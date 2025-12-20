@@ -1,11 +1,19 @@
 /**
  * Autosuite CLI Bridge
  * 
- * This module provides the interface between Autosuite GUI and the Autosuite CLI.
- * All CLI interactions go through this bridge to ensure proper versioning and
- * compatibility checks.
+ * This module provides the platform-agnostic interface between Autosuite GUI
+ * and the Autosuite CLI. All CLI interactions go through this bridge to ensure
+ * proper versioning and compatibility checks.
+ * 
+ * Execution Model:
+ * - Development: CLI resolved from PATH, executed via Node.js child_process
+ * - Production: Bundled CLI binary, executed via Tauri/Rust Command API
+ * 
+ * This module defines types and validation only. Platform-specific execution
+ * must be implemented by the runtime layer.
  * 
  * @see docs/cli-json-contract.md in the autosuite repository for the full contract.
+ * @see .windsurf/rules/project-ruleset.md for authoritative contract rules.
  */
 
 // Schema version this GUI is compatible with
@@ -303,6 +311,10 @@ export class CliBridge {
   /**
    * Execute a CLI command and return the parsed envelope.
    * 
+   * This method must be implemented by the platform-specific layer:
+   * - Development (Node.js): Use child_process.spawn
+   * - Production (Tauri): Use Tauri Command API via Rust backend
+   * 
    * @throws {CliNotFoundError} If CLI is not found
    * @throws {SchemaIncompatibleError} If CLI schema version is incompatible
    * @throws {CliCommandError} If the command fails
@@ -311,11 +323,11 @@ export class CliBridge {
     command: string,
     args: string[] = []
   ): Promise<CliEnvelope<T>> {
-    // This is a placeholder - actual implementation would use child_process
-    // or Electron's shell module to execute the CLI
+    // Platform-specific implementation required.
+    // Development: Node.js child_process
+    // Production: Tauri/Rust Command API
     throw new Error(
-      'executeCommand must be implemented by the platform-specific layer. ' +
-      'Use ElectronCliBridge or similar.'
+      'executeCommand must be implemented by the platform-specific layer.'
     );
   }
   

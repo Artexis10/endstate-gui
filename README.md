@@ -36,18 +36,17 @@ Autosuite GUI is a separate project with its own licensing and distribution mode
 
 During development, Autosuite GUI resolves the CLI from the system PATH:
 
-1. GUI calls `autosuite capabilities --json`
-2. GUI validates `schemaVersion` is compatible
-3. If incompatible, GUI shows clear error and refuses to execute
-4. If compatible, GUI proceeds with CLI invocation
+- **CLI Resolution:** `autosuite` command resolved from PATH
+- **Execution:** Node.js `child_process.spawn`
+- **Validation:** Capabilities handshake on startup
 
 #### Production Mode
 
-Production builds of Autosuite GUI bundle a pinned Autosuite binary:
+Production builds of Autosuite GUI bundle a pinned Autosuite CLI binary:
 
-1. GUI ships with a specific Autosuite CLI version
-2. GUI validates bundled CLI on startup via `capabilities`
-3. Version mismatch indicates corrupted installation
+- **CLI Resolution:** Bundled binary at known path
+- **Execution:** Tauri/Rust Command API
+- **Validation:** Capabilities handshake on startup
 
 ### Compatibility Check Flow
 
@@ -86,7 +85,7 @@ All CLI commands with `--json` flag return a standardized envelope:
 }
 ```
 
-See `docs/cli-json-contract.md` in the autosuite repository for the full contract specification.
+See `.windsurf/rules/project-ruleset.md` in the autosuite repository for the authoritative contract rules.
 
 ### Supported Commands
 
