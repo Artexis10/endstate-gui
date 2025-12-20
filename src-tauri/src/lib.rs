@@ -49,7 +49,7 @@ impl From<std::io::Error> for ExecError {
 /// * `Ok(ExecResult)` - Execution completed (check exit_code for success)
 /// * `Err(ExecError)` - Execution failed to start (e.g., CLI not found)
 #[tauri::command]
-pub fn autosuite_exec(args: Vec<String>) -> Result<ExecResult, ExecError> {
+fn autosuite_exec(args: Vec<String>) -> Result<ExecResult, ExecError> {
     let output = Command::new("autosuite")
         .args(&args)
         .output()?;

@@ -8,6 +8,34 @@ The GUI is designed to consume Autosuite strictly through its public CLI interfa
 
 This project is under active development and is not yet intended for general use.
 
+## Development Prerequisites
+
+### Windows
+
+- **Node.js** (v18+) and npm
+- **Rust** via [rustup](https://rustup.rs/) (provides `cargo` and `rustc`)
+- **Microsoft Visual C++ Build Tools** with:
+  - MSVC v143 (or later) C++ build tools
+  - Windows 10/11 SDK
+  - These are required for the Rust linker and native compilation
+
+Install Build Tools via [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) or the full Visual Studio installer.
+
+### Running the Development Server
+
+```bash
+npm install
+npm run tauri dev
+```
+
+### Regenerating Icons
+
+If `src-tauri/icons/` is empty or icons need updating:
+
+```bash
+npm run tauri icon app-icon.png
+```
+
 ## Relationship to Autosuite
 
 Autosuite GUI relies on the Autosuite CLI being installed and available on the system PATH.  
