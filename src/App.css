@@ -1,0 +1,93 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 1.5rem 2rem;
+  background-color: #16213e;
+  border-bottom: 1px solid #0f3460;
+}
+
+.app-header h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #e94560;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 2rem;
+  border-radius: 12px;
+  max-width: 480px;
+  width: 100%;
+}
+
+.status-icon {
+  font-size: 2.5rem;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-text h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.status-text p {
+  color: #a0a0a0;
+  font-size: 0.9rem;
+}
+
+.status-text .schema-version {
+  margin-top: 0.25rem;
+}
+
+.status-checking {
+  background-color: #1e3a5f;
+  border: 1px solid #2d5a87;
+}
+
+.status-checking .status-icon {
+  background-color: #2d5a87;
+}
+
+.status-ready {
+  background-color: #1a3d2e;
+  border: 1px solid #2d6b4a;
+}
+
+.status-ready .status-icon {
+  background-color: #2d6b4a;
+  color: #4ade80;
+}
+
+.status-error {
+  background-color: #3d1a1a;
+  border: 1px solid #6b2d2d;
+}
+
+.status-error .status-icon {
+  background-color: #6b2d2d;
+  color: #f87171;
+}
+
+.status-error .error-message {
+  color: #f87171;
+}
