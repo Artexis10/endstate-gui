@@ -152,11 +152,15 @@ The GUI includes an **EngineAdapter** module (`src-tauri/src/engine_adapter.rs`)
 - Parses each line: valid JSON is passed through, plain text becomes log events
 - Emits events to frontend via Tauri event channel `autosuite://event`
 - Emits fallback result if CLI exits without a terminal result event
+- **runId tagging:** Every emitted event includes a `runId` field for tracking
+- **One-run-at-a-time guard (v1):** Only one CLI run can be active at a time
+- **Cancellation support:** Running processes can be cancelled via `engine_cancel`
 
 **Event Types:**
-- **Log events:** `{"type":"log","level":"info|warn|error","message":"..."}`
-- **CLI envelope:** Full JSON response from CLI with `success`, `command`, `data` fields
-- **Fallback result:** `{"type":"result","ok":true|false,"command":"unknown","summary":{"exitCode":N},"raw":null}`
+- **Log events:** `{"type":"log","level":"info|warn|error","message":"...","runId":"..."}`
+- **CLI envelope:** Full JSON response from CLI with `success`, `command`, `data`, `runId` fields
+- **Fallback result:** `{"type":"result","ok":true|false,"command":"...","summary":{"exitCode":N},"raw":null,"runId":"..."}`
+- **Cancelled result:** `{"type":"result","ok":false,"command":"...","summary":{"cancelled":true,"exitCode":N},"raw":null,"runId":"..."}`
 
 ### Testing the Streaming UI
 
@@ -165,6 +169,18 @@ The GUI includes an **EngineAdapter** module (`src-tauri/src/engine_adapter.rs`)
 3. Wait for CLI status to show "ready"
 4. Click **Capabilities** to test streaming output
 5. For **Verify** and **Apply**, update `SAMPLE_MANIFEST_PATH` in `src/App.tsx` to point to a valid manifest file
+6. The current **Run ID** is displayed above the log when a run is active
+7. Click **Cancel** to terminate a running process (emits a cancelled result)
+
+### Cancellation
+
+To cancel a running command:
+1. Click the **Cancel** button while a run is active
+2. The running CLI process will be terminated
+3. A cancelled result event will be emitted with `summary.cancelled: true`
+4. The UI will show the run as failed with cancellation info
+
+**Note:** Only one run can be active at a time (v1 limitation). Attempting to start a new run while one is in progress will return an error.
 
 ### Running Rust Tests
 
@@ -173,7 +189,7 @@ cd src-tauri
 cargo test
 ```
 
-This runs unit tests for the parsing logic in `engine_adapter.rs`.
+This runs unit tests for the parsing logic, runId injection, and cancellation in `engine_adapter.rs`.
 
 ---
 

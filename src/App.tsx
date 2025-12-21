@@ -5,6 +5,7 @@ import {
   runCapabilities,
   runVerify,
   runApply,
+  engineCancel,
   EngineEvent,
   isLogEvent,
   isResultEvent,
@@ -27,6 +28,7 @@ interface ResultState {
   command: string;
   summary: Record<string, unknown>;
   raw: unknown | null;
+  runId?: string;
 }
 
 // Hardcoded manifest path for testing - update this to a valid path on your system
@@ -39,6 +41,7 @@ function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [result, setResult] = useState<ResultState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const logIdRef = useRef(0);
   const logContainerRef = useRef<HTMLDivElement>(null);
 
@@ -61,19 +64,24 @@ function App() {
           command: event.command,
           summary: event.summary as Record<string, unknown>,
           raw: event.raw,
+          runId: event.runId,
         });
         setIsRunning(false);
+        setCurrentRunId(null);
       } else if (isCliEnvelope(event)) {
         setResult({
           ok: event.success,
           command: event.command,
           summary: event.data as Record<string, unknown>,
           raw: event,
+          runId: event.runId,
         });
         setIsRunning(false);
+        setCurrentRunId(null);
       } else if (isTerminalResult(event)) {
         // Catch-all for any other terminal result shape
         setIsRunning(false);
+        setCurrentRunId(null);
       }
     }).then((fn) => {
       unlisten = fn;
@@ -99,13 +107,15 @@ function App() {
   const clearLogs = useCallback(() => {
     setLogs([]);
     setResult(null);
+    setCurrentRunId(null);
   }, []);
 
   const handleRunCapabilities = useCallback(async () => {
     clearLogs();
     setIsRunning(true);
     try {
-      await runCapabilities();
+      const runId = await runCapabilities();
+      setCurrentRunId(runId);
     } catch (err) {
       setLogs((prev) => [
         ...prev,
@@ -117,6 +127,7 @@ function App() {
         },
       ]);
       setIsRunning(false);
+      setCurrentRunId(null);
     }
   }, [clearLogs]);
 
@@ -124,7 +135,8 @@ function App() {
     clearLogs();
     setIsRunning(true);
     try {
-      await runVerify(SAMPLE_MANIFEST_PATH);
+      const runId = await runVerify(SAMPLE_MANIFEST_PATH);
+      setCurrentRunId(runId);
     } catch (err) {
       setLogs((prev) => [
         ...prev,
@@ -136,6 +148,7 @@ function App() {
         },
       ]);
       setIsRunning(false);
+      setCurrentRunId(null);
     }
   }, [clearLogs]);
 
@@ -143,7 +156,8 @@ function App() {
     clearLogs();
     setIsRunning(true);
     try {
-      await runApply(SAMPLE_MANIFEST_PATH);
+      const runId = await runApply(SAMPLE_MANIFEST_PATH);
+      setCurrentRunId(runId);
     } catch (err) {
       setLogs((prev) => [
         ...prev,
@@ -155,8 +169,26 @@ function App() {
         },
       ]);
       setIsRunning(false);
+      setCurrentRunId(null);
     }
   }, [clearLogs]);
+
+  const handleCancel = useCallback(async () => {
+    try {
+      await engineCancel();
+      // The cancellation result will be emitted via events
+    } catch (err) {
+      setLogs((prev) => [
+        ...prev,
+        {
+          id: logIdRef.current++,
+          timestamp: new Date(),
+          level: 'error',
+          message: `Failed to cancel: ${err}`,
+        },
+      ]);
+    }
+  }, []);
 
   return (
     <div className="app">
@@ -190,6 +222,13 @@ function App() {
               Apply
             </button>
             <button
+              className="engine-button cancel"
+              onClick={handleCancel}
+              disabled={!isRunning}
+            >
+              Cancel
+            </button>
+            <button
               className="engine-button secondary"
               onClick={clearLogs}
               disabled={isRunning}
@@ -197,6 +236,12 @@ function App() {
               Clear
             </button>
           </div>
+
+          {currentRunId && (
+            <div className="run-id-display">
+              Run ID: <code>{currentRunId}</code>
+            </div>
+          )}
 
           <div className="log-container" ref={logContainerRef}>
             {logs.length === 0 ? (

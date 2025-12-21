@@ -151,6 +151,29 @@
   background-color: #4d5a6c;
 }
 
+.engine-button.cancel {
+  background-color: #b45309;
+}
+
+.engine-button.cancel:hover:not(:disabled) {
+  background-color: #a14208;
+}
+
+/* Run ID Display */
+.run-id-display {
+  font-size: 0.8rem;
+  color: #8b949e;
+  padding: 0.25rem 0;
+}
+
+.run-id-display code {
+  background-color: #21262d;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  color: #58a6ff;
+}
+
 /* Log Container */
 .log-container {
   flex: 1;
