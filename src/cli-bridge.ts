@@ -253,15 +253,22 @@ export function parseCliOutput<T>(jsonOutput: string): CliEnvelope<T> {
  * ```
  */
 export class CliBridge {
-  private cliPath: string = 'autosuite'; // Default: resolve from PATH
+  private _cliPath: string = 'autosuite'; // Default: resolve from PATH
   private capabilities: CapabilitiesData | null = null;
   private cliVersion: string | null = null;
   private schemaVersion: string | null = null;
   
   constructor(cliPath?: string) {
     if (cliPath) {
-      this.cliPath = cliPath;
+      this._cliPath = cliPath;
     }
+  }
+  
+  /**
+   * Get the CLI path.
+   */
+  getCliPath(): string {
+    return this._cliPath;
   }
   
   /**
@@ -320,8 +327,8 @@ export class CliBridge {
    * @throws {CliCommandError} If the command fails
    */
   async executeCommand<T>(
-    command: string,
-    args: string[] = []
+    _command: string,
+    _args: string[] = []
   ): Promise<CliEnvelope<T>> {
     // Platform-specific implementation required.
     // Development: Node.js child_process

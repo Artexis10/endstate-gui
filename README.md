@@ -140,6 +140,43 @@ All rights reserved.
 
 This repository does not grant permission to use, modify, or redistribute the code unless explicitly stated otherwise.
 
+## Development Notes
+
+### Engine Adapter
+
+The GUI includes an **EngineAdapter** module (`src-tauri/src/engine_adapter.rs`) that provides streaming NDJSON output from the Autosuite CLI to the frontend.
+
+**Features:**
+- Spawns the `autosuite` CLI process with configurable arguments
+- Reads stdout/stderr concurrently (non-blocking)
+- Parses each line: valid JSON is passed through, plain text becomes log events
+- Emits events to frontend via Tauri event channel `autosuite://event`
+- Emits fallback result if CLI exits without a terminal result event
+
+**Event Types:**
+- **Log events:** `{"type":"log","level":"info|warn|error","message":"..."}`
+- **CLI envelope:** Full JSON response from CLI with `success`, `command`, `data` fields
+- **Fallback result:** `{"type":"result","ok":true|false,"command":"unknown","summary":{"exitCode":N},"raw":null}`
+
+### Testing the Streaming UI
+
+1. Ensure `autosuite` CLI is installed and on PATH
+2. Run `npm run tauri dev`
+3. Wait for CLI status to show "ready"
+4. Click **Capabilities** to test streaming output
+5. For **Verify** and **Apply**, update `SAMPLE_MANIFEST_PATH` in `src/App.tsx` to point to a valid manifest file
+
+### Running Rust Tests
+
+```bash
+cd src-tauri
+cargo test
+```
+
+This runs unit tests for the parsing logic in `engine_adapter.rs`.
+
+---
+
 ## Notes
 
 This repository exists to develop the official Autosuite desktop experience.  

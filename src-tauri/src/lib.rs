@@ -3,8 +3,11 @@
 //! This module provides the Rust backend for Autosuite GUI, handling CLI execution
 //! via std::process::Command and exposing results to the frontend via Tauri commands.
 
+mod engine_adapter;
+
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use tauri::AppHandle;
 
 /// Result of CLI execution returned to the frontend.
 #[derive(Debug, Serialize, Deserialize)]
@@ -65,11 +68,42 @@ fn autosuite_exec(args: Vec<String>) -> Result<ExecResult, ExecError> {
     })
 }
 
+/// Run the Autosuite CLI with streaming NDJSON output.
+///
+/// This command spawns the CLI process and streams events to the frontend
+/// via the "autosuite://event" channel. Each line of output is parsed:
+/// - Valid JSON is emitted as-is
+/// - Plain text from stdout becomes {"type":"log","level":"info","message":"..."}
+/// - Plain text from stderr becomes {"type":"log","level":"error","message":"..."}
+///
+/// When the process exits, if no terminal "result" event was received,
+/// a fallback result is emitted.
+///
+/// # Arguments
+/// * `app` - Tauri app handle for emitting events
+/// * `exe` - Path to the executable (typically "autosuite")
+/// * `args` - Command line arguments to pass to the CLI
+///
+/// # Returns
+/// * `Ok(())` - Process completed (events were streamed)
+/// * `Err(String)` - Failed to start the process
+#[tauri::command]
+async fn engine_run(app: AppHandle, exe: String, args: Vec<String>) -> Result<(), String> {
+    // Run in a blocking task to avoid blocking the async runtime
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        engine_adapter::run_engine(&app, &exe, &args)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+
+    result.map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![autosuite_exec])
+        .invoke_handler(tauri::generate_handler![autosuite_exec, engine_run])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
