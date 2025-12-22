@@ -578,7 +578,7 @@ function App() {
                 <div className="flex gap-2">
                   {supportsCapture ? (
                     <Button onClick={handleCapture} disabled={isRunning}>
-                      {isRunning ? 'Scanning...' : 'Scan this machine'}
+                      {isRunning ? 'Scanning...' : 'Scan current machine'}
                     </Button>
                   ) : (
                     <p className="text-sm text-warning">Capture command not available in this version</p>

@@ -62,7 +62,7 @@ export function ScanResultModal({
           <DialogDescription className="text-base pt-2">
             {hasIssues
               ? "Some applications need to be installed or updated."
-              : "All applications are installed and up to date."}
+              : "Everything matches your setup."}
           </DialogDescription>
         </DialogHeader>
 
