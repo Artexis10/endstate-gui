@@ -9,11 +9,20 @@ import {
 import { AppSettings, loadSettings, saveSettings } from './settings';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
 import { runAutosuiteStreaming, StreamEvent } from './streaming-runner';
-import { stripAnsi } from './utils';
 import { LogBuffer } from './log-buffer';
-import './App.css';
+import { AppShell } from './components/layout/app-shell';
+import { CommandPalette } from './components/layout/command-palette';
+import { PageHeader } from './components/app/page-header';
+import { LogViewer } from './components/app/log-viewer';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
+import { Button } from './components/ui/button';
+import { Input } from './components/ui/input';
+import { Switch } from './components/ui/switch';
+import { StatusPill } from './components/app/status-pill';
+import { Loader2 } from 'lucide-react';
 
 type AppStatus = 'loading' | 'ready' | 'error';
+type PageType = 'capture' | 'apply' | 'verify' | 'report' | 'settings';
 
 interface AppState {
   status: AppStatus;
@@ -27,7 +36,8 @@ interface AppState {
 
 function App() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
-  const [showSettings, setShowSettings] = useState(false);
+  const [currentPage, setCurrentPage] = useState<PageType>('apply');
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState('');
   const [selectedProfilePath, setSelectedProfilePath] = useState('');
@@ -310,48 +320,6 @@ function App() {
     }
   };
 
-  const handleRefresh = async () => {
-    setIsRunning(true);
-    setRunLogs('');
-    setLogTruncated(false);
-    logBufferRef.current = new LogBuffer((logs, truncated) => {
-      setRunLogs(logs);
-      setLogTruncated(truncated);
-    });
-
-    try {
-      const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
-        settings,
-        'report',
-        [],
-        () => {}
-      );
-      setState((prev) => ({
-        ...prev,
-        report: reportResult.envelope,
-      }));
-
-      if (selectedProfile) {
-        const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
-          settings,
-          'verify',
-          ['--profile', selectedProfile],
-          () => {}
-        );
-        setState((prev) => ({
-          ...prev,
-          verify: verifyResult.envelope,
-        }));
-      }
-
-      setLastAction(`Refreshed at ${new Date().toLocaleTimeString()}`);
-    } catch (err) {
-      alert(`Failed to refresh: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
   const handleCapture = async () => {
     setIsRunning(true);
     setRunLogs('');
@@ -370,7 +338,6 @@ function App() {
         return;
       }
       
-      // Ensure the output directory exists before running capture
       try {
         await invoke('ensure_dir', { path: dir });
       } catch (err) {
@@ -378,7 +345,6 @@ function App() {
         return;
       }
 
-      // Generate timestamped filename
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
       const filename = `setup_${timestamp}.jsonc`;
       const outputPath = `${dir}\\${filename}`;
@@ -394,7 +360,6 @@ function App() {
         }
       );
 
-      // Handle success/failure based on envelope or exit code
       const isSuccess = captureResult.envelope?.success ?? (captureResult.exitCode === 0);
       
       if (isSuccess) {
@@ -409,19 +374,9 @@ function App() {
           updateSettings({ lastSelectedProfile: newest.name, lastSelectedProfilePath: newest.path });
         }
       } else {
-        // Show friendly error message
         const friendlyMsg = captureResult.envelope?.error?.message || 
                            'Autosuite couldn\'t save the setup. Please try again.';
-        
-        const technicalDetails = [
-          `Exit code: ${captureResult.exitCode}`,
-          captureResult.stderr ? `Stderr: ${stripAnsi(captureResult.stderr).slice(-2000)}` : null,
-          captureResult.envelope ? `Envelope: ${JSON.stringify(captureResult.envelope, null, 2)}` : null
-        ].filter(Boolean).join('\n\n');
-        
-        if (confirm(`Couldn't scan this computer\n\n${friendlyMsg}\n\nShow technical details?`)) {
-          alert(`Technical Details:\n\n${technicalDetails}`);
-        }
+        alert(`Couldn't scan this computer\n\n${friendlyMsg}`);
       }
 
       setLastAction(`Scanned at ${new Date().toLocaleTimeString()}`);
@@ -455,21 +410,32 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   if (!settings.engineMode || (settings.engineMode === 'script' && !settings.engineScriptPath)) {
     return (
-      <div className="app">
-        <header className="app-header">
-          <h1>Autosuite</h1>
-        </header>
-        <main className="app-main">
-          <div className="welcome-screen">
-            <h2>Welcome to Autosuite GUI</h2>
-            <p>Please configure your autosuite engine to get started.</p>
-            <button className="action-button primary" onClick={() => setShowSettings(true)}>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Welcome to Autosuite GUI</CardTitle>
+            <CardDescription>Please configure your autosuite engine to get started.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => setCurrentPage('settings')}>
               Open Settings
-            </button>
-          </div>
-        </main>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -478,533 +444,384 @@ function App() {
 
   if (state.status === 'loading') {
     return (
-      <div className="app">
-        <header className="app-header">
-          <h1>Autosuite</h1>
-          <button className="settings-button" onClick={() => setShowSettings(true)}>
-            ⚙️ Settings
-          </button>
-        </header>
-        <main className="app-main">
-          <div className="status-card status-checking">
-            <div className="status-icon">⏳</div>
-            <div className="status-text">
-              <h2>Loading...</h2>
-              <p>Running: autosuite capabilities --json</p>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Card className="max-w-md">
+          <CardContent className="pt-6 flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="text-center">
+              <h2 className="text-lg font-semibold">Loading...</h2>
+              <p className="text-sm text-muted-foreground mt-1">Running: autosuite capabilities --json</p>
             </div>
-          </div>
-        </main>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   if (state.status === 'error') {
     return (
-      <div className="app">
-        <header className="app-header">
-          <h1>Autosuite</h1>
-          <button className="settings-button" onClick={() => setShowSettings(true)}>
-            ⚙️ Settings
-          </button>
-        </header>
-        <main className="app-main">
-          <div className="error-screen">
-            <div className="error-icon">✗</div>
-            <h2>Autosuite engine not reachable</h2>
-            <div className="error-details">
-              <div className="error-section">
-                <h3>Error</h3>
-                <p>{state.errorMessage}</p>
+      <div className="flex items-center justify-center min-h-screen bg-background p-4">
+        <Card className="max-w-2xl border-danger">
+          <CardHeader>
+            <CardTitle className="text-danger">Autosuite engine not reachable</CardTitle>
+            <CardDescription>Unable to connect to the autosuite engine</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {state.errorMessage && (
+              <div>
+                <h3 className="text-sm font-medium mb-2">Error</h3>
+                <p className="text-sm text-danger">{state.errorMessage}</p>
               </div>
-              {state.errorStderr && (
-                <div className="error-section">
-                  <h3>STDERR</h3>
-                  <pre>{state.errorStderr}</pre>
-                </div>
-              )}
-              {state.errorCommand && (
-                <div className="error-section">
-                  <h3>Command attempted</h3>
-                  <code>{state.errorCommand}</code>
-                </div>
-              )}
-            </div>
-            <div className="error-actions">
-              <button className="action-button secondary" onClick={() => setShowSettings(true)}>
+            )}
+            {state.errorStderr && (
+              <div>
+                <h3 className="text-sm font-medium mb-2">STDERR</h3>
+                <pre className="text-xs bg-background p-3 rounded border overflow-auto max-h-40">{state.errorStderr}</pre>
+              </div>
+            )}
+            {state.errorCommand && (
+              <div>
+                <h3 className="text-sm font-medium mb-2">Command attempted</h3>
+                <code className="text-xs bg-background p-2 rounded border block">{state.errorCommand}</code>
+              </div>
+            )}
+            <div className="flex gap-2 pt-4">
+              <Button variant="secondary" onClick={() => setCurrentPage('settings')}>
                 Open Settings
-              </button>
-              <button className="action-button tertiary" onClick={resetSettings}>
+              </Button>
+              <Button variant="ghost" onClick={resetSettings}>
                 Reset Settings
-              </button>
-              <button className="action-button primary" onClick={loadInitialData}>
+              </Button>
+              <Button onClick={loadInitialData}>
                 Retry
-              </button>
+              </Button>
             </div>
-          </div>
-        </main>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  if (profiles.length === 0 && state.status === 'ready') {
-    return (
-      <div className="app">
-        <header className="app-header">
-          <h1>Autosuite</h1>
-          <button className="settings-button" onClick={() => setShowSettings(true)}>
-            ⚙️ Settings
-          </button>
-        </header>
-        <main className="app-main">
-          {showSettings && (
-            <SettingsModal
-              settings={settings}
-              onSave={(newSettings) => {
-                updateSettings(newSettings);
-                setShowSettings(false);
-              }}
-              onClose={() => setShowSettings(false)}
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'capture':
+        return (
+          <div className="space-y-6">
+            <PageHeader
+              title="Capture"
+              subtitle="Scan this computer to create a setup profile"
             />
-          )}
-          <div className="welcome-screen">
-            <h2>No setup saved yet</h2>
-            <p>Scan this computer to save how it's set up — or use a setup from another machine.</p>
-            <div className="empty-state-actions">
-              {supportsCapture && (
-                <button className="action-button primary" onClick={handleCapture} disabled={isRunning}>
-                  Scan this machine
-                </button>
-              )}
-              <button className="action-button secondary" onClick={handleImportProfile} disabled={isRunning}>
-                Use an existing setup
-              </button>
-            </div>
-            {isRunning && runLogs && (
-              <div className="logs-panel">
-                <h3>Logs</h3>
-                {logTruncated && (
-                  <div className="truncation-warning">
-                    ⚠️ Output truncated (showing last 2MB)
-                  </div>
-                )}
-                <pre className="logs-content">{runLogs}</pre>
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Autosuite</h1>
-        <button className="settings-button" onClick={() => setShowSettings(true)}>
-          ⚙️ Settings
-        </button>
-      </header>
-      <main className="app-main">
-        {showSettings && (
-          <SettingsModal
-            settings={settings}
-            onSave={(newSettings) => {
-              updateSettings(newSettings);
-              setShowSettings(false);
-            }}
-            onClose={() => setShowSettings(false)}
-          />
-        )}
-
-        <div className="cards-grid">
-          <InfoCard
-            title="Autosuite engine"
-            status={state.capabilities?.success ? 'ok' : 'error'}
-            data={state.capabilities}
-          >
-            <div className="card-content">
-              <p>
-                <strong>CLI Version:</strong> {state.capabilities?.cliVersion || 'unknown'}
-              </p>
-              <p>
-                <strong>Schema Version:</strong> {state.capabilities?.schemaVersion || 'unknown'}
-              </p>
-              <p>
-                <strong>Status:</strong>{' '}
-                {state.capabilities?.success ? (
-                  <span className="status-ok">OK</span>
-                ) : (
-                  <span className="status-error">Error</span>
-                )}
-              </p>
-            </div>
-          </InfoCard>
-
-          <InfoCard
-            title="Machine status"
-            status={state.verify?.success ? 'ok' : state.verify ? 'error' : 'neutral'}
-            data={state.verify}
-          >
-            <div className="card-content">
-              {state.verify ? (
-                state.verify.success ? (
-                  <>
-                    <p>
-                      <strong>OK:</strong> {state.verify.data?.summary?.okCount ?? 0}
-                    </p>
-                    <p>
-                      <strong>Missing:</strong> {state.verify.data?.summary?.missingCount ?? 0}
-                    </p>
-                    <p>
-                      <strong>Version Mismatch:</strong>{' '}
-                      {state.verify.data?.summary?.versionMismatchCount ?? 0}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="error-text">
-                      <strong>Error:</strong> {state.verify.error?.message || 'Verification failed. Please check the logs for details.'}
-                    </p>
-                    <p className="error-code">
-                      <strong>Code:</strong> {state.verify.error?.code || 'N/A'}
-                    </p>
-                  </>
-                )
-              ) : (
-                <p className="neutral-text">Run "Check setup" to see machine status</p>
-              )}
-            </div>
-          </InfoCard>
-
-          <InfoCard
-            title="Last run / history"
-            status={state.report?.data?.hasState ? 'ok' : 'neutral'}
-            data={state.report}
-          >
-            <div className="card-content">
-              {state.report?.data?.hasState ? (
-                <>
-                  {state.report.data.lastApplied && (
-                    <div className="history-item">
-                      <p>
-                        <strong>Last Applied:</strong>{' '}
-                        {new Date(state.report.data.lastApplied.timestamp).toLocaleString()}
-                      </p>
-                      <p className="history-detail">
-                        Manifest: {state.report.data.lastApplied.manifestPath}
-                      </p>
-                    </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Scan Current Machine</CardTitle>
+                <CardDescription>
+                  Create a snapshot of installed applications and settings
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  This will scan your computer and save the current setup as a profile.
+                  You can later use this profile to set up other machines.
+                </p>
+                <div className="flex gap-2">
+                  {supportsCapture ? (
+                    <Button onClick={handleCapture} disabled={isRunning}>
+                      {isRunning ? 'Scanning...' : 'Scan this machine'}
+                    </Button>
+                  ) : (
+                    <p className="text-sm text-warning">Capture command not available in this version</p>
                   )}
-                  {state.report.data.lastVerify && (
-                    <div className="history-item">
-                      <p>
-                        <strong>Last Verify:</strong>{' '}
-                        {new Date(state.report.data.lastVerify.timestamp).toLocaleString()}
-                      </p>
-                      <p className="history-detail">
-                        Missing: {state.report.data.lastVerify.missingCount ?? 0}
-                      </p>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="neutral-text">No state available</p>
-              )}
-            </div>
-          </InfoCard>
-        </div>
-
-        <div className="actions-panel">
-          <div className="profile-selector-group">
-            <label htmlFor="profile-select">Setup:</label>
-            {profiles.length > 0 ? (
-              <select
-                id="profile-select"
-                value={selectedProfile}
-                onChange={(e) => {
-                  const selected = profiles.find(p => p.name === e.target.value);
-                  setSelectedProfile(e.target.value);
-                  setSelectedProfilePath(selected?.path || '');
-                  updateSettings({ lastSelectedProfile: e.target.value, lastSelectedProfilePath: selected?.path || '' });
-                }}
-                disabled={isRunning}
-              >
-                <option value="">-- Select a setup --</option>
-                {profiles.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="no-profiles-hint">
-                No setups found.
-              </div>
-            )}
-          </div>
-
-          <div className="dry-run-toggle">
-            <label>
-              <input
-                type="checkbox"
-                checked={settings.dryRunEnabled}
-                onChange={(e) => updateSettings({ dryRunEnabled: e.target.checked })}
-                disabled={isRunning}
+                  <Button variant="secondary" onClick={handleImportProfile} disabled={isRunning}>
+                    Import existing setup
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            {runLogs && (
+              <LogViewer
+                logs={runLogs}
+                truncated={logTruncated}
+                onClear={() => setRunLogs('')}
               />
-              <span>Preview changes (recommended)</span>
-            </label>
-          </div>
-
-          <div className="actions-buttons">
-            <button
-              className="action-button primary"
-              onClick={handleSetupMachine}
-              disabled={isRunning || !selectedProfile}
-            >
-              {isRunning ? 'Running...' : 'Fix missing apps'}
-            </button>
-            <button
-              className="action-button secondary"
-              onClick={handleCheckSetup}
-              disabled={isRunning || !selectedProfile}
-            >
-              Check this computer
-            </button>
-            <button className="action-button tertiary" onClick={handleRefresh} disabled={isRunning}>
-              Refresh
-            </button>
-          </div>
-
-          {lastAction && <div className="last-action">Last action: {lastAction}</div>}
-        </div>
-
-        {runLogs && (
-          <div className="logs-panel">
-            <h3>Run Output</h3>
-            {logTruncated && (
-              <div className="truncation-warning">
-                ⚠️ Output truncated (showing last 2MB)
-              </div>
             )}
-            <pre className="logs-content">{runLogs}</pre>
           </div>
-        )}
-      </main>
-    </div>
-  );
-}
-
-interface InfoCardProps {
-  title: string;
-  status: 'ok' | 'error' | 'neutral';
-  data: AutosuiteEnvelope<any> | null;
-  children: React.ReactNode;
-}
-
-function InfoCard({ title, status, data, children }: InfoCardProps) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className={`info-card info-card-${status}`}>
-      <div className="info-card-header">
-        <h3>{title}</h3>
-        <div className="info-card-icon">
-          {status === 'ok' && '✓'}
-          {status === 'error' && '✗'}
-          {status === 'neutral' && '○'}
-        </div>
-      </div>
-      {children}
-      {data && (
-        <div className="json-details">
-          <button className="json-toggle" onClick={() => setExpanded(!expanded)}>
-            {expanded ? '▼' : '▶'} View details (JSON)
-          </button>
-          {expanded && (
-            <pre className="json-content">{JSON.stringify(data, null, 2)}</pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface SettingsModalProps {
-  settings: AppSettings;
-  onSave: (settings: AppSettings) => void;
-  onClose: () => void;
-}
-
-function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
-  const [localSettings, setLocalSettings] = useState(settings);
-  const [validationStatus, setValidationStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
-  const [validationMessage, setValidationMessage] = useState('');
-  const [isValidating, setIsValidating] = useState(false);
-
-  const validateSettings = async () => {
-    setIsValidating(true);
-    setValidationStatus('checking');
-    setValidationMessage('Validating...');
-
-    try {
-      if (localSettings.engineMode === 'script') {
-        const scriptPath = localSettings.engineScriptPath.trim();
-        
-        if (!scriptPath) {
-          setValidationStatus('invalid');
-          setValidationMessage('Script path is required');
-          setIsValidating(false);
-          return;
-        }
-
-        if (!scriptPath.toLowerCase().endsWith('.ps1')) {
-          setValidationStatus('invalid');
-          setValidationMessage('Script path must end with .ps1');
-          setIsValidating(false);
-          return;
-        }
-
-        const { invoke } = await import('@tauri-apps/api/core');
-        const exists = await invoke<boolean>('check_file_exists', { path: scriptPath });
-        
-        if (!exists) {
-          setValidationStatus('invalid');
-          setValidationMessage('File not found');
-          setIsValidating(false);
-          return;
-        }
-
-        setValidationStatus('valid');
-        setValidationMessage('Found');
-      } else {
-        const testSettings: AppSettings = {
-          ...localSettings,
-          engineMode: 'path',
-        };
-
-        const result = await runAutosuiteStreaming(
-          testSettings,
-          'capabilities',
-          [],
-          () => {}
         );
 
-        if (result.envelope && result.envelope.success) {
-          setValidationStatus('valid');
-          setValidationMessage('Found');
-        } else {
-          setValidationStatus('invalid');
-          setValidationMessage('Not found on PATH');
-        }
-      }
-    } catch (err) {
-      setValidationStatus('invalid');
-      setValidationMessage(err instanceof Error ? err.message : 'Validation failed');
-    } finally {
-      setIsValidating(false);
+      case 'apply':
+        return (
+          <div className="space-y-6">
+            <PageHeader
+              title="Apply"
+              subtitle="Set up this machine using a saved profile"
+              actions={
+                <Button onClick={handleSetupMachine} disabled={isRunning || !selectedProfile}>
+                  {isRunning ? 'Running...' : 'Fix missing apps'}
+                </Button>
+              }
+            />
+            
+            <div className="grid gap-6 md:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Engine Status</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">CLI Version</span>
+                    <span className="text-sm font-medium">{state.capabilities?.cliVersion || 'unknown'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Schema</span>
+                    <span className="text-sm font-medium">{state.capabilities?.schemaVersion || 'unknown'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Status</span>
+                    <StatusPill status={state.capabilities?.success ? 'ok' : 'error'} />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Machine Status</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {state.verify?.success ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">OK</span>
+                        <span className="text-sm font-medium">{state.verify.data?.summary?.okCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Missing</span>
+                        <span className="text-sm font-medium">{state.verify.data?.summary?.missingCount ?? 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Mismatch</span>
+                        <span className="text-sm font-medium">{state.verify.data?.summary?.versionMismatchCount ?? 0}</span>
+                      </div>
+                    </>
+                  ) : state.verify ? (
+                    <p className="text-sm text-danger">{state.verify.error?.message || 'Verification failed'}</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">Run "Check setup" to see status</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Last Run</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {state.report?.data?.hasState ? (
+                    <>
+                      {state.report.data.lastApplied && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Last Applied</p>
+                          <p className="text-sm font-medium">
+                            {new Date(state.report.data.lastApplied.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                      {state.report.data.lastVerify && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Last Verify</p>
+                          <p className="text-sm font-medium">
+                            {new Date(state.report.data.lastVerify.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No state available</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Setup Configuration</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Setup Profile</label>
+                  {profiles.length > 0 ? (
+                    <select
+                      value={selectedProfile}
+                      onChange={(e) => {
+                        const selected = profiles.find(p => p.name === e.target.value);
+                        setSelectedProfile(e.target.value);
+                        setSelectedProfilePath(selected?.path || '');
+                        updateSettings({ lastSelectedProfile: e.target.value, lastSelectedProfilePath: selected?.path || '' });
+                      }}
+                      disabled={isRunning}
+                      className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">-- Select a setup --</option>
+                      {profiles.map((p) => (
+                        <option key={p.name} value={p.name}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="p-3 rounded-md bg-warning/10 border border-warning/20 text-sm text-warning-foreground">
+                      No setups found. Please capture or import a setup first.
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="dry-run"
+                    checked={settings.dryRunEnabled}
+                    onCheckedChange={(checked: boolean) => updateSettings({ dryRunEnabled: checked })}
+                    disabled={isRunning}
+                  />
+                  <label htmlFor="dry-run" className="text-sm font-medium cursor-pointer">
+                    Preview changes (recommended)
+                  </label>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={handleSetupMachine} disabled={isRunning || !selectedProfile}>
+                    {isRunning ? 'Running...' : 'Fix missing apps'}
+                  </Button>
+                  <Button variant="secondary" onClick={handleCheckSetup} disabled={isRunning || !selectedProfile}>
+                    Check this computer
+                  </Button>
+                </div>
+
+                {lastAction && (
+                  <p className="text-xs text-muted-foreground">Last action: {lastAction}</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {runLogs && (
+              <LogViewer
+                logs={runLogs}
+                truncated={logTruncated}
+                onClear={() => setRunLogs('')}
+              />
+            )}
+          </div>
+        );
+
+      case 'verify':
+      case 'report':
+        return (
+          <div className="space-y-6">
+            <PageHeader
+              title={currentPage === 'verify' ? 'Verify' : 'Report'}
+              subtitle={currentPage === 'verify' ? 'Check machine status' : 'View history and state'}
+            />
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">
+                  This page is under construction. Use the Apply page for now.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      case 'settings':
+        return (
+          <div className="space-y-6">
+            <PageHeader
+              title="Settings"
+              subtitle="Configure autosuite engine and preferences"
+            />
+            <Card>
+              <CardHeader>
+                <CardTitle>Engine Configuration</CardTitle>
+                <CardDescription>Choose how to run the autosuite engine</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={settings.engineMode === 'path'}
+                      onChange={() => updateSettings({ engineMode: 'path' })}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Use autosuite from PATH</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={settings.engineMode === 'script'}
+                      onChange={() => updateSettings({ engineMode: 'script' })}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Use autosuite script path</span>
+                  </label>
+                </div>
+
+                {settings.engineMode === 'script' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Script Path</label>
+                    <Input
+                      type="text"
+                      value={settings.engineScriptPath}
+                      onChange={(e) => updateSettings({ engineScriptPath: e.target.value })}
+                      placeholder="C:\path\to\autosuite.ps1"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Custom Storage Directory (optional)</label>
+                  <Input
+                    type="text"
+                    value={settings.customProfilesDirectory}
+                    onChange={(e) => updateSettings({ customProfilesDirectory: e.target.value })}
+                    placeholder="Leave empty to use default: Documents\Autosuite\Setups"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    By default, setups are stored in Documents\Autosuite\Setups
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <Button onClick={loadInitialData}>
+                    Reload Engine
+                  </Button>
+                  <Button variant="ghost" onClick={resetSettings}>
+                    Reset to Defaults
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      default:
+        return null;
     }
   };
 
-  useEffect(() => {
-    setValidationStatus('idle');
-    setValidationMessage('');
-  }, [localSettings.engineMode, localSettings.engineScriptPath]);
-
-  const canSave = validationStatus === 'valid';
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Settings</h2>
-          <button className="modal-close" onClick={onClose}>
-            ✕
-          </button>
-        </div>
-        <div className="modal-body">
-          <div className="settings-section">
-            <h3>Autosuite Engine</h3>
-            <label>
-              <input
-                type="radio"
-                checked={localSettings.engineMode === 'path'}
-                onChange={() => setLocalSettings({ ...localSettings, engineMode: 'path' })}
-              />
-              <span>Use autosuite from PATH</span>
-            </label>
-            <label>
-              <input
-                type="radio"
-                checked={localSettings.engineMode === 'script'}
-                onChange={() => setLocalSettings({ ...localSettings, engineMode: 'script' })}
-              />
-              <span>Use autosuite script path</span>
-            </label>
-            {localSettings.engineMode === 'script' && (
-              <div className="settings-input-group">
-                <label>Script Path:</label>
-                <input
-                  type="text"
-                  value={localSettings.engineScriptPath}
-                  onChange={(e) =>
-                    setLocalSettings({ ...localSettings, engineScriptPath: e.target.value })
-                  }
-                  placeholder="C:\path\to\autosuite.ps1"
-                />
-              </div>
-            )}
-            
-            <div className="validation-section">
-              <button 
-                className="action-button tertiary"
-                onClick={validateSettings}
-                disabled={isValidating}
-              >
-                {isValidating ? 'Checking...' : 'Validate'}
-              </button>
-              {validationStatus !== 'idle' && (
-                <span className={`validation-status validation-${validationStatus}`}>
-                  {validationMessage}
-                </span>
-              )}
-            </div>
-          </div>
+    <>
+      <AppShell
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        pageTitle={currentPage.charAt(0).toUpperCase() + currentPage.slice(1)}
+      >
+        {renderPage()}
+      </AppShell>
 
-          <details className="settings-section">
-            <summary><h3>Advanced</h3></summary>
-            <p className="settings-hint" style={{ marginBottom: '1rem' }}>
-              Setups are stored as Autosuite profiles (JSON). You can change the storage location or manage them manually.
-            </p>
-            <div className="settings-input-group">
-              <label>Custom Storage Directory (optional):</label>
-              <input
-                type="text"
-                value={localSettings.customProfilesDirectory}
-                onChange={(e) =>
-                  setLocalSettings({ ...localSettings, customProfilesDirectory: e.target.value })
-                }
-                placeholder="Leave empty to use default: Documents\Autosuite\Setups"
-              />
-              <p className="settings-hint">
-                By default, setups are stored in Documents\Autosuite\Setups. Only set this if you want to use a different location.
-              </p>
-            </div>
-          </details>
-        </div>
-        <div className="modal-footer">
-          <button className="action-button secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button 
-            className="action-button primary" 
-            onClick={() => onSave(localSettings)}
-            disabled={!canSave}
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    </div>
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        onNavigate={setCurrentPage}
+      />
+    </>
   );
 }
 
