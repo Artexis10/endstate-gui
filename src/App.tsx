@@ -560,8 +560,8 @@ function App() {
         return (
           <div className="space-y-6">
             <PageHeader
-              title="Capture"
-              subtitle="Scan this computer to create a setup profile"
+              title="Capture machine"
+              subtitle="Scan this computer to create a reusable setup profile"
             />
             <Card>
               <CardHeader>
@@ -573,7 +573,7 @@ function App() {
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
                   This will scan your computer and save the current setup as a profile.
-                  You can later use this profile to set up other machines.
+                  You can later use this profile to configure other machines.
                 </p>
                 <div className="flex gap-2">
                   {supportsCapture ? (
@@ -744,54 +744,22 @@ function App() {
               </CardContent>
             </Card>
 
-            {/* Row 2: Last Run (wider) + Engine Status (compact) */}
-            <div className="grid gap-6 md:grid-cols-3">
-              <Card className="md:col-span-2">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Last Run</CardTitle>
-                </CardHeader>
-                <CardContent className="py-3">
-                  {state.report?.data?.hasState ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      {state.report.data.lastApplied && (
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Last Applied</p>
-                          <p className="text-xs font-medium">
-                            {new Date(state.report.data.lastApplied.timestamp).toLocaleString()}
-                          </p>
-                        </div>
-                      )}
-                      {state.report.data.lastVerify && (
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">Last Verify</p>
-                          <p className="text-xs font-medium">
-                            {new Date(state.report.data.lastVerify.timestamp).toLocaleString()}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground italic">No history available</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Engine</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 py-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Version</span>
-                    <span className="text-xs font-medium">{state.capabilities?.cliVersion || 'unknown'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Status</span>
-                    <StatusPill status={state.capabilities?.success ? 'ok' : 'error'} />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Engine Status (compact, metadata only) */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Engine Status</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Version</span>
+                  <span className="text-xs font-medium">{state.capabilities?.cliVersion || 'unknown'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Status</span>
+                  <StatusPill status={state.capabilities?.success ? 'ok' : 'error'} />
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Activity Log with Technical Details */}
             <ActivityLog
@@ -802,6 +770,37 @@ function App() {
               isComplete={checkStep === 'ready'}
               totalAppsChecked={state.verify?.data?.summary?.total ?? 0}
             />
+
+            {/* Last Run (reference only, de-emphasized at bottom) */}
+            <Card className="border-dashed">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs text-muted-foreground">Last Run</CardTitle>
+              </CardHeader>
+              <CardContent className="py-2">
+                {state.report?.data?.hasState ? (
+                  <div className="flex gap-6 text-xs">
+                    {state.report.data.lastApplied && (
+                      <div>
+                        <span className="text-muted-foreground">Last Applied: </span>
+                        <span className="font-medium">
+                          {new Date(state.report.data.lastApplied.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                    {state.report.data.lastVerify && (
+                      <div>
+                        <span className="text-muted-foreground">Last Verify: </span>
+                        <span className="font-medium">
+                          {new Date(state.report.data.lastVerify.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No history available</p>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Result Modal */}
             <ScanResultModal
