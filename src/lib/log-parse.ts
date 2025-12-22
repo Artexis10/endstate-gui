@@ -24,6 +24,7 @@ export function parseCaptureOutput(logs: string): CaptureStats {
     outputPath: '',
     lastProcessedApp: '',
     processedCount: 0,
+    apps: [],
   };
 
   if (!logs) return stats;
@@ -70,12 +71,29 @@ export function parseCaptureOutput(logs: string): CaptureStats {
       }
     }
 
-    // Alternative: Parse "Manifest saved to: <path>" line
-    const savedMatch = line.match(/Manifest saved to:\s*(.+)/i);
+    // Alternative: Parse "Manifest saved: <path>" line (note: no "to")
+    const savedMatch = line.match(/Manifest saved:\s*(.+)/i);
     if (savedMatch && !stats.outputPath) {
       stats.outputPath = savedMatch[1].trim();
     }
   }
 
   return stats;
+}
+
+// Internal test to verify parser correctness
+if (import.meta.env.DEV) {
+  const sampleLog = `[OK]     Manifest saved: C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc
+Summary: 62 succeeded, 8 skipped, 0 failed
+Capture complete!
+{"schemaVersion":"1.0","cliVersion":"0.0.0-dev+702adc6","command":"capture","timestampUtc":"2025-12-22T21:03:34.5380554Z","success":true,"data":{"isExample":null,"sanitized":false,"outputPath":"C:\\\\Users\\\\win-laptop\\\\Documents\\\\Autosuite\\\\Setups\\\\setup_2025-12-22_21-03-31.jsonc"},"error":null}`;
+
+  const result = parseCaptureOutput(sampleLog);
+  
+  console.assert(result.succeeded === 62, `Expected succeeded=62, got ${result.succeeded}`);
+  console.assert(result.skipped === 8, `Expected skipped=8, got ${result.skipped}`);
+  console.assert(result.failed === 0, `Expected failed=0, got ${result.failed}`);
+  console.assert(result.outputPath.includes('setup_2025-12-22_21-03-31.jsonc'), `Expected outputPath to contain filename, got ${result.outputPath}`);
+  
+  console.log('✓ parseCaptureOutput test passed:', result);
 }
