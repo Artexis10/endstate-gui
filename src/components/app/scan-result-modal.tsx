@@ -87,7 +87,7 @@ export function ScanResultModal({
           )}
         </div>
 
-        {actionableResults.length > 0 && (
+        {hasIssues && actionableResults.length > 0 && (
           <div className="border-t border-border pt-4">
             <button
               onClick={() => setShowDetails(!showDetails)}
@@ -121,17 +121,14 @@ export function ScanResultModal({
           </div>
         )}
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button variant="secondary" onClick={onClose}>
-            {hasIssues ? 'Later' : 'Close'}
-          </Button>
+        <DialogFooter>
           {hasIssues ? (
-            <Button onClick={onFixApps}>
+            <Button onClick={onFixApps} className="w-full">
               Install missing apps
             </Button>
           ) : (
-            <Button onClick={onClose}>
-              All set
+            <Button onClick={onClose} className="w-full">
+              Done
             </Button>
           )}
         </DialogFooter>

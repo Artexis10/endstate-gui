@@ -72,15 +72,29 @@ function App() {
   const [showResultModal, setShowResultModal] = useState(false);
   const logBufferRef = useRef<LogBuffer | null>(null);
 
-  const addActivity = (message: string, status: ActivityItem['status'], step?: number) => {
-    const activity: ActivityItem = {
-      id: Date.now().toString(),
-      message,
-      status,
-      timestamp: new Date(),
-      step,
-    };
-    setActivities((prev) => [...prev.slice(-5), activity]);
+  const updateActivity = (message: string, status: ActivityItem['status'], step?: number) => {
+    setActivities((prev) => {
+      if (step) {
+        const existingIndex = prev.findIndex(a => a.step === step);
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            message,
+            status,
+            timestamp: new Date(),
+          };
+          return updated;
+        }
+      }
+      return [...prev, {
+        id: `step-${step || Date.now()}`,
+        message,
+        status,
+        timestamp: new Date(),
+        step,
+      }];
+    });
   };
 
   const loadProfilesDirectory = async () => {
@@ -237,13 +251,13 @@ function App() {
       setLogTruncated(truncated);
     });
 
-    addActivity('Scanning installed applications', 'running', 1);
+    updateActivity('Scanning installed applications', 'running', 1);
 
     try {
       await new Promise(resolve => setTimeout(resolve, 800));
-      addActivity('Scanning installed applications', 'success', 1);
+      updateActivity('Scanning installed applications', 'success', 1);
       setCheckStep('comparing');
-      addActivity('Comparing to setup', 'running', 2);
+      updateActivity('Comparing to setup', 'running', 2);
 
       const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
         settings,
@@ -261,8 +275,8 @@ function App() {
         verify: verifyResult.envelope,
       }));
 
-      addActivity('Comparing to setup', 'success', 2);
-      addActivity('Result ready', 'success', 3);
+      updateActivity('Comparing to setup', 'success', 2);
+      updateActivity('Result ready', 'success', 3);
       setCheckStep('ready');
 
       const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
@@ -279,7 +293,7 @@ function App() {
       await new Promise(resolve => setTimeout(resolve, 300));
       setShowResultModal(true);
     } catch (err) {
-      addActivity('Check failed', 'error');
+      updateActivity('Check failed', 'error');
       setCheckStep('idle');
       alert(`Failed to run verify: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -628,7 +642,17 @@ function App() {
               <CardContent className="space-y-4">
                 {/* Setup Profile Selection */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Setup Profile</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Setup Profile</label>
+                    <Button 
+                      variant="ghost" 
+                      onClick={handleImportProfile} 
+                      disabled={isRunning}
+                      className="h-auto py-1 px-2 text-xs"
+                    >
+                      Add setup...
+                    </Button>
+                  </div>
                   {profiles.length > 0 ? (
                     <select
                       value={selectedProfile}
