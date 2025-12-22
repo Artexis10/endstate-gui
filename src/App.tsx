@@ -328,7 +328,7 @@ function App() {
         args.push('--dry-run');
       }
 
-      const applyResult = await runAutosuiteStreaming<AutosuiteApplyData>(
+      const applyResult = await runEngineStreaming<AutosuiteApplyData>(
         settings,
         'apply',
         args,
@@ -411,7 +411,7 @@ function App() {
       const filename = `setup_${timestamp}.jsonc`;
       const outputPath = `${dir}\\${filename}`;
 
-      const captureResult = await runAutosuiteStreaming(
+      const captureResult = await runEngineStreaming(
         settings,
         'capture',
         ['--out', outputPath],

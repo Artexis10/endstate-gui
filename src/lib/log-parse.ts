@@ -3,6 +3,12 @@
  * Extracts counts, progress, and metadata from streaming log output
  */
 
+export interface AppEntry {
+  id: string;
+  status: 'ok' | 'skip' | 'fail';
+  driver?: string;
+}
+
 export interface CaptureStats {
   succeeded: number;
   skipped: number;
@@ -10,6 +16,7 @@ export interface CaptureStats {
   outputPath: string;
   lastProcessedApp: string;
   processedCount: number;
+  apps: AppEntry[];
 }
 
 /**
@@ -41,18 +48,30 @@ export function parseCaptureOutput(logs: string): CaptureStats {
     }
 
     // Parse per-app lines: "[OK] Discord.Discord (driver: winget)"
-    const appMatch = line.match(/\[(OK|SKIP|FAIL)\]\s+([^\s(]+)/i);
-    if (appMatch) {
-      const status = appMatch[1].toUpperCase();
-      const appId = appMatch[2];
-      stats.lastProcessedApp = appId;
-      stats.processedCount++;
+    // Skip "Manifest saved" lines
+    if (!line.includes('Manifest saved')) {
+      const appMatch = line.match(/\[(OK|SKIP|FAIL)\]\s+([^\s(]+)(?:\s+\(driver:\s*([^)]+)\))?/i);
+      if (appMatch) {
+        const status = appMatch[1].toUpperCase();
+        const appId = appMatch[2];
+        const driver = appMatch[3];
+        stats.lastProcessedApp = appId;
+        stats.processedCount++;
 
-      // If no summary line yet, count from individual lines
-      if (stats.succeeded === 0 && stats.skipped === 0 && stats.failed === 0) {
-        if (status === 'OK') stats.succeeded++;
-        else if (status === 'SKIP') stats.skipped++;
-        else if (status === 'FAIL') stats.failed++;
+        // Add to apps list
+        const normalizedStatus = status === 'OK' ? 'ok' : status === 'SKIP' ? 'skip' : 'fail';
+        stats.apps.push({
+          id: appId,
+          status: normalizedStatus as 'ok' | 'skip' | 'fail',
+          driver: driver,
+        });
+
+        // If no summary line yet, count from individual lines
+        if (stats.succeeded === 0 && stats.skipped === 0 && stats.failed === 0) {
+          if (status === 'OK') stats.succeeded++;
+          else if (status === 'SKIP') stats.skipped++;
+          else if (status === 'FAIL') stats.failed++;
+        }
       }
     }
 
