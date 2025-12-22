@@ -93,8 +93,15 @@ export async function runAutosuiteStreaming<T>(
           // Try to parse from this line to the end
           const jsonCandidate = lines.slice(i).join('\n');
           try {
-            envelope = JSON.parse(jsonCandidate) as AutosuiteEnvelope<T>;
-            break; // Successfully parsed, stop searching
+            const parsed = JSON.parse(jsonCandidate);
+            // Validate it's an envelope (has required fields)
+            if (parsed && typeof parsed === 'object' && 
+                'schemaVersion' in parsed && 
+                'command' in parsed && 
+                'success' in parsed) {
+              envelope = parsed as AutosuiteEnvelope<T>;
+              break; // Successfully parsed valid envelope, stop searching
+            }
           } catch {
             // Not valid JSON, continue searching backwards
             continue;

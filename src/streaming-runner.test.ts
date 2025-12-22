@@ -279,9 +279,43 @@ describe('streaming-runner', () => {
         eventCallback({ 
           payload: { 
             type: 'stdout', 
-            data: '[INFO] Starting capture...\n[INFO] Processing...\n{"schemaVersion":"1.0","success":true,"data":{"outputPath":"C:\\\\profiles\\\\setup.jsonc"},"error":null}' 
+            data: '[INFO] Starting capture...\n[INFO] Processing...\n{"schemaVersion":"1.0","command":"capture","success":true,"data":{"outputPath":"C:\\\\profiles\\\\setup.jsonc"},"error":null}' 
           } 
         });
+        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+      });
+
+      const onEvent = vi.fn();
+      const result = await runAutosuiteStreaming(mockSettings, 'capture', ['--out', 'C:\\profiles\\setup.jsonc'], onEvent);
+
+      expect(result.envelope).not.toBeNull();
+      expect(result.envelope?.success).toBe(true);
+      expect(result.envelope?.data).toHaveProperty('outputPath');
+    });
+
+    it('should extract multi-line JSON envelope from stdout', async () => {
+      const mockUnlisten = vi.fn();
+      let eventCallback: (event: any) => void = () => {};
+
+      vi.mocked(listen).mockImplementation(async (_channel, callback) => {
+        eventCallback = callback;
+        return mockUnlisten;
+      });
+
+      const multiLineEnvelope = `[INFO] Starting capture...
+[INFO] Processing...
+{
+  "schemaVersion": "1.0",
+  "command": "capture",
+  "success": true,
+  "data": {
+    "outputPath": "C:\\\\profiles\\\\setup.jsonc"
+  },
+  "error": null
+}`;
+
+      vi.mocked(invoke).mockImplementation(async () => {
+        eventCallback({ payload: { type: 'stdout', data: multiLineEnvelope } });
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
       });
 

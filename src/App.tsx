@@ -247,11 +247,13 @@ function App() {
 
       if (applyResult.envelope) {
         const dryRunText = settings.dryRunEnabled ? ' (dry run)' : '';
-        alert(
-          applyResult.envelope.success
-            ? `Setup completed successfully${dryRunText}!`
-            : `Setup failed: ${applyResult.envelope.error?.message || 'Unknown error'}`
-        );
+        if (applyResult.envelope.success) {
+          alert(`Setup completed successfully${dryRunText}!`);
+        } else {
+          const friendlyMsg = applyResult.envelope.error?.message || 
+                             'Autosuite couldn\'t apply the setup. Please try again.';
+          alert(`Couldn't apply setup\n\n${friendlyMsg}`);
+        }
       }
 
       setLastAction(`Set up machine at ${new Date().toLocaleTimeString()}`);
@@ -620,7 +622,7 @@ function App() {
                 ) : (
                   <>
                     <p className="error-text">
-                      <strong>Error:</strong> {state.verify.error?.message || 'Unknown error'}
+                      <strong>Error:</strong> {state.verify.error?.message || 'Verification failed. Please check the logs for details.'}
                     </p>
                     <p className="error-code">
                       <strong>Code:</strong> {state.verify.error?.code || 'N/A'}
