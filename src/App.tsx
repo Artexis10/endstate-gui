@@ -1,328 +1,940 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { checkCliCapabilities, CliStatus } from './tauri-bridge';
+import { useEffect, useState } from 'react';
 import {
-  subscribeToEvents,
-  runCapabilities,
-  runVerify,
-  runApply,
-  engineCancel,
-  EngineEvent,
-  isLogEvent,
-  isResultEvent,
-  isCliEnvelope,
-  isTerminalResult,
-} from './engine-bridge';
+  AutosuiteEnvelope,
+  AutosuiteCapabilitiesData,
+  AutosuiteVerifyData,
+  AutosuiteReportData,
+  AutosuiteApplyData,
+} from './types';
+import { AppSettings, loadSettings, saveSettings } from './settings';
+import { discoverProfiles, DiscoveredProfile } from './file-discovery';
+import { runAutosuiteStreaming, StreamEvent } from './streaming-runner';
+import { stripAnsi } from './utils';
 import './App.css';
 
-/** Log entry for display */
-interface LogEntry {
-  id: number;
-  timestamp: Date;
-  level: 'info' | 'warn' | 'error';
-  message: string;
-}
+type AppStatus = 'loading' | 'ready' | 'error';
 
-/** Result state for display */
-interface ResultState {
-  ok: boolean;
-  command: string;
-  summary: Record<string, unknown>;
-  raw: unknown | null;
-  runId?: string;
+interface AppState {
+  status: AppStatus;
+  errorMessage: string | null;
+  errorStderr: string | null;
+  errorCommand: string | null;
+  capabilities: AutosuiteEnvelope<AutosuiteCapabilitiesData> | null;
+  report: AutosuiteEnvelope<AutosuiteReportData> | null;
+  verify: AutosuiteEnvelope<AutosuiteVerifyData> | null;
 }
-
-// Hardcoded manifest path for testing - update this to a valid path on your system
-const SAMPLE_MANIFEST_PATH = 'C:\\manifests\\sample.jsonc';
 
 function App() {
-  const [status, setStatus] = useState<CliStatus>({
-    state: 'checking',
+  const [settings, setSettings] = useState<AppSettings>(loadSettings());
+  const [showSettings, setShowSettings] = useState(false);
+  const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState('');
+  
+  const [state, setState] = useState<AppState>({
+    status: 'loading',
+    errorMessage: null,
+    errorStderr: null,
+    errorCommand: null,
+    capabilities: null,
+    report: null,
+    verify: null,
   });
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [result, setResult] = useState<ResultState | null>(null);
+
   const [isRunning, setIsRunning] = useState(false);
-  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
-  const logIdRef = useRef(0);
-  const logContainerRef = useRef<HTMLDivElement>(null);
+  const [runLogs, setRunLogs] = useState<string>('');
+  const [lastAction, setLastAction] = useState<string | null>(null);
 
-  // Subscribe to engine events
+  const loadProfilesDirectory = async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+    try {
+      const dir = settings.customProfilesDirectory || await invoke<string>('get_default_profiles_directory');
+      return dir;
+    } catch (err) {
+      console.error('Failed to get profiles directory:', err);
+      return '';
+    }
+  };
+
+  const refreshProfiles = async () => {
+    const dir = await loadProfilesDirectory();
+    if (dir) {
+      const discovered = await discoverProfiles(dir);
+      setProfiles(discovered);
+    }
+  };
+
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
+    const loadedSettings = loadSettings();
+    setSettings(loadedSettings);
+    setSelectedProfile(loadedSettings.lastSelectedProfile);
+    refreshProfiles();
+  }, []);
 
-    subscribeToEvents((event: EngineEvent) => {
-      if (isLogEvent(event)) {
-        const entry: LogEntry = {
-          id: logIdRef.current++,
-          timestamp: new Date(),
-          level: event.level,
-          message: event.message,
-        };
-        setLogs((prev) => [...prev, entry]);
-      } else if (isResultEvent(event)) {
-        setResult({
-          ok: event.ok,
-          command: event.command,
-          summary: event.summary as Record<string, unknown>,
-          raw: event.raw,
-          runId: event.runId,
-        });
-        setIsRunning(false);
-        setCurrentRunId(null);
-      } else if (isCliEnvelope(event)) {
-        setResult({
-          ok: event.success,
-          command: event.command,
-          summary: event.data as Record<string, unknown>,
-          raw: event,
-          runId: event.runId,
-        });
-        setIsRunning(false);
-        setCurrentRunId(null);
-      } else if (isTerminalResult(event)) {
-        // Catch-all for any other terminal result shape
-        setIsRunning(false);
-        setCurrentRunId(null);
-      }
-    }).then((fn) => {
-      unlisten = fn;
+  useEffect(() => {
+    refreshProfiles();
+  }, [settings.customProfilesDirectory]);
+
+  const updateSettings = (newSettings: Partial<AppSettings>) => {
+    const updated = { ...settings, ...newSettings };
+    setSettings(updated);
+    saveSettings(updated);
+  };
+
+  const resetSettings = () => {
+    localStorage.removeItem('autosuite-gui-settings');
+    const defaults = loadSettings();
+    setSettings(defaults);
+    setSelectedProfile('');
+    setProfiles([]);
+    refreshProfiles();
+    loadInitialData();
+  };
+
+  const loadInitialData = async () => {
+    setState({
+      status: 'loading',
+      errorMessage: null,
+      errorStderr: null,
+      errorCommand: null,
+      capabilities: null,
+      report: null,
+      verify: null,
     });
 
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
+    setRunLogs('');
 
-  // Auto-scroll logs
+    try {
+      const capResult = await runAutosuiteStreaming<AutosuiteCapabilitiesData>(
+        settings,
+        'capabilities',
+        [],
+        (event) => {
+          if (event.type === 'stderr') {
+            setRunLogs((prev) => prev + event.data);
+          }
+        }
+      );
+
+      if (!capResult.envelope) {
+        setState({
+          status: 'error',
+          errorMessage: 'Autosuite engine not reachable',
+          errorStderr: capResult.stderr || 'STDOUT was not valid JSON',
+          errorCommand: 'autosuite capabilities --json',
+          capabilities: null,
+          report: null,
+          verify: null,
+        });
+        return;
+      }
+
+      const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
+        settings,
+        'report',
+        [],
+        () => {}
+      );
+
+      let verifyResult: AutosuiteEnvelope<AutosuiteVerifyData> | null = null;
+      if (selectedProfile && profiles.length > 0) {
+        const result = await runAutosuiteStreaming<AutosuiteVerifyData>(
+          settings,
+          'verify',
+          ['--profile', selectedProfile],
+          () => {}
+        );
+        verifyResult = result.envelope;
+      }
+
+      setState({
+        status: 'ready',
+        errorMessage: null,
+        errorStderr: null,
+        errorCommand: null,
+        capabilities: capResult.envelope,
+        report: reportResult.envelope,
+        verify: verifyResult,
+      });
+    } catch (err) {
+      setState({
+        status: 'error',
+        errorMessage: err instanceof Error ? err.message : String(err),
+        errorStderr: null,
+        errorCommand: 'autosuite capabilities --json',
+        capabilities: null,
+        report: null,
+        verify: null,
+      });
+    }
+  };
+
   useEffect(() => {
-    if (logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    if (settings.engineMode && (settings.engineMode === 'path' || settings.engineScriptPath)) {
+      loadInitialData();
     }
-  }, [logs]);
+  }, [settings.engineMode, settings.engineScriptPath]);
 
-  // Check CLI on startup
-  useEffect(() => {
-    checkCliCapabilities().then(setStatus);
-  }, []);
+  const handleCheckSetup = async () => {
+    if (!selectedProfile) {
+      alert('Please select a setup');
+      return;
+    }
 
-  const clearLogs = useCallback(() => {
-    setLogs([]);
-    setResult(null);
-    setCurrentRunId(null);
-  }, []);
-
-  const handleRunCapabilities = useCallback(async () => {
-    clearLogs();
     setIsRunning(true);
-    try {
-      const runId = await runCapabilities();
-      setCurrentRunId(runId);
-    } catch (err) {
-      setLogs((prev) => [
-        ...prev,
-        {
-          id: logIdRef.current++,
-          timestamp: new Date(),
-          level: 'error',
-          message: `Failed to run: ${err}`,
-        },
-      ]);
-      setIsRunning(false);
-      setCurrentRunId(null);
-    }
-  }, [clearLogs]);
+    setRunLogs('');
 
-  const handleRunVerify = useCallback(async () => {
-    clearLogs();
+    try {
+      const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
+        settings,
+        'verify',
+        ['--profile', selectedProfile],
+        (event: StreamEvent) => {
+          if (event.type === 'stdout' || event.type === 'stderr') {
+            setRunLogs((prev) => prev + event.data);
+          }
+        }
+      );
+
+      setState((prev) => ({
+        ...prev,
+        verify: verifyResult.envelope,
+      }));
+
+      setLastAction(`Check setup at ${new Date().toLocaleTimeString()}`);
+
+      const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
+        settings,
+        'report',
+        [],
+        () => {}
+      );
+      setState((prev) => ({
+        ...prev,
+        report: reportResult.envelope,
+      }));
+    } catch (err) {
+      alert(`Failed to run verify: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const handleSetupMachine = async () => {
+    if (!selectedProfile) {
+      alert('Please select a setup');
+      return;
+    }
+
     setIsRunning(true);
-    try {
-      const runId = await runVerify(SAMPLE_MANIFEST_PATH);
-      setCurrentRunId(runId);
-    } catch (err) {
-      setLogs((prev) => [
-        ...prev,
-        {
-          id: logIdRef.current++,
-          timestamp: new Date(),
-          level: 'error',
-          message: `Failed to run: ${err}`,
-        },
-      ]);
-      setIsRunning(false);
-      setCurrentRunId(null);
-    }
-  }, [clearLogs]);
+    setRunLogs('');
 
-  const handleRunApply = useCallback(async () => {
-    clearLogs();
+    try {
+      const args = ['--profile', selectedProfile];
+      if (settings.dryRunEnabled) {
+        args.push('--dry-run');
+      }
+
+      const applyResult = await runAutosuiteStreaming<AutosuiteApplyData>(
+        settings,
+        'apply',
+        args,
+        (event: StreamEvent) => {
+          if (event.type === 'stdout' || event.type === 'stderr') {
+            setRunLogs((prev) => prev + event.data);
+          }
+        }
+      );
+
+      if (applyResult.envelope) {
+        const dryRunText = settings.dryRunEnabled ? ' (dry run)' : '';
+        alert(
+          applyResult.envelope.success
+            ? `Setup completed successfully${dryRunText}!`
+            : `Setup failed: ${applyResult.envelope.error?.message || 'Unknown error'}`
+        );
+      }
+
+      setLastAction(`Set up machine at ${new Date().toLocaleTimeString()}`);
+
+      const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
+        settings,
+        'report',
+        [],
+        () => {}
+      );
+      setState((prev) => ({
+        ...prev,
+        report: reportResult.envelope,
+      }));
+
+      const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
+        settings,
+        'verify',
+        ['--profile', selectedProfile],
+        () => {}
+      );
+      setState((prev) => ({
+        ...prev,
+        verify: verifyResult.envelope,
+      }));
+    } catch (err) {
+      alert(`Failed to run apply: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const handleRefresh = async () => {
     setIsRunning(true);
-    try {
-      const runId = await runApply(SAMPLE_MANIFEST_PATH);
-      setCurrentRunId(runId);
-    } catch (err) {
-      setLogs((prev) => [
-        ...prev,
-        {
-          id: logIdRef.current++,
-          timestamp: new Date(),
-          level: 'error',
-          message: `Failed to run: ${err}`,
-        },
-      ]);
-      setIsRunning(false);
-      setCurrentRunId(null);
-    }
-  }, [clearLogs]);
+    setRunLogs('');
 
-  const handleCancel = useCallback(async () => {
     try {
-      await engineCancel();
-      // The cancellation result will be emitted via events
-    } catch (err) {
-      setLogs((prev) => [
+      const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
+        settings,
+        'report',
+        [],
+        () => {}
+      );
+      setState((prev) => ({
         ...prev,
-        {
-          id: logIdRef.current++,
-          timestamp: new Date(),
-          level: 'error',
-          message: `Failed to cancel: ${err}`,
-        },
-      ]);
+        report: reportResult.envelope,
+      }));
+
+      if (selectedProfile) {
+        const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
+          settings,
+          'verify',
+          ['--profile', selectedProfile],
+          () => {}
+        );
+        setState((prev) => ({
+          ...prev,
+          verify: verifyResult.envelope,
+        }));
+      }
+
+      setLastAction(`Refreshed at ${new Date().toLocaleTimeString()}`);
+    } catch (err) {
+      alert(`Failed to refresh: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsRunning(false);
     }
-  }, []);
+  };
+
+  const handleCapture = async () => {
+    setIsRunning(true);
+    setRunLogs('');
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      
+      const dir = await loadProfilesDirectory();
+      if (!dir) {
+        alert('Failed to determine profiles directory');
+        return;
+      }
+      
+      // Ensure the output directory exists before running capture
+      try {
+        await invoke('ensure_dir', { path: dir });
+      } catch (err) {
+        alert(`Failed to create output directory: ${err}`);
+        return;
+      }
+
+      const captureResult = await runAutosuiteStreaming(
+        settings,
+        'capture',
+        ['--out', dir],
+        (event: StreamEvent) => {
+          if (event.type === 'stdout' || event.type === 'stderr') {
+            setRunLogs((prev) => prev + event.data);
+          }
+        }
+      );
+
+      if (captureResult.envelope && captureResult.envelope.success) {
+        alert('Setup scanned successfully!');
+        await refreshProfiles();
+        
+        const discovered = await discoverProfiles(dir);
+        if (discovered.length > 0) {
+          const newest = discovered.sort((a, b) => b.path.localeCompare(a.path))[0];
+          setSelectedProfile(newest.name);
+          updateSettings({ lastSelectedProfile: newest.name });
+        }
+      } else {
+        const errorMsg = captureResult.envelope?.error?.message || 
+                        (captureResult.stderr ? stripAnsi(captureResult.stderr).slice(0, 200) : 'Unknown error');
+        alert(`Scan failed: ${errorMsg}`);
+      }
+
+      setLastAction(`Scanned at ${new Date().toLocaleTimeString()}`);
+    } catch (err) {
+      alert(`Failed to scan: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const handleImportProfile = async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+
+    try {
+      const selected = await invoke<string | null>('show_file_dialog');
+
+      if (selected) {
+        const dir = await loadProfilesDirectory();
+        if (!dir) {
+          alert('Failed to determine profiles directory');
+          return;
+        }
+
+        await invoke('import_profile', { sourcePath: selected, profilesDir: dir });
+        alert('Setup imported successfully!');
+        await refreshProfiles();
+      }
+    } catch (err) {
+      alert(`Failed to import setup: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  if (!settings.engineMode || (settings.engineMode === 'script' && !settings.engineScriptPath)) {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <h1>Autosuite</h1>
+        </header>
+        <main className="app-main">
+          <div className="welcome-screen">
+            <h2>Welcome to Autosuite GUI</h2>
+            <p>Please configure your autosuite engine to get started.</p>
+            <button className="action-button primary" onClick={() => setShowSettings(true)}>
+              Open Settings
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  const supportsCapture = Array.isArray(state.capabilities?.data?.commands) && state.capabilities.data.commands.includes('capture');
+
+  if (state.status === 'loading') {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <h1>Autosuite</h1>
+          <button className="settings-button" onClick={() => setShowSettings(true)}>
+            ⚙️ Settings
+          </button>
+        </header>
+        <main className="app-main">
+          <div className="status-card status-checking">
+            <div className="status-icon">⏳</div>
+            <div className="status-text">
+              <h2>Loading...</h2>
+              <p>Running: autosuite capabilities --json</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <h1>Autosuite</h1>
+          <button className="settings-button" onClick={() => setShowSettings(true)}>
+            ⚙️ Settings
+          </button>
+        </header>
+        <main className="app-main">
+          <div className="error-screen">
+            <div className="error-icon">✗</div>
+            <h2>Autosuite engine not reachable</h2>
+            <div className="error-details">
+              <div className="error-section">
+                <h3>Error</h3>
+                <p>{state.errorMessage}</p>
+              </div>
+              {state.errorStderr && (
+                <div className="error-section">
+                  <h3>STDERR</h3>
+                  <pre>{state.errorStderr}</pre>
+                </div>
+              )}
+              {state.errorCommand && (
+                <div className="error-section">
+                  <h3>Command attempted</h3>
+                  <code>{state.errorCommand}</code>
+                </div>
+              )}
+            </div>
+            <div className="error-actions">
+              <button className="action-button secondary" onClick={() => setShowSettings(true)}>
+                Open Settings
+              </button>
+              <button className="action-button tertiary" onClick={resetSettings}>
+                Reset Settings
+              </button>
+              <button className="action-button primary" onClick={loadInitialData}>
+                Retry
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (profiles.length === 0 && state.status === 'ready') {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <h1>Autosuite</h1>
+          <button className="settings-button" onClick={() => setShowSettings(true)}>
+            ⚙️ Settings
+          </button>
+        </header>
+        <main className="app-main">
+          {showSettings && (
+            <SettingsModal
+              settings={settings}
+              onSave={(newSettings) => {
+                updateSettings(newSettings);
+                setShowSettings(false);
+              }}
+              onClose={() => setShowSettings(false)}
+            />
+          )}
+          <div className="welcome-screen">
+            <h2>No setup saved yet</h2>
+            <p>Scan this computer to save how it's set up — or use a setup from another machine.</p>
+            <div className="empty-state-actions">
+              {supportsCapture && (
+                <button className="action-button primary" onClick={handleCapture} disabled={isRunning}>
+                  Scan this machine
+                </button>
+              )}
+              <button className="action-button secondary" onClick={handleImportProfile} disabled={isRunning}>
+                Use an existing setup
+              </button>
+            </div>
+            {isRunning && runLogs && (
+              <div className="logs-panel">
+                <h3>Logs</h3>
+                <pre className="logs-content">{runLogs}</pre>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
       <header className="app-header">
         <h1>Autosuite</h1>
+        <button className="settings-button" onClick={() => setShowSettings(true)}>
+          ⚙️ Settings
+        </button>
       </header>
-      <main className="app-main-engine">
-        <div className="engine-panel">
-          <CliStatusDisplay status={status} />
-          
-          <div className="button-bar">
-            <button
-              className="engine-button"
-              onClick={handleRunCapabilities}
-              disabled={isRunning || status.state !== 'ready'}
-            >
-              Capabilities
-            </button>
-            <button
-              className="engine-button"
-              onClick={handleRunVerify}
-              disabled={isRunning || status.state !== 'ready'}
-            >
-              Verify
-            </button>
-            <button
-              className="engine-button"
-              onClick={handleRunApply}
-              disabled={isRunning || status.state !== 'ready'}
-            >
-              Apply
-            </button>
-            <button
-              className="engine-button cancel"
-              onClick={handleCancel}
-              disabled={!isRunning}
-            >
-              Cancel
-            </button>
-            <button
-              className="engine-button secondary"
-              onClick={clearLogs}
-              disabled={isRunning}
-            >
-              Clear
-            </button>
-          </div>
+      <main className="app-main">
+        {showSettings && (
+          <SettingsModal
+            settings={settings}
+            onSave={(newSettings) => {
+              updateSettings(newSettings);
+              setShowSettings(false);
+            }}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
 
-          {currentRunId && (
-            <div className="run-id-display">
-              Run ID: <code>{currentRunId}</code>
+        <div className="cards-grid">
+          <InfoCard
+            title="Autosuite engine"
+            status={state.capabilities?.success ? 'ok' : 'error'}
+            data={state.capabilities}
+          >
+            <div className="card-content">
+              <p>
+                <strong>CLI Version:</strong> {state.capabilities?.cliVersion || 'unknown'}
+              </p>
+              <p>
+                <strong>Schema Version:</strong> {state.capabilities?.schemaVersion || 'unknown'}
+              </p>
+              <p>
+                <strong>Status:</strong>{' '}
+                {state.capabilities?.success ? (
+                  <span className="status-ok">OK</span>
+                ) : (
+                  <span className="status-error">Error</span>
+                )}
+              </p>
             </div>
-          )}
+          </InfoCard>
 
-          <div className="log-container" ref={logContainerRef}>
-            {logs.length === 0 ? (
-              <div className="log-empty">
-                Click a button above to run a command and see streaming output here.
-              </div>
+          <InfoCard
+            title="Machine status"
+            status={state.verify?.success ? 'ok' : state.verify ? 'error' : 'neutral'}
+            data={state.verify}
+          >
+            <div className="card-content">
+              {state.verify ? (
+                state.verify.success ? (
+                  <>
+                    <p>
+                      <strong>OK:</strong> {state.verify.data?.summary?.okCount ?? 0}
+                    </p>
+                    <p>
+                      <strong>Missing:</strong> {state.verify.data?.summary?.missingCount ?? 0}
+                    </p>
+                    <p>
+                      <strong>Version Mismatch:</strong>{' '}
+                      {state.verify.data?.summary?.versionMismatchCount ?? 0}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="error-text">
+                      <strong>Error:</strong> {state.verify.error?.message || 'Unknown error'}
+                    </p>
+                    <p className="error-code">
+                      <strong>Code:</strong> {state.verify.error?.code || 'N/A'}
+                    </p>
+                  </>
+                )
+              ) : (
+                <p className="neutral-text">Run "Check setup" to see machine status</p>
+              )}
+            </div>
+          </InfoCard>
+
+          <InfoCard
+            title="Last run / history"
+            status={state.report?.data?.hasState ? 'ok' : 'neutral'}
+            data={state.report}
+          >
+            <div className="card-content">
+              {state.report?.data?.hasState ? (
+                <>
+                  {state.report.data.lastApplied && (
+                    <div className="history-item">
+                      <p>
+                        <strong>Last Applied:</strong>{' '}
+                        {new Date(state.report.data.lastApplied.timestamp).toLocaleString()}
+                      </p>
+                      <p className="history-detail">
+                        Manifest: {state.report.data.lastApplied.manifestPath}
+                      </p>
+                    </div>
+                  )}
+                  {state.report.data.lastVerify && (
+                    <div className="history-item">
+                      <p>
+                        <strong>Last Verify:</strong>{' '}
+                        {new Date(state.report.data.lastVerify.timestamp).toLocaleString()}
+                      </p>
+                      <p className="history-detail">
+                        Missing: {state.report.data.lastVerify.missingCount ?? 0}
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="neutral-text">No state available</p>
+              )}
+            </div>
+          </InfoCard>
+        </div>
+
+        <div className="actions-panel">
+          <div className="profile-selector-group">
+            <label htmlFor="profile-select">Setup:</label>
+            {profiles.length > 0 ? (
+              <select
+                id="profile-select"
+                value={selectedProfile}
+                onChange={(e) => {
+                  setSelectedProfile(e.target.value);
+                  updateSettings({ lastSelectedProfile: e.target.value });
+                }}
+                disabled={isRunning}
+              >
+                <option value="">-- Select a setup --</option>
+                {profiles.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             ) : (
-              logs.map((entry) => (
-                <div key={entry.id} className={`log-entry log-${entry.level}`}>
-                  <span className="log-time">
-                    {entry.timestamp.toLocaleTimeString()}
-                  </span>
-                  <span className="log-level">[{entry.level.toUpperCase()}]</span>
-                  <span className="log-message">{entry.message}</span>
-                </div>
-              ))
+              <div className="no-profiles-hint">
+                No setups found.
+              </div>
             )}
           </div>
 
-          {result && <ResultDisplay result={result} />}
+          <div className="dry-run-toggle">
+            <label>
+              <input
+                type="checkbox"
+                checked={settings.dryRunEnabled}
+                onChange={(e) => updateSettings({ dryRunEnabled: e.target.checked })}
+                disabled={isRunning}
+              />
+              <span>Preview changes (recommended)</span>
+            </label>
+          </div>
+
+          <div className="actions-buttons">
+            <button
+              className="action-button primary"
+              onClick={handleSetupMachine}
+              disabled={isRunning || !selectedProfile}
+            >
+              {isRunning ? 'Running...' : 'Fix missing apps'}
+            </button>
+            <button
+              className="action-button secondary"
+              onClick={handleCheckSetup}
+              disabled={isRunning || !selectedProfile}
+            >
+              Check this computer
+            </button>
+            <button className="action-button tertiary" onClick={handleRefresh} disabled={isRunning}>
+              Refresh
+            </button>
+          </div>
+
+          {lastAction && <div className="last-action">Last action: {lastAction}</div>}
         </div>
+
+        {runLogs && (
+          <div className="logs-panel">
+            <h3>Run Output</h3>
+            <pre className="logs-content">{runLogs}</pre>
+          </div>
+        )}
       </main>
     </div>
   );
 }
 
-function ResultDisplay({ result }: { result: ResultState }) {
+interface InfoCardProps {
+  title: string;
+  status: 'ok' | 'error' | 'neutral';
+  data: AutosuiteEnvelope<any> | null;
+  children: React.ReactNode;
+}
+
+function InfoCard({ title, status, data, children }: InfoCardProps) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <div className={`result-card ${result.ok ? 'result-success' : 'result-failure'}`}>
-      <div className="result-header">
-        <span className="result-icon">{result.ok ? '✓' : '✗'}</span>
-        <span className="result-title">
-          {result.command} - {result.ok ? 'Success' : 'Failed'}
-        </span>
+    <div className={`info-card info-card-${status}`}>
+      <div className="info-card-header">
+        <h3>{title}</h3>
+        <div className="info-card-icon">
+          {status === 'ok' && '✓'}
+          {status === 'error' && '✗'}
+          {status === 'neutral' && '○'}
+        </div>
       </div>
-      <div className="result-summary">
-        <h4>Summary</h4>
-        <pre>{JSON.stringify(result.summary, null, 2)}</pre>
-      </div>
-      {result.raw !== null && result.raw !== undefined && (
-        <div className="result-raw">
-          <h4>Raw Output</h4>
-          <pre>{JSON.stringify(result.raw, null, 2)}</pre>
+      {children}
+      {data && (
+        <div className="json-details">
+          <button className="json-toggle" onClick={() => setExpanded(!expanded)}>
+            {expanded ? '▼' : '▶'} View details (JSON)
+          </button>
+          {expanded && (
+            <pre className="json-content">{JSON.stringify(data, null, 2)}</pre>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function CliStatusDisplay({ status }: { status: CliStatus }) {
-  if (status.state === 'checking') {
-    return (
-      <div className="status-card status-checking">
-        <div className="status-icon">⏳</div>
-        <div className="status-text">
-          <h2>Checking CLI...</h2>
-          <p>Looking for Autosuite CLI on PATH</p>
-        </div>
-      </div>
-    );
-  }
+interface SettingsModalProps {
+  settings: AppSettings;
+  onSave: (settings: AppSettings) => void;
+  onClose: () => void;
+}
 
-  if (status.state === 'ready') {
-    return (
-      <div className="status-card status-ready">
-        <div className="status-icon">✓</div>
-        <div className="status-text">
-          <h2>Autosuite CLI detected</h2>
-          <p>Version: {status.cliVersion}</p>
-          <p className="schema-version">Schema: {status.schemaVersion}</p>
-        </div>
-      </div>
-    );
-  }
+function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
+  const [localSettings, setLocalSettings] = useState(settings);
+  const [validationStatus, setValidationStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [validationMessage, setValidationMessage] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+
+  const validateSettings = async () => {
+    setIsValidating(true);
+    setValidationStatus('checking');
+    setValidationMessage('Validating...');
+
+    try {
+      if (localSettings.engineMode === 'script') {
+        const scriptPath = localSettings.engineScriptPath.trim();
+        
+        if (!scriptPath) {
+          setValidationStatus('invalid');
+          setValidationMessage('Script path is required');
+          setIsValidating(false);
+          return;
+        }
+
+        if (!scriptPath.toLowerCase().endsWith('.ps1')) {
+          setValidationStatus('invalid');
+          setValidationMessage('Script path must end with .ps1');
+          setIsValidating(false);
+          return;
+        }
+
+        const { invoke } = await import('@tauri-apps/api/core');
+        const exists = await invoke<boolean>('check_file_exists', { path: scriptPath });
+        
+        if (!exists) {
+          setValidationStatus('invalid');
+          setValidationMessage('File not found');
+          setIsValidating(false);
+          return;
+        }
+
+        setValidationStatus('valid');
+        setValidationMessage('Found');
+      } else {
+        const testSettings: AppSettings = {
+          ...localSettings,
+          engineMode: 'path',
+        };
+
+        const result = await runAutosuiteStreaming(
+          testSettings,
+          'capabilities',
+          [],
+          () => {}
+        );
+
+        if (result.envelope && result.envelope.success) {
+          setValidationStatus('valid');
+          setValidationMessage('Found');
+        } else {
+          setValidationStatus('invalid');
+          setValidationMessage('Not found on PATH');
+        }
+      }
+    } catch (err) {
+      setValidationStatus('invalid');
+      setValidationMessage(err instanceof Error ? err.message : 'Validation failed');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  useEffect(() => {
+    setValidationStatus('idle');
+    setValidationMessage('');
+  }, [localSettings.engineMode, localSettings.engineScriptPath]);
+
+  const canSave = validationStatus === 'valid';
 
   return (
-    <div className="status-card status-error">
-      <div className="status-icon">✗</div>
-      <div className="status-text">
-        <h2>CLI Error</h2>
-        <p className="error-message">{status.error}</p>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Settings</h2>
+          <button className="modal-close" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="settings-section">
+            <h3>Autosuite Engine</h3>
+            <label>
+              <input
+                type="radio"
+                checked={localSettings.engineMode === 'path'}
+                onChange={() => setLocalSettings({ ...localSettings, engineMode: 'path' })}
+              />
+              <span>Use autosuite from PATH</span>
+            </label>
+            <label>
+              <input
+                type="radio"
+                checked={localSettings.engineMode === 'script'}
+                onChange={() => setLocalSettings({ ...localSettings, engineMode: 'script' })}
+              />
+              <span>Use autosuite script path</span>
+            </label>
+            {localSettings.engineMode === 'script' && (
+              <div className="settings-input-group">
+                <label>Script Path:</label>
+                <input
+                  type="text"
+                  value={localSettings.engineScriptPath}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, engineScriptPath: e.target.value })
+                  }
+                  placeholder="C:\path\to\autosuite.ps1"
+                />
+              </div>
+            )}
+            
+            <div className="validation-section">
+              <button 
+                className="action-button tertiary"
+                onClick={validateSettings}
+                disabled={isValidating}
+              >
+                {isValidating ? 'Checking...' : 'Validate'}
+              </button>
+              {validationStatus !== 'idle' && (
+                <span className={`validation-status validation-${validationStatus}`}>
+                  {validationMessage}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <details className="settings-section">
+            <summary><h3>Advanced</h3></summary>
+            <p className="settings-hint" style={{ marginBottom: '1rem' }}>
+              Setups are stored as Autosuite profiles (JSON). You can change the storage location or manage them manually.
+            </p>
+            <div className="settings-input-group">
+              <label>Custom Storage Directory (optional):</label>
+              <input
+                type="text"
+                value={localSettings.customProfilesDirectory}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, customProfilesDirectory: e.target.value })
+                }
+                placeholder="Leave empty to use default: Documents\Autosuite\Setups"
+              />
+              <p className="settings-hint">
+                By default, setups are stored in Documents\Autosuite\Setups. Only set this if you want to use a different location.
+              </p>
+            </div>
+          </details>
+        </div>
+        <div className="modal-footer">
+          <button className="action-button secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button 
+            className="action-button primary" 
+            onClick={() => onSave(localSettings)}
+            disabled={!canSave}
+          >
+            Save
+          </button>
+        </div>
       </div>
     </div>
   );
