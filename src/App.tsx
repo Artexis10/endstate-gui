@@ -16,6 +16,7 @@ import { PageHeader } from './components/app/page-header';
 import { LogViewer } from './components/app/log-viewer';
 import { ActivityLog } from './components/app/activity-log';
 import { AppIcon } from './components/app/app-icon';
+import { ScanResultModal } from './components/app/scan-result-modal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -32,6 +33,7 @@ interface ActivityItem {
   message: string;
   status: 'running' | 'success' | 'error';
   timestamp: Date;
+  step?: number;
 }
 
 interface AppState {
@@ -67,16 +69,18 @@ function App() {
   const [logTruncated, setLogTruncated] = useState(false);
   const [checkStep, setCheckStep] = useState<CheckStep>('idle');
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [showResultModal, setShowResultModal] = useState(false);
   const logBufferRef = useRef<LogBuffer | null>(null);
 
-  const addActivity = (message: string, status: ActivityItem['status']) => {
+  const addActivity = (message: string, status: ActivityItem['status'], step?: number) => {
     const activity: ActivityItem = {
       id: Date.now().toString(),
       message,
       status,
       timestamp: new Date(),
+      step,
     };
-    setActivities((prev) => [...prev.slice(-4), activity]);
+    setActivities((prev) => [...prev.slice(-5), activity]);
   };
 
   const loadProfilesDirectory = async () => {
@@ -227,18 +231,19 @@ function App() {
     setRunLogs('');
     setLogTruncated(false);
     setCheckStep('scanning');
+    setActivities([]);
     logBufferRef.current = new LogBuffer((logs, truncated) => {
       setRunLogs(logs);
       setLogTruncated(truncated);
     });
 
-    addActivity('Scanning installed applications...', 'running');
+    addActivity('Scanning installed applications', 'running', 1);
 
     try {
       await new Promise(resolve => setTimeout(resolve, 800));
-      addActivity('Scanning complete', 'success');
+      addActivity('Scanning installed applications', 'success', 1);
       setCheckStep('comparing');
-      addActivity('Comparing to setup profile...', 'running');
+      addActivity('Comparing to setup', 'running', 2);
 
       const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
         settings,
@@ -256,20 +261,9 @@ function App() {
         verify: verifyResult.envelope,
       }));
 
-      addActivity('Comparison complete', 'success');
+      addActivity('Comparing to setup', 'success', 2);
+      addActivity('Result ready', 'success', 3);
       setCheckStep('ready');
-
-      const missing = verifyResult.envelope?.data?.summary?.missingCount ?? 0;
-      const mismatch = verifyResult.envelope?.data?.summary?.versionMismatchCount ?? 0;
-      
-      if (missing === 0 && mismatch === 0) {
-        addActivity('All applications are up to date!', 'success');
-      } else {
-        const issues = [];
-        if (missing > 0) issues.push(`${missing} missing`);
-        if (mismatch > 0) issues.push(`${mismatch} version mismatch`);
-        addActivity(`Found ${issues.join(', ')}`, 'success');
-      }
 
       const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
         settings,
@@ -281,6 +275,9 @@ function App() {
         ...prev,
         report: reportResult.envelope,
       }));
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setShowResultModal(true);
     } catch (err) {
       addActivity('Check failed', 'error');
       setCheckStep('idle');
@@ -659,69 +656,39 @@ function App() {
                   )}
                 </div>
 
-                {/* Progress Steps */}
-                {selectedProfile && checkStep !== 'idle' && (
-                  <div className="space-y-3 pt-2">
-                    <div className="flex items-center gap-3">
-                      <div className={`flex items-center justify-center w-6 h-6 rounded-full ${checkStep === 'scanning' ? 'bg-primary text-primary-foreground' : 'bg-success text-success-foreground'}`}>
-                        {checkStep === 'scanning' ? <Loader2 className="h-3 w-3 animate-spin" /> : '✓'}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Scanning installed applications</p>
-                        <p className="text-xs text-muted-foreground">Checking what's on this computer</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <div className={`flex items-center justify-center w-6 h-6 rounded-full ${checkStep === 'comparing' ? 'bg-primary text-primary-foreground' : checkStep === 'ready' ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}`}>
-                        {checkStep === 'comparing' ? <Loader2 className="h-3 w-3 animate-spin" /> : checkStep === 'ready' ? '✓' : '2'}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Comparing to setup</p>
-                        <p className="text-xs text-muted-foreground">Finding differences</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Results Summary */}
-                {isChecked && state.verify?.success && (
-                  <div className="pt-2 space-y-3">
-                    <div className="flex items-center justify-between p-3 rounded-md bg-success/10 border border-success/20">
-                      <span className="text-sm font-medium">Installed & up to date</span>
-                      <span className="text-lg font-semibold text-success">{state.verify.data?.summary?.okCount ?? 0}</span>
-                    </div>
-                    {missing > 0 && (
-                      <div className="flex items-center justify-between p-3 rounded-md bg-warning/10 border border-warning/20">
-                        <span className="text-sm font-medium">Missing applications</span>
-                        <span className="text-lg font-semibold text-warning">{missing}</span>
-                      </div>
-                    )}
-                    {mismatch > 0 && (
-                      <div className="flex items-center justify-between p-3 rounded-md bg-warning/10 border border-warning/20">
-                        <span className="text-sm font-medium">Version mismatches</span>
-                        <span className="text-lg font-semibold text-warning">{mismatch}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* App List with Icons */}
-                {isChecked && state.verify?.data?.results && state.verify.data.results.length > 0 && (
-                  <div className="pt-2">
-                    <details className="group">
-                      <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
-                        View application details ({state.verify.data.results.length} items)
-                      </summary>
-                      <div className="mt-3 space-y-1 max-h-64 overflow-y-auto">
-                        {state.verify.data.results.map((result, idx: number) => (
-                          <div key={idx} className="flex items-center gap-3 p-2 rounded hover:bg-accent/10">
+                {/* Actionable Apps Only (After Completion) */}
+                {isChecked && hasIssues && state.verify?.data?.results && (
+                  <div className="pt-2 space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">Apps needing attention:</p>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {state.verify.data.results
+                        .filter(r => r.status === 'missing' || r.status === 'version-mismatch' || r.status === 'fail')
+                        .map((result, idx: number) => (
+                          <div key={idx} className="flex items-center gap-3 p-2 rounded bg-accent/5">
                             <AppIcon wingetId={result.id || result.ref || ''} className="h-4 w-4 text-muted-foreground" />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium truncate">{result.id || result.ref || 'Unknown'}</p>
-                              {result.message && (
-                                <p className="text-xs text-muted-foreground">{result.message}</p>
-                              )}
+                            </div>
+                            <StatusPill 
+                              status={
+                                result.status === 'missing' ? 'missing' : 
+                                result.status === 'version-mismatch' || result.status === 'fail' ? 'mismatch' : 
+                                'neutral'
+                              } 
+                            />
+                          </div>
+                        ))}
+                    </div>
+                    <details className="pt-2">
+                      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                        View all apps ({state.verify.data.results.length} total)
+                      </summary>
+                      <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                        {state.verify.data.results.map((result, idx: number) => (
+                          <div key={idx} className="flex items-center gap-3 p-2 rounded hover:bg-accent/10 text-xs">
+                            <AppIcon wingetId={result.id || result.ref || ''} className="h-3 w-3 text-muted-foreground" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{result.id || result.ref || 'Unknown'}</p>
                             </div>
                             <StatusPill 
                               status={
@@ -756,40 +723,40 @@ function App() {
             {/* Row 2: Last Run (wider) + Engine Status (compact) */}
             <div className="grid gap-6 md:grid-cols-3">
               <Card className="md:col-span-2">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Last Run</CardTitle>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Last Run</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="py-3">
                   {state.report?.data?.hasState ? (
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-3">
                       {state.report.data.lastApplied && (
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Last Applied</p>
-                          <p className="text-sm font-medium">
+                          <p className="text-xs text-muted-foreground mb-0.5">Last Applied</p>
+                          <p className="text-xs font-medium">
                             {new Date(state.report.data.lastApplied.timestamp).toLocaleString()}
                           </p>
                         </div>
                       )}
                       {state.report.data.lastVerify && (
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Last Verify</p>
-                          <p className="text-sm font-medium">
+                          <p className="text-xs text-muted-foreground mb-0.5">Last Verify</p>
+                          <p className="text-xs font-medium">
                             {new Date(state.report.data.lastVerify.timestamp).toLocaleString()}
                           </p>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground italic">No history available</p>
+                    <p className="text-xs text-muted-foreground italic">No history available</p>
                   )}
                 </CardContent>
               </Card>
 
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Engine</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-1.5">
+                <CardContent className="space-y-2 py-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Version</span>
                     <span className="text-xs font-medium">{state.capabilities?.cliVersion || 'unknown'}</span>
@@ -808,6 +775,22 @@ function App() {
               technicalLogs={runLogs}
               logsTruncated={logTruncated}
               onClearLogs={() => setRunLogs('')}
+              isComplete={checkStep === 'ready'}
+              totalAppsChecked={state.verify?.data?.summary?.total ?? 0}
+            />
+
+            {/* Result Modal */}
+            <ScanResultModal
+              open={showResultModal}
+              onClose={() => setShowResultModal(false)}
+              okCount={state.verify?.data?.summary?.okCount ?? 0}
+              missingCount={missing}
+              mismatchCount={mismatch}
+              results={state.verify?.data?.results}
+              onFixApps={() => {
+                setShowResultModal(false);
+                handleSetupMachine();
+              }}
             />
           </div>
         );
