@@ -5,16 +5,17 @@
  * dramatically reducing the number of state updates during streaming operations.
  */
 
-const MAX_LOG_CHARS = 256 * 1024; // 256KB cap
+const MAX_LOG_CHARS = 2 * 1024 * 1024; // 2MB cap
 
 export class LogBuffer {
   private buffer = '';
   private flushTimer: number | null = null;
   private readonly flushIntervalMs: number;
-  private readonly onFlush: (logs: string) => void;
+  private readonly onFlush: (logs: string, truncated: boolean) => void;
   private isFlushing = false;
+  private wasTruncated = false;
 
-  constructor(onFlush: (logs: string) => void, flushIntervalMs = 100) {
+  constructor(onFlush: (logs: string, truncated: boolean) => void, flushIntervalMs = 100) {
     this.onFlush = onFlush;
     this.flushIntervalMs = flushIntervalMs;
   }
@@ -54,11 +55,19 @@ export class LogBuffer {
     let toFlush = this.buffer;
     if (toFlush.length > MAX_LOG_CHARS) {
       toFlush = toFlush.slice(-MAX_LOG_CHARS);
+      this.wasTruncated = true;
     }
 
-    this.onFlush(toFlush);
+    this.onFlush(toFlush, this.wasTruncated);
     this.buffer = '';
     this.isFlushing = false;
+  }
+
+  /**
+   * Returns whether output was truncated during any flush.
+   */
+  isTruncated(): boolean {
+    return this.wasTruncated;
   }
 
   /**
@@ -71,5 +80,6 @@ export class LogBuffer {
     }
     this.buffer = '';
     this.isFlushing = false;
+    this.wasTruncated = false;
   }
 }

@@ -26,7 +26,7 @@ describe('LogBuffer', () => {
 
     // Should have flushed once with all chunks combined
     expect(onFlush).toHaveBeenCalledTimes(1);
-    expect(onFlush).toHaveBeenCalledWith('chunk1chunk2chunk3');
+    expect(onFlush).toHaveBeenCalledWith('chunk1chunk2chunk3', false);
   });
 
   it('flushes immediately when flush() is called', () => {
@@ -40,7 +40,7 @@ describe('LogBuffer', () => {
     buffer.flush();
 
     expect(onFlush).toHaveBeenCalledTimes(1);
-    expect(onFlush).toHaveBeenCalledWith('data1data2');
+    expect(onFlush).toHaveBeenCalledWith('data1data2', false);
 
     // Timer should not trigger another flush
     vi.advanceTimersByTime(100);
@@ -51,18 +51,21 @@ describe('LogBuffer', () => {
     const onFlush = vi.fn();
     const buffer = new LogBuffer(onFlush, 100);
 
-    // Create a string larger than 256KB
-    const largeChunk = 'x'.repeat(300 * 1024);
+    // Create a string larger than 2MB
+    const largeChunk = 'x'.repeat(3 * 1024 * 1024);
     buffer.append(largeChunk);
 
     buffer.flush();
 
-    // Should have been capped to 256KB
+    // Should have been capped to 2MB and truncated flag set
     expect(onFlush).toHaveBeenCalledTimes(1);
     const flushedData = onFlush.mock.calls[0][0];
-    expect(flushedData.length).toBe(256 * 1024);
-    // Should keep the last 256KB (all 'x' characters)
-    expect(flushedData).toBe('x'.repeat(256 * 1024));
+    const truncated = onFlush.mock.calls[0][1];
+    expect(flushedData.length).toBe(2 * 1024 * 1024);
+    expect(truncated).toBe(true);
+    // Should keep the last 2MB (all 'x' characters)
+    expect(flushedData).toBe('x'.repeat(2 * 1024 * 1024));
+    expect(buffer.isTruncated()).toBe(true);
   });
 
   it('clears buffer and cancels pending flush', () => {
@@ -80,7 +83,7 @@ describe('LogBuffer', () => {
     buffer.append('new data');
     vi.advanceTimersByTime(100);
     expect(onFlush).toHaveBeenCalledTimes(1);
-    expect(onFlush).toHaveBeenCalledWith('new data');
+    expect(onFlush).toHaveBeenCalledWith('new data', false);
   });
 
   it('does not flush empty buffer', () => {
@@ -105,7 +108,7 @@ describe('LogBuffer', () => {
     // Only one timer should be scheduled
     vi.advanceTimersByTime(100);
     expect(onFlush).toHaveBeenCalledTimes(1);
-    expect(onFlush).toHaveBeenCalledWith('abcd');
+    expect(onFlush).toHaveBeenCalledWith('abcd', false);
   });
 
   it('handles multiple flush cycles correctly', () => {
@@ -116,12 +119,72 @@ describe('LogBuffer', () => {
     buffer.append('first');
     vi.advanceTimersByTime(100);
     expect(onFlush).toHaveBeenCalledTimes(1);
-    expect(onFlush).toHaveBeenCalledWith('first');
+    expect(onFlush).toHaveBeenCalledWith('first', false);
 
     // Second cycle
     buffer.append('second');
     vi.advanceTimersByTime(100);
     expect(onFlush).toHaveBeenCalledTimes(2);
-    expect(onFlush).toHaveBeenCalledWith('second');
+    expect(onFlush).toHaveBeenCalledWith('second', false);
+  });
+
+  it('ensures pending buffer is flushed even if timer was scheduled', () => {
+    const onFlush = vi.fn();
+    const buffer = new LogBuffer(onFlush, 100);
+
+    buffer.append('chunk1');
+    buffer.append('chunk2');
+
+    // Timer is scheduled but hasn't fired yet
+    expect(onFlush).not.toHaveBeenCalled();
+
+    // Manually flush before timer fires
+    buffer.flush();
+
+    // Should have flushed all pending data
+    expect(onFlush).toHaveBeenCalledTimes(1);
+    expect(onFlush).toHaveBeenCalledWith('chunk1chunk2', false);
+
+    // Timer firing should not cause another flush
+    vi.advanceTimersByTime(100);
+    expect(onFlush).toHaveBeenCalledTimes(1);
+  });
+
+  it('tracks truncation state across flushes', () => {
+    const onFlush = vi.fn();
+    const buffer = new LogBuffer(onFlush, 100);
+
+    // First flush without truncation
+    buffer.append('small');
+    buffer.flush();
+    expect(onFlush).toHaveBeenCalledWith('small', false);
+    expect(buffer.isTruncated()).toBe(false);
+
+    // Second flush with truncation
+    const largeChunk = 'y'.repeat(3 * 1024 * 1024);
+    buffer.append(largeChunk);
+    buffer.flush();
+    expect(onFlush.mock.calls[1][1]).toBe(true);
+    expect(buffer.isTruncated()).toBe(true);
+
+    // Truncation flag persists
+    buffer.append('more');
+    buffer.flush();
+    expect(buffer.isTruncated()).toBe(true);
+  });
+
+  it('resets truncation flag on clear', () => {
+    const onFlush = vi.fn();
+    const buffer = new LogBuffer(onFlush, 100);
+
+    // Trigger truncation
+    const largeChunk = 'z'.repeat(3 * 1024 * 1024);
+    buffer.append(largeChunk);
+    buffer.flush();
+    expect(buffer.isTruncated()).toBe(true);
+
+    // Clear should reset flag
+    buffer.clear();
+    expect(buffer.isTruncated()).toBe(false);
   });
 });

@@ -44,6 +44,7 @@ function App() {
 
   const [isRunning, setIsRunning] = useState(false);
   const [runLogs, setRunLogs] = useState<string>('');
+  const [logTruncated, setLogTruncated] = useState(false);
   const [lastAction, setLastAction] = useState<string | null>(null);
   const logBufferRef = useRef<LogBuffer | null>(null);
 
@@ -107,7 +108,11 @@ function App() {
     });
 
     setRunLogs('');
-    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
+    setLogTruncated(false);
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(logs);
+      setLogTruncated(truncated);
+    });
 
     try {
       const capResult = await runAutosuiteStreaming<AutosuiteCapabilitiesData>(
@@ -189,7 +194,11 @@ function App() {
 
     setIsRunning(true);
     setRunLogs('');
-    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
+    setLogTruncated(false);
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(logs);
+      setLogTruncated(truncated);
+    });
 
     try {
       const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
@@ -202,7 +211,6 @@ function App() {
           }
         }
       );
-      logBufferRef.current?.flush();
 
       setState((prev) => ({
         ...prev,
@@ -224,6 +232,7 @@ function App() {
     } catch (err) {
       alert(`Failed to run verify: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      logBufferRef.current?.flush();
       setIsRunning(false);
     }
   };
@@ -236,7 +245,11 @@ function App() {
 
     setIsRunning(true);
     setRunLogs('');
-    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
+    setLogTruncated(false);
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(logs);
+      setLogTruncated(truncated);
+    });
 
     try {
       const args = ['--profile', selectedProfilePath];
@@ -254,7 +267,6 @@ function App() {
           }
         }
       );
-      logBufferRef.current?.flush();
 
       if (applyResult.envelope) {
         const dryRunText = settings.dryRunEnabled ? ' (dry run)' : '';
@@ -293,6 +305,7 @@ function App() {
     } catch (err) {
       alert(`Failed to run apply: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      logBufferRef.current?.flush();
       setIsRunning(false);
     }
   };
@@ -300,7 +313,11 @@ function App() {
   const handleRefresh = async () => {
     setIsRunning(true);
     setRunLogs('');
-    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
+    setLogTruncated(false);
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(logs);
+      setLogTruncated(truncated);
+    });
 
     try {
       const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
@@ -338,7 +355,11 @@ function App() {
   const handleCapture = async () => {
     setIsRunning(true);
     setRunLogs('');
-    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
+    setLogTruncated(false);
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(logs);
+      setLogTruncated(truncated);
+    });
 
     try {
       const { invoke } = await import('@tauri-apps/api/core');
@@ -372,7 +393,6 @@ function App() {
           }
         }
       );
-      logBufferRef.current?.flush();
 
       // Handle success/failure based on envelope or exit code
       const isSuccess = captureResult.envelope?.success ?? (captureResult.exitCode === 0);
@@ -408,6 +428,7 @@ function App() {
     } catch (err) {
       alert(`Failed to scan: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      logBufferRef.current?.flush();
       setIsRunning(false);
     }
   };
@@ -561,6 +582,11 @@ function App() {
             {isRunning && runLogs && (
               <div className="logs-panel">
                 <h3>Logs</h3>
+                {logTruncated && (
+                  <div className="truncation-warning">
+                    ⚠️ Output truncated (showing last 2MB)
+                  </div>
+                )}
                 <pre className="logs-content">{runLogs}</pre>
               </div>
             )}
@@ -755,6 +781,11 @@ function App() {
         {runLogs && (
           <div className="logs-panel">
             <h3>Run Output</h3>
+            {logTruncated && (
+              <div className="truncation-warning">
+                ⚠️ Output truncated (showing last 2MB)
+              </div>
+            )}
             <pre className="logs-content">{runLogs}</pre>
           </div>
         )}

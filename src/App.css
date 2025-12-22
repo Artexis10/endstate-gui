@@ -1112,6 +1112,17 @@
   letter-spacing: 0.05em;
 }
 
+.truncation-warning {
+  background-color: #3d2a00;
+  border: 1px solid #f0ad4e;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  color: #f0ad4e;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
 .logs-content {
   background-color: #000000;
   border: 1px solid #21262d;
