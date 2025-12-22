@@ -17,6 +17,7 @@ import { LogViewer } from './components/app/log-viewer';
 import { ActivityLog } from './components/app/activity-log';
 import { AppIcon } from './components/app/app-icon';
 import { ScanResultModal } from './components/app/scan-result-modal';
+import { CaptureResultModal } from './components/app/capture-result-modal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -70,6 +71,9 @@ function App() {
   const [checkStep, setCheckStep] = useState<CheckStep>('idle');
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [showCaptureModal, setShowCaptureModal] = useState(false);
+  const [captureProgress, setCaptureProgress] = useState<string>('');
+  const [captureStats, setCaptureStats] = useState({ detected: 0, included: 0, skipped: 0 });
   const logBufferRef = useRef<LogBuffer | null>(null);
 
   const updateActivity = (message: string, status: ActivityItem['status'], step?: number) => {
@@ -377,6 +381,8 @@ function App() {
     setIsRunning(true);
     setRunLogs('');
     setLogTruncated(false);
+    setCaptureProgress('');
+    setCaptureStats({ detected: 0, included: 0, skipped: 0 });
     logBufferRef.current = new LogBuffer((logs, truncated) => {
       setRunLogs(logs);
       setLogTruncated(truncated);
@@ -387,14 +393,14 @@ function App() {
       
       const dir = await loadProfilesDirectory();
       if (!dir) {
-        alert('Failed to determine profiles directory');
+        setCaptureProgress('Failed to determine profiles directory');
         return;
       }
       
       try {
         await invoke('ensure_dir', { path: dir });
       } catch (err) {
-        alert(`Failed to create output directory: ${err}`);
+        setCaptureProgress(`Failed to create output directory: ${err}`);
         return;
       }
 
@@ -409,6 +415,21 @@ function App() {
         (event: StreamEvent) => {
           if (event.type === 'stdout' || event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
+            
+            // Parse streaming output for live progress
+            const line = event.data.trim();
+            
+            // Look for app names in output (e.g., "Processing: AppName" or "Found: AppName")
+            const processingMatch = line.match(/(?:Processing|Found|Detected|Scanning):\s*(.+)/i);
+            if (processingMatch) {
+              setCaptureProgress(processingMatch[1]);
+            }
+            
+            // Look for summary counts in output
+            const detectedMatch = line.match(/(\d+)\s+(?:applications?|apps?)\s+(?:detected|found)/i);
+            if (detectedMatch) {
+              setCaptureStats(prev => ({ ...prev, detected: parseInt(detectedMatch[1], 10) }));
+            }
           }
         }
       );
@@ -416,7 +437,14 @@ function App() {
       const isSuccess = captureResult.envelope?.success ?? (captureResult.exitCode === 0);
       
       if (isSuccess) {
-        alert('Setup scanned successfully!');
+        // Parse final stats from envelope if available
+        const envelopeData = captureResult.envelope?.data as any;
+        const detected = envelopeData?.summary?.total || captureStats.detected || 0;
+        const included = envelopeData?.summary?.included || detected;
+        const skipped = envelopeData?.summary?.skipped || 0;
+        
+        setCaptureStats({ detected, included, skipped });
+        
         await refreshProfiles();
         
         const discovered = await discoverProfiles(dir);
@@ -426,14 +454,16 @@ function App() {
           setSelectedProfilePath(newest.path);
           updateSettings({ lastSelectedProfile: newest.name, lastSelectedProfilePath: newest.path });
         }
+        
+        setShowCaptureModal(true);
       } else {
         const friendlyMsg = captureResult.envelope?.error?.message || 
                            'Autosuite couldn\'t save the setup. Please try again.';
-        alert(`Couldn't scan this computer\n\n${friendlyMsg}`);
+        setCaptureProgress(`Error: ${friendlyMsg}`);
       }
 
     } catch (err) {
-      alert(`Failed to scan: ${err instanceof Error ? err.message : String(err)}`);
+      setCaptureProgress(`Failed to scan: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       logBufferRef.current?.flush();
       setIsRunning(false);
@@ -588,10 +618,19 @@ function App() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Detecting installed applications...</span>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      {captureProgress ? (
+                        <span className="font-medium">Processing {captureProgress}</span>
+                      ) : (
+                        <span className="text-muted-foreground">Detecting installed applications...</span>
+                      )}
                     </div>
+                    {captureStats.detected > 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        Found {captureStats.detected} application{captureStats.detected !== 1 ? 's' : ''} so far...
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       This may take a moment. Your profile will be saved automatically.
                     </p>
@@ -599,6 +638,14 @@ function App() {
                 </CardContent>
               </Card>
             )}
+            
+            <CaptureResultModal
+              open={showCaptureModal}
+              onClose={() => setShowCaptureModal(false)}
+              appsDetected={captureStats.detected}
+              appsIncluded={captureStats.included}
+              appsSkipped={captureStats.skipped}
+            />
             
             {runLogs && (
               <details className="group">
