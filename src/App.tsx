@@ -14,6 +14,8 @@ import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
 import { LogViewer } from './components/app/log-viewer';
+import { ActivityLog } from './components/app/activity-log';
+import { AppIcon } from './components/app/app-icon';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -23,6 +25,14 @@ import { Loader2 } from 'lucide-react';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'capture' | 'apply' | 'verify' | 'report' | 'settings';
+type CheckStep = 'idle' | 'scanning' | 'comparing' | 'ready';
+
+interface ActivityItem {
+  id: string;
+  message: string;
+  status: 'running' | 'success' | 'error';
+  timestamp: Date;
+}
 
 interface AppState {
   status: AppStatus;
@@ -55,8 +65,19 @@ function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [runLogs, setRunLogs] = useState<string>('');
   const [logTruncated, setLogTruncated] = useState(false);
-  const [lastAction, setLastAction] = useState<string | null>(null);
+  const [checkStep, setCheckStep] = useState<CheckStep>('idle');
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const logBufferRef = useRef<LogBuffer | null>(null);
+
+  const addActivity = (message: string, status: ActivityItem['status']) => {
+    const activity: ActivityItem = {
+      id: Date.now().toString(),
+      message,
+      status,
+      timestamp: new Date(),
+    };
+    setActivities((prev) => [...prev.slice(-4), activity]);
+  };
 
   const loadProfilesDirectory = async () => {
     const { invoke } = await import('@tauri-apps/api/core');
@@ -205,12 +226,20 @@ function App() {
     setIsRunning(true);
     setRunLogs('');
     setLogTruncated(false);
+    setCheckStep('scanning');
     logBufferRef.current = new LogBuffer((logs, truncated) => {
       setRunLogs(logs);
       setLogTruncated(truncated);
     });
 
+    addActivity('Scanning installed applications...', 'running');
+
     try {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      addActivity('Scanning complete', 'success');
+      setCheckStep('comparing');
+      addActivity('Comparing to setup profile...', 'running');
+
       const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
         settings,
         'verify',
@@ -227,7 +256,20 @@ function App() {
         verify: verifyResult.envelope,
       }));
 
-      setLastAction(`Check setup at ${new Date().toLocaleTimeString()}`);
+      addActivity('Comparison complete', 'success');
+      setCheckStep('ready');
+
+      const missing = verifyResult.envelope?.data?.summary?.missingCount ?? 0;
+      const mismatch = verifyResult.envelope?.data?.summary?.versionMismatchCount ?? 0;
+      
+      if (missing === 0 && mismatch === 0) {
+        addActivity('All applications are up to date!', 'success');
+      } else {
+        const issues = [];
+        if (missing > 0) issues.push(`${missing} missing`);
+        if (mismatch > 0) issues.push(`${mismatch} version mismatch`);
+        addActivity(`Found ${issues.join(', ')}`, 'success');
+      }
 
       const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
         settings,
@@ -240,6 +282,8 @@ function App() {
         report: reportResult.envelope,
       }));
     } catch (err) {
+      addActivity('Check failed', 'error');
+      setCheckStep('idle');
       alert(`Failed to run verify: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       logBufferRef.current?.flush();
@@ -288,8 +332,6 @@ function App() {
           alert(`Couldn't apply setup\n\n${friendlyMsg}`);
         }
       }
-
-      setLastAction(`Set up machine at ${new Date().toLocaleTimeString()}`);
 
       const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
         settings,
@@ -379,7 +421,6 @@ function App() {
         alert(`Couldn't scan this computer\n\n${friendlyMsg}`);
       }
 
-      setLastAction(`Scanned at ${new Date().toLocaleTimeString()}`);
     } catch (err) {
       alert(`Failed to scan: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -548,103 +589,47 @@ function App() {
         );
 
       case 'apply':
+        const missing = state.verify?.data?.summary?.missingCount ?? 0;
+        const mismatch = state.verify?.data?.summary?.versionMismatchCount ?? 0;
+        const hasIssues = missing > 0 || mismatch > 0;
+        const isChecked = checkStep === 'ready';
+        
         return (
           <div className="space-y-6">
             <PageHeader
               title="Apply"
               subtitle="Set up this machine using a saved profile"
-              actions={
-                <Button onClick={handleSetupMachine} disabled={isRunning || !selectedProfile}>
-                  {isRunning ? 'Running...' : 'Fix missing apps'}
-                </Button>
-              }
             />
             
-            <div className="grid gap-6 md:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Engine Status</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">CLI Version</span>
-                    <span className="text-sm font-medium">{state.capabilities?.cliVersion || 'unknown'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Schema</span>
-                    <span className="text-sm font-medium">{state.capabilities?.schemaVersion || 'unknown'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Status</span>
-                    <StatusPill status={state.capabilities?.success ? 'ok' : 'error'} />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Machine Status</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {state.verify?.success ? (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">OK</span>
-                        <span className="text-sm font-medium">{state.verify.data?.summary?.okCount ?? 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Missing</span>
-                        <span className="text-sm font-medium">{state.verify.data?.summary?.missingCount ?? 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Mismatch</span>
-                        <span className="text-sm font-medium">{state.verify.data?.summary?.versionMismatchCount ?? 0}</span>
-                      </div>
-                    </>
-                  ) : state.verify ? (
-                    <p className="text-sm text-danger">{state.verify.error?.message || 'Verification failed'}</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Run "Check setup" to see status</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Last Run</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {state.report?.data?.hasState ? (
-                    <>
-                      {state.report.data.lastApplied && (
-                        <div>
-                          <p className="text-xs text-muted-foreground">Last Applied</p>
-                          <p className="text-sm font-medium">
-                            {new Date(state.report.data.lastApplied.timestamp).toLocaleString()}
-                          </p>
-                        </div>
-                      )}
-                      {state.report.data.lastVerify && (
-                        <div>
-                          <p className="text-xs text-muted-foreground">Last Verify</p>
-                          <p className="text-sm font-medium">
-                            {new Date(state.report.data.lastVerify.timestamp).toLocaleString()}
-                          </p>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">No state available</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
+            {/* Row 1: Primary Machine Status Card with CTA */}
             <Card>
               <CardHeader>
-                <CardTitle>Setup Configuration</CardTitle>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle>Machine Status</CardTitle>
+                    <CardDescription className="mt-1">
+                      {!selectedProfile && 'Select a setup profile to begin'}
+                      {selectedProfile && checkStep === 'idle' && 'Ready to check your computer'}
+                      {checkStep === 'scanning' && 'Scanning installed applications...'}
+                      {checkStep === 'comparing' && 'Comparing to setup profile...'}
+                      {checkStep === 'ready' && !hasIssues && 'All applications are up to date'}
+                      {checkStep === 'ready' && hasIssues && 'Some applications need attention'}
+                    </CardDescription>
+                  </div>
+                  {isChecked && hasIssues && (
+                    <Button onClick={handleSetupMachine} disabled={isRunning || !selectedProfile}>
+                      {isRunning ? 'Running...' : 'Fix missing apps'}
+                    </Button>
+                  )}
+                  {!isChecked && (
+                    <Button onClick={handleCheckSetup} disabled={isRunning || !selectedProfile}>
+                      {isRunning ? 'Checking...' : 'Check this computer'}
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Setup Profile Selection */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Setup Profile</label>
                   {profiles.length > 0 ? (
@@ -655,6 +640,7 @@ function App() {
                         setSelectedProfile(e.target.value);
                         setSelectedProfilePath(selected?.path || '');
                         updateSettings({ lastSelectedProfile: e.target.value, lastSelectedProfilePath: selected?.path || '' });
+                        setCheckStep('idle');
                       }}
                       disabled={isRunning}
                       className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -673,7 +659,87 @@ function App() {
                   )}
                 </div>
 
-                <div className="flex items-center space-x-2">
+                {/* Progress Steps */}
+                {selectedProfile && checkStep !== 'idle' && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex items-center justify-center w-6 h-6 rounded-full ${checkStep === 'scanning' ? 'bg-primary text-primary-foreground' : 'bg-success text-success-foreground'}`}>
+                        {checkStep === 'scanning' ? <Loader2 className="h-3 w-3 animate-spin" /> : '✓'}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Scanning installed applications</p>
+                        <p className="text-xs text-muted-foreground">Checking what's on this computer</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <div className={`flex items-center justify-center w-6 h-6 rounded-full ${checkStep === 'comparing' ? 'bg-primary text-primary-foreground' : checkStep === 'ready' ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}`}>
+                        {checkStep === 'comparing' ? <Loader2 className="h-3 w-3 animate-spin" /> : checkStep === 'ready' ? '✓' : '2'}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Comparing to setup</p>
+                        <p className="text-xs text-muted-foreground">Finding differences</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Results Summary */}
+                {isChecked && state.verify?.success && (
+                  <div className="pt-2 space-y-3">
+                    <div className="flex items-center justify-between p-3 rounded-md bg-success/10 border border-success/20">
+                      <span className="text-sm font-medium">Installed & up to date</span>
+                      <span className="text-lg font-semibold text-success">{state.verify.data?.summary?.okCount ?? 0}</span>
+                    </div>
+                    {missing > 0 && (
+                      <div className="flex items-center justify-between p-3 rounded-md bg-warning/10 border border-warning/20">
+                        <span className="text-sm font-medium">Missing applications</span>
+                        <span className="text-lg font-semibold text-warning">{missing}</span>
+                      </div>
+                    )}
+                    {mismatch > 0 && (
+                      <div className="flex items-center justify-between p-3 rounded-md bg-warning/10 border border-warning/20">
+                        <span className="text-sm font-medium">Version mismatches</span>
+                        <span className="text-lg font-semibold text-warning">{mismatch}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* App List with Icons */}
+                {isChecked && state.verify?.data?.results && state.verify.data.results.length > 0 && (
+                  <div className="pt-2">
+                    <details className="group">
+                      <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
+                        View application details ({state.verify.data.results.length} items)
+                      </summary>
+                      <div className="mt-3 space-y-1 max-h-64 overflow-y-auto">
+                        {state.verify.data.results.map((result, idx: number) => (
+                          <div key={idx} className="flex items-center gap-3 p-2 rounded hover:bg-accent/10">
+                            <AppIcon wingetId={result.id || result.ref || ''} className="h-4 w-4 text-muted-foreground" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{result.id || result.ref || 'Unknown'}</p>
+                              {result.message && (
+                                <p className="text-xs text-muted-foreground">{result.message}</p>
+                              )}
+                            </div>
+                            <StatusPill 
+                              status={
+                                result.status === 'ok' || result.status === 'pass' ? 'ok' : 
+                                result.status === 'missing' ? 'missing' : 
+                                result.status === 'version-mismatch' || result.status === 'fail' ? 'mismatch' : 
+                                'neutral'
+                              } 
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                )}
+
+                {/* Dry Run Toggle */}
+                <div className="flex items-center space-x-2 pt-2 border-t border-border">
                   <Switch
                     id="dry-run"
                     checked={settings.dryRunEnabled}
@@ -681,32 +747,68 @@ function App() {
                     disabled={isRunning}
                   />
                   <label htmlFor="dry-run" className="text-sm font-medium cursor-pointer">
-                    Preview changes (recommended)
+                    Preview changes only (recommended)
                   </label>
                 </div>
-
-                <div className="flex gap-2">
-                  <Button onClick={handleSetupMachine} disabled={isRunning || !selectedProfile}>
-                    {isRunning ? 'Running...' : 'Fix missing apps'}
-                  </Button>
-                  <Button variant="secondary" onClick={handleCheckSetup} disabled={isRunning || !selectedProfile}>
-                    Check this computer
-                  </Button>
-                </div>
-
-                {lastAction && (
-                  <p className="text-xs text-muted-foreground">Last action: {lastAction}</p>
-                )}
               </CardContent>
             </Card>
 
-            {runLogs && (
-              <LogViewer
-                logs={runLogs}
-                truncated={logTruncated}
-                onClear={() => setRunLogs('')}
-              />
-            )}
+            {/* Row 2: Last Run (wider) + Engine Status (compact) */}
+            <div className="grid gap-6 md:grid-cols-3">
+              <Card className="md:col-span-2">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Last Run</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {state.report?.data?.hasState ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      {state.report.data.lastApplied && (
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Last Applied</p>
+                          <p className="text-sm font-medium">
+                            {new Date(state.report.data.lastApplied.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                      {state.report.data.lastVerify && (
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Last Verify</p>
+                          <p className="text-sm font-medium">
+                            {new Date(state.report.data.lastVerify.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No history available</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Engine</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Version</span>
+                    <span className="text-xs font-medium">{state.capabilities?.cliVersion || 'unknown'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Status</span>
+                    <StatusPill status={state.capabilities?.success ? 'ok' : 'error'} />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Activity Log with Technical Details */}
+            <ActivityLog
+              activities={activities}
+              technicalLogs={runLogs}
+              logsTruncated={logTruncated}
+              onClearLogs={() => setRunLogs('')}
+            />
           </div>
         );
 
