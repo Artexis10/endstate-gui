@@ -29,6 +29,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState('');
+  const [selectedProfilePath, setSelectedProfilePath] = useState('');
   
   const [state, setState] = useState<AppState>({
     status: 'loading',
@@ -67,6 +68,7 @@ function App() {
     const loadedSettings = loadSettings();
     setSettings(loadedSettings);
     setSelectedProfile(loadedSettings.lastSelectedProfile);
+    setSelectedProfilePath(loadedSettings.lastSelectedProfilePath || '');
     refreshProfiles();
   }, []);
 
@@ -85,6 +87,7 @@ function App() {
     const defaults = loadSettings();
     setSettings(defaults);
     setSelectedProfile('');
+    setSelectedProfilePath('');
     setProfiles([]);
     refreshProfiles();
     loadInitialData();
@@ -187,7 +190,7 @@ function App() {
       const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
         settings,
         'verify',
-        ['--profile', selectedProfile],
+        ['--profile', selectedProfilePath],
         (event: StreamEvent) => {
           if (event.type === 'stdout' || event.type === 'stderr') {
             setRunLogs((prev) => prev + event.data);
@@ -229,7 +232,7 @@ function App() {
     setRunLogs('');
 
     try {
-      const args = ['--profile', selectedProfile];
+      const args = ['--profile', selectedProfilePath];
       if (settings.dryRunEnabled) {
         args.push('--dry-run');
       }
@@ -272,7 +275,7 @@ function App() {
       const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
         settings,
         'verify',
-        ['--profile', selectedProfile],
+        ['--profile', selectedProfilePath],
         () => {}
       );
       setState((prev) => ({
@@ -371,7 +374,8 @@ function App() {
         if (discovered.length > 0) {
           const newest = discovered.sort((a, b) => b.path.localeCompare(a.path))[0];
           setSelectedProfile(newest.name);
-          updateSettings({ lastSelectedProfile: newest.name });
+          setSelectedProfilePath(newest.path);
+          updateSettings({ lastSelectedProfile: newest.name, lastSelectedProfilePath: newest.path });
         }
       } else {
         // Show friendly error message
@@ -681,8 +685,10 @@ function App() {
                 id="profile-select"
                 value={selectedProfile}
                 onChange={(e) => {
+                  const selected = profiles.find(p => p.name === e.target.value);
                   setSelectedProfile(e.target.value);
-                  updateSettings({ lastSelectedProfile: e.target.value });
+                  setSelectedProfilePath(selected?.path || '');
+                  updateSettings({ lastSelectedProfile: e.target.value, lastSelectedProfilePath: selected?.path || '' });
                 }}
                 disabled={isRunning}
               >

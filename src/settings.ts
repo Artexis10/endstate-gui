@@ -3,6 +3,7 @@ export interface AppSettings {
   engineScriptPath: string;
   customProfilesDirectory: string;
   lastSelectedProfile: string;
+  lastSelectedProfilePath: string;
   dryRunEnabled: boolean;
 }
 
@@ -13,6 +14,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   engineScriptPath: 'C:\\Users\\win-laptop\\Desktop\\projects\\autosuite\\autosuite.ps1',
   customProfilesDirectory: '',
   lastSelectedProfile: '',
+  lastSelectedProfilePath: '',
   dryRunEnabled: true,
 };
 

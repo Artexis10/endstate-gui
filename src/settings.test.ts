@@ -24,6 +24,7 @@ describe('settings', () => {
         engineScriptPath: '/custom/path.ps1',
         customProfilesDirectory: '/manifests',
         lastSelectedProfile: 'TestProfile',
+        lastSelectedProfilePath: '/manifests/TestProfile.jsonc',
         dryRunEnabled: false,
       };
       localStorage.setItem('autosuite-gui-settings', JSON.stringify(stored));
@@ -64,6 +65,7 @@ describe('settings', () => {
         engineScriptPath: '/test/path.ps1',
         customProfilesDirectory: '/test/manifests',
         lastSelectedProfile: 'Profile1',
+        lastSelectedProfilePath: '/test/manifests/Profile1.jsonc',
         dryRunEnabled: false,
       };
 
@@ -80,6 +82,7 @@ describe('settings', () => {
         engineScriptPath: '/old/path.ps1',
         customProfilesDirectory: '/old',
         lastSelectedProfile: 'Old',
+        lastSelectedProfilePath: '/old/Old.jsonc',
         dryRunEnabled: true,
       };
       saveSettings(initial);
@@ -89,6 +92,7 @@ describe('settings', () => {
         engineScriptPath: '/new/path.ps1',
         customProfilesDirectory: '/new',
         lastSelectedProfile: 'New',
+        lastSelectedProfilePath: '/new/New.jsonc',
         dryRunEnabled: false,
       };
       saveSettings(updated);
