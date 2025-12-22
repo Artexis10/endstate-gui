@@ -342,10 +342,15 @@ function App() {
         return;
       }
 
+      // Generate timestamped filename
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+      const filename = `setup_${timestamp}.jsonc`;
+      const outputPath = `${dir}\\${filename}`;
+
       const captureResult = await runAutosuiteStreaming(
         settings,
         'capture',
-        ['--out', dir],
+        ['--out', outputPath],
         (event: StreamEvent) => {
           if (event.type === 'stdout' || event.type === 'stderr') {
             setRunLogs((prev) => prev + event.data);
