@@ -561,40 +561,58 @@ function App() {
           <div className="space-y-6">
             <PageHeader
               title="Capture machine"
-              subtitle="Scan this computer to create a reusable setup profile"
+              subtitle="Create a reusable setup profile from this computer"
             />
             <Card>
-              <CardHeader>
-                <CardTitle>Scan Current Machine</CardTitle>
-                <CardDescription>
-                  Create a snapshot of installed applications and settings
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 pt-6">
                 <p className="text-sm text-muted-foreground">
-                  This will scan your computer and save the current setup as a profile.
+                  This will capture your computer's current setup and save it as a profile.
                   You can later use this profile to configure other machines.
                 </p>
-                <div className="flex gap-2">
+                <div>
                   {supportsCapture ? (
                     <Button onClick={handleCapture} disabled={isRunning}>
-                      {isRunning ? 'Scanning...' : 'Scan current machine'}
+                      {isRunning ? 'Capturing...' : 'Capture machine'}
                     </Button>
                   ) : (
                     <p className="text-sm text-warning">Capture command not available in this version</p>
                   )}
-                  <Button variant="secondary" onClick={handleImportProfile} disabled={isRunning}>
-                    Import existing setup
-                  </Button>
                 </div>
               </CardContent>
             </Card>
+            
+            {isRunning && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Building your setup profile...</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Detecting installed applications...</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This may take a moment. Your profile will be saved automatically.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
             {runLogs && (
-              <LogViewer
-                logs={runLogs}
-                truncated={logTruncated}
-                onClear={() => setRunLogs('')}
-              />
+              <details className="group">
+                <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
+                  Technical details
+                </summary>
+                <div className="mt-2">
+                  <LogViewer
+                    logs={runLogs}
+                    truncated={logTruncated}
+                    onClear={() => setRunLogs('')}
+                  />
+                </div>
+              </details>
             )}
           </div>
         );
@@ -740,23 +758,6 @@ function App() {
                   <label htmlFor="dry-run" className="text-sm font-medium cursor-pointer">
                     Preview changes only (recommended)
                   </label>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Engine Status (compact, metadata only) */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Engine Status</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Version</span>
-                  <span className="text-xs font-medium">{state.capabilities?.cliVersion || 'unknown'}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Status</span>
-                  <StatusPill status={state.capabilities?.success ? 'ok' : 'error'} />
                 </div>
               </CardContent>
             </Card>
