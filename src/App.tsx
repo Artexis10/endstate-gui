@@ -10,6 +10,7 @@ import { AppSettings, loadSettings, saveSettings } from './settings';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
 import { runAutosuiteStreaming, StreamEvent } from './streaming-runner';
 import { LogBuffer } from './log-buffer';
+import { parseCaptureOutput } from './lib/log-parse';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -73,7 +74,8 @@ function App() {
   const [showResultModal, setShowResultModal] = useState(false);
   const [showCaptureModal, setShowCaptureModal] = useState(false);
   const [captureProgress, setCaptureProgress] = useState<string>('');
-  const [captureStats, setCaptureStats] = useState({ detected: 0, included: 0, skipped: 0 });
+  const [captureStats, setCaptureStats] = useState({ succeeded: 0, skipped: 0, failed: 0, outputPath: '' });
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const logBufferRef = useRef<LogBuffer | null>(null);
 
   const updateActivity = (message: string, status: ActivityItem['status'], step?: number) => {
@@ -382,7 +384,8 @@ function App() {
     setRunLogs('');
     setLogTruncated(false);
     setCaptureProgress('');
-    setCaptureStats({ detected: 0, included: 0, skipped: 0 });
+    setCaptureStats({ succeeded: 0, skipped: 0, failed: 0, outputPath: '' });
+    setShowTechnicalDetails(false);
     logBufferRef.current = new LogBuffer((logs, truncated) => {
       setRunLogs(logs);
       setLogTruncated(truncated);
@@ -416,19 +419,10 @@ function App() {
           if (event.type === 'stdout' || event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
             
-            // Parse streaming output for live progress
-            const line = event.data.trim();
-            
-            // Look for app names in output (e.g., "Processing: AppName" or "Found: AppName")
-            const processingMatch = line.match(/(?:Processing|Found|Detected|Scanning):\s*(.+)/i);
-            if (processingMatch) {
-              setCaptureProgress(processingMatch[1]);
-            }
-            
-            // Look for summary counts in output
-            const detectedMatch = line.match(/(\d+)\s+(?:applications?|apps?)\s+(?:detected|found)/i);
-            if (detectedMatch) {
-              setCaptureStats(prev => ({ ...prev, detected: parseInt(detectedMatch[1], 10) }));
+            // Parse live progress from streaming logs
+            const parsed = parseCaptureOutput(runLogs + event.data);
+            if (parsed.lastProcessedApp) {
+              setCaptureProgress(parsed.lastProcessedApp);
             }
           }
         }
@@ -437,13 +431,9 @@ function App() {
       const isSuccess = captureResult.envelope?.success ?? (captureResult.exitCode === 0);
       
       if (isSuccess) {
-        // Parse final stats from envelope if available
-        const envelopeData = captureResult.envelope?.data as any;
-        const detected = envelopeData?.summary?.total || captureStats.detected || 0;
-        const included = envelopeData?.summary?.included || detected;
-        const skipped = envelopeData?.summary?.skipped || 0;
-        
-        setCaptureStats({ detected, included, skipped });
+        // Parse final stats from complete logs
+        const finalStats = parseCaptureOutput(runLogs);
+        setCaptureStats(finalStats);
         
         await refreshProfiles();
         
@@ -621,16 +611,11 @@ function App() {
                     <div className="flex items-center gap-2 text-sm">
                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
                       {captureProgress ? (
-                        <span className="font-medium">Processing {captureProgress}</span>
+                        <span className="font-medium">Processing: {captureProgress}</span>
                       ) : (
                         <span className="text-muted-foreground">Detecting installed applications...</span>
                       )}
                     </div>
-                    {captureStats.detected > 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        Found {captureStats.detected} application{captureStats.detected !== 1 ? 's' : ''} so far...
-                      </p>
-                    )}
                     <p className="text-xs text-muted-foreground">
                       This may take a moment. Your profile will be saved automatically.
                     </p>
@@ -642,13 +627,18 @@ function App() {
             <CaptureResultModal
               open={showCaptureModal}
               onClose={() => setShowCaptureModal(false)}
-              appsDetected={captureStats.detected}
-              appsIncluded={captureStats.included}
-              appsSkipped={captureStats.skipped}
+              succeeded={captureStats.succeeded}
+              skipped={captureStats.skipped}
+              failed={captureStats.failed}
+              outputPath={captureStats.outputPath}
             />
             
             {runLogs && (
-              <details className="group">
+              <details 
+                className="group" 
+                open={showTechnicalDetails}
+                onToggle={(e) => setShowTechnicalDetails((e.target as HTMLDetailsElement).open)}
+              >
                 <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
                   Technical details
                 </summary>
