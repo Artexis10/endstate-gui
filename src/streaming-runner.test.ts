@@ -265,5 +265,54 @@ describe('streaming-runner', () => {
       expect(result.envelope).toBeNull();
       expect(result.stdout).toBe('{invalid json}');
     });
+
+    it('should extract JSON envelope from mixed stdout (logs + JSON)', async () => {
+      const mockUnlisten = vi.fn();
+      let eventCallback: (event: any) => void = () => {};
+
+      vi.mocked(listen).mockImplementation(async (_channel, callback) => {
+        eventCallback = callback;
+        return mockUnlisten;
+      });
+
+      vi.mocked(invoke).mockImplementation(async () => {
+        eventCallback({ 
+          payload: { 
+            type: 'stdout', 
+            data: '[INFO] Starting capture...\n[INFO] Processing...\n{"schemaVersion":"1.0","success":true,"data":{"outputPath":"C:\\\\profiles\\\\setup.jsonc"},"error":null}' 
+          } 
+        });
+        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+      });
+
+      const onEvent = vi.fn();
+      const result = await runAutosuiteStreaming(mockSettings, 'capture', ['--out', 'C:\\profiles\\setup.jsonc'], onEvent);
+
+      expect(result.envelope).not.toBeNull();
+      expect(result.envelope?.success).toBe(true);
+      expect(result.envelope?.data).toHaveProperty('outputPath');
+    });
+
+    it('should treat exit code 0 as success when no envelope is parsed', async () => {
+      const mockUnlisten = vi.fn();
+      let eventCallback: (event: any) => void = () => {};
+
+      vi.mocked(listen).mockImplementation(async (_channel, callback) => {
+        eventCallback = callback;
+        return mockUnlisten;
+      });
+
+      vi.mocked(invoke).mockImplementation(async () => {
+        eventCallback({ payload: { type: 'stdout', data: '[INFO] Capture completed successfully' } });
+        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+      });
+
+      const onEvent = vi.fn();
+      const result = await runAutosuiteStreaming(mockSettings, 'capture', ['--out', 'C:\\profiles\\setup.jsonc'], onEvent);
+
+      expect(result.envelope).toBeNull();
+      expect(result.exitCode).toBe(0);
+      // GUI should treat this as success based on exit code
+    });
   });
 });

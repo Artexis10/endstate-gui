@@ -82,11 +82,27 @@ export async function runAutosuiteStreaming<T>(
   const stdout = stdoutBuffer.trim();
   let envelope: AutosuiteEnvelope<T> | null = null;
 
-  if (stdout && stdout.startsWith('{')) {
+  // Extract last JSON object from stdout (engine may output logs before JSON)
+  if (stdout) {
     try {
-      envelope = JSON.parse(stdout) as AutosuiteEnvelope<T>;
+      // Find the last occurrence of a JSON object in stdout
+      const lines = stdout.split('\n');
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (line.startsWith('{')) {
+          // Try to parse from this line to the end
+          const jsonCandidate = lines.slice(i).join('\n');
+          try {
+            envelope = JSON.parse(jsonCandidate) as AutosuiteEnvelope<T>;
+            break; // Successfully parsed, stop searching
+          } catch {
+            // Not valid JSON, continue searching backwards
+            continue;
+          }
+        }
+      }
     } catch (err) {
-      console.error('Failed to parse JSON envelope:', err);
+      console.error('Failed to extract JSON envelope from stdout:', err);
     }
   }
 

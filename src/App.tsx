@@ -358,7 +358,10 @@ function App() {
         }
       );
 
-      if (captureResult.envelope && captureResult.envelope.success) {
+      // Handle success/failure based on envelope or exit code
+      const isSuccess = captureResult.envelope?.success ?? (captureResult.exitCode === 0);
+      
+      if (isSuccess) {
         alert('Setup scanned successfully!');
         await refreshProfiles();
         
@@ -369,9 +372,19 @@ function App() {
           updateSettings({ lastSelectedProfile: newest.name });
         }
       } else {
-        const errorMsg = captureResult.envelope?.error?.message || 
-                        (captureResult.stderr ? stripAnsi(captureResult.stderr).slice(0, 200) : 'Unknown error');
-        alert(`Scan failed: ${errorMsg}`);
+        // Show friendly error message
+        const friendlyMsg = captureResult.envelope?.error?.message || 
+                           'Autosuite couldn\'t save the setup. Please try again.';
+        
+        const technicalDetails = [
+          `Exit code: ${captureResult.exitCode}`,
+          captureResult.stderr ? `Stderr: ${stripAnsi(captureResult.stderr).slice(-2000)}` : null,
+          captureResult.envelope ? `Envelope: ${JSON.stringify(captureResult.envelope, null, 2)}` : null
+        ].filter(Boolean).join('\n\n');
+        
+        if (confirm(`Couldn't scan this computer\n\n${friendlyMsg}\n\nShow technical details?`)) {
+          alert(`Technical Details:\n\n${technicalDetails}`);
+        }
       }
 
       setLastAction(`Scanned at ${new Date().toLocaleTimeString()}`);
