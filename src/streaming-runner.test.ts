@@ -18,6 +18,7 @@ describe('streaming-runner', () => {
     engineScriptPath: 'C:\\test\\autosuite.ps1',
     customProfilesDirectory: '',
     lastSelectedProfile: '',
+    lastSelectedProfilePath: '',
     dryRunEnabled: true,
   };
 
