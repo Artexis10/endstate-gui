@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   AutosuiteEnvelope,
   AutosuiteCapabilitiesData,
@@ -10,6 +10,7 @@ import { AppSettings, loadSettings, saveSettings } from './settings';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
 import { runAutosuiteStreaming, StreamEvent } from './streaming-runner';
 import { stripAnsi } from './utils';
+import { LogBuffer } from './log-buffer';
 import './App.css';
 
 type AppStatus = 'loading' | 'ready' | 'error';
@@ -44,6 +45,7 @@ function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [runLogs, setRunLogs] = useState<string>('');
   const [lastAction, setLastAction] = useState<string | null>(null);
+  const logBufferRef = useRef<LogBuffer | null>(null);
 
   const loadProfilesDirectory = async () => {
     const { invoke } = await import('@tauri-apps/api/core');
@@ -105,6 +107,7 @@ function App() {
     });
 
     setRunLogs('');
+    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
 
     try {
       const capResult = await runAutosuiteStreaming<AutosuiteCapabilitiesData>(
@@ -113,10 +116,11 @@ function App() {
         [],
         (event) => {
           if (event.type === 'stderr') {
-            setRunLogs((prev) => prev + event.data);
+            logBufferRef.current?.append(event.data);
           }
         }
       );
+      logBufferRef.current?.flush();
 
       if (!capResult.envelope) {
         setState({
@@ -185,6 +189,7 @@ function App() {
 
     setIsRunning(true);
     setRunLogs('');
+    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
 
     try {
       const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
@@ -193,10 +198,11 @@ function App() {
         ['--profile', selectedProfilePath],
         (event: StreamEvent) => {
           if (event.type === 'stdout' || event.type === 'stderr') {
-            setRunLogs((prev) => prev + event.data);
+            logBufferRef.current?.append(event.data);
           }
         }
       );
+      logBufferRef.current?.flush();
 
       setState((prev) => ({
         ...prev,
@@ -230,6 +236,7 @@ function App() {
 
     setIsRunning(true);
     setRunLogs('');
+    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
 
     try {
       const args = ['--profile', selectedProfilePath];
@@ -243,10 +250,11 @@ function App() {
         args,
         (event: StreamEvent) => {
           if (event.type === 'stdout' || event.type === 'stderr') {
-            setRunLogs((prev) => prev + event.data);
+            logBufferRef.current?.append(event.data);
           }
         }
       );
+      logBufferRef.current?.flush();
 
       if (applyResult.envelope) {
         const dryRunText = settings.dryRunEnabled ? ' (dry run)' : '';
@@ -292,6 +300,7 @@ function App() {
   const handleRefresh = async () => {
     setIsRunning(true);
     setRunLogs('');
+    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
 
     try {
       const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
@@ -329,6 +338,7 @@ function App() {
   const handleCapture = async () => {
     setIsRunning(true);
     setRunLogs('');
+    logBufferRef.current = new LogBuffer((logs) => setRunLogs(logs));
 
     try {
       const { invoke } = await import('@tauri-apps/api/core');
@@ -358,10 +368,11 @@ function App() {
         ['--out', outputPath],
         (event: StreamEvent) => {
           if (event.type === 'stdout' || event.type === 'stderr') {
-            setRunLogs((prev) => prev + event.data);
+            logBufferRef.current?.append(event.data);
           }
         }
       );
+      logBufferRef.current?.flush();
 
       // Handle success/failure based on envelope or exit code
       const isSuccess = captureResult.envelope?.success ?? (captureResult.exitCode === 0);
