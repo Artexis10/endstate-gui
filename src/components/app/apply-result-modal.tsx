@@ -128,6 +128,9 @@ export function ApplyResultModal({
     });
   }, [items]);
 
+  // Total apps checked = all items in the list
+  const totalChecked = items.length;
+
   // Determine title and description based on status and phase
   const getTitle = () => {
     if (isApplying) return 'Applying changes...';
@@ -139,28 +142,33 @@ export function ApplyResultModal({
 
   const getDescription = () => {
     if (isApplying) {
+      // Show what's being installed vs already present
+      const appsToInstall = willBeInstalled;
       if (currentProgress?.currentApp) {
-        return `Installing: ${currentProgress.currentApp}`;
+        return `Installing ${appsToInstall} app${appsToInstall > 1 ? 's' : ''} — ${currentProgress.currentApp}`;
       }
-      return 'Installing apps...';
+      return `Installing ${appsToInstall} app${appsToInstall > 1 ? 's' : ''} (${alreadyPresent} already present)`;
     }
     if (hasFailures) {
-      return `${needsAttention} app${needsAttention > 1 ? 's' : ''} need${needsAttention === 1 ? 's' : ''} attention`;
+      // Show checked vs needs attention
+      return `Checked ${totalChecked} apps — ${needsAttention} need${needsAttention === 1 ? 's' : ''} attention`;
     }
     if (hasPendingChanges) {
-      // Intent-based language with reassurance
-      return 'No changes have been made yet.';
+      // Preview: emphasize checked vs changing, with reassurance
+      return `Checked ${totalChecked} apps — ${willBeInstalled} will be installed. No changes made yet.`;
     }
     if (installedThisRun > 0) {
-      return `${installedThisRun} app${installedThisRun > 1 ? 's' : ''} installed successfully`;
+      // Final result after apply
+      return `Checked ${totalChecked} apps — ${installedThisRun} installed this run`;
     }
-    return 'All apps are already present';
+    // All already present
+    return `Checked ${totalChecked} apps — all already present`;
   };
 
   return (
     <Dialog open={open} onOpenChange={isApplying ? undefined : onClose}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <div className="flex items-center gap-3 mb-2">
             {isApplying ? (
               <Loader2 className="h-8 w-8 text-primary animate-spin" />
@@ -180,8 +188,10 @@ export function ApplyResultModal({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Non-technical summary - phase-aware display */}
-        <div className="space-y-3 py-4">
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {/* Non-technical summary - phase-aware display */}
+          <div className="space-y-3 py-4">
           {/* During applying: show stable progress, not preview counts */}
           {isApplying ? (
             <div className="flex items-center justify-between p-4 rounded-lg bg-primary/10 border border-primary/20">
@@ -233,58 +243,60 @@ export function ApplyResultModal({
           )}
         </div>
 
-        {/* Details: unified single list with per-item action badges */}
-        {items.length > 0 && !isApplying && (
-          <div className="border-t border-border pt-4">
-            <button
-              onClick={() => setShowDetails(!showDetails)}
-              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
-            >
-              {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              Details ({items.length} apps)
-            </button>
-            
-            {showDetails && (
-              <div className="mt-3 space-y-1">
-                {/* Single unified list - actionable items shown first */}
-                <div className="border border-border rounded-lg max-h-64 overflow-y-auto">
-                  {sortedItems.map((item, idx) => {
-                    const badge = getActionBadge(item);
-                    const isActionable = item.reason === 'would_install' || item.reason === 'installed' || item.status === 'failed';
-                    return (
-                      <div 
-                        key={`${item.id}-${idx}`} 
-                        className={`flex items-center gap-2 px-3 py-2 text-xs border-b border-border last:border-b-0 ${isActionable ? 'bg-muted/10' : ''}`}
-                      >
-                        <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                        <span className="font-mono truncate flex-1" title={item.id}>{item.id}</span>
-                        <span className="text-muted-foreground text-xs flex-shrink-0">({item.driver})</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                      </div>
-                    );
-                  })}
+          {/* Details: unified single list with per-item action badges */}
+          {items.length > 0 && !isApplying && (
+            <div className="border-t border-border pt-4">
+              <button
+                onClick={() => setShowDetails(!showDetails)}
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
+              >
+                {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                Details ({items.length} apps)
+              </button>
+              
+              {showDetails && (
+                <div className="mt-3 space-y-1">
+                  {/* Single unified list - actionable items shown first */}
+                  <div className="border border-border rounded-lg max-h-48 overflow-y-auto">
+                    {sortedItems.map((item, idx) => {
+                      const badge = getActionBadge(item);
+                      const isActionable = item.reason === 'would_install' || item.reason === 'installed' || item.status === 'failed';
+                      return (
+                        <div 
+                          key={`${item.id}-${idx}`} 
+                          className={`flex items-center gap-2 px-3 py-2 text-xs border-b border-border last:border-b-0 ${isActionable ? 'bg-muted/10' : ''}`}
+                        >
+                          <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                          <span className="font-mono truncate flex-1" title={item.id}>{item.id}</span>
+                          <span className="text-muted-foreground text-xs flex-shrink-0">({item.driver})</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Copy diagnostics */}
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={copyDiagnostics}
+                      className="h-8 gap-2"
+                    >
+                      <Copy className="h-3 w-3" />
+                      {copied ? 'Copied!' : 'Copy diagnostics'}
+                    </Button>
+                  </div>
                 </div>
-                
-                {/* Copy diagnostics */}
-                <div className="flex justify-end pt-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={copyDiagnostics}
-                    className="h-8 gap-2"
-                  >
-                    <Copy className="h-3 w-3" />
-                    {copied ? 'Copied!' : 'Copy diagnostics'}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
 
-        <DialogFooter className="flex-col gap-2 sm:flex-col">
+        {/* Sticky footer - always visible */}
+        <DialogFooter className="flex-col gap-2 sm:flex-col flex-shrink-0 border-t border-border pt-4 bg-background">
           {/* Apply changes button - only in preview mode with pending changes */}
           {!isApplying && hasPendingChanges && onApplyChanges && (
             <Button 

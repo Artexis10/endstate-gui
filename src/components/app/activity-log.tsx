@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LogViewer } from './log-viewer';
 import { ChevronDown, ChevronRight, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getItem, setItem } from '@/lib/storage';
 
 interface ActivityItem {
   id: string;
@@ -30,15 +29,11 @@ export function ActivityLog({
   isComplete = false,
   totalAppsChecked = 0
 }: ActivityLogProps) {
-  const [showTechnical, setShowTechnical] = useState(() => {
-    const saved = getItem('autosuite-show-technical-logs');
-    return saved === 'true';
-  });
+  // Technical details always starts collapsed - only user click expands
+  const [showTechnical, setShowTechnical] = useState(false);
   const [showActivity, setShowActivity] = useState(true);
 
-  useEffect(() => {
-    setItem('autosuite-show-technical-logs', String(showTechnical));
-  }, [showTechnical]);
+  // No longer persist technical details state - always start collapsed
 
   const getStatusIcon = (status: ActivityItem['status']) => {
     switch (status) {

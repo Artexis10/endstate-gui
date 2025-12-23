@@ -1159,7 +1159,7 @@ function App() {
                     disabled={isRunning}
                   />
                   <label htmlFor="dry-run" className="text-sm font-medium cursor-pointer">
-                    Check only, don't install (recommended)
+                    Preview only — no installs (recommended)
                   </label>
                 </div>
               </CardContent>
