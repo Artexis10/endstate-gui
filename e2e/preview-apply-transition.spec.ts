@@ -79,13 +79,13 @@ test.describe('Preview to Apply Transition', () => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
     await page.selectOption('select', 'test-profile');
     
-    // Step 1: Click Preview changes (dry-run)
-    await page.click('button:has-text("Preview changes")');
+    // Step 1: Click Check what will change (dry-run)
+    await page.click('button:has-text("Check what will change")');
     
     // Wait for preview modal
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
-    await expect(dialog.locator('text=Changes ready to apply')).toBeVisible({ timeout: 5000 });
+    await expect(dialog.locator("text=Here's what will change")).toBeVisible({ timeout: 5000 });
     // Check for the "Will be installed" card using text filter
     await expect(dialog.locator('div').filter({ hasText: /Will be installed/ }).first()).toBeVisible();
     
@@ -112,11 +112,11 @@ test.describe('Preview to Apply Transition', () => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
     await page.selectOption('select', 'test-profile');
     
-    await page.click('button:has-text("Preview changes")');
+    await page.click('button:has-text("Check what will change")');
     await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     await page.click('[role="dialog"] button:has-text("Apply changes")');
     
     // Should show progress with app name - use first() to avoid strict mode
-    await expect(page.locator('text=Installing').first()).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('text=Installing:').first()).toBeVisible({ timeout: 3000 });
   });
 });

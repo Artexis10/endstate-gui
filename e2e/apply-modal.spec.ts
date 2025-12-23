@@ -81,16 +81,16 @@ test.describe('Apply Page - Apply Only Flow', () => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
     await page.selectOption('select', 'test-profile');
     
-    // Preview changes button should be visible (not "Check this computer")
-    await expect(page.locator('button:has-text("Preview changes")')).toBeVisible();
+    // Check what will change button should be visible
+    await expect(page.locator('button:has-text("Check what will change")')).toBeVisible();
   });
 
   test('Activity card appears during preview', async ({ page }) => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
     await page.selectOption('select', 'test-profile');
     
-    // Click Preview changes
-    await page.click('button:has-text("Preview changes")');
+    // Click Check what will change
+    await page.click('button:has-text("Check what will change")');
     
     // Wait for activity card to show
     await expect(page.locator('text=Activity')).toBeVisible({ timeout: 3000 });
@@ -178,8 +178,8 @@ test.describe('Apply Modal - All Already Installed', () => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
     await page.selectOption('select', 'test-profile');
     
-    // Click Preview changes to run apply --dry-run
-    await page.click('button:has-text("Preview changes")');
+    // Click Check what will change to run apply --dry-run
+    await page.click('button:has-text("Check what will change")');
     
     // Wait for apply modal
     await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
@@ -258,8 +258,8 @@ test.describe('Apply Modal - With Failures', () => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
     await page.selectOption('select', 'test-profile');
     
-    // Click Preview changes
-    await page.click('button:has-text("Preview changes")');
+    // Click Check what will change
+    await page.click('button:has-text("Check what will change")');
     
     // Wait for apply modal with issues
     await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
@@ -340,15 +340,15 @@ test.describe('Apply Modal - Pending Installs (Dry Run)', () => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
     await page.selectOption('select', 'test-profile');
     
-    // Click Preview changes
-    await page.click('button:has-text("Preview changes")');
+    // Click Check what will change
+    await page.click('button:has-text("Check what will change")');
     
     // Wait for apply modal
-    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('text=Changes ready to apply')).toBeVisible({ timeout: 5000 });
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(dialog.locator("text=Here's what will change")).toBeVisible({ timeout: 5000 });
     
     // Should show "Will be installed" with count 1
-    const dialog = page.locator('[role="dialog"]');
     const pendingCard = dialog.locator('.bg-warning\\/10').filter({ hasText: 'Will be installed' });
     await expect(pendingCard).toBeVisible();
     await expect(pendingCard.locator('.text-2xl')).toHaveText('1');

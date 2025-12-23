@@ -1082,7 +1082,7 @@ function App() {
                   <div>
                     <CardTitle>Setup Profile</CardTitle>
                     <CardDescription className="mt-1">
-                      {!selectedProfile ? 'Select a setup profile to begin' : 'Choose a profile and preview changes'}
+                      {!selectedProfile ? 'Select a setup profile to begin' : 'Choose a profile to get started'}
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
@@ -1093,7 +1093,7 @@ function App() {
                     )}
                     {!isPreviewReady && (
                       <Button onClick={handlePreviewChanges} disabled={isRunning || !selectedProfile}>
-                        {isRunning ? 'Analyzing...' : 'Preview changes'}
+                        {isRunning ? 'Checking...' : 'Check what will change'}
                       </Button>
                     )}
                     {isPreviewReady && !hasPendingInstalls && !hasFailures && (
@@ -1159,7 +1159,7 @@ function App() {
                     disabled={isRunning}
                   />
                   <label htmlFor="dry-run" className="text-sm font-medium cursor-pointer">
-                    Preview changes only (recommended)
+                    Check only, don't install (recommended)
                   </label>
                 </div>
               </CardContent>

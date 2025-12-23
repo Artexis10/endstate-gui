@@ -31,7 +31,6 @@ export function ApplyResultModal({
   rawEnvelope,
 }: ApplyResultModalProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
 
   // Categorize items using the helper - derive from items array (source of truth)
@@ -53,16 +52,6 @@ export function ApplyResultModal({
   const hasPendingChanges = willBeInstalled > 0;
   // "Your computer is ready" ONLY when: no failures, no pending installs
   const isReady = !hasFailures && !hasPendingChanges && (alreadyPresent > 0 || installedThisRun > 0);
-
-  const toggleSection = (section: string) => {
-    const next = new Set(expandedSections);
-    if (next.has(section)) {
-      next.delete(section);
-    } else {
-      next.add(section);
-    }
-    setExpandedSections(next);
-  };
 
   const copyDiagnostics = async () => {
     const diagnostics = [
@@ -99,64 +88,51 @@ export function ApplyResultModal({
     }
   };
 
-  // Render a collapsible section with items grouped by driver
-  const renderSection = (
-    title: string,
-    icon: string,
-    groupedItems: Record<string, ApplyItem[]>,
-    sectionKey: string,
-    bgColor: string
-  ) => {
-    const totalCount = Object.values(groupedItems).reduce((sum, arr) => sum + arr.length, 0);
-    if (totalCount === 0) return null;
-    
-    const isExpanded = expandedSections.has(sectionKey);
-
-    return (
-      <div className="border border-border rounded-lg">
-        <button
-          onClick={() => toggleSection(sectionKey)}
-          className={`flex items-center justify-between w-full p-3 text-left hover:bg-muted/50 ${bgColor}`}
-        >
-          <div className="flex items-center gap-2">
-            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            <span className="text-sm">{icon}</span>
-            <span className="text-sm font-medium">{title}</span>
-          </div>
-          <span className="text-xs text-muted-foreground">{totalCount}</span>
-        </button>
-        
-        {isExpanded && (
-          <div className="border-t border-border max-h-48 overflow-y-auto">
-            {Object.entries(groupedItems).map(([driver, driverItems]) => (
-              <div key={driver}>
-                <div className="px-3 py-1 bg-muted/30 text-xs font-medium text-muted-foreground">
-                  {driver}
-                </div>
-                {driverItems.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-2 px-3 py-2 text-xs border-b border-border last:border-b-0">
-                    <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                    <span className="font-mono truncate flex-1">{item.id}</span>
-                    {item.message && (
-                      <span className="text-muted-foreground text-xs truncate max-w-[150px]" title={item.message}>
-                        {item.message}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
+  // Get action label and style for an item based on its reason and phase
+  const getActionBadge = (item: ApplyItem): { label: string; className: string } => {
+    // Map reason to user-friendly action label
+    if (item.reason === 'would_install') {
+      return { label: 'Will be installed', className: 'bg-warning/20 text-warning border-warning/30' };
+    }
+    if (item.reason === 'installed') {
+      return { label: 'Installed this run', className: 'bg-success/20 text-success border-success/30' };
+    }
+    if (item.reason === 'already_installed' || item.reason === 'already_present') {
+      return { label: 'Already present', className: 'bg-muted/20 text-muted-foreground border-muted/30' };
+    }
+    if (item.status === 'failed' || item.reason === 'failed') {
+      return { label: 'Needs attention', className: 'bg-destructive/20 text-destructive border-destructive/30' };
+    }
+    if (item.reason === 'skipped' || item.reason === 'filtered') {
+      return { label: 'Skipped', className: 'bg-muted/20 text-muted-foreground border-muted/30' };
+    }
+    // Fallback
+    return { label: item.reason || 'Unknown', className: 'bg-muted/20 text-muted-foreground border-muted/30' };
   };
+
+  // Sort items: actionable items first (will be installed, needs attention), then already present
+  const sortedItems = useMemo(() => {
+    const priorityOrder: Record<string, number> = {
+      'would_install': 0,
+      'failed': 1,
+      'installed': 2,
+      'already_installed': 3,
+      'already_present': 3,
+      'skipped': 4,
+      'filtered': 4,
+    };
+    return [...items].sort((a, b) => {
+      const aPriority = priorityOrder[a.reason || ''] ?? 5;
+      const bPriority = priorityOrder[b.reason || ''] ?? 5;
+      return aPriority - bPriority;
+    });
+  }, [items]);
 
   // Determine title and description based on status and phase
   const getTitle = () => {
     if (isApplying) return 'Applying changes...';
     if (hasFailures) return 'Setup incomplete';
-    if (hasPendingChanges) return 'Changes ready to apply';
+    if (hasPendingChanges) return "Here's what will change";
     if (isReady) return 'Your computer is ready';
     return 'Your computer is ready';
   };
@@ -164,7 +140,7 @@ export function ApplyResultModal({
   const getDescription = () => {
     if (isApplying) {
       if (currentProgress?.currentApp) {
-        return `${currentProgress.action}: ${currentProgress.currentApp}`;
+        return `Installing: ${currentProgress.currentApp}`;
       }
       return 'Installing apps...';
     }
@@ -172,10 +148,11 @@ export function ApplyResultModal({
       return `${needsAttention} app${needsAttention > 1 ? 's' : ''} need${needsAttention === 1 ? 's' : ''} attention`;
     }
     if (hasPendingChanges) {
-      return `${willBeInstalled} app${willBeInstalled > 1 ? 's' : ''} will be installed`;
+      // Intent-based language with reassurance
+      return 'No changes have been made yet.';
     }
     if (installedThisRun > 0) {
-      return `${installedThisRun} app${installedThisRun > 1 ? 's' : ''} installed`;
+      return `${installedThisRun} app${installedThisRun > 1 ? 's' : ''} installed successfully`;
     }
     return 'All apps are already present';
   };
@@ -256,7 +233,7 @@ export function ApplyResultModal({
           )}
         </div>
 
-        {/* Details expander (technical) - hide during applying to avoid re-rendering preview items */}
+        {/* Details: unified single list with per-item action badges */}
         {items.length > 0 && !isApplying && (
           <div className="border-t border-border pt-4">
             <button
@@ -268,14 +245,27 @@ export function ApplyResultModal({
             </button>
             
             {showDetails && (
-              <div className="mt-3 space-y-2">
-                {/* Preview: show Will be installed */}
-                {isDryRun && renderSection('Will be installed', '📦', categorizedGroups.willBeInstalled, 'willBeInstalled', 'bg-warning/5')}
-                {/* Apply result: show Installed this run */}
-                {!isDryRun && renderSection('Installed this run', '✅', categorizedGroups.installedThisRun, 'installedThisRun', '')}
-                {renderSection('Already present', '✅', categorizedGroups.alreadyPresent, 'alreadyPresent', '')}
-                {renderSection('Needs attention', '❌', categorizedGroups.needsAttention, 'needsAttention', 'bg-destructive/5')}
-                {renderSection('Skipped', '⏭️', categorizedGroups.skipped, 'skipped', '')}
+              <div className="mt-3 space-y-1">
+                {/* Single unified list - actionable items shown first */}
+                <div className="border border-border rounded-lg max-h-64 overflow-y-auto">
+                  {sortedItems.map((item, idx) => {
+                    const badge = getActionBadge(item);
+                    const isActionable = item.reason === 'would_install' || item.reason === 'installed' || item.status === 'failed';
+                    return (
+                      <div 
+                        key={`${item.id}-${idx}`} 
+                        className={`flex items-center gap-2 px-3 py-2 text-xs border-b border-border last:border-b-0 ${isActionable ? 'bg-muted/10' : ''}`}
+                      >
+                        <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <span className="font-mono truncate flex-1" title={item.id}>{item.id}</span>
+                        <span className="text-muted-foreground text-xs flex-shrink-0">({item.driver})</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
                 
                 {/* Copy diagnostics */}
                 <div className="flex justify-end pt-2">
