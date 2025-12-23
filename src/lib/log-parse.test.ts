@@ -86,24 +86,24 @@ Capture complete!
     });
 
     it('should parse [FAIL] app lines', () => {
-      const logs = '[FAIL] FailedApp (driver: scoop)';
+      const logs = '[FAIL] Failed.App (driver: scoop)';
       const result = parseCaptureOutput(logs);
       
       expect(result.apps).toHaveLength(1);
       expect(result.apps[0]).toEqual({
-        id: 'FailedApp',
+        id: 'Failed.App',
         status: 'fail',
         driver: 'scoop',
       });
     });
 
     it('should parse app lines without driver', () => {
-      const logs = '[OK] SimpleApp';
+      const logs = '[OK] Simple.App';
       const result = parseCaptureOutput(logs);
       
       expect(result.apps).toHaveLength(1);
       expect(result.apps[0]).toEqual({
-        id: 'SimpleApp',
+        id: 'Simple.App',
         status: 'ok',
         driver: undefined,
       });
@@ -111,59 +111,53 @@ Capture complete!
 
     it('should parse multiple app lines', () => {
       const logs = `
-[OK] App1 (driver: winget)
-[SKIP] App2 (driver: chocolatey)
-[OK] App3
-[FAIL] App4 (driver: scoop)
+[OK] Test.App1 (driver: winget)
+[SKIP] Test.App2 (driver: chocolatey)
+[OK] Test.App3
+[FAIL] Test.App4 (driver: scoop)
       `;
       const result = parseCaptureOutput(logs);
       
       expect(result.apps).toHaveLength(4);
-      expect(result.apps[0].id).toBe('App1');
-      expect(result.apps[1].id).toBe('App2');
-      expect(result.apps[2].id).toBe('App3');
-      expect(result.apps[3].id).toBe('App4');
+      expect(result.apps[0].id).toBe('Test.App1');
+      expect(result.apps[1].id).toBe('Test.App2');
+      expect(result.apps[2].id).toBe('Test.App3');
+      expect(result.apps[3].id).toBe('Test.App4');
     });
   });
 
   describe('lastProcessedApp extraction', () => {
     it('should track the last processed app', () => {
-      const logs = `[OK] App1
-[SKIP] App2
-[OK] App3`;
-      const result = parseCaptureOutput(logs);
-      
-      expect(result.lastProcessedApp).toBe('App3');
+      const logs = `[OK] Test.App1
+[SKIP] Test.App2
+[OK] Test.App3`; const result = parseCaptureOutput(logs); expect(result.lastProcessedApp).toBe('Test.App3');
     });
 
     it('should update lastProcessedApp on each app line', () => {
-      const logs1 = '[OK] FirstApp';
+      const logs1 = '[OK] First.App';
       const result1 = parseCaptureOutput(logs1);
-      expect(result1.lastProcessedApp).toBe('FirstApp');
+      expect(result1.lastProcessedApp).toBe('First.App');
       
-      const logs2 = `[OK] FirstApp
-[SKIP] SecondApp`;
+      const logs2 = `[OK] First.App
+[SKIP] Second.App`;
       const result2 = parseCaptureOutput(logs2);
-      expect(result2.lastProcessedApp).toBe('SecondApp');
+      expect(result2.lastProcessedApp).toBe('Second.App');
     });
 
     it('should update processedCount', () => {
-      const logs = `[OK] App1
-[SKIP] App2
-[FAIL] App3`;
-      const result = parseCaptureOutput(logs);
-      
-      expect(result.processedCount).toBe(3);
+      const logs = `[OK] Test.App1
+[SKIP] Test.App2
+[FAIL] Test.App3`; const result = parseCaptureOutput(logs); expect(result.processedCount).toBe(3);
     });
 
     it('should increment processedCount on each app line', () => {
-      const logs1 = '[OK] App1';
+      const logs1 = '[OK] Test.App1';
       const result1 = parseCaptureOutput(logs1);
       expect(result1.processedCount).toBe(1);
       
-      const logs2 = `[OK] App1
-[SKIP] App2
-[OK] App3`;
+      const logs2 = `[OK] Test.App1
+[SKIP] Test.App2
+[OK] Test.App3`;
       const result2 = parseCaptureOutput(logs2);
       expect(result2.processedCount).toBe(3);
     });
@@ -174,7 +168,7 @@ Capture complete!
       const logs = `
 [OK] Discord.Discord (driver: winget)
 [OK] Google.Chrome (driver: winget)
-[SKIP] OldApp (driver: chocolatey)
+[SKIP] Old.App (driver: chocolatey)
 [OK]     Manifest saved: C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc
 Summary: 62 succeeded, 8 skipped, 0 failed
 Capture complete!
@@ -187,7 +181,7 @@ Capture complete!
       expect(result.failed).toBe(0);
       expect(result.outputPath).toBe('C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc');
       expect(result.apps).toHaveLength(3);
-      expect(result.lastProcessedApp).toBe('OldApp');
+      expect(result.lastProcessedApp).toBe('Old.App');
       expect(result.processedCount).toBe(3);
     });
   });
