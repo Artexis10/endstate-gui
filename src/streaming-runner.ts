@@ -64,16 +64,16 @@ export async function runAutosuiteStreaming<T>(
   const timeoutMs = isInitCommand ? 15000 : 60000;
   
   try {
-    const invokeResult = await invoke('run_autosuite_streaming', {
+    // IMPORTANT: Tauri invoke() for streaming commands does NOT return a value.
+    // In Tauri v2, invoke() commonly returns undefined even when streaming is active.
+    // Do NOT treat undefined/null as runtime failure.
+    // Only thrown errors indicate transport failure.
+    // Streaming completion is determined by receiving an 'exit' event.
+    await invoke('run_autosuite_streaming', {
       exe,
       args: execArgs,
       eventChannel,
     });
-    
-    // If invoke returned null/undefined, Tauri is not available
-    if (invokeResult === null || invokeResult === undefined) {
-      throw new Error('Tauri streaming not available - running in web mode without mock');
-    }
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
