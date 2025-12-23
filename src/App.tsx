@@ -445,8 +445,33 @@ function App() {
       const isSuccess = captureResult.envelope?.success ?? (captureResult.exitCode === 0);
       
       if (isSuccess) {
-        // Parse final stats from complete logs
-        const finalStats = parseCaptureOutput(runLogs);
+        // Get stats from envelope data (preferred) or fall back to log parsing
+        const envelopeData = captureResult.envelope?.data as { appCount?: number; appsCaptured?: Array<{ id: string; wingetId?: string; source?: string }>; outputPath?: string } | undefined;
+        
+        let finalStats: CaptureStats;
+        if (envelopeData?.appCount !== undefined && envelopeData?.appsCaptured) {
+          // Use envelope data - this is the reliable source of truth
+          finalStats = {
+            succeeded: envelopeData.appCount,
+            skipped: 0,  // Engine doesn't track skipped separately in capture
+            failed: 0,   // Engine doesn't track failed separately in capture
+            outputPath: envelopeData.outputPath || outputPath,
+            lastProcessedApp: '',
+            processedCount: envelopeData.appCount,
+            apps: envelopeData.appsCaptured.map(app => ({
+              id: app.wingetId || app.id,  // Prefer wingetId for display
+              status: 'ok' as const,
+              driver: app.source,
+            })),
+          };
+        } else {
+          // Fall back to log parsing if envelope doesn't have the data
+          finalStats = parseCaptureOutput(runLogs);
+          // Try to get outputPath from envelope if log parsing didn't find it
+          if (!finalStats.outputPath && envelopeData?.outputPath) {
+            finalStats.outputPath = envelopeData.outputPath;
+          }
+        }
         setCaptureStats(finalStats);
         
         // Save Last Run

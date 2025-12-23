@@ -115,3 +115,17 @@ export interface AutosuiteApplyData {
   stateFile?: string;
   logFile?: string;
 }
+
+export interface CapturedApp {
+  id: string;
+  wingetId?: string;
+  source?: string;
+}
+
+export interface AutosuiteCaptureData {
+  outputPath?: string;
+  sanitized?: boolean;
+  isExample?: boolean;
+  appCount?: number;
+  appsCaptured?: CapturedApp[];
+}
