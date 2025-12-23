@@ -59,16 +59,30 @@ export async function runAutosuiteStreaming<T>(
     }
   });
 
+  // Timeout for streaming operations (30 seconds default, shorter for init commands)
+  const isInitCommand = command === 'capabilities' || command === 'report';
+  const timeoutMs = isInitCommand ? 15000 : 60000;
+  
   try {
-    await invoke('run_autosuite_streaming', {
+    const invokeResult = await invoke('run_autosuite_streaming', {
       exe,
       args: execArgs,
       eventChannel,
     });
+    
+    // If invoke returned null/undefined, Tauri is not available
+    if (invokeResult === null || invokeResult === undefined) {
+      throw new Error('Tauri streaming not available - running in web mode without mock');
+    }
 
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`Streaming command '${command}' timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      
       const checkInterval = setInterval(() => {
         if (exitCode !== -1) {
+          clearTimeout(timeout);
           clearInterval(checkInterval);
           resolve();
         }

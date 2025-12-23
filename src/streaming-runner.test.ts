@@ -46,6 +46,7 @@ describe('streaming-runner', () => {
       vi.mocked(invoke).mockImplementation(async () => {
         eventCallback({ payload: { type: 'stdout', data: JSON.stringify(mockEnvelope) } });
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true; // Indicate Tauri streaming is available
       });
 
       const onEvent = vi.fn();
@@ -68,6 +69,7 @@ describe('streaming-runner', () => {
       vi.mocked(invoke).mockImplementation(async () => {
         eventCallback({ payload: { type: 'stdout', data: 'Not JSON output' } });
         eventCallback({ payload: { type: 'exit', exitCode: 1 } });
+        return true;
       });
 
       const onEvent = vi.fn();
@@ -89,6 +91,7 @@ describe('streaming-runner', () => {
 
       vi.mocked(invoke).mockImplementation(async () => {
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
       });
 
       const onEvent = vi.fn();
@@ -112,6 +115,7 @@ describe('streaming-runner', () => {
         eventCallback({ payload: { type: 'stderr', data: 'Error message\n' } });
         eventCallback({ payload: { type: 'stdout', data: '{"test": true}' } });
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
       });
 
       const onEvent = vi.fn();
@@ -134,6 +138,7 @@ describe('streaming-runner', () => {
         eventCallback({ payload: { type: 'stdout', data: 'line1\n' } });
         eventCallback({ payload: { type: 'stderr', data: 'error1\n' } });
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
       });
 
       const onEvent = vi.fn();
@@ -161,6 +166,7 @@ describe('streaming-runner', () => {
 
       vi.mocked(invoke).mockImplementation(async () => {
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
       });
 
       await runAutosuiteStreaming(pathSettings, 'capabilities', [], vi.fn());
@@ -185,6 +191,7 @@ describe('streaming-runner', () => {
 
       vi.mocked(invoke).mockImplementation(async () => {
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
       });
 
       await runAutosuiteStreaming(mockSettings, 'verify', ['--profile', 'test.jsonc'], vi.fn());
@@ -219,6 +226,7 @@ describe('streaming-runner', () => {
 
       vi.mocked(invoke).mockImplementation(async () => {
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
       });
 
       await runAutosuiteStreaming(mockSettings, 'capture', ['--out', 'C:\\test\\dir'], vi.fn());
@@ -254,6 +262,7 @@ describe('streaming-runner', () => {
       vi.mocked(invoke).mockImplementation(async () => {
         eventCallback({ payload: { type: 'stdout', data: '{invalid json}' } });
         eventCallback({ payload: { type: 'exit', exitCode: 1 } });
+        return true;
       });
 
       const onEvent = vi.fn();
@@ -280,6 +289,7 @@ describe('streaming-runner', () => {
           } 
         });
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
       });
 
       const onEvent = vi.fn();
@@ -314,6 +324,7 @@ describe('streaming-runner', () => {
       vi.mocked(invoke).mockImplementation(async () => {
         eventCallback({ payload: { type: 'stdout', data: multiLineEnvelope } });
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
       });
 
       const onEvent = vi.fn();
@@ -336,6 +347,7 @@ describe('streaming-runner', () => {
       vi.mocked(invoke).mockImplementation(async () => {
         eventCallback({ payload: { type: 'stdout', data: '[INFO] Capture completed successfully' } });
         eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
       });
 
       const onEvent = vi.fn();
