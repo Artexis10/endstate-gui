@@ -1,4 +1,6 @@
-import { beforeEach } from 'vitest';
+import { afterEach, beforeEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -14,13 +16,25 @@ const localStorageMock = (() => {
     clear: () => {
       store = {};
     },
+    get length() {
+      return Object.keys(store).length;
+    },
+    key: (index: number) => {
+      const keys = Object.keys(store);
+      return keys[index] || null;
+    },
   };
 })();
 
 Object.defineProperty(global, 'localStorage', {
   value: localStorageMock,
+  writable: true,
 });
 
 beforeEach(() => {
   localStorageMock.clear();
+});
+
+afterEach(() => {
+  cleanup();
 });

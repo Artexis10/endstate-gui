@@ -184,3 +184,97 @@ The error banner includes collapsible diagnostics showing:
 ### Keyboard Shortcuts
 - **Ctrl+K**: Open command palette
 - **Ctrl+,**: Open Settings (emergency shortcut, always works)
+
+---
+
+## UI Testing & Regression Prevention
+
+### Testing Framework
+- **Vitest** is the primary UI regression test framework
+- Environment: **jsdom** for DOM APIs
+- Test runner: `npm run test` (runs all unit tests)
+- E2E tests: `npm run test:e2e` (Playwright, separate from unit tests)
+
+### Test Foundation Location
+All reusable test utilities live in `src/test/`:
+- `test-utils.tsx` - Core testing utilities with provider wrappers
+- `localStorage-helpers.ts` - Deterministic localStorage testing
+- `tauri-bridge-mock.ts` - Mock Tauri bridge for non-Tauri test environments
+- `README.md` - Comprehensive test utilities documentation
+
+### renderWithProviders
+The canonical way to render React components in tests:
+```tsx
+import { renderWithProviders, screen } from './test/test-utils';
+
+renderWithProviders(<MyComponent />, { initialRoute: '/dashboard' });
+```
+
+**Purpose:**
+- Wraps components with the same providers used at runtime
+- Supports setting initial route for navigation testing
+- Re-exports all `@testing-library/react` utilities
+- Provides `userEvent` for realistic user interactions
+
+### localStorage Testing
+Deterministic localStorage helpers prevent test pollution:
+- `seedLocalStorage(data)` - Seed localStorage before render
+- `getLocalStorageKeys()` - Get all current keys
+- `assertLocalStorageKey(key, expectedValue?)` - Assert key exists/has value
+- `clearLocalStorage()` - Clear all localStorage (automatic in beforeEach)
+
+**Example:**
+```tsx
+import { seedLocalStorage, assertLocalStorageKey } from './test/localStorage-helpers';
+
+it('persists settings', () => {
+  seedLocalStorage({ 'web:autosuite-gui-settings': { theme: 'dark' } });
+  // ... component interaction
+  assertLocalStorageKey('web:autosuite-gui-settings', { theme: 'dark' });
+});
+```
+
+### Tauri Bridge Mocking
+Tests run outside Tauri runtime and must mock `src/lib/tauri-bridge.ts`:
+- `mockTauriBridge(overrides?)` - Mock the entire tauri-bridge module
+- `setupTauriMockForTests()` - Install `window.__TAURI__` mock
+- `clearTauriMock()` - Remove `window.__TAURI__` mock
+
+**Example:**
+```tsx
+import { mockTauriBridge } from './test/tauri-bridge-mock';
+import { vi } from 'vitest';
+
+vi.mock('../lib/tauri-bridge', () => mockTauriBridge({
+  invoke: vi.fn().mockResolvedValue({ success: true }),
+}));
+```
+
+### UI/UX Contract Enforcement
+UI/UX contracts (modals, toggles, persistence, navigation) MUST be enforced by tests:
+
+**Required test coverage:**
+- Modal open/close behavior
+- Toggle state persistence to localStorage
+- Navigation state (route changes, back button)
+- Form validation and submission
+- Error state rendering
+- Loading state rendering
+
+**Query Priority:**
+1. **Prefer:** `getByRole`, `getByLabelText`, `getByText`
+2. **Avoid:** `getByTestId` (use only when semantic queries fail)
+3. **Never:** Snapshot tests (brittle, low signal)
+
+### Test Commands
+- `npm run test` - Run all unit tests (Vitest)
+- `npm run test:unit` - Alias for `npm run test`
+- `npm run test:e2e` - Run E2E tests (Playwright)
+- `npm run test:contract` - Run contract tests (Node.js)
+
+### Regression Prevention Principle
+**Any UI/UX bug that reaches production MUST result in a new test.**
+
+Tests are the regression net. If a modal can be dismissed incorrectly, a test must catch it. If localStorage can be corrupted, a test must catch it. If navigation can break, a test must catch it.
+
+The test suite is the living specification of UI behavior.
