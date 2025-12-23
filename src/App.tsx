@@ -189,7 +189,7 @@ function App() {
     setRunLogs('');
     setLogTruncated(false);
     logBufferRef.current = new LogBuffer((logs, truncated) => {
-      setRunLogs(logs);
+      setRunLogs(prev => prev + logs);
       setLogTruncated(truncated);
     });
 
@@ -277,7 +277,7 @@ function App() {
     setCheckStep('scanning');
     setActivities([]);
     logBufferRef.current = new LogBuffer((logs, truncated) => {
-      setRunLogs(logs);
+      setRunLogs(prev => prev + logs);
       setLogTruncated(truncated);
     });
 
@@ -342,7 +342,7 @@ function App() {
     setRunLogs('');
     setLogTruncated(false);
     logBufferRef.current = new LogBuffer((logs, truncated) => {
-      setRunLogs(logs);
+      setRunLogs(prev => prev + logs);
       setLogTruncated(truncated);
     });
 
@@ -411,7 +411,7 @@ function App() {
     setCaptureStats({ succeeded: 0, skipped: 0, failed: 0, outputPath: '', lastProcessedApp: '', processedCount: 0, apps: [] });
     setShowTechnicalDetails(false);
     logBufferRef.current = new LogBuffer((logs, truncated) => {
-      setRunLogs(logs);
+      setRunLogs(prev => prev + logs);
       setLogTruncated(truncated);
     });
 
