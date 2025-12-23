@@ -13,6 +13,7 @@ import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
 import { saveLastRun, loadLastRun, type LastRunData } from './lib/last-run';
+import { invoke as tauriInvoke, getProfilesDirectory, ensureDirectory } from './lib/tauri-bridge';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -107,13 +108,12 @@ function App() {
   };
 
   const loadProfilesDirectory = async () => {
-    const { invoke } = await import('@tauri-apps/api/core');
     try {
-      const dir = settings.customProfilesDirectory || await invoke<string>('get_default_profiles_directory');
+      const dir = await getProfilesDirectory(settings.customProfilesDirectory);
       return dir;
     } catch (err) {
-      console.error('Failed to get profiles directory:', err);
-      return '';
+      console.error('Failed to load profiles directory:', err);
+      return null;
     }
   };
 
@@ -416,20 +416,14 @@ function App() {
     });
 
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      
       const dir = await loadProfilesDirectory();
       if (!dir) {
         setCaptureProgress('Failed to determine profiles directory');
+        setIsRunning(false);
         return;
       }
       
-      try {
-        await invoke('ensure_dir', { path: dir });
-      } catch (err) {
-        setCaptureProgress(`Failed to create output directory: ${err}`);
-        return;
-      }
+      await ensureDirectory(dir);
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
       const filename = `setup_${timestamp}.jsonc`;

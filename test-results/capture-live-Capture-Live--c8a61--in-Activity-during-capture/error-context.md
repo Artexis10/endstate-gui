@@ -1,0 +1,61 @@
+# Page snapshot
+
+```yaml
+- generic:
+  - generic:
+    - generic:
+      - complementary:
+        - generic:
+          - heading [level=1]: Autosuite
+          - paragraph: Setup Management
+        - navigation:
+          - button:
+            - img
+            - generic: Capture machine
+          - button:
+            - img
+            - generic: Apply
+          - button:
+            - img
+            - generic: Verify
+          - button:
+            - img
+            - generic: Report
+          - button:
+            - img
+            - generic: Settings
+      - generic:
+        - banner:
+          - generic:
+            - heading [level=2]: Capture
+          - generic:
+            - button:
+              - img
+              - generic: Ctrl+K
+        - main:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - heading [level=1]: Capture machine
+                    - paragraph: Create a reusable setup profile from this computer
+                - generic:
+                  - generic:
+                    - paragraph: This will capture your computer's current setup and save it as a profile. You can later use this profile to configure other machines.
+                    - generic:
+                      - button: Capture machine
+                - group:
+                  - generic: Technical details
+  - dialog "Setup profile created" [ref=e2]:
+    - generic [ref=e4]:
+      - img [ref=e5]
+      - heading "Setup profile created" [level=2] [ref=e8]
+    - generic [ref=e10]:
+      - generic [ref=e11]: Apps captured
+      - generic [ref=e12]: "0"
+    - button "Done" [active] [ref=e14] [cursor=pointer]
+    - button "Close" [ref=e15] [cursor=pointer]:
+      - img [ref=e16]
+      - generic [ref=e19]: Close
+```
