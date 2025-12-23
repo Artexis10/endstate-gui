@@ -56,12 +56,13 @@ test.describe('UX Contract Tests', () => {
   });
 
   test('Last Run persists', async ({ page }) => {
+    // Use namespaced key - VITE_STORAGE_NS=test is set in playwright.config.ts
     await page.evaluate(() => {
-      localStorage.setItem('autosuite-last-run', JSON.stringify({ timestamp: new Date().toISOString(), command: 'capture', outcome: { succeeded: 10, skipped: 2, failed: 0 } }));
+      localStorage.setItem('test:autosuite-last-run', JSON.stringify({ timestamp: new Date().toISOString(), command: 'capture', outcome: { succeeded: 10, skipped: 2, failed: 0 } }));
     });
     await page.reload();
     await page.waitForTimeout(1000);
-    const exists = await page.evaluate(() => localStorage.getItem('autosuite-last-run') !== null);
+    const exists = await page.evaluate(() => localStorage.getItem('test:autosuite-last-run') !== null);
     expect(exists).toBe(true);
   });
 });

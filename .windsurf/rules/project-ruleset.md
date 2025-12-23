@@ -140,3 +140,27 @@ Project ruleset file (canonical, always edit this exact file when updating rules
 C:\Users\win-laptop\Desktop\projects\autosuite\.windsurf\rules\project-ruleset.md
 
 Do not use PowerShell to edit normal repo files unless a write persistence issue is proven in this session. Default to normal edits. PowerShell fallback only after one failed normal edit, and only for the specific file that failed.
+## Storage Namespace Isolation
+
+To prevent test/web settings from affecting Tauri runtime, localStorage keys are namespaced.
+
+### Namespace Selection
+1. **VITE_STORAGE_NS env var** - If set (e.g., "test" for Playwright), uses that namespace
+2. **"tauri"** - Automatically selected when running in Tauri runtime (detected via import.meta.env.TAURI_PLATFORM)
+3. **"web"** - Default for plain browser
+
+### Key Format
+Keys are prefixed with namespace: `{namespace}:{key}`
+- Tauri: `tauri:autosuite-gui-settings`
+- Web: `web:autosuite-gui-settings`
+- Test: `test:autosuite-gui-settings`
+
+### Migration Rules
+- **Tauri runtime**: NEVER reads from legacy un-namespaced keys (prevents pollution from web/test)
+- **Web/Test**: Falls back to legacy keys and migrates them to namespaced keys
+
+### Reset Settings
+The Reset Settings function clears ALL known keys across ALL namespaces (tauri, web, test) plus legacy un-namespaced keys. This ensures the app can recover from any stuck state.
+
+### Test Isolation
+Playwright tests set `VITE_STORAGE_NS=test` in playwright.config.ts webServer.env to isolate test storage from Tauri dev storage.

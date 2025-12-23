@@ -1,3 +1,5 @@
+import { getItem, setItem } from './lib/storage';
+
 export interface AppSettings {
   engineMode: 'path' | 'script';
   engineScriptPath: string;
@@ -20,7 +22,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 export function loadSettings(): AppSettings {
   try {
-    const stored = localStorage.getItem(SETTINGS_KEY);
+    const stored = getItem(SETTINGS_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       return { ...DEFAULT_SETTINGS, ...parsed };
@@ -33,7 +35,7 @@ export function loadSettings(): AppSettings {
 
 export function saveSettings(settings: AppSettings): void {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (err) {
     console.error('Failed to save settings:', err);
   }

@@ -33,16 +33,31 @@ function hasTestMock(): boolean {
 
 /**
  * Detect if we're running in real Tauri runtime (not pure web browser).
- * Uses multiple heuristics to be robust.
+ * Uses multiple heuristics in order of reliability.
  */
-function isTauriRuntime(): boolean {
+export function isTauriRuntime(): boolean {
   if (typeof window === 'undefined') return false;
-  // Check for Tauri internals (Tauri v2)
+  
+  // 1. Most reliable: Vite/Tauri sets this env var during dev and build
+  if (import.meta.env.TAURI_PLATFORM) return true;
+  
+  // 2. Check for Tauri internals (Tauri v2)
   if ('__TAURI_INTERNALS__' in window) return true;
-  // Check for Tauri IPC (Tauri v1/v2)
+  
+  // 3. Check for Tauri IPC (Tauri v1/v2)
   if ('__TAURI_IPC__' in window) return true;
-  // Check user agent
+  
+  // 4. Check for window.__TAURI__ (real Tauri, not test mock)
+  // Real Tauri sets __TAURI__ but test mocks also set it, so check for internals
+  const tauriObj = (window as any).__TAURI__;
+  if (tauriObj && !hasTestMock()) {
+    // Has __TAURI__ but not our test mock structure - likely real Tauri
+    return true;
+  }
+  
+  // 5. Weak fallback: user agent
   if (typeof navigator !== 'undefined' && navigator.userAgent?.includes('Tauri')) return true;
+  
   return false;
 }
 
