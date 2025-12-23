@@ -4,11 +4,28 @@
 
 The GUI test suite validates that the application remains "dumb" - it only discovers files, spawns autosuite, parses JSON, and renders. No business logic is implemented in the GUI.
 
+## Quick Start
+
+```bash
+# Run unit tests
+npm test
+
+# Run unit tests with coverage
+npm run test:coverage
+
+# Run E2E tests
+npm run test:e2e
+
+# Run all tests
+npm test && npm run test:e2e
+```
+
 ## Test Layers
 
 ### 1. Unit Tests (Vitest)
 
 **Command:** `npm run test:unit` or `npm test`
+**Coverage:** `npm run test:coverage`
 
 **Coverage:**
 - **settings.ts** - localStorage persistence, defaults, merging
@@ -104,7 +121,27 @@ npm test && npm run test:contract && npm run test:e2e
 2. **Autosuite is the authority** - Contract tests treat autosuite as black box
 3. **Deterministic** - No flaky timing, no network calls, no random data
 4. **Fast feedback** - Unit tests run in < 2 seconds
-5. **Minimal E2E** - Single smoke test covers happy path, not exhaustive scenarios
+5. **Minimal E2E** - E2E tests cover critical user flows and contracts
+
+### Modal Contract Philosophy
+
+UI/UX contracts (modals, toggles, persistence, navigation) are enforced by tests to prevent regressions:
+
+**Core Principles:**
+- **Transient state must reset** - Modal state (like technical details expansion) must not persist between opens
+- **localStorage pollution cannot affect UI** - Even if localStorage has stale data, UI must start in correct default state
+- **User interactions must be reliable** - Toggle, escape, reopen behaviors must work consistently
+- **Any UI/UX bug that reaches production must result in a new test**
+
+**Example: Technical Details Collapse**
+- Technical details in result modals MUST start collapsed on open
+- User can expand/collapse via toggle button
+- Closing modal resets transient state
+- Reopening modal starts collapsed again (even if localStorage has "expanded=true")
+- Escape key closes modal
+- No persistence of technical details toggle state
+
+This philosophy ensures the UI remains predictable and prevents recurring regressions.
 
 ## What Tests DON'T Cover
 
@@ -120,17 +157,52 @@ npm test && npm run test:contract && npm run test:e2e
 - **Contract tests** - Update if JSON envelope contract changes
 - **E2E test** - Update if core UI flow changes (settings → profile → action)
 
-## CI/CD Considerations
+## Coverage Thresholds
 
+Coverage is tracked to catch regressions early without blocking progress.
+
+**Current Thresholds (Gentle Minimums):**
+- Lines: 15%
+- Functions: 10%
+- Branches: 10%
+- Statements: 15%
+
+**Ratcheting Strategy:**
+- Thresholds are reviewed and increased **weekly** as coverage improves
+- Never decrease thresholds (only increase)
+- Increases are small and achievable (5-10% increments)
+- Goal: Gradual improvement without blocking development
+
+**Coverage Reports:**
 ```bash
-# Fast CI check (< 5 seconds)
-npm run test:unit
+# Generate coverage report
+npm run test:coverage
 
-# Full CI check (requires autosuite)
-npm run test:unit && npm run test:contract
-
-# Local verification before commit
-npm test && npm run test:contract
+# View HTML report
+open coverage/index.html  # macOS
+start coverage/index.html # Windows
+xdg-open coverage/index.html # Linux
 ```
 
-The E2E test (`npm run test:e2e`) is best run locally or in a dedicated E2E environment due to Electron/Tauri requirements.
+Coverage reports show:
+- Which files are tested
+- Which lines/branches are covered
+- Which code paths need tests
+
+## CI/CD Considerations
+
+**GitHub Actions CI runs:**
+1. Unit tests with coverage (`npm run test:coverage`)
+2. E2E tests (`npm run test:e2e`)
+3. Uploads coverage to Codecov
+4. Uploads Playwright artifacts (traces/screenshots) on E2E failure
+
+**Local verification before commit:**
+```bash
+npm test && npm run test:e2e
+```
+
+**Fast CI check:**
+```bash
+npm run test:unit
+```

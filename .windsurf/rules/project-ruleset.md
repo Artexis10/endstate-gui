@@ -269,8 +269,18 @@ UI/UX contracts (modals, toggles, persistence, navigation) MUST be enforced by t
 ### Test Commands
 - `npm run test` - Run all unit tests (Vitest)
 - `npm run test:unit` - Alias for `npm run test`
+- `npm run test:coverage` - Run unit tests with coverage reporting
 - `npm run test:e2e` - Run E2E tests (Playwright)
 - `npm run test:contract` - Run contract tests (Node.js)
+
+### Coverage Thresholds
+Coverage is tracked with gentle minimums to catch regressions early:
+- Lines: 15%
+- Functions: 10%
+- Branches: 10%
+- Statements: 15%
+
+Thresholds are reviewed and ratcheted up **weekly** as coverage improves. Never decrease, only increase in small increments (5-10%).
 
 ### Regression Prevention Principle
 **Any UI/UX bug that reaches production MUST result in a new test.**
