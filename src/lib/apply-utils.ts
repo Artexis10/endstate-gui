@@ -1,10 +1,16 @@
-import type { ApplyItem, ApplyCounts } from '../types';
+import type { ApplyItem } from '../types';
 
 /**
- * Normalized status categories for Apply results.
- * These map engine status/reason combinations to UI categories.
+ * UI categories for Apply results.
+ * 
+ * These are semantic categories that map to user-facing labels:
+ * - willBeInstalled: apps that will be installed (from dry-run preview)
+ * - installedThisRun: apps that were installed during this apply run
+ * - alreadyPresent: apps that were already on the system
+ * - needsAttention: apps that failed to install
+ * - skipped: apps skipped by filter/policy (advanced, hidden by default)
  */
-export type ApplyCategory = 'installed' | 'alreadyInstalled' | 'skipped' | 'failed';
+export type ApplyCategory = 'willBeInstalled' | 'installedThisRun' | 'alreadyPresent' | 'needsAttention' | 'skipped';
 
 /**
  * Categorized item with normalized status.
@@ -17,49 +23,55 @@ export interface CategorizedApplyItem extends ApplyItem {
  * Grouped items by category and driver.
  */
 export interface CategorizedApplyGroups {
-  installed: Record<string, ApplyItem[]>;
-  alreadyInstalled: Record<string, ApplyItem[]>;
+  willBeInstalled: Record<string, ApplyItem[]>;
+  installedThisRun: Record<string, ApplyItem[]>;
+  alreadyPresent: Record<string, ApplyItem[]>;
+  needsAttention: Record<string, ApplyItem[]>;
   skipped: Record<string, ApplyItem[]>;
-  failed: Record<string, ApplyItem[]>;
 }
 
 /**
- * Normalize an apply item's status/reason to a UI category.
+ * Map engine reason to UI category.
  * 
- * Engine status values:
- * - status: 'ok' | 'skipped' | 'failed'
- * - reason: 'installed' | 'would_install' | 'already_installed' | 'install_failed' | etc.
- * 
- * UI categories:
- * - installed: newly installed apps (status=ok, reason=installed|would_install)
- * - alreadyInstalled: apps that were already present (status=skipped, reason=already_installed)
- * - skipped: apps skipped by filter/policy (status=skipped, reason!=already_installed)
- * - failed: apps that failed to install (status=failed)
+ * Engine reason values → UI category:
+ * - would_install → willBeInstalled (preview only)
+ * - installed → installedThisRun (apply only)
+ * - already_installed → alreadyPresent
+ * - install_failed → needsAttention
+ * - skipped_filtered → skipped
  */
 export function normalizeApplyStatus(item: ApplyItem): ApplyCategory {
   const status = item.status?.toLowerCase() || '';
   const reason = item.reason?.toLowerCase() || '';
 
-  // Failed always maps to failed
+  // Failed always maps to needsAttention
   if (status === 'failed' || reason === 'install_failed' || reason === 'failed') {
-    return 'failed';
+    return 'needsAttention';
   }
 
-  // OK with installed/would_install reason = newly installed
+  // would_install = preview showing what will be installed
+  if (reason === 'would_install') {
+    return 'willBeInstalled';
+  }
+
+  // installed = actually installed this run
+  if (reason === 'installed') {
+    return 'installedThisRun';
+  }
+
+  // already_installed = already present on system
+  if (reason === 'already_installed') {
+    return 'alreadyPresent';
+  }
+
+  // OK status without specific reason - check if it's a dry-run or real apply
   if (status === 'ok') {
-    if (reason === 'installed' || reason === 'would_install') {
-      return 'installed';
-    }
-    // OK without specific reason - assume installed
-    return 'installed';
+    // Default to installedThisRun for ok status without reason
+    return 'installedThisRun';
   }
 
-  // Skipped with already_installed reason = already installed
+  // Skipped for other reasons = filtered/policy skip
   if (status === 'skipped') {
-    if (reason === 'already_installed') {
-      return 'alreadyInstalled';
-    }
-    // Skipped for other reasons = filtered/policy skip
     return 'skipped';
   }
 
@@ -72,10 +84,11 @@ export function normalizeApplyStatus(item: ApplyItem): ApplyCategory {
  */
 export function categorizeApplyItems(items: ApplyItem[]): CategorizedApplyGroups {
   const groups: CategorizedApplyGroups = {
-    installed: {},
-    alreadyInstalled: {},
+    willBeInstalled: {},
+    installedThisRun: {},
+    alreadyPresent: {},
+    needsAttention: {},
     skipped: {},
-    failed: {},
   };
 
   for (const item of items) {
@@ -95,56 +108,71 @@ export function categorizeApplyItems(items: ApplyItem[]): CategorizedApplyGroups
  * Count items in each category.
  */
 export function countCategorizedItems(groups: CategorizedApplyGroups): {
-  installed: number;
-  alreadyInstalled: number;
+  willBeInstalled: number;
+  installedThisRun: number;
+  alreadyPresent: number;
+  needsAttention: number;
   skipped: number;
-  failed: number;
 } {
   const countGroup = (group: Record<string, ApplyItem[]>) =>
     Object.values(group).reduce((sum, items) => sum + items.length, 0);
 
   return {
-    installed: countGroup(groups.installed),
-    alreadyInstalled: countGroup(groups.alreadyInstalled),
+    willBeInstalled: countGroup(groups.willBeInstalled),
+    installedThisRun: countGroup(groups.installedThisRun),
+    alreadyPresent: countGroup(groups.alreadyPresent),
+    needsAttention: countGroup(groups.needsAttention),
     skipped: countGroup(groups.skipped),
-    failed: countGroup(groups.failed),
   };
 }
 
 /**
  * Determine if the apply result indicates "ready" state.
  * 
- * Ready = no failed apps AND (installed + alreadyInstalled) covers all expected apps.
+ * Ready = no failures AND no pending installs.
+ * "Your computer is ready" ONLY when:
+ * - No failures
+ * - No pending installs (willBeInstalled = 0)
  * 
- * @param counts - The counts from the envelope
  * @param itemCounts - Counts derived from categorizing items
  */
 export function isApplyReady(
-  counts: ApplyCounts,
-  itemCounts: { installed: number; alreadyInstalled: number; skipped: number; failed: number }
+  itemCounts: { willBeInstalled: number; installedThisRun: number; alreadyPresent: number; needsAttention: number; skipped: number }
 ): boolean {
-  // If there are any failed items, not ready
-  if (counts.failed > 0 || itemCounts.failed > 0) {
+  // Not ready if there are failures
+  if (itemCounts.needsAttention > 0) {
     return false;
   }
-
-  // Ready if we have no failures
+  // Not ready if there are pending installs (preview mode)
+  if (itemCounts.willBeInstalled > 0) {
+    return false;
+  }
+  // Ready if we have no failures and no pending
   return true;
 }
 
 /**
- * Determine if all apps are "up to date" (nothing newly installed, all already present).
+ * Determine if this is a preview result (has pending installs).
  */
-export function isAllUpToDate(
-  counts: ApplyCounts,
-  itemCounts: { installed: number; alreadyInstalled: number; skipped: number; failed: number }
+export function isPreviewResult(
+  itemCounts: { willBeInstalled: number; installedThisRun: number; alreadyPresent: number; needsAttention: number; skipped: number }
 ): boolean {
-  // All up to date = no new installs, no failures, and at least one already installed
-  const noNewInstalls = counts.installed === 0 && itemCounts.installed === 0;
-  const noFailures = counts.failed === 0 && itemCounts.failed === 0;
-  const hasAlreadyInstalled = counts.alreadyInstalled > 0 || itemCounts.alreadyInstalled > 0;
+  return itemCounts.willBeInstalled > 0;
+}
 
-  return noNewInstalls && noFailures && hasAlreadyInstalled;
+/**
+ * Determine if all apps are already present (nothing to install).
+ */
+export function isAllAlreadyPresent(
+  itemCounts: { willBeInstalled: number; installedThisRun: number; alreadyPresent: number; needsAttention: number; skipped: number }
+): boolean {
+  // All already present = no pending installs, no new installs, no failures, and at least one already present
+  const noPending = itemCounts.willBeInstalled === 0;
+  const noNewInstalls = itemCounts.installedThisRun === 0;
+  const noFailures = itemCounts.needsAttention === 0;
+  const hasAlreadyPresent = itemCounts.alreadyPresent > 0;
+
+  return noPending && noNewInstalls && noFailures && hasAlreadyPresent;
 }
 
 /**

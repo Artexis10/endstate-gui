@@ -95,6 +95,7 @@ function App() {
   
   // Apply modal state
   const [showApplyModal, setShowApplyModal] = useState(false);
+  const [applyModalIsDryRun, setApplyModalIsDryRun] = useState(true);  // Track if modal shows preview or apply result
   const [applyData, setApplyData] = useState<{ counts: ApplyCounts; items: ApplyItem[]; rawEnvelope?: object }>({
     counts: { total: 0, installed: 0, alreadyInstalled: 0, skippedFiltered: 0, failed: 0 },
     items: [],
@@ -359,6 +360,7 @@ function App() {
 
       updateActivity('Preview ready', 'success', 1);
       setCheckStep('ready');
+      setApplyModalIsDryRun(true);  // Preview = dry-run
       setShowApplyModal(true);
     } catch (err) {
       updateActivity('Preview failed', 'error');
@@ -471,6 +473,7 @@ function App() {
           applyResult.envelope.success ? 'success' : 'error',
           1
         );
+        setApplyModalIsDryRun(false);  // Apply = not dry-run
         setShowApplyModal(true);
       }
 
@@ -1032,6 +1035,7 @@ function App() {
               }}
               counts={applyData.counts}
               items={applyData.items}
+              isDryRun={applyModalIsDryRun}
               rawLogs={runLogs}
               rawEnvelope={applyData.rawEnvelope}
               onApplyChanges={hasPendingInstalls ? handleSetupMachine : undefined}

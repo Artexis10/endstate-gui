@@ -8,9 +8,10 @@ import { categorizeApplyItems, countCategorizedItems } from '../../lib/apply-uti
 interface ApplyResultModalProps {
   open: boolean;
   onClose: () => void;
-  onApplyChanges?: () => void;  // Called when user wants to apply pending changes
+  onApplyChanges?: () => void;
   counts: ApplyCounts;
   items: ApplyItem[];
+  isDryRun: boolean;  // True for preview (apply --dry-run), false for actual apply
   rawLogs?: string;
   rawEnvelope?: object;
 }
@@ -21,6 +22,7 @@ export function ApplyResultModal({
   onApplyChanges,
   counts,
   items,
+  isDryRun,
   rawLogs,
   rawEnvelope,
 }: ApplyResultModalProps) {
@@ -32,24 +34,21 @@ export function ApplyResultModal({
   const categorizedGroups = useMemo(() => categorizeApplyItems(items), [items]);
   const itemCounts = useMemo(() => countCategorizedItems(categorizedGroups), [categorizedGroups]);
 
-  // Use item-derived counts as primary, fall back to envelope counts
-  const effectiveCounts = {
-    installed: itemCounts.installed || counts.installed,
-    alreadyInstalled: itemCounts.alreadyInstalled || counts.alreadyInstalled,
-    skipped: itemCounts.skipped || counts.skippedFiltered,
-    failed: itemCounts.failed || counts.failed,
-  };
-
-  // Count pending installs (would_install from dry-run)
-  const pendingInstalls = items.filter(i => i.reason === 'would_install').length;
+  // Semantic counts for UI display
+  const willBeInstalled = itemCounts.willBeInstalled;
+  const installedThisRun = itemCounts.installedThisRun;
+  const alreadyPresent = itemCounts.alreadyPresent;
+  const needsAttention = itemCounts.needsAttention;
+  const skippedCount = itemCounts.skipped;
   
   // Determine status:
   // - hasFailures: any failed items
   // - hasPendingChanges: items that would be installed (from dry-run preview)
-  // - isReady: no failures AND no pending changes (everything already installed)
-  const hasFailures = effectiveCounts.failed > 0;
-  const hasPendingChanges = pendingInstalls > 0;
-  const isReady = !hasFailures && !hasPendingChanges && effectiveCounts.alreadyInstalled > 0;
+  // - isReady: no failures AND no pending changes (everything already installed or just installed)
+  const hasFailures = needsAttention > 0;
+  const hasPendingChanges = willBeInstalled > 0;
+  // "Your computer is ready" ONLY when: no failures, no pending installs
+  const isReady = !hasFailures && !hasPendingChanges && (alreadyPresent > 0 || installedThisRun > 0);
 
   const toggleSection = (section: string) => {
     const next = new Set(expandedSections);
@@ -64,10 +63,11 @@ export function ApplyResultModal({
   const copyDiagnostics = async () => {
     const diagnostics = [
       '=== Apply Diagnostics ===',
-      `Installed: ${effectiveCounts.installed}`,
-      `Already installed: ${effectiveCounts.alreadyInstalled}`,
-      `Skipped (filtered): ${effectiveCounts.skipped}`,
-      `Failed: ${effectiveCounts.failed}`,
+      `Will be installed: ${willBeInstalled}`,
+      `Installed this run: ${installedThisRun}`,
+      `Already present: ${alreadyPresent}`,
+      `Needs attention: ${needsAttention}`,
+      `Skipped: ${skippedCount}`,
       '',
       '--- Envelope Counts ---',
       `total: ${counts.total}`,
@@ -76,7 +76,7 @@ export function ApplyResultModal({
       `skippedFiltered: ${counts.skippedFiltered}`,
       `failed: ${counts.failed}`,
       '',
-      '--- Items (${items.length}) ---',
+      `--- Items (${items.length}) ---`,
       ...items.map(i => `${i.status.toUpperCase()}: ${i.id} (${i.driver}) - ${i.reason}${i.message ? ': ' + i.message : ''}`),
       '',
       '--- Raw Envelope ---',
@@ -148,29 +148,25 @@ export function ApplyResultModal({
     );
   };
 
-  // Determine title and description based on status
+  // Determine title and description based on status and phase
   const getTitle = () => {
     if (hasFailures) return 'Setup incomplete';
     if (hasPendingChanges) return 'Changes ready to apply';
     if (isReady) return 'Your computer is ready';
-    if (effectiveCounts.installed > 0) return 'Setup complete';
-    return 'No changes needed';
+    return 'Your computer is ready';
   };
 
   const getDescription = () => {
     if (hasFailures) {
-      return `${effectiveCounts.failed} app${effectiveCounts.failed > 1 ? 's' : ''} need${effectiveCounts.failed === 1 ? 's' : ''} attention`;
+      return `${needsAttention} app${needsAttention > 1 ? 's' : ''} need${needsAttention === 1 ? 's' : ''} attention`;
     }
     if (hasPendingChanges) {
-      return `${pendingInstalls} app${pendingInstalls > 1 ? 's' : ''} will be installed`;
+      return `${willBeInstalled} app${willBeInstalled > 1 ? 's' : ''} will be installed`;
     }
-    if (isReady) {
-      return 'All apps are already installed';
+    if (installedThisRun > 0) {
+      return `${installedThisRun} app${installedThisRun > 1 ? 's' : ''} installed`;
     }
-    if (effectiveCounts.installed > 0) {
-      return `${effectiveCounts.installed} app${effectiveCounts.installed > 1 ? 's' : ''} installed successfully`;
-    }
-    return 'Everything is already set up';
+    return 'All apps are already present';
   };
 
   return (
@@ -194,45 +190,45 @@ export function ApplyResultModal({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Non-technical summary */}
+        {/* Non-technical summary - phase-aware display */}
         <div className="space-y-3 py-4">
-          {/* Pending installs (from dry-run preview) */}
-          {pendingInstalls > 0 && (
+          {/* Will be installed (preview only - from dry-run) */}
+          {willBeInstalled > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20">
               <span className="text-sm font-medium">Will be installed</span>
-              <span className="text-2xl font-semibold text-warning">{pendingInstalls}</span>
+              <span className="text-2xl font-semibold text-warning">{willBeInstalled}</span>
             </div>
           )}
           
-          {/* Newly installed (from actual apply) */}
-          {effectiveCounts.installed > 0 && (
+          {/* Installed this run (apply only - never shown in preview) */}
+          {!isDryRun && installedThisRun > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
-              <span className="text-sm font-medium">Installed</span>
-              <span className="text-2xl font-semibold text-success">{effectiveCounts.installed}</span>
+              <span className="text-sm font-medium">Installed this run</span>
+              <span className="text-2xl font-semibold text-success">{installedThisRun}</span>
             </div>
           )}
           
-          {/* Already installed */}
-          {effectiveCounts.alreadyInstalled > 0 && (
-            <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
-              <span className="text-sm font-medium">Already installed</span>
-              <span className="text-2xl font-semibold text-success">{effectiveCounts.alreadyInstalled}</span>
-            </div>
-          )}
-          
-          {/* Skipped */}
-          {effectiveCounts.skipped > 0 && (
+          {/* Already present */}
+          {alreadyPresent > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
-              <span className="text-sm font-medium">Skipped</span>
-              <span className="text-2xl font-semibold text-muted-foreground">{effectiveCounts.skipped}</span>
+              <span className="text-sm font-medium">Already present</span>
+              <span className="text-2xl font-semibold text-muted-foreground">{alreadyPresent}</span>
             </div>
           )}
           
-          {/* Failed / Needs attention */}
-          {effectiveCounts.failed > 0 && (
+          {/* Needs attention (failures) */}
+          {needsAttention > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/20">
               <span className="text-sm font-medium">Needs attention</span>
-              <span className="text-2xl font-semibold text-destructive">{effectiveCounts.failed}</span>
+              <span className="text-2xl font-semibold text-destructive">{needsAttention}</span>
+            </div>
+          )}
+          
+          {/* Skipped (advanced - only show if > 0) */}
+          {skippedCount > 0 && (
+            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
+              <span className="text-sm font-medium">Skipped</span>
+              <span className="text-2xl font-semibold text-muted-foreground">{skippedCount}</span>
             </div>
           )}
         </div>
@@ -250,10 +246,13 @@ export function ApplyResultModal({
             
             {showDetails && (
               <div className="mt-3 space-y-2">
-                {renderSection('Installed', '✅', categorizedGroups.installed, 'installed', '')}
-                {renderSection('Already installed', '✅', categorizedGroups.alreadyInstalled, 'already', '')}
+                {/* Preview: show Will be installed */}
+                {renderSection('Will be installed', '📦', categorizedGroups.willBeInstalled, 'willBeInstalled', 'bg-warning/5')}
+                {/* Apply: show Installed this run */}
+                {!isDryRun && renderSection('Installed this run', '✅', categorizedGroups.installedThisRun, 'installedThisRun', '')}
+                {renderSection('Already present', '✅', categorizedGroups.alreadyPresent, 'alreadyPresent', '')}
+                {renderSection('Needs attention', '❌', categorizedGroups.needsAttention, 'needsAttention', 'bg-destructive/5')}
                 {renderSection('Skipped', '⏭️', categorizedGroups.skipped, 'skipped', '')}
-                {renderSection('Needs attention', '❌', categorizedGroups.failed, 'failed', 'bg-destructive/5')}
                 
                 {/* Copy diagnostics */}
                 <div className="flex justify-end pt-2">
@@ -275,7 +274,7 @@ export function ApplyResultModal({
         <DialogFooter className="flex-col gap-2 sm:flex-col">
           {hasPendingChanges && onApplyChanges && (
             <Button onClick={() => { onClose(); onApplyChanges(); }} className="w-full">
-              Install {pendingInstalls} app{pendingInstalls > 1 ? 's' : ''}
+              Apply changes
             </Button>
           )}
           <Button 

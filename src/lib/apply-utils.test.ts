@@ -4,32 +4,34 @@ import {
   categorizeApplyItems,
   countCategorizedItems,
   isApplyReady,
-  isAllUpToDate,
+  isAllAlreadyPresent,
+  isPreviewResult,
   parseApplyProgressLine,
   StreamingLineBuffer,
 } from './apply-utils';
-import type { ApplyItem, ApplyCounts } from '../types';
+import type { ApplyItem } from '../types';
 
 describe('apply-utils', () => {
   describe('normalizeApplyStatus', () => {
-    it('maps status=ok, reason=installed to installed', () => {
+    // Engine reason → UI category mapping tests
+    it('maps reason=installed to installedThisRun', () => {
       const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'ok', reason: 'installed' };
-      expect(normalizeApplyStatus(item)).toBe('installed');
+      expect(normalizeApplyStatus(item)).toBe('installedThisRun');
     });
 
-    it('maps status=ok, reason=would_install to installed', () => {
+    it('maps reason=would_install to willBeInstalled (preview)', () => {
       const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'ok', reason: 'would_install' };
-      expect(normalizeApplyStatus(item)).toBe('installed');
+      expect(normalizeApplyStatus(item)).toBe('willBeInstalled');
     });
 
-    it('maps status=ok without reason to installed', () => {
+    it('maps status=ok without reason to installedThisRun', () => {
       const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'ok' };
-      expect(normalizeApplyStatus(item)).toBe('installed');
+      expect(normalizeApplyStatus(item)).toBe('installedThisRun');
     });
 
-    it('maps status=skipped, reason=already_installed to alreadyInstalled', () => {
+    it('maps reason=already_installed to alreadyPresent', () => {
       const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'skipped', reason: 'already_installed' };
-      expect(normalizeApplyStatus(item)).toBe('alreadyInstalled');
+      expect(normalizeApplyStatus(item)).toBe('alreadyPresent');
     });
 
     it('maps status=skipped, reason=filtered to skipped', () => {
@@ -42,14 +44,25 @@ describe('apply-utils', () => {
       expect(normalizeApplyStatus(item)).toBe('skipped');
     });
 
-    it('maps status=failed to failed', () => {
+    it('maps status=failed to needsAttention', () => {
       const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'failed', reason: 'install_failed' };
-      expect(normalizeApplyStatus(item)).toBe('failed');
+      expect(normalizeApplyStatus(item)).toBe('needsAttention');
     });
 
-    it('maps reason=install_failed to failed regardless of status', () => {
+    it('maps reason=install_failed to needsAttention regardless of status', () => {
       const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'ok', reason: 'install_failed' };
-      expect(normalizeApplyStatus(item)).toBe('failed');
+      expect(normalizeApplyStatus(item)).toBe('needsAttention');
+    });
+
+    // Semantic correctness tests - these would have caught the bug
+    it('SEMANTIC: would_install NEVER maps to installedThisRun', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'ok', reason: 'would_install' };
+      expect(normalizeApplyStatus(item)).not.toBe('installedThisRun');
+    });
+
+    it('SEMANTIC: preview items (would_install) go to willBeInstalled category', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'ok', reason: 'would_install' };
+      expect(normalizeApplyStatus(item)).toBe('willBeInstalled');
     });
   });
 
@@ -61,28 +74,32 @@ describe('apply-utils', () => {
         { id: 'App3', driver: 'msstore', status: 'ok', reason: 'installed' },
         { id: 'App4', driver: 'winget', status: 'failed', reason: 'install_failed' },
         { id: 'App5', driver: 'winget', status: 'skipped', reason: 'filtered' },
+        { id: 'App6', driver: 'winget', status: 'ok', reason: 'would_install' },
       ];
 
       const groups = categorizeApplyItems(items);
 
-      expect(groups.installed.winget).toHaveLength(1);
-      expect(groups.installed.winget[0].id).toBe('App1');
-      expect(groups.installed.msstore).toHaveLength(1);
-      expect(groups.installed.msstore[0].id).toBe('App3');
-      expect(groups.alreadyInstalled.winget).toHaveLength(1);
-      expect(groups.alreadyInstalled.winget[0].id).toBe('App2');
-      expect(groups.failed.winget).toHaveLength(1);
-      expect(groups.failed.winget[0].id).toBe('App4');
+      expect(groups.installedThisRun.winget).toHaveLength(1);
+      expect(groups.installedThisRun.winget[0].id).toBe('App1');
+      expect(groups.installedThisRun.msstore).toHaveLength(1);
+      expect(groups.installedThisRun.msstore[0].id).toBe('App3');
+      expect(groups.alreadyPresent.winget).toHaveLength(1);
+      expect(groups.alreadyPresent.winget[0].id).toBe('App2');
+      expect(groups.needsAttention.winget).toHaveLength(1);
+      expect(groups.needsAttention.winget[0].id).toBe('App4');
       expect(groups.skipped.winget).toHaveLength(1);
       expect(groups.skipped.winget[0].id).toBe('App5');
+      expect(groups.willBeInstalled.winget).toHaveLength(1);
+      expect(groups.willBeInstalled.winget[0].id).toBe('App6');
     });
 
     it('handles empty items array', () => {
       const groups = categorizeApplyItems([]);
-      expect(groups.installed).toEqual({});
-      expect(groups.alreadyInstalled).toEqual({});
+      expect(groups.installedThisRun).toEqual({});
+      expect(groups.alreadyPresent).toEqual({});
       expect(groups.skipped).toEqual({});
-      expect(groups.failed).toEqual({});
+      expect(groups.needsAttention).toEqual({});
+      expect(groups.willBeInstalled).toEqual({});
     });
 
     it('uses "unknown" driver when driver is missing', () => {
@@ -90,7 +107,17 @@ describe('apply-utils', () => {
         { id: 'App1', driver: '', status: 'ok', reason: 'installed' },
       ];
       const groups = categorizeApplyItems(items);
-      expect(groups.installed.unknown).toHaveLength(1);
+      expect(groups.installedThisRun.unknown).toHaveLength(1);
+    });
+
+    // Semantic correctness: would_install items NEVER appear in installedThisRun
+    it('SEMANTIC: would_install items appear in willBeInstalled, not installedThisRun', () => {
+      const items: ApplyItem[] = [
+        { id: 'Missing.App', driver: 'winget', status: 'ok', reason: 'would_install' },
+      ];
+      const groups = categorizeApplyItems(items);
+      expect(groups.willBeInstalled.winget).toHaveLength(1);
+      expect(groups.installedThisRun.winget).toBeUndefined();
     });
   });
 
@@ -101,61 +128,137 @@ describe('apply-utils', () => {
         { id: 'App2', driver: 'winget', status: 'ok', reason: 'installed' },
         { id: 'App3', driver: 'winget', status: 'skipped', reason: 'already_installed' },
         { id: 'App4', driver: 'winget', status: 'failed' },
+        { id: 'App5', driver: 'winget', status: 'ok', reason: 'would_install' },
       ];
 
       const groups = categorizeApplyItems(items);
       const counts = countCategorizedItems(groups);
 
-      expect(counts.installed).toBe(2);
-      expect(counts.alreadyInstalled).toBe(1);
+      expect(counts.installedThisRun).toBe(2);
+      expect(counts.alreadyPresent).toBe(1);
       expect(counts.skipped).toBe(0);
-      expect(counts.failed).toBe(1);
+      expect(counts.needsAttention).toBe(1);
+      expect(counts.willBeInstalled).toBe(1);
     });
   });
 
   describe('isApplyReady', () => {
-    it('returns true when no failures', () => {
-      const counts: ApplyCounts = { total: 5, installed: 2, alreadyInstalled: 3, skippedFiltered: 0, failed: 0 };
-      const itemCounts = { installed: 2, alreadyInstalled: 3, skipped: 0, failed: 0 };
-      expect(isApplyReady(counts, itemCounts)).toBe(true);
+    it('returns true when no failures and no pending installs', () => {
+      const itemCounts = { willBeInstalled: 0, installedThisRun: 2, alreadyPresent: 3, needsAttention: 0, skipped: 0 };
+      expect(isApplyReady(itemCounts)).toBe(true);
     });
 
-    it('returns false when envelope counts has failures', () => {
-      const counts: ApplyCounts = { total: 5, installed: 2, alreadyInstalled: 2, skippedFiltered: 0, failed: 1 };
-      const itemCounts = { installed: 2, alreadyInstalled: 2, skipped: 0, failed: 1 };
-      expect(isApplyReady(counts, itemCounts)).toBe(false);
+    it('returns false when there are failures (needsAttention > 0)', () => {
+      const itemCounts = { willBeInstalled: 0, installedThisRun: 2, alreadyPresent: 2, needsAttention: 1, skipped: 0 };
+      expect(isApplyReady(itemCounts)).toBe(false);
     });
 
-    it('returns false when item counts has failures', () => {
-      const counts: ApplyCounts = { total: 5, installed: 2, alreadyInstalled: 2, skippedFiltered: 0, failed: 0 };
-      const itemCounts = { installed: 2, alreadyInstalled: 2, skipped: 0, failed: 1 };
-      expect(isApplyReady(counts, itemCounts)).toBe(false);
+    it('returns false when there are pending installs (willBeInstalled > 0)', () => {
+      const itemCounts = { willBeInstalled: 1, installedThisRun: 0, alreadyPresent: 61, needsAttention: 0, skipped: 0 };
+      expect(isApplyReady(itemCounts)).toBe(false);
+    });
+
+    // SEMANTIC: "Your computer is ready" NEVER appears if pending installs exist
+    it('SEMANTIC: ready=false when willBeInstalled > 0 (preview scenario)', () => {
+      const itemCounts = { willBeInstalled: 1, installedThisRun: 0, alreadyPresent: 61, needsAttention: 0, skipped: 0 };
+      expect(isApplyReady(itemCounts)).toBe(false);
     });
   });
 
-  describe('isAllUpToDate', () => {
-    it('returns true when all apps already installed and none newly installed', () => {
-      const counts: ApplyCounts = { total: 5, installed: 0, alreadyInstalled: 5, skippedFiltered: 0, failed: 0 };
-      const itemCounts = { installed: 0, alreadyInstalled: 5, skipped: 0, failed: 0 };
-      expect(isAllUpToDate(counts, itemCounts)).toBe(true);
+  describe('isPreviewResult', () => {
+    it('returns true when willBeInstalled > 0', () => {
+      const itemCounts = { willBeInstalled: 1, installedThisRun: 0, alreadyPresent: 61, needsAttention: 0, skipped: 0 };
+      expect(isPreviewResult(itemCounts)).toBe(true);
     });
 
-    it('returns false when some apps were newly installed', () => {
-      const counts: ApplyCounts = { total: 5, installed: 2, alreadyInstalled: 3, skippedFiltered: 0, failed: 0 };
-      const itemCounts = { installed: 2, alreadyInstalled: 3, skipped: 0, failed: 0 };
-      expect(isAllUpToDate(counts, itemCounts)).toBe(false);
+    it('returns false when willBeInstalled = 0', () => {
+      const itemCounts = { willBeInstalled: 0, installedThisRun: 1, alreadyPresent: 61, needsAttention: 0, skipped: 0 };
+      expect(isPreviewResult(itemCounts)).toBe(false);
+    });
+  });
+
+  describe('isAllAlreadyPresent', () => {
+    it('returns true when all apps already present and none pending or installed', () => {
+      const itemCounts = { willBeInstalled: 0, installedThisRun: 0, alreadyPresent: 5, needsAttention: 0, skipped: 0 };
+      expect(isAllAlreadyPresent(itemCounts)).toBe(true);
+    });
+
+    it('returns false when some apps were installed this run', () => {
+      const itemCounts = { willBeInstalled: 0, installedThisRun: 2, alreadyPresent: 3, needsAttention: 0, skipped: 0 };
+      expect(isAllAlreadyPresent(itemCounts)).toBe(false);
+    });
+
+    it('returns false when there are pending installs', () => {
+      const itemCounts = { willBeInstalled: 1, installedThisRun: 0, alreadyPresent: 4, needsAttention: 0, skipped: 0 };
+      expect(isAllAlreadyPresent(itemCounts)).toBe(false);
     });
 
     it('returns false when there are failures', () => {
-      const counts: ApplyCounts = { total: 5, installed: 0, alreadyInstalled: 4, skippedFiltered: 0, failed: 1 };
-      const itemCounts = { installed: 0, alreadyInstalled: 4, skipped: 0, failed: 1 };
-      expect(isAllUpToDate(counts, itemCounts)).toBe(false);
+      const itemCounts = { willBeInstalled: 0, installedThisRun: 0, alreadyPresent: 4, needsAttention: 1, skipped: 0 };
+      expect(isAllAlreadyPresent(itemCounts)).toBe(false);
     });
 
-    it('returns false when no apps are already installed', () => {
-      const counts: ApplyCounts = { total: 0, installed: 0, alreadyInstalled: 0, skippedFiltered: 0, failed: 0 };
-      const itemCounts = { installed: 0, alreadyInstalled: 0, skipped: 0, failed: 0 };
-      expect(isAllUpToDate(counts, itemCounts)).toBe(false);
+    it('returns false when no apps are already present', () => {
+      const itemCounts = { willBeInstalled: 0, installedThisRun: 0, alreadyPresent: 0, needsAttention: 0, skipped: 0 };
+      expect(isAllAlreadyPresent(itemCounts)).toBe(false);
+    });
+  });
+
+  // Semantic correctness tests that would have caught the original bug
+  describe('Semantic correctness - Preview vs Apply', () => {
+    it('Preview scenario: 61 present + 1 missing shows willBeInstalled=1, alreadyPresent=61', () => {
+      const items: ApplyItem[] = [
+        ...Array(61).fill(null).map((_, i) => ({ 
+          id: `Present.App${i}`, 
+          driver: 'winget', 
+          status: 'skipped' as const, 
+          reason: 'already_installed' 
+        })),
+        { id: 'Notepad++.Notepad++', driver: 'winget', status: 'ok', reason: 'would_install' },
+      ];
+
+      const groups = categorizeApplyItems(items);
+      const counts = countCategorizedItems(groups);
+
+      expect(counts.willBeInstalled).toBe(1);
+      expect(counts.alreadyPresent).toBe(61);
+      expect(counts.installedThisRun).toBe(0);  // CRITICAL: must be 0 in preview
+      expect(counts.needsAttention).toBe(0);
+    });
+
+    it('Apply scenario: 61 present + 1 installed shows installedThisRun=1, alreadyPresent=61', () => {
+      const items: ApplyItem[] = [
+        ...Array(61).fill(null).map((_, i) => ({ 
+          id: `Present.App${i}`, 
+          driver: 'winget', 
+          status: 'skipped' as const, 
+          reason: 'already_installed' 
+        })),
+        { id: 'Notepad++.Notepad++', driver: 'winget', status: 'ok', reason: 'installed' },
+      ];
+
+      const groups = categorizeApplyItems(items);
+      const counts = countCategorizedItems(groups);
+
+      expect(counts.installedThisRun).toBe(1);
+      expect(counts.alreadyPresent).toBe(61);
+      expect(counts.willBeInstalled).toBe(0);  // CRITICAL: must be 0 after apply
+      expect(counts.needsAttention).toBe(0);
+    });
+
+    it('Preview NEVER shows "Installed" category (installedThisRun must be 0)', () => {
+      // Simulate preview result with would_install items
+      const items: ApplyItem[] = [
+        { id: 'Missing.App', driver: 'winget', status: 'ok', reason: 'would_install' },
+        { id: 'Present.App', driver: 'winget', status: 'skipped', reason: 'already_installed' },
+      ];
+
+      const groups = categorizeApplyItems(items);
+      const counts = countCategorizedItems(groups);
+
+      // In preview, would_install should NOT count as installedThisRun
+      expect(counts.installedThisRun).toBe(0);
+      expect(counts.willBeInstalled).toBe(1);
     });
   });
 

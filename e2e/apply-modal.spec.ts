@@ -185,11 +185,11 @@ test.describe('Apply Modal - All Already Installed', () => {
     await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('text=Your computer is ready')).toBeVisible({ timeout: 5000 });
     
-    // Should show "Already installed" with count 3
+    // Should show "Already present" with count 3
     const dialog = page.locator('[role="dialog"]');
-    const alreadyInstalledCard = dialog.locator('.bg-success\\/10').filter({ hasText: 'Already installed' });
-    await expect(alreadyInstalledCard).toBeVisible();
-    await expect(alreadyInstalledCard.locator('.text-2xl')).toHaveText('3');
+    const alreadyPresentCard = dialog.locator('.bg-muted\\/10').filter({ hasText: 'Already present' });
+    await expect(alreadyPresentCard).toBeVisible();
+    await expect(alreadyPresentCard.locator('.text-2xl')).toHaveText('3');
   });
 });
 
@@ -353,8 +353,8 @@ test.describe('Apply Modal - Pending Installs (Dry Run)', () => {
     await expect(pendingCard).toBeVisible();
     await expect(pendingCard.locator('.text-2xl')).toHaveText('1');
     
-    // Should have Install button
-    await expect(dialog.locator('button:has-text("Install 1 app")')).toBeVisible();
+    // Should have Apply changes button
+    await expect(dialog.locator('button:has-text("Apply changes")')).toBeVisible();
     
     // Should NOT show "Your computer is ready"
     await expect(page.locator('text=Your computer is ready')).not.toBeVisible();
