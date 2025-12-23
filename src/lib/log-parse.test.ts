@@ -128,25 +128,44 @@ Capture complete!
 
   describe('lastProcessedApp extraction', () => {
     it('should track the last processed app', () => {
-      const logs = `
-[OK] FirstApp
-[OK] SecondApp
-[OK] ThirdApp
-      `;
+      const logs = `[OK] App1
+[SKIP] App2
+[OK] App3`;
       const result = parseCaptureOutput(logs);
       
-      expect(result.lastProcessedApp).toBe('ThirdApp');
+      expect(result.lastProcessedApp).toBe('App3');
+    });
+
+    it('should update lastProcessedApp on each app line', () => {
+      const logs1 = '[OK] FirstApp';
+      const result1 = parseCaptureOutput(logs1);
+      expect(result1.lastProcessedApp).toBe('FirstApp');
+      
+      const logs2 = `[OK] FirstApp
+[SKIP] SecondApp`;
+      const result2 = parseCaptureOutput(logs2);
+      expect(result2.lastProcessedApp).toBe('SecondApp');
     });
 
     it('should update processedCount', () => {
-      const logs = `
-[OK] App1
+      const logs = `[OK] App1
 [SKIP] App2
-[FAIL] App3
-      `;
+[FAIL] App3`;
       const result = parseCaptureOutput(logs);
       
       expect(result.processedCount).toBe(3);
+    });
+
+    it('should increment processedCount on each app line', () => {
+      const logs1 = '[OK] App1';
+      const result1 = parseCaptureOutput(logs1);
+      expect(result1.processedCount).toBe(1);
+      
+      const logs2 = `[OK] App1
+[SKIP] App2
+[OK] App3`;
+      const result2 = parseCaptureOutput(logs2);
+      expect(result2.processedCount).toBe(3);
     });
   });
 

@@ -143,6 +143,21 @@ function App() {
     refreshProfiles();
   }, [settings.customProfilesDirectory]);
 
+  useEffect(() => {
+    if (currentPage !== 'capture') {
+      if (captureProgress || showTechnicalDetails) {
+        setCaptureProgress('');
+        setShowTechnicalDetails(false);
+      }
+    }
+    if (currentPage !== 'apply') {
+      if (activities.length > 0 || checkStep !== 'idle') {
+        setActivities([]);
+        setCheckStep('idle');
+      }
+    }
+  }, [currentPage]);
+
   const updateSettings = (newSettings: Partial<AppSettings>) => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
@@ -433,6 +448,10 @@ function App() {
             if (parsed.lastProcessedApp) {
               setCaptureProgress(parsed.lastProcessedApp);
             }
+            // Update stats for processedCount display
+            if (parsed.processedCount > 0) {
+              setCaptureStats(prev => ({ ...prev, processedCount: parsed.processedCount }));
+            }
           }
         }
       );
@@ -444,6 +463,7 @@ function App() {
         const finalStats = parseCaptureOutput(runLogs);
         setCaptureStats(finalStats);
         
+        // Save Last Run
         const lastRunData: LastRunData = {
           timestamp: new Date().toISOString(),
           command: 'capture',
@@ -625,14 +645,19 @@ function App() {
             {isRunning && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Building your setup profile...</CardTitle>
+                  <CardTitle className="text-base">Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm">
                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
                       {captureProgress ? (
-                        <span className="font-medium">Processing: {captureProgress}</span>
+                        <div>
+                          <span className="font-medium">Processing: {captureProgress}</span>
+                          {captureStats.processedCount > 0 && (
+                            <span className="text-muted-foreground ml-2">({captureStats.processedCount} processed)</span>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-muted-foreground">Detecting installed applications...</span>
                       )}
