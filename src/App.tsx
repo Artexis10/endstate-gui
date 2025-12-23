@@ -25,8 +25,6 @@ import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
 import { LogViewer } from './components/app/log-viewer';
 import { ActivityLog } from './components/app/activity-log';
-import { AppIcon } from './components/app/app-icon';
-import { ScanResultModal } from './components/app/scan-result-modal';
 import { CaptureResultModal } from './components/app/capture-result-modal';
 import { ApplyResultModal } from './components/app/apply-result-modal';
 import type { ApplyCounts, ApplyItem } from './types';
@@ -34,7 +32,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './com
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Switch } from './components/ui/switch';
-import { StatusPill } from './components/app/status-pill';
 import { Loader2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 
 type AppStatus = 'loading' | 'ready' | 'error';
@@ -82,7 +79,6 @@ function App() {
   const [logTruncated, setLogTruncated] = useState(false);
   const [checkStep, setCheckStep] = useState<CheckStep>('idle');
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [showResultModal, setShowResultModal] = useState(false);
   const [showCaptureModal, setShowCaptureModal] = useState(false);
   const [captureProgress, setCaptureProgress] = useState<string>('');
   const [captureStats, setCaptureStats] = useState<CaptureStats>({ succeeded: 0, skipped: 0, failed: 0, outputPath: '', lastProcessedApp: '', processedCount: 0, apps: [] });
@@ -273,7 +269,8 @@ function App() {
     }
   }, [settings.engineMode, settings.engineScriptPath]);
 
-  const handleCheckSetup = async () => {
+  // Preview changes using apply --dry-run
+  const handlePreviewChanges = async () => {
     if (!selectedProfile) {
       alert('Please select a setup');
       return;
@@ -284,59 +281,80 @@ function App() {
     setLogTruncated(false);
     setCheckStep('scanning');
     setActivities([]);
+    setApplyProgress({ currentApp: '', action: '' });
+    
     logBufferRef.current = new LogBuffer((logs, truncated) => {
       setRunLogs(prev => prev + logs);
       setLogTruncated(truncated);
     });
+    applyLineBufferRef.current = new StreamingLineBuffer();
 
-    updateActivity('Scanning installed applications', 'running', 1);
+    updateActivity('Analyzing setup profile...', 'running', 1);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      updateActivity('Scanning installed applications', 'success', 1);
-      setCheckStep('comparing');
-      updateActivity('Comparing to setup', 'running', 2);
-
-      const verifyResult = await runEngineStreaming<AutosuiteVerifyData>(
+      // Run apply --dry-run to preview changes
+      const applyResult = await runEngineStreaming<AutosuiteApplyData>(
         settings,
-        'verify',
-        ['--profile', selectedProfilePath],
+        'apply',
+        ['--profile', selectedProfilePath, '--dry-run'],
         (event: StreamEvent) => {
           if (event.type === 'stdout' || event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
+            
+            // Parse real-time progress
+            const completeLines = applyLineBufferRef.current?.append(event.data) || [];
+            for (const line of completeLines) {
+              const progress = parseApplyProgressLine(line);
+              if (progress) {
+                setApplyProgress({ currentApp: progress.app, action: progress.action });
+                updateActivity(`${progress.action}: ${progress.app}`, 'running', 1);
+              }
+            }
           }
         }
       );
 
-      setState((prev) => ({
-        ...prev,
-        verify: verifyResult.envelope,
-      }));
+      // Process apply result
+      if (applyResult.envelope) {
+        const envelopeData = applyResult.envelope.data as AutosuiteApplyResultData | undefined;
+        
+        if (envelopeData?.counts && envelopeData?.items) {
+          setApplyData({
+            counts: envelopeData.counts,
+            items: envelopeData.items,
+            rawEnvelope: applyResult.envelope,
+          });
+        } else {
+          // Fallback: construct counts from legacy fields
+          const installed = envelopeData?.installed ?? 0;
+          const skipped = envelopeData?.skipped ?? 0;
+          const failed = envelopeData?.failed ?? 0;
+          setApplyData({
+            counts: {
+              total: installed + skipped + failed,
+              installed: installed,
+              alreadyInstalled: skipped,
+              skippedFiltered: 0,
+              failed: failed,
+            },
+            items: [],
+            rawEnvelope: applyResult.envelope,
+          });
+        }
+      }
 
-      updateActivity('Comparing to setup', 'success', 2);
-      updateActivity('Result ready', 'success', 3);
+      updateActivity('Preview ready', 'success', 1);
       setCheckStep('ready');
-
-      const reportResult = await runEngineStreaming<AutosuiteReportData>(
-        settings,
-        'report',
-        [],
-        () => {}
-      );
-      setState((prev) => ({
-        ...prev,
-        report: reportResult.envelope,
-      }));
-
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setShowResultModal(true);
+      setShowApplyModal(true);
     } catch (err) {
-      updateActivity('Check failed', 'error');
+      updateActivity('Preview failed', 'error');
       setCheckStep('idle');
-      alert(`Failed to run verify: ${err instanceof Error ? err.message : String(err)}`);
+      alert(`Failed to preview changes: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       logBufferRef.current?.flush();
+      applyLineBufferRef.current?.clear();
       setIsRunning(false);
+      setApplyProgress({ currentApp: '', action: '' });
     }
   };
 
@@ -428,7 +446,7 @@ function App() {
         setShowApplyModal(true);
       }
 
-      // Refresh report and verify state
+      // Refresh report state
       const reportResult = await runEngineStreaming<AutosuiteReportData>(
         settings,
         'report',
@@ -438,17 +456,6 @@ function App() {
       setState((prev) => ({
         ...prev,
         report: reportResult.envelope,
-      }));
-
-      const verifyResult = await runEngineStreaming<AutosuiteVerifyData>(
-        settings,
-        'verify',
-        ['--profile', selectedProfilePath],
-        () => {}
-      );
-      setState((prev) => ({
-        ...prev,
-        verify: verifyResult.envelope,
       }));
     } catch (err) {
       updateActivity(`Failed: ${err instanceof Error ? err.message : String(err)}`, 'error', 1);
@@ -844,10 +851,10 @@ function App() {
         );
 
       case 'apply':
-        const missing = state.verify?.data?.summary?.missingCount ?? 0;
-        const mismatch = state.verify?.data?.summary?.versionMismatchCount ?? 0;
-        const hasIssues = missing > 0 || mismatch > 0;
-        const isChecked = checkStep === 'ready';
+        // Derive state from applyData (apply envelope), not verify
+        const hasPendingInstalls = applyData.items.filter(i => i.reason === 'would_install').length > 0;
+        const hasFailures = applyData.counts.failed > 0;
+        const isPreviewReady = checkStep === 'ready';
         
         return (
           <div className="space-y-6">
@@ -862,40 +869,44 @@ function App() {
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div>
-                    <CardTitle>Machine Status</CardTitle>
+                    <CardTitle>Setup Profile</CardTitle>
                     <CardDescription className="mt-1">
                       {!selectedProfile && 'Select a setup profile to begin'}
-                      {selectedProfile && checkStep === 'idle' && !isRunning && 'Ready to check your computer'}
-                      {selectedProfile && checkStep === 'idle' && isRunning && applyProgress.currentApp && (
+                      {selectedProfile && checkStep === 'idle' && !isRunning && 'Ready to preview changes'}
+                      {selectedProfile && isRunning && applyProgress.currentApp && (
                         <span className="flex items-center gap-2">
                           <Loader2 className="h-3 w-3 animate-spin" />
                           {applyProgress.action}: <span className="font-mono">{applyProgress.currentApp}</span>
                         </span>
                       )}
-                      {selectedProfile && checkStep === 'idle' && isRunning && !applyProgress.currentApp && 'Setting up...'}
-                      {checkStep === 'scanning' && 'Scanning installed applications...'}
-                      {checkStep === 'comparing' && 'Comparing to setup profile...'}
-                      {checkStep === 'ready' && !hasIssues && 'All applications are up to date'}
-                      {checkStep === 'ready' && hasIssues && 'Some applications need attention'}
+                      {selectedProfile && isRunning && !applyProgress.currentApp && 'Analyzing...'}
+                      {checkStep === 'scanning' && 'Analyzing setup profile...'}
                     </CardDescription>
                   </div>
-                  {isChecked && hasIssues && (
-                    <Button onClick={handleSetupMachine} disabled={isRunning || !selectedProfile}>
-                      {isRunning ? 'Running...' : 'Fix missing apps'}
-                    </Button>
-                  )}
-                  {!isChecked && (
-                    <Button onClick={handleCheckSetup} disabled={isRunning || !selectedProfile}>
-                      {isRunning ? 'Checking...' : 'Check this computer'}
-                    </Button>
-                  )}
+                  <div className="flex gap-2">
+                    {isPreviewReady && hasPendingInstalls && (
+                      <Button onClick={handleSetupMachine} disabled={isRunning || !selectedProfile}>
+                        {isRunning ? 'Installing...' : 'Apply changes'}
+                      </Button>
+                    )}
+                    {!isPreviewReady && (
+                      <Button onClick={handlePreviewChanges} disabled={isRunning || !selectedProfile}>
+                        {isRunning ? 'Analyzing...' : 'Preview changes'}
+                      </Button>
+                    )}
+                    {isPreviewReady && !hasPendingInstalls && !hasFailures && (
+                      <Button variant="secondary" onClick={() => setCheckStep('idle')} disabled={isRunning}>
+                        Done
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Setup Profile Selection */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">Setup Profile</label>
+                    <label className="text-sm font-medium">Profile</label>
                     <Button 
                       variant="ghost" 
                       onClick={handleImportProfile} 
@@ -914,6 +925,11 @@ function App() {
                         setSelectedProfilePath(selected?.path || '');
                         updateSettings({ lastSelectedProfile: e.target.value, lastSelectedProfilePath: selected?.path || '' });
                         setCheckStep('idle');
+                        // Reset apply data when profile changes
+                        setApplyData({
+                          counts: { total: 0, installed: 0, alreadyInstalled: 0, skippedFiltered: 0, failed: 0 },
+                          items: [],
+                        });
                       }}
                       disabled={isRunning}
                       className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -931,55 +947,6 @@ function App() {
                     </div>
                   )}
                 </div>
-
-                {/* Actionable Apps Only (After Completion) */}
-                {isChecked && hasIssues && state.verify?.data?.results && (
-                  <div className="pt-2 space-y-2">
-                    <p className="text-sm font-medium text-muted-foreground">Apps needing attention:</p>
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {state.verify.data.results
-                        .filter(r => r.status === 'missing' || r.status === 'version-mismatch' || r.status === 'fail')
-                        .map((result, idx: number) => (
-                          <div key={idx} className="flex items-center gap-3 p-2 rounded bg-accent/5">
-                            <AppIcon wingetId={result.id || result.ref || ''} className="h-4 w-4 text-muted-foreground" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{result.id || result.ref || 'Unknown'}</p>
-                            </div>
-                            <StatusPill 
-                              status={
-                                result.status === 'missing' ? 'missing' : 
-                                result.status === 'version-mismatch' || result.status === 'fail' ? 'mismatch' : 
-                                'neutral'
-                              } 
-                            />
-                          </div>
-                        ))}
-                    </div>
-                    <details className="pt-2">
-                      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                        View all apps ({state.verify.data.results.length} total)
-                      </summary>
-                      <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-                        {state.verify.data.results.map((result, idx: number) => (
-                          <div key={idx} className="flex items-center gap-3 p-2 rounded hover:bg-accent/10 text-xs">
-                            <AppIcon wingetId={result.id || result.ref || ''} className="h-3 w-3 text-muted-foreground" />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{result.id || result.ref || 'Unknown'}</p>
-                            </div>
-                            <StatusPill 
-                              status={
-                                result.status === 'ok' || result.status === 'pass' ? 'ok' : 
-                                result.status === 'missing' ? 'missing' : 
-                                result.status === 'version-mismatch' || result.status === 'fail' ? 'mismatch' : 
-                                'neutral'
-                              } 
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  </div>
-                )}
 
                 {/* Dry Run Toggle */}
                 <div className="flex items-center space-x-2 pt-2 border-t border-border">
@@ -1003,7 +970,6 @@ function App() {
               logsTruncated={logTruncated}
               onClearLogs={() => setRunLogs('')}
               isComplete={checkStep === 'ready'}
-              totalAppsChecked={state.verify?.data?.summary?.total ?? 0}
             />
 
             {/* Last Run (reference only, de-emphasized at bottom) */}
@@ -1022,14 +988,6 @@ function App() {
                         </span>
                       </div>
                     )}
-                    {state.report.data.lastVerify && (
-                      <div>
-                        <span className="text-muted-foreground">Last Verify: </span>
-                        <span className="font-medium">
-                          {new Date(state.report.data.lastVerify.timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground italic">No history available</p>
@@ -1037,28 +995,18 @@ function App() {
               </CardContent>
             </Card>
 
-            {/* Result Modal */}
-            <ScanResultModal
-              open={showResultModal}
-              onClose={() => setShowResultModal(false)}
-              okCount={state.verify?.data?.summary?.okCount ?? 0}
-              missingCount={missing}
-              mismatchCount={mismatch}
-              results={state.verify?.data?.results}
-              onFixApps={() => {
-                setShowResultModal(false);
-                handleSetupMachine();
-              }}
-            />
-            
-            {/* Apply Result Modal */}
+            {/* Apply Result Modal - driven by apply envelope data only */}
             <ApplyResultModal
               open={showApplyModal}
-              onClose={() => setShowApplyModal(false)}
+              onClose={() => {
+                setShowApplyModal(false);
+                setCheckStep('idle');
+              }}
               counts={applyData.counts}
               items={applyData.items}
               rawLogs={runLogs}
               rawEnvelope={applyData.rawEnvelope}
+              onApplyChanges={hasPendingInstalls ? handleSetupMachine : undefined}
             />
           </div>
         );

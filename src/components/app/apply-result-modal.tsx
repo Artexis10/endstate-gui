@@ -3,12 +3,12 @@ import { Button } from '../ui/button';
 import { CheckCircle2, AlertTriangle, Copy, Package, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import type { ApplyItem, ApplyCounts } from '../../types';
-import { categorizeApplyItems, countCategorizedItems, isAllUpToDate } from '../../lib/apply-utils';
+import { categorizeApplyItems, countCategorizedItems } from '../../lib/apply-utils';
 
 interface ApplyResultModalProps {
   open: boolean;
   onClose: () => void;
-  onFixIssues?: () => void;
+  onApplyChanges?: () => void;  // Called when user wants to apply pending changes
   counts: ApplyCounts;
   items: ApplyItem[];
   rawLogs?: string;
@@ -18,7 +18,7 @@ interface ApplyResultModalProps {
 export function ApplyResultModal({
   open,
   onClose,
-  onFixIssues,
+  onApplyChanges,
   counts,
   items,
   rawLogs,
@@ -40,9 +40,16 @@ export function ApplyResultModal({
     failed: itemCounts.failed || counts.failed,
   };
 
-  // Determine status using helpers
-  const hasIssues = effectiveCounts.failed > 0;
-  const allUpToDate = isAllUpToDate(counts, itemCounts);
+  // Count pending installs (would_install from dry-run)
+  const pendingInstalls = items.filter(i => i.reason === 'would_install').length;
+  
+  // Determine status:
+  // - hasFailures: any failed items
+  // - hasPendingChanges: items that would be installed (from dry-run preview)
+  // - isReady: no failures AND no pending changes (everything already installed)
+  const hasFailures = effectiveCounts.failed > 0;
+  const hasPendingChanges = pendingInstalls > 0;
+  const isReady = !hasFailures && !hasPendingChanges && effectiveCounts.alreadyInstalled > 0;
 
   const toggleSection = (section: string) => {
     const next = new Set(expandedSections);
@@ -143,19 +150,27 @@ export function ApplyResultModal({
 
   // Determine title and description based on status
   const getTitle = () => {
-    if (hasIssues) return 'Setup complete with issues';
-    if (allUpToDate) return 'Your computer is ready';
-    return 'Setup complete';
+    if (hasFailures) return 'Setup incomplete';
+    if (hasPendingChanges) return 'Changes ready to apply';
+    if (isReady) return 'Your computer is ready';
+    if (effectiveCounts.installed > 0) return 'Setup complete';
+    return 'No changes needed';
   };
 
   const getDescription = () => {
-    if (hasIssues) {
+    if (hasFailures) {
       return `${effectiveCounts.failed} app${effectiveCounts.failed > 1 ? 's' : ''} need${effectiveCounts.failed === 1 ? 's' : ''} attention`;
     }
-    if (allUpToDate) {
-      return 'All apps are already installed and up to date';
+    if (hasPendingChanges) {
+      return `${pendingInstalls} app${pendingInstalls > 1 ? 's' : ''} will be installed`;
     }
-    return 'All apps are ready to use';
+    if (isReady) {
+      return 'All apps are already installed';
+    }
+    if (effectiveCounts.installed > 0) {
+      return `${effectiveCounts.installed} app${effectiveCounts.installed > 1 ? 's' : ''} installed successfully`;
+    }
+    return 'Everything is already set up';
   };
 
   return (
@@ -163,7 +178,9 @@ export function ApplyResultModal({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
-            {hasIssues ? (
+            {hasFailures ? (
+              <AlertTriangle className="h-8 w-8 text-destructive" />
+            ) : hasPendingChanges ? (
               <AlertTriangle className="h-8 w-8 text-warning" />
             ) : (
               <CheckCircle2 className="h-8 w-8 text-success" />
@@ -177,8 +194,17 @@ export function ApplyResultModal({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Non-technical summary - use effectiveCounts */}
+        {/* Non-technical summary */}
         <div className="space-y-3 py-4">
+          {/* Pending installs (from dry-run preview) */}
+          {pendingInstalls > 0 && (
+            <div className="flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20">
+              <span className="text-sm font-medium">Will be installed</span>
+              <span className="text-2xl font-semibold text-warning">{pendingInstalls}</span>
+            </div>
+          )}
+          
+          {/* Newly installed (from actual apply) */}
           {effectiveCounts.installed > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
               <span className="text-sm font-medium">Installed</span>
@@ -186,13 +212,15 @@ export function ApplyResultModal({
             </div>
           )}
           
+          {/* Already installed */}
           {effectiveCounts.alreadyInstalled > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
-              <span className="text-sm font-medium">{allUpToDate ? 'Up to date' : 'Already installed'}</span>
+              <span className="text-sm font-medium">Already installed</span>
               <span className="text-2xl font-semibold text-success">{effectiveCounts.alreadyInstalled}</span>
             </div>
           )}
           
+          {/* Skipped */}
           {effectiveCounts.skipped > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
               <span className="text-sm font-medium">Skipped</span>
@@ -200,6 +228,7 @@ export function ApplyResultModal({
             </div>
           )}
           
+          {/* Failed / Needs attention */}
           {effectiveCounts.failed > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/20">
               <span className="text-sm font-medium">Needs attention</span>
@@ -244,13 +273,17 @@ export function ApplyResultModal({
         )}
 
         <DialogFooter className="flex-col gap-2 sm:flex-col">
-          {hasIssues && onFixIssues ? (
-            <Button onClick={() => { onClose(); onFixIssues(); }} className="w-full" variant="danger">
-              Fix {effectiveCounts.failed} issue{effectiveCounts.failed > 1 ? 's' : ''}
+          {hasPendingChanges && onApplyChanges && (
+            <Button onClick={() => { onClose(); onApplyChanges(); }} className="w-full">
+              Install {pendingInstalls} app{pendingInstalls > 1 ? 's' : ''}
             </Button>
-          ) : null}
-          <Button variant={hasIssues ? "secondary" : "primary"} onClick={onClose} className="w-full">
-            {hasIssues ? 'Close' : 'Finish'}
+          )}
+          <Button 
+            variant={hasPendingChanges ? "secondary" : "primary"} 
+            onClick={onClose} 
+            className="w-full"
+          >
+            {hasPendingChanges ? 'Cancel' : hasFailures ? 'Close' : 'Done'}
           </Button>
         </DialogFooter>
       </DialogContent>

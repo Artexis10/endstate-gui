@@ -1,84 +1,67 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Apply Modal and Navigation Persistence', () => {
+// Helper to create mock engine for Apply-only flow
+function createApplyMockEngine(applyResponse: any) {
+  return {
+    runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      if (command === 'capabilities') {
+        return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
+      }
+      if (command === 'report') {
+        return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
+      }
+      if (command === 'apply') {
+        return applyResponse;
+      }
+      return { exitCode: 0, envelope: { success: true, data: {} } };
+    }
+  };
+}
+
+test.describe('Apply Page - Apply Only Flow', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await page.addInitScript(() => {
-      // Mock Tauri
       (window as any).__TAURI__ = {
         core: {
-          invoke: async (cmd: string, args?: any) => {
+          invoke: async (cmd: string) => {
             if (cmd === 'ensure_dir') return null;
             if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return [
-              'C:\\test\\profiles\\test-profile.jsonc'
-            ];
+            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
             if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
             return null;
           }
         }
       };
       
-      // Mock engine with streaming apply
+      // Default mock: all apps already installed
       (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
         runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
-            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
+            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }
           if (command === 'report') {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
           }
-          if (command === 'verify') {
-            // Return all OK so no modal appears
-            return { 
-              exitCode: 0, 
-              envelope: { 
-                success: true, 
-                data: { 
-                  summary: { total: 3, okCount: 3, missingCount: 0, versionMismatchCount: 0 }, 
-                  results: [
-                    { id: 'Discord.Discord', status: 'ok' },
-                    { id: 'Google.Chrome', status: 'ok' },
-                    { id: '7zip.7zip', status: 'ok' }
-                  ] 
-                } 
-              } 
-            };
-          }
           if (command === 'apply') {
-            // Emit streaming events with delays
-            const lines = [
-              '[ACTION] Installing Google.Chrome via winget',
-              '[OK] Google.Chrome (driver: winget) - installed',
-              '[OK] Discord.Discord (driver: winget) - already installed',
-              '[OK] 7zip.7zip (driver: winget) - installed',
-            ];
+            // Emit streaming events
+            onEvent({ type: 'stdout', data: '[SKIP] Discord.Discord - already installed\n' });
+            onEvent({ type: 'stdout', data: '[SKIP] Google.Chrome - already installed\n' });
             
-            for (const line of lines) {
-              await new Promise(r => setTimeout(r, 150));
-              onEvent({ type: 'stdout', data: line + '\n' });
-            }
-            
-            // Return envelope with counts and items
             return { 
               exitCode: 0, 
               envelope: { 
                 success: true, 
                 data: { 
-                  manifestPath: 'C:\\test\\profiles\\test-profile.jsonc',
-                  installed: 2,
-                  skipped: 1,
-                  failed: 0,
                   counts: {
-                    total: 3,
-                    installed: 2,
-                    alreadyInstalled: 1,
+                    total: 2,
+                    installed: 0,
+                    alreadyInstalled: 2,
                     skippedFiltered: 0,
                     failed: 0
                   },
                   items: [
-                    { id: 'Google.Chrome', driver: 'winget', status: 'ok', reason: 'installed' },
                     { id: 'Discord.Discord', driver: 'winget', status: 'skipped', reason: 'already_installed' },
-                    { id: '7zip.7zip', driver: 'winget', status: 'ok', reason: 'installed' }
+                    { id: 'Google.Chrome', driver: 'winget', status: 'skipped', reason: 'already_installed' }
                   ]
                 } 
               } 
@@ -91,45 +74,37 @@ test.describe('Apply Modal and Navigation Persistence', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    // Wait for app to be ready (Apply page is default)
     await expect(page.locator('h1:has-text("Apply")')).toBeVisible({ timeout: 5000 });
   });
 
-  test('Apply page loads with profile selector', async ({ page }) => {
-    // Wait for select to have the profile option
+  test('Apply page loads with profile selector and Preview button', async ({ page }) => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    
-    // Select a profile
     await page.selectOption('select', 'test-profile');
     
-    // Check button should be visible
-    await expect(page.locator('button:has-text("Check this computer")')).toBeVisible();
+    // Preview changes button should be visible (not "Check this computer")
+    await expect(page.locator('button:has-text("Preview changes")')).toBeVisible();
   });
 
-  test('Activity card appears during check', async ({ page }) => {
-    // Wait for select to have the profile option
+  test('Activity card appears during preview', async ({ page }) => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    
-    // Select profile and start check
     await page.selectOption('select', 'test-profile');
-    await page.click('button:has-text("Check this computer")');
+    
+    // Click Preview changes
+    await page.click('button:has-text("Preview changes")');
     
     // Wait for activity card to show
     await expect(page.locator('text=Activity')).toBeVisible({ timeout: 3000 });
   });
 
-  test('Navigation preserves app state', async ({ page }) => {
-    // Wait for select to have the profile option
+  test('Navigation preserves profile selection', async ({ page }) => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    
-    // Select a profile
     await page.selectOption('select', 'test-profile');
     
-    // Navigate to Capture page (sidebar label)
+    // Navigate to Capture page
     await page.click('nav >> text=Capture machine');
     await expect(page.locator('h1:has-text("Capture machine")')).toBeVisible();
     
-    // Navigate back to Apply page (sidebar label is "Apply")
+    // Navigate back to Apply page
     await page.click('nav >> text=Apply');
     await expect(page.locator('h1:has-text("Apply")')).toBeVisible();
     
@@ -138,8 +113,8 @@ test.describe('Apply Modal and Navigation Persistence', () => {
   });
 });
 
-// Test: All apps already installed => "Your computer is ready" + Up to date count
-test.describe('Apply Modal - All Up To Date', () => {
+// Test: All apps already installed => "Your computer is ready"
+test.describe('Apply Modal - All Already Installed', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await page.addInitScript(() => {
       (window as any).__TAURI__ = {
@@ -157,30 +132,13 @@ test.describe('Apply Modal - All Up To Date', () => {
       (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
         runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
-            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
+            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }
           if (command === 'report') {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
           }
-          if (command === 'verify') {
-            // Return some missing so Fix button appears
-            return { 
-              exitCode: 0, 
-              envelope: { 
-                success: true, 
-                data: { 
-                  summary: { total: 3, okCount: 0, missingCount: 3, versionMismatchCount: 0 }, 
-                  results: [
-                    { id: 'Discord.Discord', status: 'missing' },
-                    { id: 'Google.Chrome', status: 'missing' },
-                    { id: '7zip.7zip', status: 'missing' }
-                  ] 
-                } 
-              } 
-            };
-          }
           if (command === 'apply') {
-            // All apps already installed - no new installs
+            // All apps already installed
             onEvent({ type: 'stdout', data: '[SKIP] Discord.Discord - already installed\n' });
             onEvent({ type: 'stdout', data: '[SKIP] Google.Chrome - already installed\n' });
             onEvent({ type: 'stdout', data: '[SKIP] 7zip.7zip - already installed\n' });
@@ -216,29 +174,26 @@ test.describe('Apply Modal - All Up To Date', () => {
     await expect(page.locator('h1:has-text("Apply")')).toBeVisible({ timeout: 5000 });
   });
 
-  test('shows "Your computer is ready" and Up to date count when all apps already installed', async ({ page }) => {
+  test('shows "Your computer is ready" when all apps already installed', async ({ page }) => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
     await page.selectOption('select', 'test-profile');
     
-    // Click Check to trigger verify
-    await page.click('button:has-text("Check this computer")');
-    
-    // Wait for scan result modal and click Install missing apps
-    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
-    await page.locator('[role="dialog"] button:has-text("Install missing apps")').click();
+    // Click Preview changes to run apply --dry-run
+    await page.click('button:has-text("Preview changes")');
     
     // Wait for apply modal
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('text=Your computer is ready')).toBeVisible({ timeout: 5000 });
     
-    // Should show "Up to date" label with count 3 in the summary card
+    // Should show "Already installed" with count 3
     const dialog = page.locator('[role="dialog"]');
-    const upToDateCard = dialog.locator('.bg-success\\/10').filter({ hasText: 'Up to date' });
-    await expect(upToDateCard).toBeVisible();
-    await expect(upToDateCard.locator('.text-2xl')).toHaveText('3');
+    const alreadyInstalledCard = dialog.locator('.bg-success\\/10').filter({ hasText: 'Already installed' });
+    await expect(alreadyInstalledCard).toBeVisible();
+    await expect(alreadyInstalledCard.locator('.text-2xl')).toHaveText('3');
   });
 });
 
-// Test: Some apps failed => "Setup complete with issues" + Needs attention section
+// Test: Some apps failed => "Setup incomplete" + Needs attention
 test.describe('Apply Modal - With Failures', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await page.addInitScript(() => {
@@ -257,31 +212,15 @@ test.describe('Apply Modal - With Failures', () => {
       (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
         runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
-            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
+            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }
           if (command === 'report') {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
           }
-          if (command === 'verify') {
-            return { 
-              exitCode: 0, 
-              envelope: { 
-                success: true, 
-                data: { 
-                  summary: { total: 3, okCount: 0, missingCount: 3, versionMismatchCount: 0 }, 
-                  results: [
-                    { id: 'Discord.Discord', status: 'missing' },
-                    { id: 'Google.Chrome', status: 'missing' },
-                    { id: 'BrokenApp.App', status: 'missing' }
-                  ] 
-                } 
-              } 
-            };
-          }
           if (command === 'apply') {
             // Some succeed, one fails
             onEvent({ type: 'stdout', data: '[OK] Discord.Discord - installed\n' });
-            onEvent({ type: 'stdout', data: '[OK] Google.Chrome - already installed\n' });
+            onEvent({ type: 'stdout', data: '[SKIP] Google.Chrome - already installed\n' });
             onEvent({ type: 'stdout', data: '[FAIL] BrokenApp.App - installation failed\n' });
             
             return { 
@@ -315,25 +254,107 @@ test.describe('Apply Modal - With Failures', () => {
     await expect(page.locator('h1:has-text("Apply")')).toBeVisible({ timeout: 5000 });
   });
 
-  test('shows "Setup complete with issues" and Needs attention when apps fail', async ({ page }) => {
+  test('shows "Setup incomplete" and Needs attention when apps fail', async ({ page }) => {
     await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
     await page.selectOption('select', 'test-profile');
     
-    // Click Check to trigger verify
-    await page.click('button:has-text("Check this computer")');
-    
-    // Wait for scan result modal and click Install missing apps
-    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
-    await page.locator('[role="dialog"] button:has-text("Install missing apps")').click();
+    // Click Preview changes
+    await page.click('button:has-text("Preview changes")');
     
     // Wait for apply modal with issues
-    await expect(page.locator('text=Setup complete with issues')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=Setup incomplete')).toBeVisible({ timeout: 5000 });
     
-    // Should show "Needs attention" label with count 1 in the summary card
+    // Should show "Needs attention" with count 1
     const dialog = page.locator('[role="dialog"]');
     const needsAttentionCard = dialog.locator('.bg-destructive\\/10').filter({ hasText: 'Needs attention' });
     await expect(needsAttentionCard).toBeVisible();
     await expect(needsAttentionCard.locator('.text-2xl')).toHaveText('1');
+    
+    // Should NOT show "Your computer is ready"
+    await expect(page.locator('text=Your computer is ready')).not.toBeVisible();
+  });
+});
+
+// Test: Pending installs from dry-run => "Changes ready to apply" with Install button
+test.describe('Apply Modal - Pending Installs (Dry Run)', () => {
+  test.beforeEach(async ({ page, baseURL }) => {
+    await page.addInitScript(() => {
+      (window as any).__TAURI__ = {
+        core: {
+          invoke: async (cmd: string) => {
+            if (cmd === 'ensure_dir') return null;
+            if (cmd === 'read_dir') return [];
+            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
+            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
+            return null;
+          }
+        }
+      };
+      
+      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
+        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+          if (command === 'capabilities') {
+            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
+          }
+          if (command === 'report') {
+            return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
+          }
+          if (command === 'apply') {
+            // Dry run: some apps would be installed
+            onEvent({ type: 'stdout', data: '[PLAN] Would install Notepad++.Notepad++\n' });
+            onEvent({ type: 'stdout', data: '[SKIP] Google.Chrome - already installed\n' });
+            
+            return { 
+              exitCode: 0, 
+              envelope: { 
+                success: true, 
+                data: { 
+                  dryRun: true,
+                  counts: {
+                    total: 2,
+                    installed: 0,
+                    alreadyInstalled: 1,
+                    skippedFiltered: 0,
+                    failed: 0
+                  },
+                  items: [
+                    { id: 'Notepad++.Notepad++', driver: 'winget', status: 'ok', reason: 'would_install' },
+                    { id: 'Google.Chrome', driver: 'winget', status: 'skipped', reason: 'already_installed' }
+                  ]
+                } 
+              } 
+            };
+          }
+          return { exitCode: 0, envelope: { success: true, data: {} } };
+        }
+      };
+    });
+    
+    await page.goto(baseURL || '/');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('h1:has-text("Apply")')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('shows "Changes ready to apply" with Install button when apps need installing', async ({ page }) => {
+    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
+    await page.selectOption('select', 'test-profile');
+    
+    // Click Preview changes
+    await page.click('button:has-text("Preview changes")');
+    
+    // Wait for apply modal
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=Changes ready to apply')).toBeVisible({ timeout: 5000 });
+    
+    // Should show "Will be installed" with count 1
+    const dialog = page.locator('[role="dialog"]');
+    const pendingCard = dialog.locator('.bg-warning\\/10').filter({ hasText: 'Will be installed' });
+    await expect(pendingCard).toBeVisible();
+    await expect(pendingCard.locator('.text-2xl')).toHaveText('1');
+    
+    // Should have Install button
+    await expect(dialog.locator('button:has-text("Install 1 app")')).toBeVisible();
     
     // Should NOT show "Your computer is ready"
     await expect(page.locator('text=Your computer is ready')).not.toBeVisible();

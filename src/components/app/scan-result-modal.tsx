@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,16 +8,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { StatusPill } from './status-pill';
-import { CheckCircle2, AlertCircle, Copy, Package } from 'lucide-react';
-
-interface ScanResult {
-  type: string;
-  status: string;
-  id?: string;
-  ref?: string;
-  message?: string;
-}
+import { CheckCircle2, AlertCircle, Copy, Package, ChevronDown, ChevronRight } from 'lucide-react';
+import type { VerifyItem } from '../../types';
 
 interface ScanResultModalProps {
   open: boolean;
@@ -25,8 +17,37 @@ interface ScanResultModalProps {
   okCount: number;
   missingCount: number;
   mismatchCount: number;
-  results?: ScanResult[];
+  items?: VerifyItem[];
   onFixApps: () => void;
+}
+
+// Group items by status and then by driver
+function categorizeVerifyItems(items: VerifyItem[]): {
+  ok: Record<string, VerifyItem[]>;
+  missing: Record<string, VerifyItem[]>;
+  versionMismatch: Record<string, VerifyItem[]>;
+} {
+  const result = {
+    ok: {} as Record<string, VerifyItem[]>,
+    missing: {} as Record<string, VerifyItem[]>,
+    versionMismatch: {} as Record<string, VerifyItem[]>,
+  };
+
+  for (const item of items) {
+    const driver = item.driver || 'unknown';
+    if (item.status === 'ok') {
+      if (!result.ok[driver]) result.ok[driver] = [];
+      result.ok[driver].push(item);
+    } else if (item.status === 'missing') {
+      if (!result.missing[driver]) result.missing[driver] = [];
+      result.missing[driver].push(item);
+    } else if (item.status === 'version_mismatch') {
+      if (!result.versionMismatch[driver]) result.versionMismatch[driver] = [];
+      result.versionMismatch[driver].push(item);
+    }
+  }
+
+  return result;
 }
 
 export function ScanResultModal({
@@ -35,34 +56,106 @@ export function ScanResultModal({
   okCount,
   missingCount,
   mismatchCount,
-  results = [],
+  items = [],
   onFixApps,
 }: ScanResultModalProps) {
   const [showDetails, setShowDetails] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['missing', 'versionMismatch']));
   const [copied, setCopied] = useState(false);
   const hasIssues = missingCount > 0 || mismatchCount > 0;
   
-  const okApps = results.filter(r => r.status === 'ok' || r.status === 'pass');
-  const missingApps = results.filter(r => r.status === 'missing');
-  const mismatchApps = results.filter(r => r.status === 'version-mismatch' || r.status === 'fail');
+  const categorized = useMemo(() => categorizeVerifyItems(items), [items]);
   
+  const toggleSection = (section: string) => {
+    const next = new Set(expandedSections);
+    if (next.has(section)) {
+      next.delete(section);
+    } else {
+      next.add(section);
+    }
+    setExpandedSections(next);
+  };
+  
+  // Count items per category from the items array
+  const okItems = Object.values(categorized.ok).flat();
+  const missingItems = Object.values(categorized.missing).flat();
+  const mismatchItems = Object.values(categorized.versionMismatch).flat();
+
   const copyToClipboard = async () => {
-    const text = [
-      okApps.length > 0 ? `Up to date (${okApps.length}):` : '',
-      ...okApps.map(a => `  - ${a.id || a.ref}`),
-      missingApps.length > 0 ? `\nMissing (${missingApps.length}):` : '',
-      ...missingApps.map(a => `  - ${a.id || a.ref}`),
-      mismatchApps.length > 0 ? `\nVersion mismatch (${mismatchApps.length}):` : '',
-      ...mismatchApps.map(a => `  - ${a.id || a.ref}`),
-    ].filter(Boolean).join('\n');
+    const lines: string[] = [];
+    if (okItems.length > 0) {
+      lines.push(`Up to date (${okItems.length}):`);
+      okItems.forEach(a => lines.push(`  - ${a.id}`));
+    }
+    if (missingItems.length > 0) {
+      lines.push(`\nMissing (${missingItems.length}):`);
+      missingItems.forEach(a => lines.push(`  - ${a.id}`));
+    }
+    if (mismatchItems.length > 0) {
+      lines.push(`\nVersion mismatch (${mismatchItems.length}):`);
+      mismatchItems.forEach(a => lines.push(`  - ${a.id}${a.reason ? ` (${a.reason})` : ''}`));
+    }
 
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(lines.join('\n'));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }
+  };
+
+  // Render a categorized section with driver grouping
+  const renderSection = (
+    title: string,
+    icon: string,
+    groupedItems: Record<string, VerifyItem[]>,
+    sectionKey: string,
+    bgClass: string
+  ) => {
+    const itemCount = Object.values(groupedItems).flat().length;
+    if (itemCount === 0) return null;
+
+    const isExpanded = expandedSections.has(sectionKey);
+
+    return (
+      <div className={`rounded-lg border ${bgClass}`}>
+        <button
+          onClick={() => toggleSection(sectionKey)}
+          className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/50 rounded-lg transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+            <span className="text-sm font-medium">{icon} {title}</span>
+            <span className="text-xs text-muted-foreground">({itemCount})</span>
+          </div>
+        </button>
+        {isExpanded && (
+          <div className="px-3 pb-3 space-y-2">
+            {Object.entries(groupedItems).map(([driver, driverItems]) => (
+              <div key={driver} className="ml-6">
+                <p className="text-xs font-medium text-muted-foreground mb-1 uppercase">{driver}</p>
+                <div className="space-y-1">
+                  {driverItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2 p-1.5 rounded bg-background/50 text-xs">
+                      <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      <span className="flex-1 font-mono truncate">{item.id}</span>
+                      {item.reason && (
+                        <span className="text-muted-foreground text-[10px] truncate max-w-[120px]">{item.reason}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -86,6 +179,7 @@ export function ScanResultModal({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Summary counts */}
         <div className="space-y-3 py-4">
           <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
             <span className="text-sm font-medium">Up to date</span>
@@ -107,14 +201,15 @@ export function ScanResultModal({
           )}
         </div>
 
-        {results.length > 0 && (
+        {/* Details expander with categorized tree view */}
+        {items.length > 0 && (
           <div className="border-t border-border pt-4">
             <div className="flex items-center justify-between mb-3">
               <button
                 onClick={() => setShowDetails(!showDetails)}
                 className="text-sm font-medium text-muted-foreground hover:text-foreground"
               >
-                {showDetails ? 'Hide' : 'View'} details ({results.length} apps)
+                {showDetails ? 'Hide' : 'View'} details ({items.length} apps)
               </button>
               {showDetails && (
                 <Button
@@ -130,54 +225,10 @@ export function ScanResultModal({
             </div>
             
             {showDetails && (
-              <div className="space-y-4 max-h-64 overflow-y-auto">
-                {okApps.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">UP TO DATE ({okApps.length})</p>
-                    <div className="space-y-1">
-                      {okApps.map((app, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 rounded bg-success/5 text-xs">
-                          <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="flex-1 font-mono truncate">{app.id || app.ref}</span>
-                          <StatusPill status="ok" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {missingApps.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">MISSING ({missingApps.length})</p>
-                    <div className="space-y-1">
-                      {missingApps.map((app, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 rounded bg-warning/5 text-xs">
-                          <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="flex-1 font-mono truncate">{app.id || app.ref}</span>
-                          <StatusPill status="missing" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {mismatchApps.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">VERSION MISMATCH ({mismatchApps.length})</p>
-                    <div className="space-y-1">
-                      {mismatchApps.map((app, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 rounded bg-warning/5 text-xs">
-                          <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="flex-1 font-mono truncate">{app.id || app.ref}</span>
-                          {app.message && (
-                            <span className="text-muted-foreground text-[10px] truncate max-w-[100px]">{app.message}</span>
-                          )}
-                          <StatusPill status="mismatch" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {renderSection('Missing', '❌', categorized.missing, 'missing', 'border-warning/30 bg-warning/5')}
+                {renderSection('Version mismatch', '⚠️', categorized.versionMismatch, 'versionMismatch', 'border-warning/30 bg-warning/5')}
+                {renderSection('Up to date', '✅', categorized.ok, 'ok', 'border-success/30 bg-success/5')}
               </div>
             )}
           </div>

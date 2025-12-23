@@ -35,30 +35,29 @@ export interface AutosuiteCapabilitiesData {
   };
 }
 
+export interface VerifyItem {
+  id: string;
+  driver: string;
+  status: 'ok' | 'missing' | 'version_mismatch';
+  version?: string;
+  reason?: string;
+  constraint?: string;
+}
+
 export interface AutosuiteVerifyData {
-  manifest?: {
-    path: string;
-    name: string;
-  };
-  summary?: {
-    total?: number;
-    okCount?: number;
-    missingCount?: number;
-    versionMismatchCount?: number;
-    pass?: number;
-    fail?: number;
-  };
-  results?: Array<{
-    type: string;
-    status: string;
-    verifyType?: string;
-    id?: string;
-    ref?: string;
-    path?: string;
-    command?: string;
-    message?: string;
+  manifestPath?: string;
+  okCount?: number;
+  missingCount?: number;
+  versionMismatches?: number;
+  extraCount?: number;
+  missingApps?: string[];
+  versionMismatchApps?: Array<{
+    id: string;
+    reason: string;
+    installedVersion: string;
+    constraint: string;
   }>;
-  stateFile?: string;
+  items?: VerifyItem[];
 }
 
 export interface AutosuiteReportData {
