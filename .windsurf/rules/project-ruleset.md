@@ -139,3 +139,4 @@ This section binds the general GUI rules to the concrete structure and technolog
 Project ruleset file (canonical, always edit this exact file when updating rules):
 C:\Users\win-laptop\Desktop\projects\autosuite\.windsurf\rules\project-ruleset.md
 
+Do not use PowerShell to edit normal repo files unless a write persistence issue is proven in this session. Default to normal edits. PowerShell fallback only after one failed normal edit, and only for the specific file that failed.
