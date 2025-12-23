@@ -122,6 +122,8 @@ export function CaptureResultModal({
             <button
               onClick={() => setShowDetails(!showDetails)}
               className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
+              aria-label="Toggle technical details"
+              aria-expanded={showDetails}
             >
               {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               Details ({appsIncluded.length} apps)
