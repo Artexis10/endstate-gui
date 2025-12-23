@@ -5,9 +5,9 @@
  * All other code must use this bridge to avoid web-only boot crashes.
  * 
  * Strategy:
- * 1. If window.__TAURI__ mock exists (tests), use it exclusively
- * 2. Otherwise, try real @tauri-apps/api/* imports
- * 3. If real Tauri fails, fall back to web-safe defaults for allowlisted commands
+ * 1. If test mock exists (window.__TAURI__.core.invoke is a function), use it exclusively
+ * 2. Otherwise, if in Tauri runtime, use real @tauri-apps/api/* - errors are fatal
+ * 3. Only use web fallbacks when NOT in Tauri runtime (pure web browser)
  */
 
 // Commands that have safe web fallbacks (used in web-only E2E tests)
@@ -21,29 +21,53 @@ const WEB_FALLBACK_COMMANDS: Record<string, () => any> = {
   'run_autosuite_streaming': () => null,
 };
 
-function hasMock(): boolean {
-  return typeof window !== 'undefined' && '__TAURI__' in window;
+/**
+ * Check if a test mock is installed (Playwright addInitScript sets window.__TAURI__.core.invoke)
+ */
+function hasTestMock(): boolean {
+  if (typeof window === 'undefined') return false;
+  const mock = (window as any).__TAURI__;
+  // Test mocks explicitly set core.invoke as a function
+  return mock?.core?.invoke && typeof mock.core.invoke === 'function';
+}
+
+/**
+ * Detect if we're running in real Tauri runtime (not pure web browser).
+ * Uses multiple heuristics to be robust.
+ */
+function isTauriRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  // Check for Tauri internals (Tauri v2)
+  if ('__TAURI_INTERNALS__' in window) return true;
+  // Check for Tauri IPC (Tauri v1/v2)
+  if ('__TAURI_IPC__' in window) return true;
+  // Check user agent
+  if (typeof navigator !== 'undefined' && navigator.userAgent?.includes('Tauri')) return true;
+  return false;
 }
 
 export async function safeInvoke<T = any>(cmd: string, args?: Record<string, any>): Promise<T> {
   // Mock-first: if test mock exists, use it exclusively
-  if (hasMock()) {
-    const mock = (window as any).__TAURI__;
-    if (mock?.core?.invoke) {
-      return await mock.core.invoke(cmd, args);
-    }
+  if (hasTestMock()) {
+    return await (window as any).__TAURI__.core.invoke(cmd, args);
   }
+  
+  const inTauri = isTauriRuntime();
   
   // Try real Tauri API
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     return await invoke<T>(cmd, args);
   } catch (err) {
-    // Real Tauri not available - use web fallback if command is allowlisted
+    // In real Tauri runtime, errors are fatal - don't silently fall back
+    if (inTauri) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Tauri invoke failed for '${cmd}': ${msg}`);
+    }
+    // Not in Tauri runtime - use web fallback if command is allowlisted
     if (cmd in WEB_FALLBACK_COMMANDS) {
       return WEB_FALLBACK_COMMANDS[cmd]() as T;
     }
-    // For non-allowlisted commands, re-throw to signal failure
     throw err;
   }
 }
@@ -53,19 +77,28 @@ export async function safeListen<T = any>(
   handler: (event: { payload: T }) => void
 ): Promise<() => void> {
   // Mock-first: if test mock exists, use it exclusively
-  if (hasMock()) {
+  if (hasTestMock()) {
     const mock = (window as any).__TAURI__;
     if (mock?.event?.listen) {
       return await mock.event.listen(event, handler);
     }
+    // Mock exists but no event.listen - return no-op for tests
+    return () => {};
   }
   
-  // Try real Tauri API
+  const inTauri = isTauriRuntime();
+  
+  // Try real Tauri API (listen is from @tauri-apps/api/event, NOT core)
   try {
     const { listen } = await import('@tauri-apps/api/event');
     return await listen<T>(event, handler);
-  } catch {
-    // Real Tauri not available - return no-op unlisten
+  } catch (err) {
+    // In real Tauri runtime, errors are fatal
+    if (inTauri) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Tauri listen failed for '${event}': ${msg}`);
+    }
+    // Not in Tauri runtime - return no-op unlisten
     return () => {};
   }
 }
