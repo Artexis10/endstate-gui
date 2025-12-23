@@ -318,6 +318,20 @@ function App() {
       if (applyResult.envelope) {
         const envelopeData = applyResult.envelope.data as AutosuiteApplyResultData | undefined;
         
+        // Dev-only debug: log parsed apply envelope shape
+        if (import.meta.env.DEV) {
+          console.log('[ApplyEnvelope] Preview result:', {
+            hasItems: !!envelopeData?.items,
+            itemsLength: envelopeData?.items?.length ?? 0,
+            hasCounts: !!envelopeData?.counts,
+            counts: envelopeData?.counts,
+            itemsByReason: envelopeData?.items?.reduce((acc, item) => {
+              acc[item.reason || 'unknown'] = (acc[item.reason || 'unknown'] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>),
+          });
+        }
+        
         if (envelopeData?.counts && envelopeData?.items) {
           setApplyData({
             counts: envelopeData.counts,
@@ -412,6 +426,20 @@ function App() {
       // Process apply result and show modal
       if (applyResult.envelope) {
         const envelopeData = applyResult.envelope.data as AutosuiteApplyResultData | undefined;
+        
+        // Dev-only debug: log parsed apply envelope shape
+        if (import.meta.env.DEV) {
+          console.log('[ApplyEnvelope] Apply result:', {
+            hasItems: !!envelopeData?.items,
+            itemsLength: envelopeData?.items?.length ?? 0,
+            hasCounts: !!envelopeData?.counts,
+            counts: envelopeData?.counts,
+            itemsByReason: envelopeData?.items?.reduce((acc, item) => {
+              acc[item.reason || 'unknown'] = (acc[item.reason || 'unknown'] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>),
+          });
+        }
         
         if (envelopeData?.counts && envelopeData?.items) {
           // Use structured envelope data
