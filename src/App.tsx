@@ -14,6 +14,7 @@ import { LogBuffer } from './log-buffer';
 import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
 import { saveLastRun, loadLastRun, type LastRunData } from './lib/last-run';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime } from './lib/tauri-bridge';
+import { runAutosuiteOnce, getErrorMessage } from './lib/engine-exec';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -195,70 +196,55 @@ function App() {
       setLogTruncated(truncated);
     });
 
-    try {
-      const capResult = await runEngineStreaming<AutosuiteCapabilitiesData>(
-        settings,
-        'capabilities',
-        [],
-        (event: StreamEvent) => {
-          if (event.type === 'stderr') {
-            logBufferRef.current?.append(event.data);
-          }
-        }
-      );
-      logBufferRef.current?.flush();
+    // Use non-streaming exec for capabilities (one-shot command)
+    const capResult = await runAutosuiteOnce<AutosuiteEnvelope<AutosuiteCapabilitiesData>>(
+      settings,
+      'capabilities',
+      []
+    );
 
-      if (!capResult.envelope) {
-        setState({
-          status: 'error',
-          errorMessage: 'Autosuite engine not reachable',
-          errorStderr: capResult.stderr || 'STDOUT was not valid JSON',
-          errorCommand: 'autosuite capabilities --json',
-          capabilities: null,
-          report: null,
-          verify: null,
-        });
-        return;
-      }
-
-      const reportResult = await runEngineStreaming<AutosuiteReportData>(
-        settings,
-        'report',
-        [],
-        () => {}
-      );
-
-      let verifyResult: AutosuiteEnvelope<AutosuiteVerifyData> | null = null;
-      if (selectedProfile && profiles.length > 0) {
-        const result = await runEngineStreaming<AutosuiteVerifyData>(
-          settings,
-          'verify',
-          ['--profile', selectedProfile],
-          () => {}
-        );
-        verifyResult = result.envelope;
-      }
-
-      setState({
-        status: 'ready',
-        errorMessage: null,
-        errorStderr: null,
-        errorCommand: null,
-        capabilities: capResult.envelope,
-        report: reportResult.envelope,
-        verify: verifyResult,
-      });
-    } catch (err) {
+    if (!capResult.success) {
       setState({
         status: 'error',
-        errorMessage: err instanceof Error ? err.message : String(err),
-        errorStderr: null,
-        errorCommand: 'autosuite capabilities --json',
+        errorMessage: getErrorMessage(capResult.error),
+        errorStderr: capResult.stderr || null,
+        errorCommand: capResult.error.command || 'autosuite capabilities --json',
         capabilities: null,
         report: null,
         verify: null,
       });
+      return;
     }
+
+    // Capabilities succeeded - continue with report (also non-streaming)
+    const reportResult = await runAutosuiteOnce<AutosuiteEnvelope<AutosuiteReportData>>(
+      settings,
+      'report',
+      []
+    );
+
+    let verifyResult: AutosuiteEnvelope<AutosuiteVerifyData> | null = null;
+    if (selectedProfile && profiles.length > 0) {
+      const result = await runAutosuiteOnce<AutosuiteEnvelope<AutosuiteVerifyData>>(
+        settings,
+        'verify',
+        ['--profile', selectedProfile]
+      );
+      if (result.success) {
+        verifyResult = result.envelope;
+      }
+    }
+
+    // Success - clear any previous error state
+    setState({
+      status: 'ready',
+      errorMessage: null,
+      errorStderr: null,
+      errorCommand: null,
+      capabilities: capResult.envelope,
+      report: reportResult.success ? reportResult.envelope : null,
+      verify: verifyResult,
+    });
   };
 
   useEffect(() => {

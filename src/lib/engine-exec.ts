@@ -1,0 +1,286 @@
+/**
+ * Non-streaming engine execution for one-shot commands like capabilities.
+ * 
+ * This module provides typed errors and proper handling for both Tauri and web modes.
+ */
+
+import { invoke, isTauriRuntime } from './tauri-bridge';
+import { AppSettings } from '../settings';
+
+/** Typed error kinds for engine execution */
+export type EngineErrorKind = 
+  | 'engine_unavailable_web'  // Running in web mode without mock
+  | 'command_failed'          // Command executed but failed (non-zero exit, parse error)
+  | 'command_not_found'       // autosuite binary not found
+  | 'invoke_failed';          // Tauri invoke failed
+
+export interface EngineError {
+  kind: EngineErrorKind;
+  message: string;
+  command?: string;
+  exitCode?: number;
+  stderr?: string;
+  details?: string;
+}
+
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+export type EngineExecResult<T> = {
+  success: true;
+  envelope: T;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+} | {
+  success: false;
+  error: EngineError;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+}
+
+/** Mock capabilities response for web mode with mock enabled */
+const MOCK_CAPABILITIES = {
+  schemaVersion: '1.0',
+  cliVersion: 'mock-1.0.0',
+  command: 'capabilities',
+  runId: 'mock-run',
+  timestampUtc: new Date().toISOString(),
+  success: true,
+  data: {
+    supportedSchemaVersions: { min: '1.0', max: '1.0' },
+    commands: ['capabilities', 'verify', 'apply', 'capture', 'report'],
+  },
+};
+
+/**
+ * Check if mock engine is enabled (for web mode testing).
+ */
+function hasMockEngine(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !!(window as any).__AUTOSUITE_MOCK_ENGINE__;
+}
+
+/**
+ * Run an autosuite command once (non-streaming).
+ * 
+ * In Tauri runtime: executes via autosuite_exec command
+ * In web runtime with mock: returns mock response
+ * In web runtime without mock: returns typed error
+ */
+export async function runAutosuiteOnce<T>(
+  settings: AppSettings,
+  command: string,
+  args: string[] = []
+): Promise<EngineExecResult<T>> {
+  const fullArgs = [command, '--json', ...args];
+  const commandStr = `autosuite ${fullArgs.join(' ')}`;
+  
+  // Check if we're in web mode
+  if (!isTauriRuntime()) {
+    // Web mode - check for mock
+    if (hasMockEngine()) {
+      // Use mock engine
+      const mockEngine = (window as any).__AUTOSUITE_MOCK_ENGINE__;
+      if (mockEngine.runAutosuiteOnce) {
+        return mockEngine.runAutosuiteOnce(settings, command, args);
+      }
+      // Fallback: return mock capabilities for capabilities command
+      if (command === 'capabilities') {
+        return {
+          success: true,
+          envelope: MOCK_CAPABILITIES as T,
+          stdout: JSON.stringify(MOCK_CAPABILITIES),
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+    }
+    
+    // Web mode without mock - return typed error
+    return {
+      success: false,
+      error: {
+        kind: 'engine_unavailable_web',
+        message: 'Engine not available in web mode. Enable mock mode or run in Tauri.',
+        command: commandStr,
+      },
+    };
+  }
+  
+  // Tauri runtime - execute via autosuite_exec
+  // The backend handles exe selection based on platform
+  let execArgs: string[];
+  
+  if (settings.engineMode === 'path') {
+    execArgs = fullArgs;
+  } else {
+    execArgs = [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      settings.engineScriptPath,
+      ...fullArgs,
+    ];
+  }
+  
+  try {
+    const result = await invoke<ExecResult>('autosuite_exec', {
+      args: execArgs,
+    });
+    
+    // Check for command not found (typically exit code 1 with specific stderr)
+    if (result.exitCode !== 0) {
+      const isNotFound = result.stderr?.includes('not recognized') || 
+                         result.stderr?.includes('not found') ||
+                         result.stderr?.includes('CommandNotFoundException');
+      
+      if (isNotFound) {
+        return {
+          success: false,
+          error: {
+            kind: 'command_not_found',
+            message: 'autosuite command not found. Check that it is installed and in PATH.',
+            command: commandStr,
+            exitCode: result.exitCode,
+            stderr: result.stderr,
+          },
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+        };
+      }
+      
+      return {
+        success: false,
+        error: {
+          kind: 'command_failed',
+          message: `Command failed with exit code ${result.exitCode}`,
+          command: commandStr,
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+        },
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      };
+    }
+    
+    // Parse JSON from stdout
+    if (!result.stdout || !result.stdout.trim()) {
+      return {
+        success: false,
+        error: {
+          kind: 'command_failed',
+          message: 'Command produced no output',
+          command: commandStr,
+          exitCode: result.exitCode,
+          stderr: result.stderr,
+        },
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      };
+    }
+    
+    // Find JSON in stdout (may have log lines before it)
+    const lines = result.stdout.split('\n');
+    let jsonStr = '';
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (line.startsWith('{')) {
+        jsonStr = lines.slice(i).join('\n');
+        break;
+      }
+    }
+    
+    if (!jsonStr) {
+      return {
+        success: false,
+        error: {
+          kind: 'command_failed',
+          message: 'No JSON found in command output',
+          command: commandStr,
+          exitCode: result.exitCode,
+          details: result.stdout.substring(0, 200),
+        },
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      };
+    }
+    
+    try {
+      const envelope = JSON.parse(jsonStr) as T;
+      return {
+        success: true,
+        envelope,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      };
+    } catch (parseErr) {
+      return {
+        success: false,
+        error: {
+          kind: 'command_failed',
+          message: `Failed to parse JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+          command: commandStr,
+          exitCode: result.exitCode,
+          details: jsonStr.substring(0, 200),
+        },
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      };
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    
+    // Check if it's a "not found" type error
+    if (errMsg.includes('not found') || errMsg.includes('not recognized')) {
+      return {
+        success: false,
+        error: {
+          kind: 'command_not_found',
+          message: 'autosuite command not found. Check that it is installed and in PATH.',
+          command: commandStr,
+          details: errMsg,
+        },
+      };
+    }
+    
+    return {
+      success: false,
+      error: {
+        kind: 'invoke_failed',
+        message: `Failed to execute command: ${errMsg}`,
+        command: commandStr,
+        details: errMsg,
+      },
+    };
+  }
+}
+
+/**
+ * Get a user-friendly error message for display.
+ */
+export function getErrorMessage(error: EngineError): string {
+  switch (error.kind) {
+    case 'engine_unavailable_web':
+      return 'Engine not available in web mode. Enable mock mode for testing, or run the app in Tauri.';
+    case 'command_not_found':
+      return 'autosuite command not found. Please install autosuite or configure the script path in Settings.';
+    case 'command_failed':
+      return error.message;
+    case 'invoke_failed':
+      return `Failed to run command: ${error.message}`;
+    default:
+      return error.message;
+  }
+}
