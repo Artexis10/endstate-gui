@@ -118,14 +118,49 @@ export interface AutosuiteApplyData {
 
 export interface CapturedApp {
   id: string;
-  wingetId?: string;
   source?: string;
+}
+
+export interface CaptureCounts {
+  totalFound: number;
+  included: number;
+  skipped: number;
+  filteredRuntimes: number;
+  filteredStoreApps: number;
+  sensitiveExcludedCount: number;
 }
 
 export interface AutosuiteCaptureData {
   outputPath?: string;
   sanitized?: boolean;
   isExample?: boolean;
-  appCount?: number;
-  appsCaptured?: CapturedApp[];
+  counts?: CaptureCounts;
+  appsIncluded?: CapturedApp[];
+}
+
+export interface ApplyItem {
+  id: string;
+  driver: string;
+  status: 'ok' | 'skipped' | 'failed';
+  reason?: string;
+  message?: string;
+}
+
+export interface ApplyCounts {
+  total: number;
+  installed: number;
+  alreadyInstalled: number;
+  skippedFiltered: number;
+  failed: number;
+}
+
+export interface AutosuiteApplyResultData {
+  manifestPath?: string;
+  installed?: number;
+  upgraded?: number;
+  skipped?: number;
+  failed?: number;
+  dryRun?: boolean;
+  counts?: ApplyCounts;
+  items?: ApplyItem[];
 }

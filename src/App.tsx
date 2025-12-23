@@ -5,6 +5,9 @@ import {
   AutosuiteVerifyData,
   AutosuiteReportData,
   AutosuiteApplyData,
+  AutosuiteCaptureData,
+  CapturedApp,
+  CaptureCounts,
 } from './types';
 import { AppSettings, loadSettings, saveSettings } from './settings';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
@@ -79,6 +82,11 @@ function App() {
   const [showCaptureModal, setShowCaptureModal] = useState(false);
   const [captureProgress, setCaptureProgress] = useState<string>('');
   const [captureStats, setCaptureStats] = useState<CaptureStats>({ succeeded: 0, skipped: 0, failed: 0, outputPath: '', lastProcessedApp: '', processedCount: 0, apps: [] });
+  const [captureData, setCaptureData] = useState<{ counts: CaptureCounts; appsIncluded: CapturedApp[]; outputPath: string; rawEnvelope?: object }>({
+    counts: { totalFound: 0, included: 0, skipped: 0, filteredRuntimes: 0, filteredStoreApps: 0, sensitiveExcludedCount: 0 },
+    appsIncluded: [],
+    outputPath: '',
+  });
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [, setLastRun] = useState<LastRunData | null>(null);
   const [safeMode, setSafeMode] = useState(false);
@@ -446,32 +454,36 @@ function App() {
       
       if (isSuccess) {
         // Get stats from envelope data (preferred) or fall back to log parsing
-        const envelopeData = captureResult.envelope?.data as { appCount?: number; appsCaptured?: Array<{ id: string; wingetId?: string; source?: string }>; outputPath?: string } | undefined;
+        const envelopeData = captureResult.envelope?.data as AutosuiteCaptureData | undefined;
         
-        let finalStats: CaptureStats;
-        if (envelopeData?.appCount !== undefined && envelopeData?.appsCaptured) {
-          // Use envelope data - this is the reliable source of truth
-          finalStats = {
-            succeeded: envelopeData.appCount,
-            skipped: 0,  // Engine doesn't track skipped separately in capture
-            failed: 0,   // Engine doesn't track failed separately in capture
+        // Use new structured envelope data
+        if (envelopeData?.counts && envelopeData?.appsIncluded) {
+          setCaptureData({
+            counts: envelopeData.counts,
+            appsIncluded: envelopeData.appsIncluded,
             outputPath: envelopeData.outputPath || outputPath,
-            lastProcessedApp: '',
-            processedCount: envelopeData.appCount,
-            apps: envelopeData.appsCaptured.map(app => ({
-              id: app.wingetId || app.id,  // Prefer wingetId for display
-              status: 'ok' as const,
-              driver: app.source,
-            })),
-          };
+            rawEnvelope: captureResult.envelope || undefined,
+          });
         } else {
-          // Fall back to log parsing if envelope doesn't have the data
-          finalStats = parseCaptureOutput(runLogs);
-          // Try to get outputPath from envelope if log parsing didn't find it
-          if (!finalStats.outputPath && envelopeData?.outputPath) {
-            finalStats.outputPath = envelopeData.outputPath;
-          }
+          // Fall back to log parsing if envelope doesn't have the new structure
+          const finalStats = parseCaptureOutput(runLogs);
+          setCaptureData({
+            counts: {
+              totalFound: finalStats.succeeded + finalStats.skipped,
+              included: finalStats.succeeded,
+              skipped: finalStats.skipped,
+              filteredRuntimes: 0,
+              filteredStoreApps: 0,
+              sensitiveExcludedCount: 0,
+            },
+            appsIncluded: finalStats.apps.filter(a => a.status === 'ok').map(a => ({ id: a.id, source: a.driver })),
+            outputPath: finalStats.outputPath || envelopeData?.outputPath || outputPath,
+            rawEnvelope: captureResult.envelope || undefined,
+          });
         }
+        
+        // Also update legacy captureStats for backward compatibility
+        const finalStats = parseCaptureOutput(runLogs);
         setCaptureStats(finalStats);
         
         // Save Last Run
@@ -744,11 +756,12 @@ function App() {
             <CaptureResultModal
               open={showCaptureModal}
               onClose={() => setShowCaptureModal(false)}
-              succeeded={captureStats.succeeded}
-              skipped={captureStats.skipped}
-              failed={captureStats.failed}
-              outputPath={captureStats.outputPath}
-              apps={captureStats.apps}
+              onGoToApply={() => setCurrentPage('apply')}
+              counts={captureData.counts}
+              appsIncluded={captureData.appsIncluded}
+              outputPath={captureData.outputPath}
+              rawLogs={runLogs}
+              rawEnvelope={captureData.rawEnvelope}
             />
             
             {runLogs && (

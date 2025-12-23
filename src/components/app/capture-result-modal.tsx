@@ -1,50 +1,74 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { CheckCircle2, AlertTriangle, Copy, Package } from 'lucide-react';
+import { CheckCircle2, Copy, Package, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useState } from 'react';
-import { StatusPill } from './status-pill';
-import type { AppEntry } from '../../lib/log-parse';
+import type { CapturedApp, CaptureCounts } from '../../types';
 
 interface CaptureResultModalProps {
   open: boolean;
   onClose: () => void;
-  succeeded: number;
-  skipped: number;
-  failed: number;
+  onGoToApply?: () => void;
+  counts: CaptureCounts;
+  appsIncluded: CapturedApp[];
   outputPath: string;
-  apps: AppEntry[];
+  rawLogs?: string;
+  rawEnvelope?: object;
 }
 
 export function CaptureResultModal({
   open,
   onClose,
-  succeeded,
-  skipped,
-  failed,
+  onGoToApply,
+  counts,
+  appsIncluded,
   outputPath,
-  apps,
+  rawLogs,
+  rawEnvelope,
 }: CaptureResultModalProps) {
   const [showDetails, setShowDetails] = useState(false);
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
-  const hasIssues = failed > 0;
   const displayPath = outputPath ? outputPath.split('\\').pop() || outputPath : '';
 
-  const capturedApps = apps.filter(a => a.status === 'ok');
-  const skippedApps = apps.filter(a => a.status === 'skip');
-  const failedApps = apps.filter(a => a.status === 'fail');
+  // Group apps by source
+  const appsBySource = appsIncluded.reduce((acc, app) => {
+    const source = app.source || 'winget';
+    if (!acc[source]) acc[source] = [];
+    acc[source].push(app);
+    return acc;
+  }, {} as Record<string, CapturedApp[]>);
 
-  const copyToClipboard = async () => {
-    const text = [
-      `Captured (${capturedApps.length}):`,
-      ...capturedApps.map(a => `  - ${a.id}${a.driver ? ` (${a.driver})` : ''}`),
-      skippedApps.length > 0 ? `\nSkipped (${skippedApps.length}):` : '',
-      ...skippedApps.map(a => `  - ${a.id}${a.driver ? ` (${a.driver})` : ''}`),
-      failedApps.length > 0 ? `\nFailed (${failedApps.length}):` : '',
-      ...failedApps.map(a => `  - ${a.id}${a.driver ? ` (${a.driver})` : ''}`),
-    ].filter(Boolean).join('\n');
+  const toggleSource = (source: string) => {
+    const next = new Set(expandedSources);
+    if (next.has(source)) {
+      next.delete(source);
+    } else {
+      next.add(source);
+    }
+    setExpandedSources(next);
+  };
+
+  const copyDiagnostics = async () => {
+    const diagnostics = [
+      '=== Capture Diagnostics ===',
+      `Output: ${outputPath}`,
+      `Apps captured: ${counts.included}`,
+      '',
+      '--- Apps by Source ---',
+      ...Object.entries(appsBySource).flatMap(([source, apps]) => [
+        `${source} (${apps.length}):`,
+        ...apps.map(a => `  - ${a.id}`),
+      ]),
+      '',
+      '--- Raw Envelope ---',
+      rawEnvelope ? JSON.stringify(rawEnvelope, null, 2) : '(not available)',
+      '',
+      '--- Logs ---',
+      rawLogs || '(not available)',
+    ].join('\n');
 
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(diagnostics);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -57,12 +81,8 @@ export function CaptureResultModal({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
-            {hasIssues ? (
-              <AlertTriangle className="h-8 w-8 text-warning" />
-            ) : (
-              <CheckCircle2 className="h-8 w-8 text-success" />
-            )}
-            <DialogTitle className="text-2xl">Setup profile created</DialogTitle>
+            <CheckCircle2 className="h-8 w-8 text-success" />
+            <DialogTitle className="text-2xl">Profile created</DialogTitle>
           </div>
           {outputPath && (
             <DialogDescription className="text-sm pt-2 font-mono text-muted-foreground">
@@ -71,116 +91,105 @@ export function CaptureResultModal({
           )}
         </DialogHeader>
 
+        {/* Non-technical summary */}
         <div className="space-y-3 py-4">
           <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
             <span className="text-sm font-medium">Apps captured</span>
-            <span className="text-2xl font-semibold text-success">{succeeded}</span>
+            <span className="text-2xl font-semibold text-success">{counts.included}</span>
           </div>
           
-          {skipped > 0 && (
+          {counts.skipped > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Apps skipped</span>
-                <span className="text-xs text-muted-foreground">(see Technical details)</span>
-              </div>
-              <span className="text-2xl font-semibold text-muted-foreground">{skipped}</span>
+              <span className="text-sm font-medium">Skipped</span>
+              <span className="text-2xl font-semibold text-muted-foreground">{counts.skipped}</span>
             </div>
           )}
           
-          {failed > 0 && (
-            <div className="flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20">
-              <span className="text-sm font-medium">Apps failed</span>
-              <span className="text-2xl font-semibold text-warning">{failed}</span>
+          {counts.sensitiveExcludedCount > 0 && (
+            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Excluded for safety</span>
+                <span className="text-xs text-muted-foreground" title="Sensitive paths like SSH keys, credentials, and browser data are never captured">(security)</span>
+              </div>
+              <span className="text-2xl font-semibold text-muted-foreground">{counts.sensitiveExcludedCount}</span>
             </div>
           )}
         </div>
 
-        {apps.length > 0 && (
+        {/* Details expander (technical) */}
+        {appsIncluded.length > 0 && (
           <div className="border-t border-border pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <button
-                onClick={() => setShowDetails(!showDetails)}
-                className="text-sm font-medium text-muted-foreground hover:text-foreground"
-              >
-                {showDetails ? 'Hide' : 'View'} details ({apps.length} apps)
-              </button>
-              {showDetails && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={copyToClipboard}
-                  className="h-8 gap-2"
-                >
-                  <Copy className="h-3 w-3" />
-                  {copied ? 'Copied!' : 'Copy list'}
-                </Button>
-              )}
-            </div>
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
+            >
+              {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              Details ({appsIncluded.length} apps)
+            </button>
             
             {showDetails && (
-              <div className="space-y-4 max-h-64 overflow-y-auto">
-                {capturedApps.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">CAPTURED ({capturedApps.length})</p>
-                    <div className="space-y-1">
-                      {capturedApps.map((app, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 rounded bg-success/5 text-xs">
-                          <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="flex-1 font-mono truncate">{app.id}</span>
-                          {app.driver && (
-                            <span className="text-muted-foreground">{app.driver}</span>
-                          )}
-                          <StatusPill status="ok" />
-                        </div>
-                      ))}
-                    </div>
+              <div className="mt-3 space-y-3">
+                {/* Apps grouped by source */}
+                {Object.entries(appsBySource).map(([source, apps]) => (
+                  <div key={source} className="border border-border rounded-lg">
+                    <button
+                      onClick={() => toggleSource(source)}
+                      className="flex items-center justify-between w-full p-3 text-left hover:bg-muted/50"
+                    >
+                      <div className="flex items-center gap-2">
+                        {expandedSources.has(source) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        <span className="text-sm font-medium capitalize">{source}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{apps.length} apps</span>
+                    </button>
+                    
+                    {expandedSources.has(source) && (
+                      <div className="border-t border-border max-h-48 overflow-y-auto">
+                        {apps.map((app, idx) => (
+                          <div key={idx} className="flex items-center gap-2 px-3 py-2 text-xs border-b border-border last:border-b-0">
+                            <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                            <span className="font-mono truncate">{app.id}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
                 
-                {skippedApps.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">SKIPPED ({skippedApps.length})</p>
-                    <div className="space-y-1">
-                      {skippedApps.map((app, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 rounded bg-muted/5 text-xs">
-                          <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="flex-1 font-mono truncate">{app.id}</span>
-                          {app.driver && (
-                            <span className="text-muted-foreground">{app.driver}</span>
-                          )}
-                          <StatusPill status="neutral" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {failedApps.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">FAILED ({failedApps.length})</p>
-                    <div className="space-y-1">
-                      {failedApps.map((app, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 rounded bg-warning/5 text-xs">
-                          <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="flex-1 font-mono truncate">{app.id}</span>
-                          {app.driver && (
-                            <span className="text-muted-foreground">{app.driver}</span>
-                          )}
-                          <StatusPill status="error" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Copy diagnostics */}
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={copyDiagnostics}
+                    className="h-8 gap-2"
+                  >
+                    <Copy className="h-3 w-3" />
+                    {copied ? 'Copied!' : 'Copy diagnostics'}
+                  </Button>
+                </div>
               </div>
             )}
           </div>
         )}
 
-        <DialogFooter>
-          <Button onClick={onClose} className="w-full">
-            Done
-          </Button>
+        <DialogFooter className="flex-col gap-2 sm:flex-col">
+          {onGoToApply && (
+            <Button onClick={() => { onClose(); onGoToApply(); }} className="w-full">
+              Next: Set up a computer
+            </Button>
+          )}
+          <div className="flex gap-2 w-full">
+            {outputPath && (
+              <Button variant="secondary" size="sm" className="flex-1 gap-2" onClick={() => navigator.clipboard.writeText(outputPath)}>
+                <FileText className="h-4 w-4" />
+                Copy path
+              </Button>
+            )}
+            <Button variant={onGoToApply ? "secondary" : "primary"} onClick={onClose} className="flex-1">
+              {onGoToApply ? 'Close' : 'Done'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

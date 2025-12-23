@@ -44,18 +44,25 @@ test.describe('Capture Live Progress', () => {
               onEvent({ type: 'stdout', data: line + '\n' });
             }
             
-            // Return envelope with appCount and appsCaptured - this is the source of truth
+            // Return envelope with counts and appsIncluded - this is the source of truth
             return { 
               exitCode: 0, 
               envelope: { 
                 success: true, 
                 data: { 
                   outputPath: 'C:\\test\\setup.jsonc',
-                  appCount: 3,
-                  appsCaptured: [
-                    { id: 'discord-discord', wingetId: 'Discord.Discord', source: 'winget' },
-                    { id: 'google-chrome', wingetId: 'Google.Chrome', source: 'winget' },
-                    { id: '7zip-7zip', wingetId: '7zip.7zip', source: 'winget' }
+                  counts: {
+                    totalFound: 4,
+                    included: 3,
+                    skipped: 1,
+                    filteredRuntimes: 0,
+                    filteredStoreApps: 0,
+                    sensitiveExcludedCount: 0
+                  },
+                  appsIncluded: [
+                    { id: 'Discord.Discord', source: 'winget' },
+                    { id: 'Google.Chrome', source: 'winget' },
+                    { id: '7zip.7zip', source: 'winget' }
                   ]
                 } 
               } 
@@ -89,7 +96,7 @@ test.describe('Capture Live Progress', () => {
     await expect(page.locator('text=processed')).toBeVisible({ timeout: 2000 });
     
     // Assert capture completes with modal
-    await expect(page.locator('text=Setup profile created')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });
   });
 
   test('Capture modal shows correct app count and list from envelope', async ({ page }) => {
@@ -101,28 +108,25 @@ test.describe('Capture Live Progress', () => {
     await page.click('main >> button:has-text("Capture machine")');
     
     // Wait for capture to complete and modal to appear
-    await expect(page.locator('text=Setup profile created')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });
     
     // CRITICAL ASSERTIONS - These would fail with the old "0 apps" bug:
     
-    // 1. Assert the count shows 3 (from envelope.data.appCount), NOT 0
-    // The modal has a specific structure with the count in a success-colored large text
+    // 1. Assert the count shows 3 (from envelope.data.counts.included), NOT 0
     const modalContent = page.locator('[role="dialog"]');
     const countElement = modalContent.locator('.text-success.text-2xl');
     await expect(countElement).toHaveText('3');
     
-    // 2. Click to expand the app list (the "View details" button is inside the modal)
-    await modalContent.locator('button:has-text("View details")').click();
+    // 2. Click to expand the details section
+    await modalContent.locator('button:has-text("Details")').click();
     
-    // 3. Assert the app list contains expected IDs from envelope.data.appsCaptured
-    // Use more specific locators within the modal's app list section
-    const appList = modalContent.locator('.space-y-1');
-    await expect(appList.locator('span.font-mono:has-text("Discord.Discord")')).toBeVisible();
-    await expect(appList.locator('span.font-mono:has-text("Google.Chrome")')).toBeVisible();
-    await expect(appList.locator('span.font-mono:has-text("7zip.7zip")')).toBeVisible();
+    // 3. Expand the winget source group
+    await modalContent.locator('button:has-text("winget")').click();
     
-    // 4. Assert the list shows correct count in header
-    await expect(modalContent.locator('text=CAPTURED (3)')).toBeVisible();
+    // 4. Assert the app list contains expected IDs from envelope.data.appsIncluded
+    await expect(modalContent.locator('span.font-mono:has-text("Discord.Discord")')).toBeVisible();
+    await expect(modalContent.locator('span.font-mono:has-text("Google.Chrome")')).toBeVisible();
+    await expect(modalContent.locator('span.font-mono:has-text("7zip.7zip")')).toBeVisible();
   });
 
   test('Technical details is closed by default and shows continuous log when opened', async ({ page }) => {
@@ -137,10 +141,10 @@ test.describe('Capture Live Progress', () => {
     await expect(page.locator('text=Activity')).toBeVisible({ timeout: 3000 });
     
     // Wait for capture to complete
-    await expect(page.locator('text=Setup profile created')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });
     
     // Close the modal
-    await page.click('button:has-text("Done")');
+    await page.click('button:has-text("Close")');
     
     // Wait a moment for logs to be fully rendered
     await page.waitForTimeout(200);
