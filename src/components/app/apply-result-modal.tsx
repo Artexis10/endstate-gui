@@ -28,6 +28,7 @@ export function ApplyResultModal({
   const [copied, setCopied] = useState(false);
 
   const hasIssues = counts.failed > 0;
+  const allUpToDate = counts.installed === 0 && counts.failed === 0 && counts.alreadyInstalled > 0;
 
   // Categorize items
   const installedItems = items.filter(i => i.status === 'ok' && (i.reason === 'installed' || i.reason === 'would_install'));
@@ -144,13 +145,15 @@ export function ApplyResultModal({
               <CheckCircle2 className="h-8 w-8 text-success" />
             )}
             <DialogTitle className="text-2xl">
-              {hasIssues ? 'Setup complete with issues' : 'Setup complete'}
+              {hasIssues ? 'Setup complete with issues' : allUpToDate ? 'Your computer is ready' : 'Setup complete'}
             </DialogTitle>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
             {hasIssues 
               ? `${counts.failed} app${counts.failed > 1 ? 's' : ''} need${counts.failed === 1 ? 's' : ''} attention`
-              : 'All apps are ready to use'}
+              : allUpToDate 
+                ? 'All apps are already installed and up to date'
+                : 'All apps are ready to use'}
           </DialogDescription>
         </DialogHeader>
 
@@ -164,9 +167,16 @@ export function ApplyResultModal({
           )}
           
           {counts.alreadyInstalled > 0 && (
+            <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
+              <span className="text-sm font-medium">{allUpToDate ? 'Up to date' : 'Already installed'}</span>
+              <span className="text-2xl font-semibold text-success">{counts.alreadyInstalled}</span>
+            </div>
+          )}
+          
+          {counts.skippedFiltered > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
-              <span className="text-sm font-medium">Already installed</span>
-              <span className="text-2xl font-semibold text-muted-foreground">{counts.alreadyInstalled}</span>
+              <span className="text-sm font-medium">Skipped</span>
+              <span className="text-2xl font-semibold text-muted-foreground">{counts.skippedFiltered}</span>
             </div>
           )}
           

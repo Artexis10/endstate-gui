@@ -8,6 +8,7 @@ import {
   AutosuiteCaptureData,
   CapturedApp,
   CaptureCounts,
+  AutosuiteApplyResultData,
 } from './types';
 import { AppSettings, loadSettings, saveSettings } from './settings';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
@@ -26,6 +27,8 @@ import { ActivityLog } from './components/app/activity-log';
 import { AppIcon } from './components/app/app-icon';
 import { ScanResultModal } from './components/app/scan-result-modal';
 import { CaptureResultModal } from './components/app/capture-result-modal';
+import { ApplyResultModal } from './components/app/apply-result-modal';
+import type { ApplyCounts, ApplyItem } from './types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -92,6 +95,14 @@ function App() {
   const [safeMode, setSafeMode] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const logBufferRef = useRef<LogBuffer | null>(null);
+  
+  // Apply modal state
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [applyData, setApplyData] = useState<{ counts: ApplyCounts; items: ApplyItem[]; rawEnvelope?: object }>({
+    counts: { total: 0, installed: 0, alreadyInstalled: 0, skippedFiltered: 0, failed: 0 },
+    items: [],
+  });
+  const [applyProgress, setApplyProgress] = useState<{ currentApp: string; action: string }>({ currentApp: '', action: '' });
 
   const updateActivity = (message: string, status: ActivityItem['status'], step?: number) => {
     setActivities((prev) => {
@@ -155,18 +166,14 @@ function App() {
   }, [settings.customProfilesDirectory]);
 
   useEffect(() => {
+    // Only clear capture-specific UI state on navigation, not run state
     if (currentPage !== 'capture') {
-      if (captureProgress || showTechnicalDetails) {
+      if (captureProgress) {
         setCaptureProgress('');
-        setShowTechnicalDetails(false);
       }
     }
-    if (currentPage !== 'apply') {
-      if (activities.length > 0 || checkStep !== 'idle') {
-        setActivities([]);
-        setCheckStep('idle');
-      }
-    }
+    // Note: We intentionally do NOT clear activities or checkStep on navigation
+    // so that users can navigate away and return to see the same run state
   }, [currentPage]);
 
   const updateSettings = (newSettings: Partial<AppSettings>) => {
@@ -332,6 +339,44 @@ function App() {
     }
   };
 
+  // Parse apply progress from log line
+  const parseApplyProgress = (line: string): { app: string; action: string } | null => {
+    // Match patterns like: [OK] App.Id (driver: winget) - already installed
+    // Or: [ACTION] Installing App.Id via winget
+    // Or: [SKIP] App.Id - filtered
+    // Or: [FAIL] App.Id - error message
+    const okMatch = line.match(/\[OK\]\s+(\S+)/);
+    if (okMatch) {
+      const isAlready = line.toLowerCase().includes('already');
+      return { app: okMatch[1], action: isAlready ? 'Already installed' : 'Installed' };
+    }
+    
+    const actionMatch = line.match(/\[ACTION\]\s+(?:Installing|Checking)\s+(\S+)/i);
+    if (actionMatch) {
+      return { app: actionMatch[1], action: 'Installing' };
+    }
+    
+    const skipMatch = line.match(/\[SKIP\]\s+(\S+)/);
+    if (skipMatch) {
+      return { app: skipMatch[1], action: 'Skipped' };
+    }
+    
+    const failMatch = line.match(/\[FAIL\]\s+(\S+)/);
+    if (failMatch) {
+      return { app: failMatch[1], action: 'Failed' };
+    }
+    
+    // Also match winget-style output: "Found Discord.Discord [Discord.Discord]"
+    const wingetMatch = line.match(/(?:Found|Installing|Successfully installed)\s+[^\[]*\[([^\]]+)\]/);
+    if (wingetMatch) {
+      const action = line.includes('Successfully') ? 'Installed' : 
+                     line.includes('Installing') ? 'Installing' : 'Checking';
+      return { app: wingetMatch[1], action };
+    }
+    
+    return null;
+  };
+
   const handleSetupMachine = async () => {
     if (!selectedProfile) {
       alert('Please select a setup');
@@ -341,6 +386,10 @@ function App() {
     setIsRunning(true);
     setRunLogs('');
     setLogTruncated(false);
+    setApplyProgress({ currentApp: '', action: '' });
+    setActivities([]);
+    updateActivity('Starting setup...', 'running', 1);
+    
     logBufferRef.current = new LogBuffer((logs, truncated) => {
       setRunLogs(prev => prev + logs);
       setLogTruncated(truncated);
@@ -359,21 +408,58 @@ function App() {
         (event: StreamEvent) => {
           if (event.type === 'stdout' || event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
+            
+            // Parse real-time progress
+            const lines = event.data.split('\n');
+            for (const line of lines) {
+              const progress = parseApplyProgress(line);
+              if (progress) {
+                setApplyProgress({ currentApp: progress.app, action: progress.action });
+                updateActivity(`${progress.action}: ${progress.app}`, 'running', 1);
+              }
+            }
           }
         }
       );
 
+      // Process apply result and show modal
       if (applyResult.envelope) {
-        const dryRunText = settings.dryRunEnabled ? ' (dry run)' : '';
-        if (applyResult.envelope.success) {
-          alert(`Setup completed successfully${dryRunText}!`);
+        const envelopeData = applyResult.envelope.data as AutosuiteApplyResultData | undefined;
+        
+        if (envelopeData?.counts && envelopeData?.items) {
+          // Use structured envelope data
+          setApplyData({
+            counts: envelopeData.counts,
+            items: envelopeData.items,
+            rawEnvelope: applyResult.envelope,
+          });
         } else {
-          const friendlyMsg = applyResult.envelope.error?.message || 
-                             'Autosuite couldn\'t apply the setup. Please try again.';
-          alert(`Couldn't apply setup\n\n${friendlyMsg}`);
+          // Fallback: construct counts from legacy fields
+          const installed = envelopeData?.installed ?? 0;
+          const skipped = envelopeData?.skipped ?? 0;
+          const failed = envelopeData?.failed ?? 0;
+          setApplyData({
+            counts: {
+              total: installed + skipped + failed,
+              installed: installed,
+              alreadyInstalled: skipped, // Legacy: skipped usually means already installed
+              skippedFiltered: 0,
+              failed: failed,
+            },
+            items: [],
+            rawEnvelope: applyResult.envelope,
+          });
         }
+        
+        updateActivity(
+          applyResult.envelope.success ? 'Setup complete' : 'Setup completed with issues',
+          applyResult.envelope.success ? 'success' : 'error',
+          1
+        );
+        setShowApplyModal(true);
       }
 
+      // Refresh report and verify state
       const reportResult = await runEngineStreaming<AutosuiteReportData>(
         settings,
         'report',
@@ -396,10 +482,12 @@ function App() {
         verify: verifyResult.envelope,
       }));
     } catch (err) {
+      updateActivity(`Failed: ${err instanceof Error ? err.message : String(err)}`, 'error', 1);
       alert(`Failed to run apply: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       logBufferRef.current?.flush();
       setIsRunning(false);
+      setApplyProgress({ currentApp: '', action: '' });
     }
   };
 
@@ -807,7 +895,14 @@ function App() {
                     <CardTitle>Machine Status</CardTitle>
                     <CardDescription className="mt-1">
                       {!selectedProfile && 'Select a setup profile to begin'}
-                      {selectedProfile && checkStep === 'idle' && 'Ready to check your computer'}
+                      {selectedProfile && checkStep === 'idle' && !isRunning && 'Ready to check your computer'}
+                      {selectedProfile && checkStep === 'idle' && isRunning && applyProgress.currentApp && (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          {applyProgress.action}: <span className="font-mono">{applyProgress.currentApp}</span>
+                        </span>
+                      )}
+                      {selectedProfile && checkStep === 'idle' && isRunning && !applyProgress.currentApp && 'Setting up...'}
                       {checkStep === 'scanning' && 'Scanning installed applications...'}
                       {checkStep === 'comparing' && 'Comparing to setup profile...'}
                       {checkStep === 'ready' && !hasIssues && 'All applications are up to date'}
@@ -984,6 +1079,16 @@ function App() {
                 setShowResultModal(false);
                 handleSetupMachine();
               }}
+            />
+            
+            {/* Apply Result Modal */}
+            <ApplyResultModal
+              open={showApplyModal}
+              onClose={() => setShowApplyModal(false)}
+              counts={applyData.counts}
+              items={applyData.items}
+              rawLogs={runLogs}
+              rawEnvelope={applyData.rawEnvelope}
             />
           </div>
         );
