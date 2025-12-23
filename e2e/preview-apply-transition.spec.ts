@@ -119,4 +119,49 @@ test.describe('Preview to Apply Transition', () => {
     // Should show progress with app name - use first() to avoid strict mode
     await expect(page.locator('text=Installing:').first()).toBeVisible({ timeout: 3000 });
   });
+
+  test('Double-clicking Apply changes only triggers ONE apply run', async ({ page }) => {
+    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
+    await page.selectOption('select', 'test-profile');
+    
+    // Step 1: Click Check what will change (dry-run)
+    await page.click('button:has-text("Check what will change")');
+    
+    // Wait for preview modal
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(dialog.locator("text=Here's what will change")).toBeVisible({ timeout: 5000 });
+    
+    // Verify call count = 1 (preview only)
+    const previewCount = await page.evaluate(() => (window as any).__APPLY_CALL_COUNT__);
+    expect(previewCount).toBe(1);
+    
+    // Step 2: Double-click Apply changes rapidly
+    const applyButton = dialog.locator('button:has-text("Apply changes")');
+    await applyButton.dblclick();
+    
+    // Wait for completion
+    await expect(dialog.locator('text=Your computer is ready')).toBeVisible({ timeout: 10000 });
+    
+    // Verify call count = 2 (preview + ONE apply, not preview + TWO applies)
+    const finalCount = await page.evaluate(() => (window as any).__APPLY_CALL_COUNT__);
+    expect(finalCount).toBe(2);
+  });
+
+  test('Apply button is disabled while applying', async ({ page }) => {
+    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
+    await page.selectOption('select', 'test-profile');
+    
+    await page.click('button:has-text("Check what will change")');
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    
+    // Click Apply changes
+    await page.click('[role="dialog"] button:has-text("Apply changes")');
+    
+    // Button should show "Applying..." and be disabled
+    const applyButton = dialog.locator('button:has-text("Applying...")');
+    await expect(applyButton).toBeVisible({ timeout: 3000 });
+    await expect(applyButton).toBeDisabled();
+  });
 });

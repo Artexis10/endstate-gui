@@ -393,6 +393,9 @@ function App() {
 
   // Ref for streaming line buffer (handles partial lines)
   const applyLineBufferRef = useRef<StreamingLineBuffer | null>(null);
+  
+  // Idempotency guard: prevent double-click / Enter / re-render from starting apply twice
+  const applyInProgressRef = useRef(false);
 
   /**
    * Handle "Apply changes" from preview modal.
@@ -400,10 +403,18 @@ function App() {
    * This ensures only ONE apply execution occurs after preview.
    */
   const handleApplyFromPreview = async () => {
+    // Idempotency guard: if apply is already in progress, ignore
+    if (applyInProgressRef.current) {
+      return;
+    }
+    
     if (!selectedProfile) {
       alert('Please select a setup');
       return;
     }
+
+    // Lock immediately before any async work
+    applyInProgressRef.current = true;
 
     // Transition to applying state - modal stays open with "Applying..." message
     setApplyRunPhase('applying');
@@ -516,6 +527,8 @@ function App() {
       applyLineBufferRef.current?.clear();
       setIsRunning(false);
       setApplyProgress({ currentApp: '', action: '' });
+      // Release idempotency lock
+      applyInProgressRef.current = false;
     }
   };
 

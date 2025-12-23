@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { CheckCircle2, AlertTriangle, Copy, Package, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import type { ApplyItem, ApplyCounts } from '../../types';
 import { categorizeApplyItems, countCategorizedItems } from '../../lib/apply-utils';
 
@@ -32,6 +32,22 @@ export function ApplyResultModal({
 }: ApplyResultModalProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  // Local guard to prevent double-click on Apply button
+  const applyClickedRef = useRef(false);
+  
+  // Wrapped onApplyChanges with local idempotency guard
+  const handleApplyClick = useCallback(() => {
+    if (applyClickedRef.current || !onApplyChanges) return;
+    applyClickedRef.current = true;
+    onApplyChanges();
+  }, [onApplyChanges]);
+  
+  // Reset local guard when modal closes or apply completes
+  // (isApplying goes false when done)
+  if (!isApplying && !open) {
+    applyClickedRef.current = false;
+  }
 
   // Categorize items using the helper - derive from items array (source of truth)
   const categorizedGroups = useMemo(() => categorizeApplyItems(items), [items]);
@@ -165,9 +181,24 @@ export function ApplyResultModal({
     return `Checked ${totalChecked} apps — all already present`;
   };
 
+  // Handle dialog open change - prevent closing while applying
+  const handleOpenChange = useCallback((newOpen: boolean) => {
+    // Ignore close attempts while applying
+    if (!newOpen && isApplying) {
+      return;
+    }
+    if (!newOpen) {
+      onClose();
+    }
+  }, [isApplying, onClose]);
+
   return (
-    <Dialog open={open} onOpenChange={isApplying ? undefined : onClose}>
-      <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent 
+        className="sm:max-w-[500px] max-h-[85vh] flex flex-col"
+        onEscapeKeyDown={isApplying ? (e) => e.preventDefault() : undefined}
+        onPointerDownOutside={isApplying ? (e) => e.preventDefault() : undefined}
+      >
         <DialogHeader className="flex-shrink-0">
           <div className="flex items-center gap-3 mb-2">
             {isApplying ? (
@@ -298,12 +329,13 @@ export function ApplyResultModal({
         {/* Sticky footer - always visible */}
         <DialogFooter className="flex-col gap-2 sm:flex-col flex-shrink-0 border-t border-border pt-4 bg-background">
           {/* Apply changes button - only in preview mode with pending changes */}
-          {!isApplying && hasPendingChanges && onApplyChanges && (
+          {hasPendingChanges && onApplyChanges && (
             <Button 
-              onClick={onApplyChanges} 
+              onClick={handleApplyClick} 
               className="w-full h-10"
+              disabled={isApplying || applyClickedRef.current}
             >
-              Apply changes
+              {isApplying ? 'Applying...' : 'Apply changes'}
             </Button>
           )}
           {/* Close/Cancel/Done button - disabled during apply */}
