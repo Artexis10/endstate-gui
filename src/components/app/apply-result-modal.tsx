@@ -1,8 +1,9 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { CheckCircle2, AlertTriangle, Copy, Package, ChevronDown, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { ApplyItem, ApplyCounts } from '../../types';
+import { categorizeApplyItems, countCategorizedItems, isAllUpToDate } from '../../lib/apply-utils';
 
 interface ApplyResultModalProps {
   open: boolean;
@@ -27,14 +28,21 @@ export function ApplyResultModal({
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
 
-  const hasIssues = counts.failed > 0;
-  const allUpToDate = counts.installed === 0 && counts.failed === 0 && counts.alreadyInstalled > 0;
+  // Categorize items using the helper - derive from items array (source of truth)
+  const categorizedGroups = useMemo(() => categorizeApplyItems(items), [items]);
+  const itemCounts = useMemo(() => countCategorizedItems(categorizedGroups), [categorizedGroups]);
 
-  // Categorize items
-  const installedItems = items.filter(i => i.status === 'ok' && (i.reason === 'installed' || i.reason === 'would_install'));
-  const alreadyInstalledItems = items.filter(i => i.status === 'skipped' && i.reason === 'already_installed');
-  const skippedFilteredItems = items.filter(i => i.status === 'skipped' && i.reason !== 'already_installed');
-  const failedItems = items.filter(i => i.status === 'failed');
+  // Use item-derived counts as primary, fall back to envelope counts
+  const effectiveCounts = {
+    installed: itemCounts.installed || counts.installed,
+    alreadyInstalled: itemCounts.alreadyInstalled || counts.alreadyInstalled,
+    skipped: itemCounts.skipped || counts.skippedFiltered,
+    failed: itemCounts.failed || counts.failed,
+  };
+
+  // Determine status using helpers
+  const hasIssues = effectiveCounts.failed > 0;
+  const allUpToDate = isAllUpToDate(counts, itemCounts);
 
   const toggleSection = (section: string) => {
     const next = new Set(expandedSections);
@@ -46,25 +54,22 @@ export function ApplyResultModal({
     setExpandedSections(next);
   };
 
-  // Group items by driver
-  const groupByDriver = (items: ApplyItem[]) => {
-    return items.reduce((acc, item) => {
-      const driver = item.driver || 'unknown';
-      if (!acc[driver]) acc[driver] = [];
-      acc[driver].push(item);
-      return acc;
-    }, {} as Record<string, ApplyItem[]>);
-  };
-
   const copyDiagnostics = async () => {
     const diagnostics = [
       '=== Apply Diagnostics ===',
-      `Installed: ${counts.installed}`,
-      `Already installed: ${counts.alreadyInstalled}`,
-      `Skipped (filtered): ${counts.skippedFiltered}`,
-      `Failed: ${counts.failed}`,
+      `Installed: ${effectiveCounts.installed}`,
+      `Already installed: ${effectiveCounts.alreadyInstalled}`,
+      `Skipped (filtered): ${effectiveCounts.skipped}`,
+      `Failed: ${effectiveCounts.failed}`,
       '',
-      '--- Items ---',
+      '--- Envelope Counts ---',
+      `total: ${counts.total}`,
+      `installed: ${counts.installed}`,
+      `alreadyInstalled: ${counts.alreadyInstalled}`,
+      `skippedFiltered: ${counts.skippedFiltered}`,
+      `failed: ${counts.failed}`,
+      '',
+      '--- Items (${items.length}) ---',
       ...items.map(i => `${i.status.toUpperCase()}: ${i.id} (${i.driver}) - ${i.reason}${i.message ? ': ' + i.message : ''}`),
       '',
       '--- Raw Envelope ---',
@@ -83,16 +88,18 @@ export function ApplyResultModal({
     }
   };
 
+  // Render a collapsible section with items grouped by driver
   const renderSection = (
     title: string,
     icon: string,
-    items: ApplyItem[],
+    groupedItems: Record<string, ApplyItem[]>,
     sectionKey: string,
     bgColor: string
   ) => {
-    if (items.length === 0) return null;
+    const totalCount = Object.values(groupedItems).reduce((sum, arr) => sum + arr.length, 0);
+    if (totalCount === 0) return null;
+    
     const isExpanded = expandedSections.has(sectionKey);
-    const grouped = groupByDriver(items);
 
     return (
       <div className="border border-border rounded-lg">
@@ -105,12 +112,12 @@ export function ApplyResultModal({
             <span className="text-sm">{icon}</span>
             <span className="text-sm font-medium">{title}</span>
           </div>
-          <span className="text-xs text-muted-foreground">{items.length}</span>
+          <span className="text-xs text-muted-foreground">{totalCount}</span>
         </button>
         
         {isExpanded && (
           <div className="border-t border-border max-h-48 overflow-y-auto">
-            {Object.entries(grouped).map(([driver, driverItems]) => (
+            {Object.entries(groupedItems).map(([driver, driverItems]) => (
               <div key={driver}>
                 <div className="px-3 py-1 bg-muted/30 text-xs font-medium text-muted-foreground">
                   {driver}
@@ -134,6 +141,23 @@ export function ApplyResultModal({
     );
   };
 
+  // Determine title and description based on status
+  const getTitle = () => {
+    if (hasIssues) return 'Setup complete with issues';
+    if (allUpToDate) return 'Your computer is ready';
+    return 'Setup complete';
+  };
+
+  const getDescription = () => {
+    if (hasIssues) {
+      return `${effectiveCounts.failed} app${effectiveCounts.failed > 1 ? 's' : ''} need${effectiveCounts.failed === 1 ? 's' : ''} attention`;
+    }
+    if (allUpToDate) {
+      return 'All apps are already installed and up to date';
+    }
+    return 'All apps are ready to use';
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
@@ -145,50 +169,46 @@ export function ApplyResultModal({
               <CheckCircle2 className="h-8 w-8 text-success" />
             )}
             <DialogTitle className="text-2xl">
-              {hasIssues ? 'Setup complete with issues' : allUpToDate ? 'Your computer is ready' : 'Setup complete'}
+              {getTitle()}
             </DialogTitle>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            {hasIssues 
-              ? `${counts.failed} app${counts.failed > 1 ? 's' : ''} need${counts.failed === 1 ? 's' : ''} attention`
-              : allUpToDate 
-                ? 'All apps are already installed and up to date'
-                : 'All apps are ready to use'}
+            {getDescription()}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Non-technical summary */}
+        {/* Non-technical summary - use effectiveCounts */}
         <div className="space-y-3 py-4">
-          {counts.installed > 0 && (
+          {effectiveCounts.installed > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
               <span className="text-sm font-medium">Installed</span>
-              <span className="text-2xl font-semibold text-success">{counts.installed}</span>
+              <span className="text-2xl font-semibold text-success">{effectiveCounts.installed}</span>
             </div>
           )}
           
-          {counts.alreadyInstalled > 0 && (
+          {effectiveCounts.alreadyInstalled > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
               <span className="text-sm font-medium">{allUpToDate ? 'Up to date' : 'Already installed'}</span>
-              <span className="text-2xl font-semibold text-success">{counts.alreadyInstalled}</span>
+              <span className="text-2xl font-semibold text-success">{effectiveCounts.alreadyInstalled}</span>
             </div>
           )}
           
-          {counts.skippedFiltered > 0 && (
+          {effectiveCounts.skipped > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
               <span className="text-sm font-medium">Skipped</span>
-              <span className="text-2xl font-semibold text-muted-foreground">{counts.skippedFiltered}</span>
+              <span className="text-2xl font-semibold text-muted-foreground">{effectiveCounts.skipped}</span>
             </div>
           )}
           
-          {counts.failed > 0 && (
+          {effectiveCounts.failed > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/20">
               <span className="text-sm font-medium">Needs attention</span>
-              <span className="text-2xl font-semibold text-destructive">{counts.failed}</span>
+              <span className="text-2xl font-semibold text-destructive">{effectiveCounts.failed}</span>
             </div>
           )}
         </div>
 
-        {/* Details expander (technical) */}
+        {/* Details expander (technical) - use categorizedGroups */}
         {items.length > 0 && (
           <div className="border-t border-border pt-4">
             <button
@@ -201,10 +221,10 @@ export function ApplyResultModal({
             
             {showDetails && (
               <div className="mt-3 space-y-2">
-                {renderSection('Installed', '✅', installedItems, 'installed', '')}
-                {renderSection('Already installed', '⏭️', alreadyInstalledItems, 'already', '')}
-                {renderSection('Skipped by filter', '⏭️', skippedFilteredItems, 'skipped', '')}
-                {renderSection('Needs attention', '❌', failedItems, 'failed', 'bg-destructive/5')}
+                {renderSection('Installed', '✅', categorizedGroups.installed, 'installed', '')}
+                {renderSection('Already installed', '✅', categorizedGroups.alreadyInstalled, 'already', '')}
+                {renderSection('Skipped', '⏭️', categorizedGroups.skipped, 'skipped', '')}
+                {renderSection('Needs attention', '❌', categorizedGroups.failed, 'failed', 'bg-destructive/5')}
                 
                 {/* Copy diagnostics */}
                 <div className="flex justify-end pt-2">
@@ -226,7 +246,7 @@ export function ApplyResultModal({
         <DialogFooter className="flex-col gap-2 sm:flex-col">
           {hasIssues && onFixIssues ? (
             <Button onClick={() => { onClose(); onFixIssues(); }} className="w-full" variant="danger">
-              Fix {counts.failed} issue{counts.failed > 1 ? 's' : ''}
+              Fix {effectiveCounts.failed} issue{effectiveCounts.failed > 1 ? 's' : ''}
             </Button>
           ) : null}
           <Button variant={hasIssues ? "secondary" : "primary"} onClick={onClose} className="w-full">

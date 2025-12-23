@@ -16,6 +16,7 @@ import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
+import { parseApplyProgressLine, StreamingLineBuffer } from './lib/apply-utils';
 import { saveLastRun, loadLastRun, type LastRunData } from './lib/last-run';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime } from './lib/tauri-bridge';
 import { runAutosuiteOnce, getErrorMessage } from './lib/engine-exec';
@@ -339,43 +340,8 @@ function App() {
     }
   };
 
-  // Parse apply progress from log line
-  const parseApplyProgress = (line: string): { app: string; action: string } | null => {
-    // Match patterns like: [OK] App.Id (driver: winget) - already installed
-    // Or: [ACTION] Installing App.Id via winget
-    // Or: [SKIP] App.Id - filtered
-    // Or: [FAIL] App.Id - error message
-    const okMatch = line.match(/\[OK\]\s+(\S+)/);
-    if (okMatch) {
-      const isAlready = line.toLowerCase().includes('already');
-      return { app: okMatch[1], action: isAlready ? 'Already installed' : 'Installed' };
-    }
-    
-    const actionMatch = line.match(/\[ACTION\]\s+(?:Installing|Checking)\s+(\S+)/i);
-    if (actionMatch) {
-      return { app: actionMatch[1], action: 'Installing' };
-    }
-    
-    const skipMatch = line.match(/\[SKIP\]\s+(\S+)/);
-    if (skipMatch) {
-      return { app: skipMatch[1], action: 'Skipped' };
-    }
-    
-    const failMatch = line.match(/\[FAIL\]\s+(\S+)/);
-    if (failMatch) {
-      return { app: failMatch[1], action: 'Failed' };
-    }
-    
-    // Also match winget-style output: "Found Discord.Discord [Discord.Discord]"
-    const wingetMatch = line.match(/(?:Found|Installing|Successfully installed)\s+[^\[]*\[([^\]]+)\]/);
-    if (wingetMatch) {
-      const action = line.includes('Successfully') ? 'Installed' : 
-                     line.includes('Installing') ? 'Installing' : 'Checking';
-      return { app: wingetMatch[1], action };
-    }
-    
-    return null;
-  };
+  // Ref for streaming line buffer (handles partial lines)
+  const applyLineBufferRef = useRef<StreamingLineBuffer | null>(null);
 
   const handleSetupMachine = async () => {
     if (!selectedProfile) {
@@ -394,6 +360,9 @@ function App() {
       setRunLogs(prev => prev + logs);
       setLogTruncated(truncated);
     });
+    
+    // Initialize streaming line buffer for robust partial line handling
+    applyLineBufferRef.current = new StreamingLineBuffer();
 
     try {
       const args = ['--profile', selectedProfilePath];
@@ -409,10 +378,10 @@ function App() {
           if (event.type === 'stdout' || event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
             
-            // Parse real-time progress
-            const lines = event.data.split('\n');
-            for (const line of lines) {
-              const progress = parseApplyProgress(line);
+            // Parse real-time progress using streaming line buffer
+            const completeLines = applyLineBufferRef.current?.append(event.data) || [];
+            for (const line of completeLines) {
+              const progress = parseApplyProgressLine(line);
               if (progress) {
                 setApplyProgress({ currentApp: progress.app, action: progress.action });
                 updateActivity(`${progress.action}: ${progress.app}`, 'running', 1);
@@ -486,6 +455,7 @@ function App() {
       alert(`Failed to run apply: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       logBufferRef.current?.flush();
+      applyLineBufferRef.current?.clear();
       setIsRunning(false);
       setApplyProgress({ currentApp: '', action: '' });
     }
