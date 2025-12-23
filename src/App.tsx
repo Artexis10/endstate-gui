@@ -8,9 +8,11 @@ import {
 } from './types';
 import { AppSettings, loadSettings, saveSettings } from './settings';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
-import { runAutosuiteStreaming, StreamEvent } from './streaming-runner';
+import { StreamEvent } from './streaming-runner';
+import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
-import { parseCaptureOutput } from './lib/log-parse';
+import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
+import { saveLastRun, loadLastRun, type LastRunData } from './lib/last-run';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -74,8 +76,9 @@ function App() {
   const [showResultModal, setShowResultModal] = useState(false);
   const [showCaptureModal, setShowCaptureModal] = useState(false);
   const [captureProgress, setCaptureProgress] = useState<string>('');
-  const [captureStats, setCaptureStats] = useState({ succeeded: 0, skipped: 0, failed: 0, outputPath: '' });
+  const [captureStats, setCaptureStats] = useState<CaptureStats>({ succeeded: 0, skipped: 0, failed: 0, outputPath: '', lastProcessedApp: '', processedCount: 0, apps: [] });
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const [lastRun, setLastRun] = useState<LastRunData | null>(null);
   const logBufferRef = useRef<LogBuffer | null>(null);
 
   const updateActivity = (message: string, status: ActivityItem['status'], step?: number) => {
@@ -127,6 +130,12 @@ function App() {
     setSettings(loadedSettings);
     setSelectedProfile(loadedSettings.lastSelectedProfile);
     setSelectedProfilePath(loadedSettings.lastSelectedProfilePath || '');
+    
+    const savedLastRun = loadLastRun();
+    if (savedLastRun) {
+      setLastRun(savedLastRun);
+    }
+    
     refreshProfiles();
   }, []);
 
@@ -170,11 +179,11 @@ function App() {
     });
 
     try {
-      const capResult = await runAutosuiteStreaming<AutosuiteCapabilitiesData>(
+      const capResult = await runEngineStreaming<AutosuiteCapabilitiesData>(
         settings,
         'capabilities',
         [],
-        (event) => {
+        (event: StreamEvent) => {
           if (event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
           }
@@ -195,7 +204,7 @@ function App() {
         return;
       }
 
-      const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
+      const reportResult = await runEngineStreaming<AutosuiteReportData>(
         settings,
         'report',
         [],
@@ -204,7 +213,7 @@ function App() {
 
       let verifyResult: AutosuiteEnvelope<AutosuiteVerifyData> | null = null;
       if (selectedProfile && profiles.length > 0) {
-        const result = await runAutosuiteStreaming<AutosuiteVerifyData>(
+        const result = await runEngineStreaming<AutosuiteVerifyData>(
           settings,
           'verify',
           ['--profile', selectedProfile],
@@ -265,7 +274,7 @@ function App() {
       setCheckStep('comparing');
       updateActivity('Comparing to setup', 'running', 2);
 
-      const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
+      const verifyResult = await runEngineStreaming<AutosuiteVerifyData>(
         settings,
         'verify',
         ['--profile', selectedProfilePath],
@@ -285,7 +294,7 @@ function App() {
       updateActivity('Result ready', 'success', 3);
       setCheckStep('ready');
 
-      const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
+      const reportResult = await runEngineStreaming<AutosuiteReportData>(
         settings,
         'report',
         [],
@@ -350,7 +359,7 @@ function App() {
         }
       }
 
-      const reportResult = await runAutosuiteStreaming<AutosuiteReportData>(
+      const reportResult = await runEngineStreaming<AutosuiteReportData>(
         settings,
         'report',
         [],
@@ -361,7 +370,7 @@ function App() {
         report: reportResult.envelope,
       }));
 
-      const verifyResult = await runAutosuiteStreaming<AutosuiteVerifyData>(
+      const verifyResult = await runEngineStreaming<AutosuiteVerifyData>(
         settings,
         'verify',
         ['--profile', selectedProfilePath],
@@ -384,7 +393,7 @@ function App() {
     setRunLogs('');
     setLogTruncated(false);
     setCaptureProgress('');
-    setCaptureStats({ succeeded: 0, skipped: 0, failed: 0, outputPath: '' });
+    setCaptureStats({ succeeded: 0, skipped: 0, failed: 0, outputPath: '', lastProcessedApp: '', processedCount: 0, apps: [] });
     setShowTechnicalDetails(false);
     logBufferRef.current = new LogBuffer((logs, truncated) => {
       setRunLogs(logs);
@@ -434,6 +443,18 @@ function App() {
         // Parse final stats from complete logs
         const finalStats = parseCaptureOutput(runLogs);
         setCaptureStats(finalStats);
+        
+        const lastRunData: LastRunData = {
+          timestamp: new Date().toISOString(),
+          command: 'capture',
+          outcome: {
+            succeeded: finalStats.succeeded,
+            skipped: finalStats.skipped,
+            failed: finalStats.failed,
+          },
+        };
+        saveLastRun(lastRunData);
+        setLastRun(lastRunData);
         
         await refreshProfiles();
         
@@ -631,6 +652,7 @@ function App() {
               skipped={captureStats.skipped}
               failed={captureStats.failed}
               outputPath={captureStats.outputPath}
+              apps={captureStats.apps}
             />
             
             {runLogs && (
