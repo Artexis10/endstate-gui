@@ -8,7 +8,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { AppIcon } from './app-icon';
 import { StatusPill } from './status-pill';
 import { CheckCircle2, AlertCircle, Copy, Package } from 'lucide-react';
 

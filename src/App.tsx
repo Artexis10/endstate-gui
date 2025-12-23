@@ -13,7 +13,7 @@ import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
 import { saveLastRun, loadLastRun, type LastRunData } from './lib/last-run';
-import { invoke as tauriInvoke, getProfilesDirectory, ensureDirectory } from './lib/tauri-bridge';
+import { getProfilesDirectory, ensureDirectory } from './lib/tauri-bridge';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -79,7 +79,7 @@ function App() {
   const [captureProgress, setCaptureProgress] = useState<string>('');
   const [captureStats, setCaptureStats] = useState<CaptureStats>({ succeeded: 0, skipped: 0, failed: 0, outputPath: '', lastProcessedApp: '', processedCount: 0, apps: [] });
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
-  const [lastRun, setLastRun] = useState<LastRunData | null>(null);
+  const [, setLastRun] = useState<LastRunData | null>(null);
   const logBufferRef = useRef<LogBuffer | null>(null);
 
   const updateActivity = (message: string, status: ActivityItem['status'], step?: number) => {
