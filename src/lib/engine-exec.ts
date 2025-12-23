@@ -12,7 +12,8 @@ export type EngineErrorKind =
   | 'engine_unavailable_web'  // Running in web mode without mock
   | 'command_failed'          // Command executed but failed (non-zero exit, parse error)
   | 'command_not_found'       // autosuite binary not found
-  | 'invoke_failed';          // Tauri invoke failed
+  | 'invoke_failed'           // Tauri invoke failed
+  | 'verify_failed';          // Domain failure: verify found missing apps/mismatches (not a runtime error)
 
 export interface EngineError {
   kind: EngineErrorKind;
@@ -38,6 +39,7 @@ export type EngineExecResult<T> = {
 } | {
   success: false;
   error: EngineError;
+  envelope?: T;  // May be present for domain failures (e.g., VERIFY_FAILED has valid data)
   stdout?: string;
   stderr?: string;
   exitCode?: number;
@@ -217,6 +219,28 @@ export async function runAutosuiteOnce<T>(
     
     try {
       const envelope = JSON.parse(jsonStr) as T;
+      
+      // Check if the envelope itself indicates a domain failure (e.g., VERIFY_FAILED)
+      // These are not runtime errors - the command executed successfully but found issues
+      const envelopeObj = envelope as Record<string, unknown>;
+      if (envelopeObj.success === false && envelopeObj.error) {
+        const errorObj = envelopeObj.error as { code?: string; message?: string };
+        // Domain failure - include envelope so caller can access the data
+        return {
+          success: false,
+          error: {
+            kind: errorObj.code === 'VERIFY_FAILED' ? 'verify_failed' : 'command_failed',
+            message: errorObj.message || 'Command returned failure',
+            command: commandStr,
+            exitCode: result.exitCode,
+          },
+          envelope,  // Include envelope for domain failures - data is still valid
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+        };
+      }
+      
       return {
         success: true,
         envelope,

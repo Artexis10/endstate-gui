@@ -232,6 +232,10 @@ function App() {
       );
       if (result.success) {
         verifyResult = result.envelope;
+      } else if (result.envelope && result.envelope.error?.code === 'VERIFY_FAILED') {
+        // Domain failure (missing apps) - still use the envelope data
+        // This is NOT a runtime error, just verification found issues
+        verifyResult = result.envelope;
       }
     }
 
