@@ -102,7 +102,10 @@ export function parseCaptureOutput(logs: string): CaptureStats {
 
 // Internal test to verify parser correctness
 if (import.meta.env.DEV) {
-  const sampleLog = `[OK]     Manifest saved: C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc
+  const sampleLog = `[OK] Discord.Discord (driver: winget)
+[OK] Google.Chrome (driver: winget)
+[SKIP] OldApp (driver: chocolatey)
+[OK]     Manifest saved: C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc
 Summary: 62 succeeded, 8 skipped, 0 failed
 Capture complete!
 {"schemaVersion":"1.0","cliVersion":"0.0.0-dev+702adc6","command":"capture","timestampUtc":"2025-12-22T21:03:34.5380554Z","success":true,"data":{"isExample":null,"sanitized":false,"outputPath":"C:\\\\Users\\\\win-laptop\\\\Documents\\\\Autosuite\\\\Setups\\\\setup_2025-12-22_21-03-31.jsonc"},"error":null}`;
@@ -113,6 +116,9 @@ Capture complete!
   console.assert(result.skipped === 8, `Expected skipped=8, got ${result.skipped}`);
   console.assert(result.failed === 0, `Expected failed=0, got ${result.failed}`);
   console.assert(result.outputPath.includes('setup_2025-12-22_21-03-31.jsonc'), `Expected outputPath to contain filename, got ${result.outputPath}`);
+  console.assert(result.apps.length === 3, `Expected apps.length=3, got ${result.apps.length}`);
+  console.assert(result.processedCount === 3, `Expected processedCount=3, got ${result.processedCount}`);
+  console.assert(result.lastProcessedApp === 'OldApp', `Expected lastProcessedApp=OldApp, got ${result.lastProcessedApp}`);
   
   console.log('✓ parseCaptureOutput test passed:', result);
 }
