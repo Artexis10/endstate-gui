@@ -14,6 +14,9 @@ export default defineConfig({
       ignored: ['**/src-tauri/**'],
     },
   },
+  optimizeDeps: {
+    exclude: ['@tauri-apps/api'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
