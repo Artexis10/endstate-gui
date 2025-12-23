@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './lib/tauri-bridge';
 import { AutosuiteEnvelope } from './types';
 
 interface ExecResult {

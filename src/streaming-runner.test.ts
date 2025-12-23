@@ -1,14 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runAutosuiteStreaming } from './streaming-runner';
 import { AppSettings } from './settings';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { invoke, listen } from './lib/tauri-bridge';
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock('./lib/tauri-bridge', () => ({
   invoke: vi.fn(),
-}));
-
-vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(),
 }));
 

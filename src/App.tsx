@@ -496,7 +496,7 @@ function App() {
   };
 
   const handleImportProfile = async () => {
-    const { invoke } = await import('@tauri-apps/api/core');
+    const { invoke } = await import('./lib/tauri-bridge');
 
     try {
       const selected = await invoke<string | null>('show_file_dialog');

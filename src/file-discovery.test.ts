@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { discoverProfiles } from './file-discovery';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './lib/tauri-bridge';
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock('./lib/tauri-bridge', () => ({
   invoke: vi.fn(),
 }));
 

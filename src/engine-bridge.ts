@@ -10,8 +10,9 @@
  * - Cancellation support
  */
 
-import { invoke } from '@tauri-apps/api/core';
-import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { invoke, listen } from './lib/tauri-bridge';
+
+export type UnlistenFn = () => void;
 
 /** Event channel name - must match Rust constant */
 export const EVENT_CHANNEL = 'autosuite://event';

@@ -1,5 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { invoke, listen } from './lib/tauri-bridge';
 import { AutosuiteEnvelope } from './types';
 import { AppSettings } from './settings';
 

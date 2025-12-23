@@ -12,6 +12,9 @@ export async function discoverProfiles(directory: string): Promise<DiscoveredPro
 
   try {
     const files = await invoke<string[]>('list_manifest_files', { directory });
+    if (!files || !Array.isArray(files)) {
+      return [];
+    }
     return files.map((path) => {
       const filename = path.split(/[/\\]/).pop() || '';
       const name = filename.replace(/\.(jsonc?|json5)$/i, '');
