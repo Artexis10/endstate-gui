@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { CheckCircle2, AlertTriangle, Copy, Package, ChevronDown, ChevronRight } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Copy, Package, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import type { ApplyItem, ApplyCounts } from '../../types';
 import { categorizeApplyItems, countCategorizedItems } from '../../lib/apply-utils';
@@ -12,6 +12,8 @@ interface ApplyResultModalProps {
   counts: ApplyCounts;
   items: ApplyItem[];
   isDryRun: boolean;  // True for preview (apply --dry-run), false for actual apply
+  isApplying?: boolean;  // True when transitioning from preview to apply
+  currentProgress?: { currentApp: string; action: string };  // Real-time progress during apply
   rawLogs?: string;
   rawEnvelope?: object;
 }
@@ -23,6 +25,8 @@ export function ApplyResultModal({
   counts,
   items,
   isDryRun,
+  isApplying = false,
+  currentProgress,
   rawLogs,
   rawEnvelope,
 }: ApplyResultModalProps) {
@@ -150,6 +154,7 @@ export function ApplyResultModal({
 
   // Determine title and description based on status and phase
   const getTitle = () => {
+    if (isApplying) return 'Applying changes...';
     if (hasFailures) return 'Setup incomplete';
     if (hasPendingChanges) return 'Changes ready to apply';
     if (isReady) return 'Your computer is ready';
@@ -157,6 +162,12 @@ export function ApplyResultModal({
   };
 
   const getDescription = () => {
+    if (isApplying) {
+      if (currentProgress?.currentApp) {
+        return `${currentProgress.action}: ${currentProgress.currentApp}`;
+      }
+      return 'Installing apps...';
+    }
     if (hasFailures) {
       return `${needsAttention} app${needsAttention > 1 ? 's' : ''} need${needsAttention === 1 ? 's' : ''} attention`;
     }
@@ -170,11 +181,13 @@ export function ApplyResultModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={isApplying ? undefined : onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
-            {hasFailures ? (
+            {isApplying ? (
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            ) : hasFailures ? (
               <AlertTriangle className="h-8 w-8 text-destructive" />
             ) : hasPendingChanges ? (
               <AlertTriangle className="h-8 w-8 text-warning" />
@@ -192,49 +205,59 @@ export function ApplyResultModal({
 
         {/* Non-technical summary - phase-aware display */}
         <div className="space-y-3 py-4">
-          {/* Will be installed (preview only - from dry-run) */}
-          {willBeInstalled > 0 && (
-            <div className="flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20">
-              <span className="text-sm font-medium">Will be installed</span>
-              <span className="text-2xl font-semibold text-warning">{willBeInstalled}</span>
+          {/* During applying: show stable progress, not preview counts */}
+          {isApplying ? (
+            <div className="flex items-center justify-between p-4 rounded-lg bg-primary/10 border border-primary/20">
+              <span className="text-sm font-medium">Installing</span>
+              <span className="text-2xl font-semibold text-primary">{willBeInstalled}</span>
             </div>
-          )}
-          
-          {/* Installed this run (apply only - never shown in preview) */}
-          {!isDryRun && installedThisRun > 0 && (
-            <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
-              <span className="text-sm font-medium">Installed this run</span>
-              <span className="text-2xl font-semibold text-success">{installedThisRun}</span>
-            </div>
-          )}
-          
-          {/* Already present */}
-          {alreadyPresent > 0 && (
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
-              <span className="text-sm font-medium">Already present</span>
-              <span className="text-2xl font-semibold text-muted-foreground">{alreadyPresent}</span>
-            </div>
-          )}
-          
-          {/* Needs attention (failures) */}
-          {needsAttention > 0 && (
-            <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/20">
-              <span className="text-sm font-medium">Needs attention</span>
-              <span className="text-2xl font-semibold text-destructive">{needsAttention}</span>
-            </div>
-          )}
-          
-          {/* Skipped (advanced - only show if > 0) */}
-          {skippedCount > 0 && (
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
-              <span className="text-sm font-medium">Skipped</span>
-              <span className="text-2xl font-semibold text-muted-foreground">{skippedCount}</span>
-            </div>
+          ) : (
+            <>
+              {/* Will be installed (preview only - from dry-run, NOT during applying) */}
+              {isDryRun && willBeInstalled > 0 && (
+                <div className="flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20">
+                  <span className="text-sm font-medium">Will be installed</span>
+                  <span className="text-2xl font-semibold text-warning">{willBeInstalled}</span>
+                </div>
+              )}
+              
+              {/* Installed this run (apply result only - never shown in preview) */}
+              {!isDryRun && installedThisRun > 0 && (
+                <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
+                  <span className="text-sm font-medium">Installed this run</span>
+                  <span className="text-2xl font-semibold text-success">{installedThisRun}</span>
+                </div>
+              )}
+              
+              {/* Already present */}
+              {alreadyPresent > 0 && (
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
+                  <span className="text-sm font-medium">Already present</span>
+                  <span className="text-2xl font-semibold text-muted-foreground">{alreadyPresent}</span>
+                </div>
+              )}
+              
+              {/* Needs attention (failures) */}
+              {needsAttention > 0 && (
+                <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <span className="text-sm font-medium">Needs attention</span>
+                  <span className="text-2xl font-semibold text-destructive">{needsAttention}</span>
+                </div>
+              )}
+              
+              {/* Skipped (advanced - only show if > 0) */}
+              {skippedCount > 0 && (
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
+                  <span className="text-sm font-medium">Skipped</span>
+                  <span className="text-2xl font-semibold text-muted-foreground">{skippedCount}</span>
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {/* Details expander (technical) - use categorizedGroups */}
-        {items.length > 0 && (
+        {/* Details expander (technical) - hide during applying to avoid re-rendering preview items */}
+        {items.length > 0 && !isApplying && (
           <div className="border-t border-border pt-4">
             <button
               onClick={() => setShowDetails(!showDetails)}
@@ -247,8 +270,8 @@ export function ApplyResultModal({
             {showDetails && (
               <div className="mt-3 space-y-2">
                 {/* Preview: show Will be installed */}
-                {renderSection('Will be installed', '📦', categorizedGroups.willBeInstalled, 'willBeInstalled', 'bg-warning/5')}
-                {/* Apply: show Installed this run */}
+                {isDryRun && renderSection('Will be installed', '📦', categorizedGroups.willBeInstalled, 'willBeInstalled', 'bg-warning/5')}
+                {/* Apply result: show Installed this run */}
                 {!isDryRun && renderSection('Installed this run', '✅', categorizedGroups.installedThisRun, 'installedThisRun', '')}
                 {renderSection('Already present', '✅', categorizedGroups.alreadyPresent, 'alreadyPresent', '')}
                 {renderSection('Needs attention', '❌', categorizedGroups.needsAttention, 'needsAttention', 'bg-destructive/5')}
@@ -272,17 +295,23 @@ export function ApplyResultModal({
         )}
 
         <DialogFooter className="flex-col gap-2 sm:flex-col">
-          {hasPendingChanges && onApplyChanges && (
-            <Button onClick={() => { onClose(); onApplyChanges(); }} className="w-full">
+          {/* Apply changes button - only in preview mode with pending changes */}
+          {!isApplying && hasPendingChanges && onApplyChanges && (
+            <Button 
+              onClick={onApplyChanges} 
+              className="w-full h-10"
+            >
               Apply changes
             </Button>
           )}
+          {/* Close/Cancel/Done button - disabled during apply */}
           <Button 
-            variant={hasPendingChanges ? "secondary" : "primary"} 
+            variant={hasPendingChanges && !isApplying ? "secondary" : "primary"} 
             onClick={onClose} 
-            className="w-full"
+            className="w-full h-10"
+            disabled={isApplying}
           >
-            {hasPendingChanges ? 'Cancel' : hasFailures ? 'Close' : 'Done'}
+            {isApplying ? 'Please wait...' : hasPendingChanges ? 'Cancel' : hasFailures ? 'Close' : 'Done'}
           </Button>
         </DialogFooter>
       </DialogContent>

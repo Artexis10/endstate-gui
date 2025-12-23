@@ -74,7 +74,7 @@ test.describe('Apply Page - Apply Only Flow', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1:has-text("Apply")')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
   });
 
   test('Apply page loads with profile selector and Preview button', async ({ page }) => {
@@ -101,12 +101,12 @@ test.describe('Apply Page - Apply Only Flow', () => {
     await page.selectOption('select', 'test-profile');
     
     // Navigate to Capture page
-    await page.click('nav >> text=Capture machine');
-    await expect(page.locator('h1:has-text("Capture machine")')).toBeVisible();
+    await page.click('nav >> text=Capture computer');
+    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
     
     // Navigate back to Apply page
-    await page.click('nav >> text=Apply');
-    await expect(page.locator('h1:has-text("Apply")')).toBeVisible();
+    await page.click('nav >> text=Set up computer');
+    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
     
     // Profile should still be selected
     await expect(page.locator('select')).toHaveValue('test-profile');
@@ -171,7 +171,7 @@ test.describe('Apply Modal - All Already Installed', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1:has-text("Apply")')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
   });
 
   test('shows "Your computer is ready" when all apps already installed', async ({ page }) => {
@@ -251,7 +251,7 @@ test.describe('Apply Modal - With Failures', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1:has-text("Apply")')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
   });
 
   test('shows "Setup incomplete" and Needs attention when apps fail', async ({ page }) => {
@@ -333,7 +333,7 @@ test.describe('Apply Modal - Pending Installs (Dry Run)', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1:has-text("Apply")')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
   });
 
   test('shows "Changes ready to apply" with Install button when apps need installing', async ({ page }) => {

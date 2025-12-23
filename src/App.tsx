@@ -17,7 +17,7 @@ import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
 import { parseApplyProgressLine, StreamingLineBuffer } from './lib/apply-utils';
-import { saveLastRun, loadLastRun, type LastRunData } from './lib/last-run';
+import { saveLastRun, loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime } from './lib/tauri-bridge';
 import { runAutosuiteOnce, getErrorMessage } from './lib/engine-exec';
 import { AppShell } from './components/layout/app-shell';
@@ -37,6 +37,16 @@ import { Loader2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'capture' | 'apply' | 'verify' | 'report' | 'settings';
 type CheckStep = 'idle' | 'scanning' | 'comparing' | 'ready';
+
+/**
+ * Apply run phase state machine:
+ * - idle: No apply operation in progress
+ * - previewing: Running apply --dry-run
+ * - previewResult: Showing preview modal with dry-run results
+ * - applying: Running actual apply (from preview modal CTA)
+ * - applyResult: Showing apply modal with real results
+ */
+type ApplyRunPhase = 'idle' | 'previewing' | 'previewResult' | 'applying' | 'applyResult';
 
 interface ActivityItem {
   id: string;
@@ -88,19 +98,26 @@ function App() {
     outputPath: '',
   });
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
-  const [, setLastRun] = useState<LastRunData | null>(null);
+  // Per-command last run state
+  const [lastRunCapture, setLastRunCapture] = useState<LastRunData | null>(null);
+  const [lastRunApply, setLastRunApply] = useState<LastRunData | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_lastRunVerify, setLastRunVerify] = useState<LastRunData | null>(null);
   const [safeMode, setSafeMode] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const logBufferRef = useRef<LogBuffer | null>(null);
   
-  // Apply modal state
-  const [showApplyModal, setShowApplyModal] = useState(false);
-  const [applyModalIsDryRun, setApplyModalIsDryRun] = useState(true);  // Track if modal shows preview or apply result
+  // Apply modal state - single source of truth for apply flow
+  const [applyRunPhase, setApplyRunPhase] = useState<ApplyRunPhase>('idle');
   const [applyData, setApplyData] = useState<{ counts: ApplyCounts; items: ApplyItem[]; rawEnvelope?: object }>({
     counts: { total: 0, installed: 0, alreadyInstalled: 0, skippedFiltered: 0, failed: 0 },
     items: [],
   });
   const [applyProgress, setApplyProgress] = useState<{ currentApp: string; action: string }>({ currentApp: '', action: '' });
+  
+  // Derived state from applyRunPhase
+  const showApplyModal = applyRunPhase === 'previewResult' || applyRunPhase === 'applyResult';
+  const applyModalIsDryRun = applyRunPhase === 'previewResult';
 
   const updateActivity = (message: string, status: ActivityItem['status'], step?: number) => {
     setActivities((prev) => {
@@ -151,10 +168,11 @@ function App() {
     setSelectedProfile(loadedSettings.lastSelectedProfile);
     setSelectedProfilePath(loadedSettings.lastSelectedProfilePath || '');
     
-    const savedLastRun = loadLastRun();
-    if (savedLastRun) {
-      setLastRun(savedLastRun);
-    }
+    // Migrate legacy last run and load per-command last runs
+    migrateLegacyLastRun();
+    setLastRunCapture(loadLastRunForCommand('capture'));
+    setLastRunApply(loadLastRunForCommand('apply'));
+    setLastRunVerify(loadLastRunForCommand('verify'));
     
     refreshProfiles();
   }, []);
@@ -360,8 +378,7 @@ function App() {
 
       updateActivity('Preview ready', 'success', 1);
       setCheckStep('ready');
-      setApplyModalIsDryRun(true);  // Preview = dry-run
-      setShowApplyModal(true);
+      setApplyRunPhase('previewResult');  // Show preview modal
     } catch (err) {
       updateActivity('Preview failed', 'error');
       setCheckStep('idle');
@@ -376,6 +393,131 @@ function App() {
 
   // Ref for streaming line buffer (handles partial lines)
   const applyLineBufferRef = useRef<StreamingLineBuffer | null>(null);
+
+  /**
+   * Handle "Apply changes" from preview modal.
+   * Transitions from previewResult -> applying -> applyResult.
+   * This ensures only ONE apply execution occurs after preview.
+   */
+  const handleApplyFromPreview = async () => {
+    if (!selectedProfile) {
+      alert('Please select a setup');
+      return;
+    }
+
+    // Transition to applying state - modal stays open with "Applying..." message
+    setApplyRunPhase('applying');
+    setIsRunning(true);
+    setRunLogs('');
+    setLogTruncated(false);
+    setApplyProgress({ currentApp: '', action: '' });
+    setActivities([]);
+    updateActivity('Applying changes...', 'running', 1);
+    
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(prev => prev + logs);
+      setLogTruncated(truncated);
+    });
+    applyLineBufferRef.current = new StreamingLineBuffer();
+
+    try {
+      // Run actual apply (no --dry-run)
+      const applyResult = await runEngineStreaming<AutosuiteApplyData>(
+        settings,
+        'apply',
+        ['--profile', selectedProfilePath],
+        (event: StreamEvent) => {
+          if (event.type === 'stdout' || event.type === 'stderr') {
+            logBufferRef.current?.append(event.data);
+            
+            const completeLines = applyLineBufferRef.current?.append(event.data) || [];
+            for (const line of completeLines) {
+              const progress = parseApplyProgressLine(line);
+              if (progress) {
+                setApplyProgress({ currentApp: progress.app, action: progress.action });
+                updateActivity(`${progress.action}: ${progress.app}`, 'running', 1);
+              }
+            }
+          }
+        }
+      );
+
+      // Process apply result
+      if (applyResult.envelope) {
+        const envelopeData = applyResult.envelope.data as AutosuiteApplyResultData | undefined;
+        
+        if (envelopeData?.counts && envelopeData?.items) {
+          setApplyData({
+            counts: envelopeData.counts,
+            items: envelopeData.items,
+            rawEnvelope: applyResult.envelope,
+          });
+        } else {
+          const installed = envelopeData?.installed ?? 0;
+          const skipped = envelopeData?.skipped ?? 0;
+          const failed = envelopeData?.failed ?? 0;
+          setApplyData({
+            counts: {
+              total: installed + skipped + failed,
+              installed: installed,
+              alreadyInstalled: skipped,
+              skippedFiltered: 0,
+              failed: failed,
+            },
+            items: [],
+            rawEnvelope: applyResult.envelope,
+          });
+        }
+        
+        updateActivity(
+          applyResult.envelope.success ? 'Setup complete' : 'Setup completed with issues',
+          applyResult.envelope.success ? 'success' : 'error',
+          1
+        );
+      }
+
+      // Save last run to localStorage (per-command)
+      const envelopeData = applyResult.envelope?.data as AutosuiteApplyResultData | undefined;
+      const lastRunData: LastRunData = {
+        timestamp: new Date().toISOString(),
+        command: 'apply',
+        profile: selectedProfile,
+        outcome: {
+          installed: envelopeData?.counts?.installed ?? 0,
+          alreadyPresent: envelopeData?.counts?.alreadyInstalled ?? 0,
+          needsAttention: envelopeData?.counts?.failed ?? 0,
+        },
+      };
+      saveLastRun(lastRunData);
+      setLastRunApply(lastRunData);
+
+      // Refresh report state
+      const reportResult = await runEngineStreaming<AutosuiteReportData>(
+        settings,
+        'report',
+        [],
+        () => {}
+      );
+      setState((prev) => ({
+        ...prev,
+        report: reportResult.envelope,
+      }));
+
+      // Transition to applyResult - show final results
+      setApplyRunPhase('applyResult');
+      setCheckStep('ready');
+    } catch (err) {
+      updateActivity('Apply failed', 'error', 1);
+      setApplyRunPhase('idle');
+      setCheckStep('idle');
+      alert(`Failed to apply changes: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      logBufferRef.current?.flush();
+      applyLineBufferRef.current?.clear();
+      setIsRunning(false);
+      setApplyProgress({ currentApp: '', action: '' });
+    }
+  };
 
   const handleSetupMachine = async () => {
     if (!selectedProfile) {
@@ -473,8 +615,7 @@ function App() {
           applyResult.envelope.success ? 'success' : 'error',
           1
         );
-        setApplyModalIsDryRun(false);  // Apply = not dry-run
-        setShowApplyModal(true);
+        setApplyRunPhase('applyResult');  // Show apply result modal
       }
 
       // Refresh report state
@@ -582,7 +723,7 @@ function App() {
         const finalStats = parseCaptureOutput(runLogs);
         setCaptureStats(finalStats);
         
-        // Save Last Run
+        // Save Last Run (per-command)
         const lastRunData: LastRunData = {
           timestamp: new Date().toISOString(),
           command: 'capture',
@@ -593,7 +734,7 @@ function App() {
           },
         };
         saveLastRun(lastRunData);
-        setLastRun(lastRunData);
+        setLastRunCapture(lastRunData);
         
         await refreshProfiles();
         
@@ -800,7 +941,7 @@ function App() {
           <div className="space-y-6">
             {errorBanner}
             <PageHeader
-              title="Capture machine"
+              title="Capture computer"
               subtitle="Create a reusable setup profile from this computer"
             />
             <Card>
@@ -812,7 +953,7 @@ function App() {
                 <div>
                   {supportsCapture ? (
                     <Button onClick={handleCapture} disabled={isRunning}>
-                      {isRunning ? 'Capturing...' : 'Capture machine'}
+                      {isRunning ? 'Capturing...' : 'Capture computer'}
                     </Button>
                   ) : (
                     <p className="text-sm text-warning">Capture command not available in this version</p>
@@ -878,6 +1019,45 @@ function App() {
                 </div>
               </details>
             )}
+
+            {/* Last Run - Capture only (per-workflow) */}
+            <Card className="border-dashed">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs text-muted-foreground">Last Capture Run</CardTitle>
+              </CardHeader>
+              <CardContent className="py-2">
+                {lastRunCapture ? (
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Time: </span>
+                      <span className="font-medium">
+                        {new Date(lastRunCapture.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                    {lastRunCapture.outcome.succeeded !== undefined && (
+                      <div>
+                        <span className="text-muted-foreground">Captured: </span>
+                        <span className="font-medium text-success">{lastRunCapture.outcome.succeeded}</span>
+                      </div>
+                    )}
+                    {lastRunCapture.outcome.skipped !== undefined && lastRunCapture.outcome.skipped > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Skipped: </span>
+                        <span className="font-medium">{lastRunCapture.outcome.skipped}</span>
+                      </div>
+                    )}
+                    {lastRunCapture.outcome.failed !== undefined && lastRunCapture.outcome.failed > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Failed: </span>
+                        <span className="font-medium text-destructive">{lastRunCapture.outcome.failed}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No capture history available</p>
+                )}
+              </CardContent>
+            </Card>
           </div>
         );
 
@@ -891,8 +1071,8 @@ function App() {
           <div className="space-y-6">
             {errorBanner}
             <PageHeader
-              title="Apply"
-              subtitle="Set up this machine using a saved profile"
+              title="Set up computer"
+              subtitle="Install apps from a saved setup profile"
             />
             
             {/* Row 1: Primary Machine Status Card with CTA */}
@@ -902,16 +1082,7 @@ function App() {
                   <div>
                     <CardTitle>Setup Profile</CardTitle>
                     <CardDescription className="mt-1">
-                      {!selectedProfile && 'Select a setup profile to begin'}
-                      {selectedProfile && checkStep === 'idle' && !isRunning && 'Ready to preview changes'}
-                      {selectedProfile && isRunning && applyProgress.currentApp && (
-                        <span className="flex items-center gap-2">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          {applyProgress.action}: <span className="font-mono">{applyProgress.currentApp}</span>
-                        </span>
-                      )}
-                      {selectedProfile && isRunning && !applyProgress.currentApp && 'Analyzing...'}
-                      {checkStep === 'scanning' && 'Analyzing setup profile...'}
+                      {!selectedProfile ? 'Select a setup profile to begin' : 'Choose a profile and preview changes'}
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
@@ -1003,59 +1174,100 @@ function App() {
               isComplete={checkStep === 'ready'}
             />
 
-            {/* Last Run (reference only, de-emphasized at bottom) */}
+            {/* Last Run - Apply only (per-workflow) */}
             <Card className="border-dashed">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs text-muted-foreground">Last Run</CardTitle>
+                <CardTitle className="text-xs text-muted-foreground">Last Setup Run</CardTitle>
               </CardHeader>
               <CardContent className="py-2">
-                {state.report?.data?.hasState ? (
-                  <div className="flex gap-6 text-xs">
-                    {state.report.data.lastApplied && (
+                {lastRunApply ? (
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Time: </span>
+                      <span className="font-medium">
+                        {new Date(lastRunApply.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                    {lastRunApply.profile && (
                       <div>
-                        <span className="text-muted-foreground">Last Applied: </span>
-                        <span className="font-medium">
-                          {new Date(state.report.data.lastApplied.timestamp).toLocaleString()}
-                        </span>
+                        <span className="text-muted-foreground">Profile: </span>
+                        <span className="font-medium">{lastRunApply.profile}</span>
+                      </div>
+                    )}
+                    {lastRunApply.outcome.installed !== undefined && (
+                      <div>
+                        <span className="text-muted-foreground">Installed: </span>
+                        <span className="font-medium text-success">{lastRunApply.outcome.installed}</span>
+                      </div>
+                    )}
+                    {lastRunApply.outcome.alreadyPresent !== undefined && lastRunApply.outcome.alreadyPresent > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Already present: </span>
+                        <span className="font-medium">{lastRunApply.outcome.alreadyPresent}</span>
+                      </div>
+                    )}
+                    {lastRunApply.outcome.needsAttention !== undefined && lastRunApply.outcome.needsAttention > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Needs attention: </span>
+                        <span className="font-medium text-destructive">{lastRunApply.outcome.needsAttention}</span>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground italic">No history available</p>
+                  <p className="text-xs text-muted-foreground italic">No setup history available</p>
                 )}
               </CardContent>
             </Card>
 
             {/* Apply Result Modal - driven by apply envelope data only */}
             <ApplyResultModal
-              open={showApplyModal}
+              open={showApplyModal || applyRunPhase === 'applying'}
               onClose={() => {
-                setShowApplyModal(false);
+                setApplyRunPhase('idle');
                 setCheckStep('idle');
               }}
               counts={applyData.counts}
               items={applyData.items}
               isDryRun={applyModalIsDryRun}
+              isApplying={applyRunPhase === 'applying'}
+              currentProgress={applyProgress}
               rawLogs={runLogs}
               rawEnvelope={applyData.rawEnvelope}
-              onApplyChanges={hasPendingInstalls ? handleSetupMachine : undefined}
+              onApplyChanges={hasPendingInstalls ? handleApplyFromPreview : undefined}
             />
           </div>
         );
 
       case 'verify':
+        return (
+          <div className="space-y-6">
+            {errorBanner}
+            <PageHeader
+              title="Check computer"
+              subtitle="Checks whether this computer matches your setup. Does not make changes."
+            />
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">
+                  This page is under construction. Use the "Set up computer" page for now.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
       case 'report':
         return (
           <div className="space-y-6">
             {errorBanner}
             <PageHeader
-              title={currentPage === 'verify' ? 'Verify' : 'Report'}
-              subtitle={currentPage === 'verify' ? 'Check machine status' : 'View history and state'}
+              title="Report"
+              subtitle="View history and state"
             />
             <Card>
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">
-                  This page is under construction. Use the Apply page for now.
+                  This page is under construction. Use the "Set up computer" page for now.
                 </p>
               </CardContent>
             </Card>

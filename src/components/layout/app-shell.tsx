@@ -31,9 +31,9 @@ export function AppShell({
   actions,
 }: AppShellProps) {
   const navItems = [
-    { id: 'capture' as const, label: 'Capture machine', icon: ScanSearch },
-    { id: 'apply' as const, label: 'Apply', icon: PlayCircle },
-    { id: 'verify' as const, label: 'Verify', icon: CheckCircle },
+    { id: 'capture' as const, label: 'Capture computer', icon: ScanSearch },
+    { id: 'apply' as const, label: 'Set up computer', icon: PlayCircle },
+    { id: 'verify' as const, label: 'Check computer', icon: CheckCircle },
     { id: 'report' as const, label: 'Report', icon: FileText },
     { id: 'settings' as const, label: 'Settings', icon: Settings },
   ];

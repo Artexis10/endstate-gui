@@ -74,16 +74,16 @@ test.describe('Capture Live Progress', () => {
     });
     
     await page.goto(baseURL || '/');
-    await page.waitForSelector('text=Apply', { timeout: 10000 });
+    await page.waitForSelector('text=Set up computer', { timeout: 10000 });
   });
 
   test('Shows live per-app progress in Activity during capture', async ({ page }) => {
     // Navigate to Capture page
-    await page.click('text=Capture machine');
-    await expect(page.locator('h1:has-text("Capture machine")')).toBeVisible();
+    await page.click('text=Capture computer');
+    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
     
     // Click Capture button
-    await page.click('main >> button:has-text("Capture machine")');
+    await page.click('main >> button:has-text("Capture computer")');
     
     // Assert Activity card appears
     await expect(page.locator('text=Activity')).toBeVisible({ timeout: 3000 });
@@ -101,11 +101,11 @@ test.describe('Capture Live Progress', () => {
 
   test('Capture modal shows correct app count and list from envelope', async ({ page }) => {
     // Navigate to Capture page
-    await page.click('text=Capture machine');
-    await expect(page.locator('h1:has-text("Capture machine")')).toBeVisible();
+    await page.click('text=Capture computer');
+    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
     
     // Click Capture button
-    await page.click('main >> button:has-text("Capture machine")');
+    await page.click('main >> button:has-text("Capture computer")');
     
     // Wait for capture to complete and modal to appear
     await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });
@@ -131,11 +131,11 @@ test.describe('Capture Live Progress', () => {
 
   test('Technical details is closed by default and shows continuous log when opened', async ({ page }) => {
     // Navigate to Capture page
-    await page.click('text=Capture machine');
-    await expect(page.locator('h1:has-text("Capture machine")')).toBeVisible();
+    await page.click('text=Capture computer');
+    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
     
     // Click Capture button
-    await page.click('main >> button:has-text("Capture machine")');
+    await page.click('main >> button:has-text("Capture computer")');
     
     // Wait for Activity to appear
     await expect(page.locator('text=Activity')).toBeVisible({ timeout: 3000 });

@@ -71,7 +71,7 @@ test.describe('Streaming Contract', () => {
     await page.goto(baseURL || '/');
     
     // Wait for app to load - should reach ready state
-    await page.waitForSelector('text=Apply', { timeout: 15000 });
+    await page.waitForSelector('text=Set up computer', { timeout: 15000 });
     
     // CRITICAL ASSERTIONS:
     // 1. No error banner should be visible
@@ -83,7 +83,7 @@ test.describe('Streaming Contract', () => {
     await expect(page.locator('text=Loading...')).not.toBeVisible();
     
     // 3. Navigation should work
-    await expect(page.locator('h1:has-text("Apply")')).toBeVisible();
+    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
   });
 
   test('Streaming invoke throws - error banner appears', async ({ page, baseURL }) => {
@@ -121,7 +121,7 @@ test.describe('Streaming Contract', () => {
     await expect(page.locator('text=Engine Connection Issue')).toBeVisible();
     
     // 2. UI should remain navigable (non-blocking error)
-    await expect(page.locator('text=Capture machine')).toBeVisible();
+    await expect(page.locator('text=Capture computer')).toBeVisible();
     await expect(page.locator('text=Settings')).toBeVisible();
   });
 
@@ -216,7 +216,7 @@ test.describe('Streaming Contract', () => {
     });
     
     await page.goto(baseURL || '/');
-    await page.waitForSelector('text=Apply', { timeout: 15000 });
+    await page.waitForSelector('text=Set up computer', { timeout: 15000 });
     
     // CRITICAL ASSERTIONS:
     // Domain failure (VERIFY_FAILED) should NOT show error banner
@@ -224,6 +224,6 @@ test.describe('Streaming Contract', () => {
     await expect(page.locator('text=Tauri streaming not available')).not.toBeVisible();
     
     // App should be usable
-    await expect(page.locator('h1:has-text("Apply")')).toBeVisible();
+    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
   });
 });

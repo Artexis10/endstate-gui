@@ -33,13 +33,13 @@ test.describe('UX Contract Tests', () => {
       };
     });
     await page.goto(baseURL || '/');
-    await page.waitForSelector('text=Apply', { timeout: 10000 });
+    await page.waitForSelector('text=Set up computer', { timeout: 10000 });
   });
 
   test('Boot does not hang - reaches ready state within timeout', async ({ page }) => {
     // This test verifies the app boots successfully and doesn't hang at "Loading..."
-    // The beforeEach already waits for 'Apply' to be visible, which means boot completed
-    await expect(page.locator('h1:has-text("Apply")')).toBeVisible();
+    // The beforeEach already waits for 'Set up computer' to be visible, which means boot completed
+    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
     
     // Verify we're NOT stuck on loading screen
     await expect(page.locator('text=Loading...')).not.toBeVisible();
@@ -47,22 +47,38 @@ test.describe('UX Contract Tests', () => {
   });
 
   test('Navigation works without breaking', async ({ page }) => {
-    await page.click('text=Capture machine');
-    await expect(page.locator('h1:has-text("Capture machine")')).toBeVisible();
-    await page.click('text=Apply');
-    await expect(page.locator('h1:has-text("Apply")')).toBeVisible();
-    await page.click('text=Capture machine');
-    await expect(page.locator('main >> button:has-text("Capture machine")')).toBeVisible();
+    await page.click('text=Capture computer');
+    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
+    await page.click('text=Set up computer');
+    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
+    await page.click('text=Capture computer');
+    await expect(page.locator('main >> button:has-text("Capture computer")')).toBeVisible();
   });
 
-  test('Last Run persists', async ({ page }) => {
-    // Use namespaced key - VITE_STORAGE_NS=test is set in playwright.config.ts
+  test('Last Run persists per-command', async ({ page }) => {
+    // Use namespaced per-command keys - VITE_STORAGE_NS=test is set in playwright.config.ts
     await page.evaluate(() => {
-      localStorage.setItem('test:autosuite-last-run', JSON.stringify({ timestamp: new Date().toISOString(), command: 'capture', outcome: { succeeded: 10, skipped: 2, failed: 0 } }));
+      // Set capture last run
+      localStorage.setItem('test:autosuite-last-run-capture', JSON.stringify({ 
+        timestamp: new Date().toISOString(), 
+        command: 'capture', 
+        outcome: { succeeded: 10, skipped: 2, failed: 0 } 
+      }));
+      // Set apply last run
+      localStorage.setItem('test:autosuite-last-run-apply', JSON.stringify({ 
+        timestamp: new Date().toISOString(), 
+        command: 'apply', 
+        profile: 'test-profile',
+        outcome: { installed: 5, alreadyPresent: 3, needsAttention: 0 } 
+      }));
     });
     await page.reload();
     await page.waitForTimeout(1000);
-    const exists = await page.evaluate(() => localStorage.getItem('test:autosuite-last-run') !== null);
-    expect(exists).toBe(true);
+    
+    // Verify both per-command keys exist
+    const captureExists = await page.evaluate(() => localStorage.getItem('test:autosuite-last-run-capture') !== null);
+    const applyExists = await page.evaluate(() => localStorage.getItem('test:autosuite-last-run-apply') !== null);
+    expect(captureExists).toBe(true);
+    expect(applyExists).toBe(true);
   });
 });
