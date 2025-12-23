@@ -13,7 +13,7 @@ import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
 import { saveLastRun, loadLastRun, type LastRunData } from './lib/last-run';
-import { getProfilesDirectory, ensureDirectory } from './lib/tauri-bridge';
+import { getProfilesDirectory, ensureDirectory, isTauriRuntime } from './lib/tauri-bridge';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -27,7 +27,7 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Switch } from './components/ui/switch';
 import { StatusPill } from './components/app/status-pill';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'capture' | 'apply' | 'verify' | 'report' | 'settings';
@@ -80,6 +80,8 @@ function App() {
   const [captureStats, setCaptureStats] = useState<CaptureStats>({ succeeded: 0, skipped: 0, failed: 0, outputPath: '', lastProcessedApp: '', processedCount: 0, apps: [] });
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [, setLastRun] = useState<LastRunData | null>(null);
+  const [safeMode, setSafeMode] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const logBufferRef = useRef<LogBuffer | null>(null);
 
   const updateActivity = (message: string, status: ActivityItem['status'], step?: number) => {
@@ -523,6 +525,11 @@ function App() {
         e.preventDefault();
         setCommandPaletteOpen(true);
       }
+      // Ctrl+, opens Settings (emergency shortcut)
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        setCurrentPage('settings');
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -565,55 +572,110 @@ function App() {
     );
   }
 
-  if (state.status === 'error') {
+  // Helper to get runtime diagnostics
+  const getDiagnostics = () => {
+    const inTauri = isTauriRuntime();
+    return {
+      runtime: inTauri ? 'tauri' : 'web',
+      tauriPlatform: import.meta.env.TAURI_PLATFORM || 'not set',
+      hasTauriInternals: typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window,
+      hasTauriIpc: typeof window !== 'undefined' && '__TAURI_IPC__' in window,
+      location: typeof window !== 'undefined' ? window.location.href : 'unknown',
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+      engineMode: settings.engineMode,
+      engineScriptPath: settings.engineScriptPath,
+      safeMode,
+      errorMessage: state.errorMessage,
+      errorCommand: state.errorCommand,
+    };
+  };
+
+  const copyDiagnostics = () => {
+    const diag = getDiagnostics();
+    const text = Object.entries(diag)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('\n');
+    navigator.clipboard.writeText(text);
+  };
+
+  // Error banner component (non-blocking)
+  const renderErrorBanner = () => {
+    if (state.status !== 'error') return null;
+    
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background p-4">
-        <Card className="max-w-2xl border-danger">
-          <CardHeader>
-            <CardTitle className="text-danger">Autosuite engine not reachable</CardTitle>
-            <CardDescription>Unable to connect to the autosuite engine</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {state.errorMessage && (
-              <div>
-                <h3 className="text-sm font-medium mb-2">Error</h3>
-                <p className="text-sm text-danger">{state.errorMessage}</p>
-              </div>
-            )}
-            {state.errorStderr && (
-              <div>
-                <h3 className="text-sm font-medium mb-2">STDERR</h3>
-                <pre className="text-xs bg-background p-3 rounded border overflow-auto max-h-40">{state.errorStderr}</pre>
-              </div>
-            )}
-            {state.errorCommand && (
-              <div>
-                <h3 className="text-sm font-medium mb-2">Command attempted</h3>
-                <code className="text-xs bg-background p-2 rounded border block">{state.errorCommand}</code>
-              </div>
-            )}
-            <div className="flex gap-2 pt-4">
-              <Button variant="secondary" onClick={() => setCurrentPage('settings')}>
-                Open Settings
-              </Button>
-              <Button variant="ghost" onClick={resetSettings}>
-                Reset Settings
-              </Button>
-              <Button onClick={loadInitialData}>
+      <Card className="border-destructive bg-destructive/5 mb-6">
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-destructive text-base">Engine Connection Issue</CardTitle>
+              <CardDescription className="text-destructive/80">
+                {state.errorMessage || 'Unable to connect to the autosuite engine'}
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onClick={loadInitialData}>
                 Retry
               </Button>
+              <Button size="sm" variant="secondary" onClick={() => {
+                setSafeMode(true);
+                setState(prev => ({ ...prev, status: 'ready' }));
+              }}>
+                Safe Mode
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-3">
+          {state.errorCommand && (
+            <div className="text-xs">
+              <span className="text-muted-foreground">Command: </span>
+              <code className="bg-muted px-1 rounded">{state.errorCommand}</code>
+            </div>
+          )}
+          
+          {/* Collapsible diagnostics */}
+          <details open={showDiagnostics} onToggle={(e) => setShowDiagnostics((e.target as HTMLDetailsElement).open)}>
+            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+              {showDiagnostics ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              Diagnostics
+            </summary>
+            <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1 font-mono">
+              {Object.entries(getDiagnostics()).map(([key, value]) => (
+                <div key={key}>
+                  <span className="text-muted-foreground">{key}: </span>
+                  <span>{String(value)}</span>
+                </div>
+              ))}
+            </div>
+            <Button size="sm" variant="ghost" className="mt-2 h-7 text-xs" onClick={copyDiagnostics}>
+              <Copy className="h-3 w-3 mr-1" /> Copy Diagnostics
+            </Button>
+          </details>
+          
+          {state.errorStderr && (
+            <details>
+              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                STDERR output
+              </summary>
+              <pre className="mt-2 text-xs bg-muted/50 p-2 rounded overflow-auto max-h-32">{state.errorStderr}</pre>
+            </details>
+          )}
+        </CardContent>
+      </Card>
     );
-  }
+  };
+
+  // Note: Error state no longer blocks UI - it shows a banner instead
 
   const renderPage = () => {
+    // Show error banner at top of any page when in error state
+    const errorBanner = renderErrorBanner();
+    
     switch (currentPage) {
       case 'capture':
         return (
           <div className="space-y-6">
+            {errorBanner}
             <PageHeader
               title="Capture machine"
               subtitle="Create a reusable setup profile from this computer"
@@ -703,6 +765,7 @@ function App() {
         
         return (
           <div className="space-y-6">
+            {errorBanner}
             <PageHeader
               title="Apply"
               subtitle="Set up this machine using a saved profile"
@@ -901,6 +964,7 @@ function App() {
       case 'report':
         return (
           <div className="space-y-6">
+            {errorBanner}
             <PageHeader
               title={currentPage === 'verify' ? 'Verify' : 'Report'}
               subtitle={currentPage === 'verify' ? 'Check machine status' : 'View history and state'}
@@ -918,6 +982,7 @@ function App() {
       case 'settings':
         return (
           <div className="space-y-6">
+            {errorBanner}
             <PageHeader
               title="Settings"
               subtitle="Configure autosuite engine and preferences"

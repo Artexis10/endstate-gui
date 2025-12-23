@@ -164,3 +164,23 @@ The Reset Settings function clears ALL known keys across ALL namespaces (tauri, 
 
 ### Test Isolation
 Playwright tests set `VITE_STORAGE_NS=test` in playwright.config.ts webServer.env to isolate test storage from Tauri dev storage.
+
+## Engine Probe and Error Handling
+
+The app probes the autosuite engine on startup via `capabilities --json`. This probe is **non-fatal**:
+
+### Non-Blocking Error State
+- Engine connection errors display as a **banner** within the normal UI, not a blocking modal
+- Users can always navigate to Settings (Ctrl+, shortcut) even when engine is unreachable
+- "Safe Mode" button dismisses the error and allows UI exploration without engine
+
+### Diagnostics
+The error banner includes collapsible diagnostics showing:
+- Runtime detection (tauri vs web)
+- TAURI_PLATFORM env var
+- Engine mode and script path
+- Error message and command attempted
+
+### Keyboard Shortcuts
+- **Ctrl+K**: Open command palette
+- **Ctrl+,**: Open Settings (emergency shortcut, always works)
