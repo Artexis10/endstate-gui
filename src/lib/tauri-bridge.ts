@@ -3,63 +3,48 @@
  * 
  * ONLY this file may import @tauri-apps/api/*
  * All other code must use this bridge to avoid web-only boot crashes.
+ * 
+ * Strategy:
+ * 1. If window.__TAURI__ mock exists (tests), use it exclusively
+ * 2. Otherwise, try real @tauri-apps/api/* imports
+ * 3. If real Tauri fails, fall back to web-safe defaults for allowlisted commands
  */
 
-let tauriCore: any = null;
-let tauriEvent: any = null;
-let initialized = false;
-
-function isRealTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
+// Commands that have safe web fallbacks (used in web-only E2E tests)
+const WEB_FALLBACK_COMMANDS: Record<string, () => any> = {
+  'ensure_dir': () => null,
+  'check_file_exists': () => null,
+  'read_dir': () => [],
+  'list_manifest_files': () => [],
+  'get_default_profiles_directory': () => 'C:\\test\\profiles',
+  'show_file_dialog': () => null,
+  'run_autosuite_streaming': () => null,
+};
 
 function hasMock(): boolean {
   return typeof window !== 'undefined' && '__TAURI__' in window;
 }
 
-async function initTauri() {
-  if (initialized) return;
-  initialized = true;
-  
-  if (hasMock() || !isRealTauri()) {
-    return;
-  }
-  
-  try {
-    const coreModule = await import('@tauri-apps/api/core');
-    const eventModule = await import('@tauri-apps/api/event');
-    
-    if (coreModule?.invoke && eventModule?.listen) {
-      tauriCore = coreModule;
-      tauriEvent = eventModule;
-    }
-  } catch {
-    // Tauri not available
-  }
-}
-
 export async function safeInvoke<T = any>(cmd: string, args?: Record<string, any>): Promise<T> {
+  // Mock-first: if test mock exists, use it exclusively
   if (hasMock()) {
-    return await (window as any).__TAURI__.core.invoke(cmd, args);
+    const mock = (window as any).__TAURI__;
+    if (mock?.core?.invoke) {
+      return await mock.core.invoke(cmd, args);
+    }
   }
   
-  await initTauri();
-  if (tauriCore?.invoke) {
-    return await tauriCore.invoke<T>(cmd, args);
-  }
-  
-  switch (cmd) {
-    case 'ensure_dir':
-    case 'check_file_exists':
-      return null as T;
-    case 'read_dir':
-      return [] as T;
-    case 'get_default_profiles_directory':
-      return 'C:\\test\\profiles' as T;
-    case 'show_file_dialog':
-      return null as T;
-    default:
-      return null as T;
+  // Try real Tauri API
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<T>(cmd, args);
+  } catch (err) {
+    // Real Tauri not available - use web fallback if command is allowlisted
+    if (cmd in WEB_FALLBACK_COMMANDS) {
+      return WEB_FALLBACK_COMMANDS[cmd]() as T;
+    }
+    // For non-allowlisted commands, re-throw to signal failure
+    throw err;
   }
 }
 
@@ -67,16 +52,22 @@ export async function safeListen<T = any>(
   event: string,
   handler: (event: { payload: T }) => void
 ): Promise<() => void> {
-  if (hasMock() && (window as any).__TAURI__.event?.listen) {
-    return await (window as any).__TAURI__.event.listen(event, handler);
+  // Mock-first: if test mock exists, use it exclusively
+  if (hasMock()) {
+    const mock = (window as any).__TAURI__;
+    if (mock?.event?.listen) {
+      return await mock.event.listen(event, handler);
+    }
   }
   
-  await initTauri();
-  if (tauriEvent?.listen) {
-    return await tauriEvent.listen<T>(event, handler);
+  // Try real Tauri API
+  try {
+    const { listen } = await import('@tauri-apps/api/event');
+    return await listen<T>(event, handler);
+  } catch {
+    // Real Tauri not available - return no-op unlisten
+    return () => {};
   }
-  
-  return () => {};
 }
 
 export async function getProfilesDirectory(customDir?: string): Promise<string> {
