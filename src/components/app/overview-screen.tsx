@@ -26,20 +26,37 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  ExternalLink
+  Eye,
+  Zap
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { formatRelativeTime, type LifecycleState, type LifecycleEvent } from '@/lib/lifecycle-state';
 import type { DiscoveredProfile } from '@/file-discovery';
 import type { UIMode } from '@/lib/ui-mode';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
 type ActionStatus = 'idle' | 'running' | 'success' | 'error';
+type SetupIntent = 'preview' | 'apply';
 
 interface ActionProgress {
   message: string;
   detail?: string;
+}
+
+interface ActionResult {
+  action: ActionType;
+  status: 'success' | 'error';
+  summary: string;
+  details?: string[];
 }
 
 interface OverviewScreenProps {
@@ -50,10 +67,11 @@ interface OverviewScreenProps {
   runningAction: ActionType;
   actionStatus: ActionStatus;
   actionProgress: ActionProgress | null;
+  actionResult: ActionResult | null;
   uiMode: UIMode;
   onNavigate: (page: 'capture' | 'apply' | 'verify' | 'report' | 'settings') => void;
   onCapture: () => void;
-  onSetup: () => void;
+  onSetup: (intent: SetupIntent) => void;
   onCheck: () => void;
   onProfileChange: (profile: string, path: string) => void;
   onDismissResult: () => void;
@@ -67,6 +85,7 @@ export function OverviewScreen({
   runningAction,
   actionStatus,
   actionProgress,
+  actionResult,
   uiMode,
   onNavigate,
   onCapture,
@@ -76,6 +95,8 @@ export function OverviewScreen({
   onDismissResult,
 }: OverviewScreenProps) {
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
+  const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const hasProfile = !!selectedProfile && profiles.length > 0;
   
   // Handle card click based on UI mode
@@ -115,7 +136,7 @@ export function OverviewScreen({
         onCapture();
         break;
       case 'setup':
-        onSetup();
+        onSetup(setupIntent);
         break;
       case 'check':
         onCheck();
@@ -240,15 +261,18 @@ export function OverviewScreen({
     // Action-specific descriptions
     const descriptions: Record<NonNullable<ActionType>, string> = {
       capture: 'Scan your computer for installed applications and save them as a reusable setup profile.',
-      setup: 'Install applications from your selected profile. Preview changes first to see what will be installed.',
-      check: 'Compare your computer against the selected profile to see what\'s installed and what\'s missing.',
+      setup: 'Install applications from your selected profile.',
+      check: 'This computer will be compared against the selected profile.',
     };
 
-    // Action-specific button labels
-    const buttonLabels: Record<NonNullable<ActionType>, { idle: string; running: string }> = {
-      capture: { idle: 'Start capture', running: 'Capturing...' },
-      setup: { idle: 'Preview changes', running: 'Analyzing...' },
-      check: { idle: 'Check now', running: 'Checking...' },
+    // Dynamic button labels based on setup intent
+    const getButtonLabel = (act: NonNullable<ActionType>, running: boolean): string => {
+      if (act === 'capture') return running ? 'Capturing...' : 'Start capture';
+      if (act === 'setup') {
+        if (running) return setupIntent === 'preview' ? 'Previewing...' : 'Applying...';
+        return setupIntent === 'preview' ? 'Preview changes' : 'Apply changes';
+      }
+      return running ? 'Checking...' : 'Check now';
     };
 
     if (!action) return null;
@@ -259,16 +283,77 @@ export function OverviewScreen({
         initial="hidden"
         animate="visible"
         exit="exit"
-        className="border-t border-border mt-3 pt-4 space-y-4"
+        className="border-t border-border mt-2 pt-3 space-y-3 pb-2"
       >
         {/* Description */}
         <p className="text-sm text-muted-foreground">
           {descriptions[action]}
         </p>
 
+        {/* Profile selector for Check and Setup cards */}
+        {(action === 'check' || action === 'setup') && hasProfile && !isThisRunning && !isThisComplete && (
+          <div className="flex items-center gap-3 bg-muted/50 rounded-md px-3 py-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Profile</p>
+              <select
+                value={selectedProfile}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  const selected = profiles.find(p => p.name === e.target.value);
+                  onProfileChange(e.target.value, selected?.path || '');
+                }}
+                onClick={(e) => e.stopPropagation()}
+                disabled={isRunning}
+                className="w-full bg-transparent text-sm font-medium border-0 p-0 focus:ring-0 focus:outline-none cursor-pointer"
+              >
+                {profiles.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Preview/Apply toggle for Setup card */}
+        {action === 'setup' && !isThisRunning && !isThisComplete && (
+          <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-md w-fit">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSetupIntent('preview');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                setupIntent === 'preview'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Eye className="h-3 w-3" />
+              Preview
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSetupIntent('apply');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                setupIntent === 'apply'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Zap className="h-3 w-3" />
+              Apply
+            </button>
+          </div>
+        )}
+
         {/* Last run info */}
         {lastEvent && !isThisRunning && !isThisComplete && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" />
             <span>Last run {formatRelativeTime(lastEvent.timestamp)}</span>
             {lastSummary && (
@@ -319,8 +404,11 @@ export function OverviewScreen({
           </div>
         )}
 
+        {/* Visual separator before action row */}
+        <div className="border-t border-border/50 pt-3 mt-1" />
+
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 pb-1">
           {!isThisComplete ? (
             <>
               <Button
@@ -334,10 +422,10 @@ export function OverviewScreen({
                 {isThisRunning ? (
                   <>
                     <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                    {buttonLabels[action].running}
+                    {getButtonLabel(action, true)}
                   </>
                 ) : (
-                  buttonLabels[action].idle
+                  getButtonLabel(action, false)
                 )}
               </Button>
               {!isThisRunning && (
@@ -369,12 +457,10 @@ export function OverviewScreen({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const page = action === 'capture' ? 'capture' : action === 'setup' ? 'apply' : 'verify';
-                  onNavigate(page);
+                  setDetailsModalOpen(true);
                 }}
               >
                 View details
-                <ExternalLink className="h-3 w-3 ml-1" />
               </Button>
             </>
           )}
@@ -646,6 +732,48 @@ export function OverviewScreen({
           </CardContent>
         </Card>
       )}
+
+      {/* Details Modal - shows logs/results without navigation */}
+      <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {runningAction === 'capture' && 'Capture Details'}
+              {runningAction === 'setup' && 'Setup Details'}
+              {runningAction === 'check' && 'Check Details'}
+              {!runningAction && 'Details'}
+            </DialogTitle>
+            <DialogDescription>
+              {actionResult?.summary || actionProgress?.message || 'Action completed.'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {/* Result details */}
+          {actionResult?.details && actionResult.details.length > 0 && (
+            <div className="max-h-64 overflow-y-auto">
+              <div className="space-y-1 text-sm font-mono bg-muted/50 rounded-md p-3">
+                {actionResult.details.map((line, i) => (
+                  <p key={i} className="text-muted-foreground">{line}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Fallback if no details */}
+          {(!actionResult?.details || actionResult.details.length === 0) && (
+            <div className="text-sm text-muted-foreground py-4 text-center">
+              {actionStatus === 'success' && 'Operation completed successfully.'}
+              {actionStatus === 'error' && 'An error occurred during the operation.'}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setDetailsModalOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

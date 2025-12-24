@@ -174,14 +174,21 @@ export function AppShell({
           
           <div className="flex items-center gap-2">
             {actions}
+            {/* Command palette button - de-emphasized in Default mode */}
             <Button
               variant="ghost"
               size="sm"
               onClick={onOpenCommandPalette}
-              className="gap-2"
+              className={cn(
+                "gap-2",
+                !showSidebar && "opacity-50 hover:opacity-100"
+              )}
+              title="Command palette (Ctrl+K)"
             >
               <Command className="h-4 w-4" />
-              <span className="text-xs text-muted-foreground">Ctrl+K</span>
+              {showSidebar && (
+                <span className="text-xs text-muted-foreground">Ctrl+K</span>
+              )}
             </Button>
           </div>
         </header>

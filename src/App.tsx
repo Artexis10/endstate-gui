@@ -117,15 +117,23 @@ function App() {
   // Overview action state - tracks which action is running and its status
   type OverviewActionType = 'capture' | 'setup' | 'check' | null;
   type OverviewActionStatus = 'idle' | 'running' | 'success' | 'error';
+  interface OverviewActionResult {
+    action: OverviewActionType;
+    status: 'success' | 'error';
+    summary: string;
+    details?: string[];
+  }
   const [overviewRunningAction, setOverviewRunningAction] = useState<OverviewActionType>(null);
   const [overviewActionStatus, setOverviewActionStatus] = useState<OverviewActionStatus>('idle');
   const [overviewActionProgress, setOverviewActionProgress] = useState<{ message: string; detail?: string } | null>(null);
+  const [overviewActionResult, setOverviewActionResult] = useState<OverviewActionResult | null>(null);
   
   // Reset overview action state
   const resetOverviewActionState = () => {
     setOverviewRunningAction(null);
     setOverviewActionStatus('idle');
     setOverviewActionProgress(null);
+    setOverviewActionResult(null);
   };
   
   // Handle UI mode toggle with persistence
@@ -1038,6 +1046,71 @@ function App() {
     }
   };
 
+  const handleApplyFromOverview = async () => {
+    if (!selectedProfile) {
+      throw new Error('Please select a setup profile');
+    }
+
+    setIsRunning(true);
+    setRunLogs('');
+    setLogTruncated(false);
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(prev => prev + logs);
+      setLogTruncated(truncated);
+    });
+    applyLineBufferRef.current = new StreamingLineBuffer();
+
+    const applyResult = await runEngineStreaming<EndstateApplyData>(
+      settings,
+      'apply',
+      ['--profile', selectedProfilePath],
+      (event: StreamEvent) => {
+        if (event.type === 'stdout' || event.type === 'stderr') {
+          logBufferRef.current?.append(event.data);
+          const completeLines = applyLineBufferRef.current?.append(event.data) || [];
+          for (const line of completeLines) {
+            const progress = parseApplyProgressLine(line);
+            if (progress) {
+              setOverviewActionProgress({ 
+                message: 'Installing applications...', 
+                detail: progress.app 
+              });
+            }
+          }
+        }
+      }
+    );
+
+    logBufferRef.current?.flush();
+    applyLineBufferRef.current?.clear();
+    setIsRunning(false);
+
+    const isSuccess = applyResult.envelope?.success ?? (applyResult.exitCode === 0);
+    if (!isSuccess) {
+      throw new Error(applyResult.envelope?.error?.message || 'Apply failed');
+    }
+
+    // Process result
+    const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
+    const installed = envelopeData?.counts?.installed ?? 0;
+    const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? 0;
+    
+    // Record lifecycle event
+    const applyEvent: LifecycleEvent = {
+      timestamp: new Date().toISOString(),
+      profile: selectedProfile,
+      profilePath: selectedProfilePath,
+      success: true,
+      summary: { installed, alreadyPresent },
+    };
+    const newState = recordLifecycleEvent('apply', applyEvent);
+    setLifecycleState(newState);
+    
+    setOverviewActionProgress({ 
+      message: `${installed} installed, ${alreadyPresent} already present` 
+    });
+  };
+
   const handleImportProfile = async () => {
     const { invoke } = await import('./lib/tauri-bridge');
 
@@ -1225,6 +1298,7 @@ function App() {
               runningAction={overviewRunningAction}
               actionStatus={overviewActionStatus}
               actionProgress={overviewActionProgress}
+              actionResult={overviewActionResult}
               uiMode={uiMode}
               onNavigate={setCurrentPage}
               onCapture={async () => {
@@ -1234,23 +1308,52 @@ function App() {
                 try {
                   await handleCaptureFromOverview();
                   setOverviewActionStatus('success');
-                  setOverviewActionProgress({ message: `Profile saved successfully` });
-                } catch {
+                  setOverviewActionResult({ 
+                    action: 'capture', 
+                    status: 'success', 
+                    summary: 'Profile saved successfully' 
+                  });
+                } catch (err) {
                   setOverviewActionStatus('error');
-                  setOverviewActionProgress({ message: 'Capture failed' });
+                  setOverviewActionResult({ 
+                    action: 'capture', 
+                    status: 'error', 
+                    summary: err instanceof Error ? err.message : 'Capture failed' 
+                  });
                 }
               }}
-              onSetup={async () => {
+              onSetup={async (intent) => {
                 setOverviewRunningAction('setup');
                 setOverviewActionStatus('running');
-                setOverviewActionProgress({ message: 'Analyzing profile...' });
+                const isApply = intent === 'apply';
+                setOverviewActionProgress({ 
+                  message: isApply ? 'Installing applications...' : 'Analyzing profile...' 
+                });
                 try {
-                  await handlePreviewFromOverview();
-                  setOverviewActionStatus('success');
-                  setOverviewActionProgress({ message: 'Preview complete' });
-                } catch {
+                  if (isApply) {
+                    await handleApplyFromOverview();
+                    setOverviewActionStatus('success');
+                    setOverviewActionResult({ 
+                      action: 'setup', 
+                      status: 'success', 
+                      summary: 'Applications installed successfully' 
+                    });
+                  } else {
+                    await handlePreviewFromOverview();
+                    setOverviewActionStatus('success');
+                    setOverviewActionResult({ 
+                      action: 'setup', 
+                      status: 'success', 
+                      summary: 'Preview complete' 
+                    });
+                  }
+                } catch (err) {
                   setOverviewActionStatus('error');
-                  setOverviewActionProgress({ message: 'Preview failed' });
+                  setOverviewActionResult({ 
+                    action: 'setup', 
+                    status: 'error', 
+                    summary: err instanceof Error ? err.message : 'Setup failed' 
+                  });
                 }
               }}
               onCheck={async () => {
@@ -1260,10 +1363,18 @@ function App() {
                 try {
                   await handleCheckFromOverview();
                   setOverviewActionStatus('success');
-                  setOverviewActionProgress({ message: 'Check complete' });
-                } catch {
+                  setOverviewActionResult({ 
+                    action: 'check', 
+                    status: 'success', 
+                    summary: 'Check complete' 
+                  });
+                } catch (err) {
                   setOverviewActionStatus('error');
-                  setOverviewActionProgress({ message: 'Check failed' });
+                  setOverviewActionResult({ 
+                    action: 'check', 
+                    status: 'error', 
+                    summary: err instanceof Error ? err.message : 'Check failed' 
+                  });
                 }
               }}
               onProfileChange={(profile, path) => {
