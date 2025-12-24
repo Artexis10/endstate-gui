@@ -195,7 +195,7 @@ export function ApplyResultModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent 
-        className="sm:max-w-[500px] max-h-[85vh] flex flex-col"
+        className="sm:max-w-[500px] max-h-[80vh] flex flex-col"
         onEscapeKeyDown={isApplying ? (e) => e.preventDefault() : undefined}
         onPointerDownOutside={isApplying ? (e) => e.preventDefault() : undefined}
       >
@@ -220,7 +220,7 @@ export function ApplyResultModal({
         </DialogHeader>
 
         {/* Scrollable content area */}
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0 pb-2">
           {/* Non-technical summary - phase-aware display */}
           <div className="space-y-3 py-4">
           {/* During applying: show stable progress, not preview counts */}
@@ -290,7 +290,7 @@ export function ApplyResultModal({
               {showDetails && (
                 <div className="mt-3 space-y-1">
                   {/* Single unified list - actionable items shown first */}
-                  <div className="border border-border rounded-lg max-h-48 overflow-y-auto">
+                  <div className="border border-border rounded-lg max-h-48 overflow-y-auto pb-1">
                     {sortedItems.map((item, idx) => {
                       const badge = getActionBadge(item);
                       const isActionable = item.reason === 'would_install' || item.reason === 'installed' || item.status === 'failed';

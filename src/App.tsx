@@ -1204,15 +1204,16 @@ function App() {
               
               // Friendly headline mapping (Option A)
               const friendlyAction = progress.action === 'OK' ? 'Already present' :
-                                     progress.action === 'Processing' ? 'Processing' :
+                                     progress.action === 'Processing' ? 'Working…' :
+                                     progress.action === 'Skipped' ? 'Skipped' :
                                      progress.action;
               // Friendly counter text
               const parts: string[] = [];
-              if (counters.installed > 0) parts.push(`Installed ${counters.installed}`);
-              if (counters.alreadyPresent > 0) parts.push(`Already present ${counters.alreadyPresent}`);
-              if (counters.skipped > 0) parts.push(`Skipped ${counters.skipped}`);
-              if (counters.failed > 0) parts.push(`Failed ${counters.failed}`);
-              const counterText = parts.join(' · ') || 'Processing...';
+              if (counters.installed > 0) parts.push(`${counters.installed} installed`);
+              if (counters.alreadyPresent > 0) parts.push(`${counters.alreadyPresent} already present`);
+              if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
+              if (counters.failed > 0) parts.push(`${counters.failed} failed`);
+              const counterText = parts.join(' · ') || 'Working…';
               
               setOverviewActionProgress({ 
                 message: `${friendlyAction}: ${progress.app}`,

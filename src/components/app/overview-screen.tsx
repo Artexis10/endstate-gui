@@ -444,7 +444,7 @@ export function OverviewScreen({
                   </div>
                 </button>
                 {activityExpanded && (
-                  <div className="px-3 pb-3 space-y-1 border-t border-border/50">
+                  <div className="px-3 pb-3 space-y-1 border-t border-border/50 max-h-32 overflow-y-auto">
                     {liveAppEvents.slice(-5).reverse().map((event, i) => (
                       <div key={i} className="flex items-center gap-2 text-xs pt-1.5">
                         <span className={`w-14 text-right font-medium ${
@@ -456,8 +456,8 @@ export function OverviewScreen({
                           'text-muted-foreground'
                         }`}>
                           {event.action === 'OK' ? 'PRESENT' : 
-                           event.action === 'Skipped' ? 'SKIP' : 
-                           event.action === 'Processing' ? 'PROC' : 
+                           event.action === 'Skipped' ? 'SKIPPED' : 
+                           event.action === 'Processing' ? 'WORKING' : 
                            event.action.toUpperCase().slice(0, 7)}
                         </span>
                         <span className="font-mono truncate flex-1">{event.app}</span>
