@@ -1,8 +1,8 @@
-# Autosuite GUI
+# Endstate GUI
 
-Autosuite GUI is the official desktop application for **Autosuite**, providing a graphical interface for running provisioning, configuration restore, and verification workflows.
+Endstate GUI is the official desktop application for **Endstate**, providing a graphical interface for running provisioning, configuration restore, and verification workflows.
 
-The GUI is designed to consume Autosuite strictly through its public CLI interface, ensuring a clear separation between the engine and the user interface.
+The GUI is designed to consume Endstate strictly through its public CLI interface, ensuring a clear separation between the engine and the user interface.
 
 ## Status
 
@@ -36,13 +36,13 @@ If `src-tauri/icons/` is empty or icons need updating:
 npm run tauri icon app-icon.png
 ```
 
-## Relationship to Autosuite
+## Relationship to Endstate
 
-Autosuite GUI relies on the Autosuite CLI being installed and available on the system PATH.  
+Endstate GUI relies on the Endstate CLI being installed and available on the system PATH.  
 All operations are executed by invoking the CLI and consuming its structured output.
 
-Autosuite (the core engine) is open source and licensed under the Apache License 2.0.  
-Autosuite GUI is a separate project with its own licensing and distribution model.
+Endstate (the core engine) is open source and licensed under the Apache License 2.0.  
+Endstate GUI is a separate project with its own licensing and distribution model.
 
 ---
 
@@ -50,7 +50,7 @@ Autosuite GUI is a separate project with its own licensing and distribution mode
 
 ### Design Principles
 
-1. **Thin GUI:** Autosuite GUI contains no business logic, no provisioning logic, and makes no assumptions about internal CLI implementation.
+1. **Thin GUI:** Endstate GUI contains no business logic, no provisioning logic, and makes no assumptions about internal CLI implementation.
 
 2. **CLI as Source of Truth:** All operations are executed by CLI invocation. GUI is purely a presentation layer.
 
@@ -62,15 +62,15 @@ Autosuite GUI is a separate project with its own licensing and distribution mode
 
 #### Development Mode
 
-During development, Autosuite GUI resolves the CLI from the system PATH:
+During development, Endstate GUI resolves the CLI from the system PATH:
 
-- **CLI Resolution:** `autosuite` command resolved from PATH
+- **CLI Resolution:** `endstate` command resolved from PATH
 - **Execution:** Node.js `child_process.spawn`
 - **Validation:** Capabilities handshake on startup
 
 #### Production Mode
 
-Production builds of Autosuite GUI bundle a pinned Autosuite CLI binary:
+Production builds of Endstate GUI bundle a pinned Endstate CLI binary:
 
 - **CLI Resolution:** Bundled binary at known path
 - **Execution:** Tauri/Rust Command API
@@ -81,7 +81,7 @@ Production builds of Autosuite GUI bundle a pinned Autosuite CLI binary:
 ```
 GUI starts
   │
-  ├─► Call: autosuite capabilities --json
+  ├─► Call: endstate capabilities --json
   │
   ├─► Parse response
   │     │
@@ -113,7 +113,7 @@ All CLI commands with `--json` flag return a standardized envelope:
 }
 ```
 
-See `.windsurf/rules/project-ruleset.md` in the autosuite repository for the authoritative contract rules.
+See `.windsurf/rules/project-ruleset.md` in the endstate repository for the authoritative contract rules.
 
 ### Supported Commands
 
@@ -144,13 +144,13 @@ This repository does not grant permission to use, modify, or redistribute the co
 
 ### Engine Adapter
 
-The GUI includes an **EngineAdapter** module (`src-tauri/src/engine_adapter.rs`) that provides streaming NDJSON output from the Autosuite CLI to the frontend.
+The GUI includes an **EngineAdapter** module (`src-tauri/src/engine_adapter.rs`) that provides streaming NDJSON output from the Endstate CLI to the frontend.
 
 **Features:**
-- Spawns the `autosuite` CLI process with configurable arguments
+- Spawns the `endstate` CLI process with configurable arguments
 - Reads stdout/stderr concurrently (non-blocking)
 - Parses each line: valid JSON is passed through, plain text becomes log events
-- Emits events to frontend via Tauri event channel `autosuite://event`
+- Emits events to frontend via Tauri event channel `endstate://event`
 - Emits fallback result if CLI exits without a terminal result event
 - **runId tagging:** Every emitted event includes a `runId` field for tracking
 - **One-run-at-a-time guard (v1):** Only one CLI run can be active at a time
@@ -164,7 +164,7 @@ The GUI includes an **EngineAdapter** module (`src-tauri/src/engine_adapter.rs`)
 
 ### Testing the Streaming UI
 
-1. Ensure `autosuite` CLI is installed and on PATH
+1. Ensure `endstate` CLI is installed and on PATH
 2. Run `npm run tauri dev`
 3. Wait for CLI status to show "ready"
 4. Click **Capabilities** to test streaming output
@@ -195,5 +195,5 @@ This runs unit tests for the parsing logic, runId injection, and cancellation in
 
 ## Notes
 
-This repository exists to develop the official Autosuite desktop experience.  
+This repository exists to develop the official Endstate desktop experience.  
 Details about distribution, pricing, and supported platforms will be documented closer to release.

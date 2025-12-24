@@ -1,7 +1,7 @@
 /**
  * Engine Bridge
  * 
- * This module provides the interface for running the Autosuite CLI with
+ * This module provides the interface for running the Endstate CLI with
  * streaming NDJSON output. Events are received via Tauri event listeners.
  * 
  * Features:
@@ -15,7 +15,7 @@ import { invoke, listen } from './lib/tauri-bridge';
 export type UnlistenFn = () => void;
 
 /** Event channel name - must match Rust constant */
-export const EVENT_CHANNEL = 'autosuite://event';
+export const EVENT_CHANNEL = 'endstate://event';
 
 /** Base event with runId (all events now include runId) */
 interface BaseEvent {
@@ -101,7 +101,7 @@ export async function subscribeToEvents(
 }
 
 /**
- * Run the Autosuite CLI with streaming output.
+ * Run the Endstate CLI with streaming output.
  * 
  * Events will be emitted to the EVENT_CHANNEL and can be received
  * by subscribing with subscribeToEvents().
@@ -109,7 +109,7 @@ export async function subscribeToEvents(
  * Only one run can be active at a time. If another run is in progress,
  * this function throws an error.
  * 
- * @param exe - Path to the executable (typically "autosuite")
+ * @param exe - Path to the executable (typically "endstate")
  * @param args - Command line arguments
  * @returns The runId of the started run
  * @throws Error if the process fails to start or another run is active
@@ -146,30 +146,30 @@ export async function engineGetRunId(): Promise<string | null> {
 }
 
 /**
- * Run autosuite capabilities command.
+ * Run endstate capabilities command.
  * 
  * @returns The runId of the started run
  */
 export async function runCapabilities(): Promise<string> {
-  return engineRun('autosuite', ['capabilities', '-Json']);
+  return engineRun('endstate', ['capabilities', '-Json']);
 }
 
 /**
- * Run autosuite verify command.
+ * Run endstate verify command.
  * 
  * @param manifestPath - Path to the manifest file
  * @returns The runId of the started run
  */
 export async function runVerify(manifestPath: string): Promise<string> {
-  return engineRun('autosuite', ['verify', manifestPath, '-Json']);
+  return engineRun('endstate', ['verify', manifestPath, '-Json']);
 }
 
 /**
- * Run autosuite apply command.
+ * Run endstate apply command.
  * 
  * @param manifestPath - Path to the manifest file
  * @returns The runId of the started run
  */
 export async function runApply(manifestPath: string): Promise<string> {
-  return engineRun('autosuite', ['apply', manifestPath, '-Json']);
+  return engineRun('endstate', ['apply', manifestPath, '-Json']);
 }

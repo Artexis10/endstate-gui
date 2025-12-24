@@ -1,5 +1,5 @@
 import { invoke } from './lib/tauri-bridge';
-import { AutosuiteEnvelope } from './types';
+import { EndstateEnvelope } from './types';
 
 interface ExecResult {
   stdout: string;
@@ -7,27 +7,27 @@ interface ExecResult {
   exitCode: number;
 }
 
-export interface RunAutosuiteResult<T> {
-  envelope: AutosuiteEnvelope<T> | null;
+export interface RunEndstateResult<T> {
+  envelope: EndstateEnvelope<T> | null;
   exitCode: number;
   stderr: string;
   rawStdout: string;
 }
 
-export async function runAutosuite<T>(
+export async function runEndstate<T>(
   command: string,
   args: string[] = []
-): Promise<RunAutosuiteResult<T>> {
+): Promise<RunEndstateResult<T>> {
   const fullArgs = [command, '--json', ...args];
 
   let result: ExecResult;
   try {
-    result = await invoke<ExecResult>('autosuite_exec', {
+    result = await invoke<ExecResult>('endstate_exec', {
       args: fullArgs,
     });
   } catch (err) {
     throw new Error(
-      `Failed to execute autosuite: ${err instanceof Error ? err.message : String(err)}`
+      `Failed to execute endstate: ${err instanceof Error ? err.message : String(err)}`
     );
   }
 
@@ -44,9 +44,9 @@ export async function runAutosuite<T>(
     };
   }
 
-  let envelope: AutosuiteEnvelope<T>;
+  let envelope: EndstateEnvelope<T>;
   try {
-    envelope = JSON.parse(stdout) as AutosuiteEnvelope<T>;
+    envelope = JSON.parse(stdout) as EndstateEnvelope<T>;
   } catch (err) {
     return {
       envelope: null,

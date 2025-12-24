@@ -25,10 +25,10 @@ test.describe('Navigation Smoke', () => {
       };
     });
 
-    // Mock autosuite engine
+    // Mock endstate engine
     await page.addInitScript(() => {
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return {
               exitCode: 0,

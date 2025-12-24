@@ -1,14 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
 import {
-  AutosuiteEnvelope,
-  AutosuiteCapabilitiesData,
-  AutosuiteVerifyData,
-  AutosuiteReportData,
-  AutosuiteApplyData,
-  AutosuiteCaptureData,
+  EndstateEnvelope,
+  EndstateCapabilitiesData,
+  EndstateVerifyData,
+  EndstateReportData,
+  EndstateApplyData,
+  EndstateCaptureData,
   CapturedApp,
   CaptureCounts,
-  AutosuiteApplyResultData,
+  EndstateApplyResultData,
 } from './types';
 import { AppSettings, loadSettings, saveSettings } from './settings';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
@@ -19,7 +19,7 @@ import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
 import { parseApplyProgressLine, StreamingLineBuffer } from './lib/apply-utils';
 import { saveLastRun, loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime } from './lib/tauri-bridge';
-import { runAutosuiteOnce, getErrorMessage } from './lib/engine-exec';
+import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -61,9 +61,9 @@ interface AppState {
   errorMessage: string | null;
   errorStderr: string | null;
   errorCommand: string | null;
-  capabilities: AutosuiteEnvelope<AutosuiteCapabilitiesData> | null;
-  report: AutosuiteEnvelope<AutosuiteReportData> | null;
-  verify: AutosuiteEnvelope<AutosuiteVerifyData> | null;
+  capabilities: EndstateEnvelope<EndstateCapabilitiesData> | null;
+  report: EndstateEnvelope<EndstateReportData> | null;
+  verify: EndstateEnvelope<EndstateVerifyData> | null;
 }
 
 function App() {
@@ -199,7 +199,7 @@ function App() {
   };
 
   const resetSettings = () => {
-    localStorage.removeItem('autosuite-gui-settings');
+    localStorage.removeItem('endstate-gui-settings');
     const defaults = loadSettings();
     setSettings(defaults);
     setSelectedProfile('');
@@ -228,7 +228,7 @@ function App() {
     });
 
     // Use non-streaming exec for capabilities (one-shot command)
-    const capResult = await runAutosuiteOnce<AutosuiteEnvelope<AutosuiteCapabilitiesData>>(
+    const capResult = await runEndstateOnce<EndstateEnvelope<EndstateCapabilitiesData>>(
       settings,
       'capabilities',
       []
@@ -239,7 +239,7 @@ function App() {
         status: 'error',
         errorMessage: getErrorMessage(capResult.error),
         errorStderr: capResult.stderr || null,
-        errorCommand: capResult.error.command || 'autosuite capabilities --json',
+        errorCommand: capResult.error.command || 'endstate capabilities --json',
         capabilities: null,
         report: null,
         verify: null,
@@ -248,15 +248,15 @@ function App() {
     }
 
     // Capabilities succeeded - continue with report (also non-streaming)
-    const reportResult = await runAutosuiteOnce<AutosuiteEnvelope<AutosuiteReportData>>(
+    const reportResult = await runEndstateOnce<EndstateEnvelope<EndstateReportData>>(
       settings,
       'report',
       []
     );
 
-    let verifyResult: AutosuiteEnvelope<AutosuiteVerifyData> | null = null;
+    let verifyResult: EndstateEnvelope<EndstateVerifyData> | null = null;
     if (selectedProfile && profiles.length > 0) {
-      const result = await runAutosuiteOnce<AutosuiteEnvelope<AutosuiteVerifyData>>(
+      const result = await runEndstateOnce<EndstateEnvelope<EndstateVerifyData>>(
         settings,
         'verify',
         ['--profile', selectedProfile]
@@ -312,7 +312,7 @@ function App() {
 
     try {
       // Run apply --dry-run to preview changes
-      const applyResult = await runEngineStreaming<AutosuiteApplyData>(
+      const applyResult = await runEngineStreaming<EndstateApplyData>(
         settings,
         'apply',
         ['--profile', selectedProfilePath, '--dry-run'],
@@ -335,7 +335,7 @@ function App() {
 
       // Process apply result
       if (applyResult.envelope) {
-        const envelopeData = applyResult.envelope.data as AutosuiteApplyResultData | undefined;
+        const envelopeData = applyResult.envelope.data as EndstateApplyResultData | undefined;
         
         // Dev-only debug: log parsed apply envelope shape
         if (import.meta.env.DEV) {
@@ -433,7 +433,7 @@ function App() {
 
     try {
       // Run actual apply (no --dry-run)
-      const applyResult = await runEngineStreaming<AutosuiteApplyData>(
+      const applyResult = await runEngineStreaming<EndstateApplyData>(
         settings,
         'apply',
         ['--profile', selectedProfilePath],
@@ -455,7 +455,7 @@ function App() {
 
       // Process apply result
       if (applyResult.envelope) {
-        const envelopeData = applyResult.envelope.data as AutosuiteApplyResultData | undefined;
+        const envelopeData = applyResult.envelope.data as EndstateApplyResultData | undefined;
         
         if (envelopeData?.counts && envelopeData?.items) {
           setApplyData({
@@ -488,7 +488,7 @@ function App() {
       }
 
       // Save last run to localStorage (per-command)
-      const envelopeData = applyResult.envelope?.data as AutosuiteApplyResultData | undefined;
+      const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
       const lastRunData: LastRunData = {
         timestamp: new Date().toISOString(),
         command: 'apply',
@@ -503,7 +503,7 @@ function App() {
       setLastRunApply(lastRunData);
 
       // Refresh report state
-      const reportResult = await runEngineStreaming<AutosuiteReportData>(
+      const reportResult = await runEngineStreaming<EndstateReportData>(
         settings,
         'report',
         [],
@@ -559,7 +559,7 @@ function App() {
         args.push('--dry-run');
       }
 
-      const applyResult = await runEngineStreaming<AutosuiteApplyData>(
+      const applyResult = await runEngineStreaming<EndstateApplyData>(
         settings,
         'apply',
         args,
@@ -582,7 +582,7 @@ function App() {
 
       // Process apply result and show modal
       if (applyResult.envelope) {
-        const envelopeData = applyResult.envelope.data as AutosuiteApplyResultData | undefined;
+        const envelopeData = applyResult.envelope.data as EndstateApplyResultData | undefined;
         
         // Dev-only debug: log parsed apply envelope shape
         if (import.meta.env.DEV) {
@@ -632,7 +632,7 @@ function App() {
       }
 
       // Refresh report state
-      const reportResult = await runEngineStreaming<AutosuiteReportData>(
+      const reportResult = await runEngineStreaming<EndstateReportData>(
         settings,
         'report',
         [],
@@ -704,7 +704,7 @@ function App() {
       
       if (isSuccess) {
         // Get stats from envelope data (preferred) or fall back to log parsing
-        const envelopeData = captureResult.envelope?.data as AutosuiteCaptureData | undefined;
+        const envelopeData = captureResult.envelope?.data as EndstateCaptureData | undefined;
         
         // Use new structured envelope data
         if (envelopeData?.counts && envelopeData?.appsIncluded) {
@@ -762,7 +762,7 @@ function App() {
         setShowCaptureModal(true);
       } else {
         const friendlyMsg = captureResult.envelope?.error?.message || 
-                           'Autosuite couldn\'t save the setup. Please try again.';
+                           'Endstate couldn\'t save the setup. Please try again.';
         setCaptureProgress(`Error: ${friendlyMsg}`);
       }
 
@@ -818,8 +818,8 @@ function App() {
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle>Welcome to Autosuite GUI</CardTitle>
-            <CardDescription>Please configure your autosuite engine to get started.</CardDescription>
+            <CardTitle>Welcome to Endstate GUI</CardTitle>
+            <CardDescription>Please configure your endstate engine to get started.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button onClick={() => setCurrentPage('settings')}>
@@ -841,7 +841,7 @@ function App() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <div className="text-center">
               <h2 className="text-lg font-semibold">Loading...</h2>
-              <p className="text-sm text-muted-foreground mt-1">Running: autosuite capabilities --json</p>
+              <p className="text-sm text-muted-foreground mt-1">Running: endstate capabilities --json</p>
             </div>
           </CardContent>
         </Card>
@@ -886,7 +886,7 @@ function App() {
             <div>
               <CardTitle className="text-destructive text-base">Engine Connection Issue</CardTitle>
               <CardDescription className="text-destructive/80">
-                {state.errorMessage || 'Unable to connect to the autosuite engine'}
+                {state.errorMessage || 'Unable to connect to the endstate engine'}
               </CardDescription>
             </div>
             <div className="flex gap-2">
@@ -1293,12 +1293,12 @@ function App() {
             {errorBanner}
             <PageHeader
               title="Settings"
-              subtitle="Configure autosuite engine and preferences"
+              subtitle="Configure endstate engine and preferences"
             />
             <Card>
               <CardHeader>
                 <CardTitle>Engine Configuration</CardTitle>
-                <CardDescription>Choose how to run the autosuite engine</CardDescription>
+                <CardDescription>Choose how to run the endstate engine</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -1309,7 +1309,7 @@ function App() {
                       onChange={() => updateSettings({ engineMode: 'path' })}
                       className="rounded"
                     />
-                    <span className="text-sm">Use autosuite from PATH</span>
+                    <span className="text-sm">Use endstate from PATH</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1318,7 +1318,7 @@ function App() {
                       onChange={() => updateSettings({ engineMode: 'script' })}
                       className="rounded"
                     />
-                    <span className="text-sm">Use autosuite script path</span>
+                    <span className="text-sm">Use endstate script path</span>
                   </label>
                 </div>
 
@@ -1329,7 +1329,7 @@ function App() {
                       type="text"
                       value={settings.engineScriptPath}
                       onChange={(e) => updateSettings({ engineScriptPath: e.target.value })}
-                      placeholder="C:\path\to\autosuite.ps1"
+                      placeholder="C:\path\to\endstate.ps1"
                     />
                   </div>
                 )}
@@ -1340,10 +1340,10 @@ function App() {
                     type="text"
                     value={settings.customProfilesDirectory}
                     onChange={(e) => updateSettings({ customProfilesDirectory: e.target.value })}
-                    placeholder="Leave empty to use default: Documents\Autosuite\Setups"
+                    placeholder="Leave empty to use default: Documents\Endstate\Setups"
                   />
                   <p className="text-xs text-muted-foreground">
-                    By default, setups are stored in Documents\Autosuite\Setups
+                    By default, setups are stored in Documents\Endstate\Setups
                   </p>
                 </div>
 

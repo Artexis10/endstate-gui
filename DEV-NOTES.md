@@ -1,34 +1,34 @@
-# Autosuite GUI - Development Notes
+# Endstate GUI - Development Notes
 
 ## Architecture
 
-The GUI is a **dumb renderer** that spawns autosuite CLI and parses JSON from STDOUT. All business logic lives in autosuite.
+The GUI is a **dumb renderer** that spawns endstate CLI and parses JSON from STDOUT. All business logic lives in endstate.
 
 ## Commands Invoked
 
-The GUI runs these autosuite commands with `--json` flag:
+The GUI runs these endstate commands with `--json` flag:
 
-1. **`autosuite capabilities --json`** - Startup probe to check engine availability
-2. **`autosuite report --json`** - Get history/state information
-3. **`autosuite verify --manifest <path> --json`** - Check machine status ("Check setup" button)
-4. **`autosuite apply --manifest <path> --json [--dry-run]`** - Apply configuration ("Set up my machine" button)
+1. **`endstate capabilities --json`** - Startup probe to check engine availability
+2. **`endstate report --json`** - Get history/state information
+3. **`endstate verify --manifest <path> --json`** - Check machine status ("Check setup" button)
+4. **`endstate apply --manifest <path> --json [--dry-run]`** - Apply configuration ("Set up my machine" button)
 
 ### Execution Modes
 
 **Mode 1: PATH (preferred)**
-- Command: `autosuite <command> --json <args>`
-- Requires autosuite to be on system PATH
+- Command: `endstate <command> --json <args>`
+- Requires endstate to be on system PATH
 
 **Mode 2: Script Path**
 - Command: `pwsh -NoProfile -ExecutionPolicy Bypass -File <script.ps1> <command> --json <args>`
-- Uses absolute path to autosuite.ps1
-- Default: `C:\Users\win-laptop\Desktop\projects\autosuite\autosuite.ps1`
+- Uses absolute path to endstate.ps1
+- Default: `C:\Users\win-laptop\Desktop\projects\endstate\endstate.ps1`
 
 ## STDOUT Parsing Contract
 
 - GUI expects **pure JSON** on STDOUT
 - If STDOUT is not valid JSON, GUI shows blocking error state
-- All commands return `AutosuiteEnvelope<T>` structure:
+- All commands return `EndstateEnvelope<T>` structure:
   ```typescript
   {
     schemaVersion: string;
@@ -38,14 +38,14 @@ The GUI runs these autosuite commands with `--json` flag:
     timestampUtc: string;
     success: boolean;
     data: T;
-    error: AutosuiteError | null;
+    error: EndstateError | null;
   }
   ```
 
 ## Error Handling
 
 - **Blocking error screen** shown when:
-  - autosuite CLI cannot be spawned
+  - endstate CLI cannot be spawned
   - STDOUT is not valid JSON
   - capabilities command fails
 - Error screen displays:
@@ -59,7 +59,7 @@ The GUI runs these autosuite commands with `--json` flag:
 ### Home/Overview Screen
 
 Three cards:
-1. **Autosuite engine** - CLI version, schema version, status
+1. **Endstate engine** - CLI version, schema version, status
 2. **Machine status** - Results from verify (ok/missing/mismatch counts)
 3. **Last run / history** - Last applied/verify timestamps
 
@@ -78,7 +78,7 @@ Each card has expandable "View details (JSON)" section showing raw envelope.
 
 ## Settings Storage
 
-Settings are persisted in **localStorage** under key `autosuite-gui-settings`:
+Settings are persisted in **localStorage** under key `endstate-gui-settings`:
 
 ```typescript
 {
@@ -136,10 +136,10 @@ Settings are persisted in **localStorage** under key `autosuite-gui-settings`:
 - `src/streaming-runner.ts` - Streaming execution with live event handling
 
 **Modified:**
-- `src/types.ts` - TypeScript types for autosuite envelopes
+- `src/types.ts` - TypeScript types for endstate envelopes
 - `src/App.tsx` - Complete UI with settings modal, profile dropdown, streaming logs, recovery controls, preflight validation
 - `src/App.css` - Styling for all components including validation states and error actions
-- `src-tauri/src/lib.rs` - Added `list_manifest_files`, `run_autosuite_streaming`, and `check_file_exists` commands
+- `src-tauri/src/lib.rs` - Added `list_manifest_files`, `run_endstate_streaming`, and `check_file_exists` commands
 
 ## User-Facing Language
 
@@ -171,11 +171,11 @@ Technical details remain accessible via expandable JSON sections.
 **Blocking Error Screen** provides three recovery options:
 
 1. **Open Settings** - Opens settings modal to reconfigure engine
-2. **Reset Settings** - Clears localStorage key `autosuite-gui-settings` and reloads with defaults
+2. **Reset Settings** - Clears localStorage key `endstate-gui-settings` and reloads with defaults
 3. **Retry** - Attempts startup probe again with current settings
 
 **Reset Settings behavior:**
-- Removes `autosuite-gui-settings` from localStorage
+- Removes `endstate-gui-settings` from localStorage
 - Reloads default settings (script mode with default path)
 - Clears selected profile and discovered profiles
 - Immediately runs startup probe (capabilities + report)
@@ -193,7 +193,7 @@ Technical details remain accessible via expandable JSON sections.
 - Save button disabled until validation passes
 
 **PATH Mode:**
-- Runs preflight probe: `autosuite capabilities --json`
+- Runs preflight probe: `endstate capabilities --json`
 - Shows inline status: "Found" (green) or "Not found on PATH" (red)
 - Save button disabled until probe succeeds
 

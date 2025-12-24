@@ -1,6 +1,6 @@
 # Test Utilities
 
-This directory contains reusable test utilities for React Testing Library + Vitest testing in autosuite-gui.
+This directory contains reusable test utilities for React Testing Library + Vitest testing in endstate-gui.
 
 ## Files
 

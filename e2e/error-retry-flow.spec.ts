@@ -25,8 +25,8 @@ test.describe('Error Retry Flow - UX Contracts', () => {
         }
       };
       
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
           }
@@ -144,7 +144,7 @@ test.describe('Error Retry Flow - UX Contracts', () => {
     // Verify localStorage has the selection
     const hasProfile = await page.evaluate(() => {
       const keys = Object.keys(localStorage);
-      const settingsKey = keys.find(k => k.includes('autosuite-gui-settings'));
+      const settingsKey = keys.find(k => k.includes('endstate-gui-settings'));
       if (!settingsKey) return false;
       const settings = JSON.parse(localStorage.getItem(settingsKey) || '{}');
       return settings.lastSelectedProfile === 'test-profile';

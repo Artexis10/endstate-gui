@@ -1,4 +1,4 @@
-export interface AutosuiteEnvelope<T = unknown> {
+export interface EndstateEnvelope<T = unknown> {
   schemaVersion: string;
   cliVersion: string;
   command: string;
@@ -6,10 +6,10 @@ export interface AutosuiteEnvelope<T = unknown> {
   timestampUtc: string;
   success: boolean;
   data: T;
-  error: AutosuiteError | null;
+  error: EndstateError | null;
 }
 
-export interface AutosuiteError {
+export interface EndstateError {
   code: string;
   message: string;
   detail?: Record<string, unknown>;
@@ -17,7 +17,7 @@ export interface AutosuiteError {
   docsKey?: string;
 }
 
-export interface AutosuiteCapabilitiesData {
+export interface EndstateCapabilitiesData {
   supportedSchemaVersions?: {
     min: string;
     max: string;
@@ -44,7 +44,7 @@ export interface VerifyItem {
   constraint?: string;
 }
 
-export interface AutosuiteVerifyData {
+export interface EndstateVerifyData {
   manifestPath?: string;
   okCount?: number;
   missingCount?: number;
@@ -60,7 +60,7 @@ export interface AutosuiteVerifyData {
   items?: VerifyItem[];
 }
 
-export interface AutosuiteReportData {
+export interface EndstateReportData {
   hasState?: boolean;
   lastApplied?: {
     timestamp: string;
@@ -91,7 +91,7 @@ export interface AutosuiteReportData {
   }>;
 }
 
-export interface AutosuiteApplyData {
+export interface EndstateApplyData {
   dryRun?: boolean;
   manifest?: {
     path: string;
@@ -129,7 +129,7 @@ export interface CaptureCounts {
   sensitiveExcludedCount: number;
 }
 
-export interface AutosuiteCaptureData {
+export interface EndstateCaptureData {
   outputPath?: string;
   sanitized?: boolean;
   isExample?: boolean;
@@ -153,7 +153,7 @@ export interface ApplyCounts {
   failed: number;
 }
 
-export interface AutosuiteApplyResultData {
+export interface EndstateApplyResultData {
   manifestPath?: string;
   installed?: number;
   upgraded?: number;

@@ -44,9 +44,9 @@ function getNamespacedKey(key: string): string {
  * Known storage keys for migration and cleanup
  */
 export const KNOWN_KEYS = [
-  'autosuite-gui-settings',
-  'autosuite-last-run',
-  'autosuite-show-technical-logs',
+  'endstate-gui-settings',
+  'endstate-last-run',
+  'endstate-show-technical-logs',
 ] as const;
 
 /**

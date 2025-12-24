@@ -1,5 +1,5 @@
 /**
- * Parser for Autosuite capture output logs
+ * Parser for Endstate capture output logs
  * Extracts counts, progress, and metadata from streaming log output
  */
 

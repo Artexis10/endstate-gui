@@ -35,18 +35,18 @@ describe('parseCaptureOutput', () => {
     it('should extract outputPath from JSON envelope', () => {
       const logs = `
 Capture complete!
-{"schemaVersion":"1.0","cliVersion":"0.0.0-dev+702adc6","command":"capture","timestampUtc":"2025-12-22T21:03:34.5380554Z","success":true,"data":{"isExample":null,"sanitized":false,"outputPath":"C:\\\\Users\\\\win-laptop\\\\Documents\\\\Autosuite\\\\Setups\\\\setup_2025-12-22_21-03-31.jsonc"},"error":null}
+{"schemaVersion":"1.0","cliVersion":"0.0.0-dev+702adc6","command":"capture","timestampUtc":"2025-12-22T21:03:34.5380554Z","success":true,"data":{"isExample":null,"sanitized":false,"outputPath":"C:\\\\Users\\\\win-laptop\\\\Documents\\\\Aendstate\\\\Setups\\\\setup_2025-12-22_21-03-31.jsonc"},"error":null}
       `;
       const result = parseCaptureOutput(logs);
       
-      expect(result.outputPath).toBe('C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc');
+      expect(result.outputPath).toBe('C:\\Users\\win-laptop\\Documents\\Aendstate\\Setups\\setup_2025-12-22_21-03-31.jsonc');
     });
 
     it('should extract outputPath from "Manifest saved:" line', () => {
-      const logs = '[OK]     Manifest saved: C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc';
+      const logs = '[OK]     Manifest saved: C:\\Users\\win-laptop\\Documents\\Aendstate\\Setups\\setup_2025-12-22_21-03-31.jsonc';
       const result = parseCaptureOutput(logs);
       
-      expect(result.outputPath).toBe('C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc');
+      expect(result.outputPath).toBe('C:\\Users\\win-laptop\\Documents\\Aendstate\\Setups\\setup_2025-12-22_21-03-31.jsonc');
     });
 
     it('should prefer JSON envelope over manifest saved line', () => {
@@ -169,17 +169,17 @@ Capture complete!
 [OK] Discord.Discord (driver: winget)
 [OK] Google.Chrome (driver: winget)
 [SKIP] Old.App (driver: chocolatey)
-[OK]     Manifest saved: C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc
+[OK]     Manifest saved: C:\\Users\\win-laptop\\Documents\\Aendstate\\Setups\\setup_2025-12-22_21-03-31.jsonc
 Summary: 62 succeeded, 8 skipped, 0 failed
 Capture complete!
-{"schemaVersion":"1.0","cliVersion":"0.0.0-dev+702adc6","command":"capture","timestampUtc":"2025-12-22T21:03:34.5380554Z","success":true,"data":{"isExample":null,"sanitized":false,"outputPath":"C:\\\\Users\\\\win-laptop\\\\Documents\\\\Autosuite\\\\Setups\\\\setup_2025-12-22_21-03-31.jsonc"},"error":null}
+{"schemaVersion":"1.0","cliVersion":"0.0.0-dev+702adc6","command":"capture","timestampUtc":"2025-12-22T21:03:34.5380554Z","success":true,"data":{"isExample":null,"sanitized":false,"outputPath":"C:\\\\Users\\\\win-laptop\\\\Documents\\\\Aendstate\\\\Setups\\\\setup_2025-12-22_21-03-31.jsonc"},"error":null}
       `;
       const result = parseCaptureOutput(logs);
       
       expect(result.succeeded).toBe(62);
       expect(result.skipped).toBe(8);
       expect(result.failed).toBe(0);
-      expect(result.outputPath).toBe('C:\\Users\\win-laptop\\Documents\\Autosuite\\Setups\\setup_2025-12-22_21-03-31.jsonc');
+      expect(result.outputPath).toBe('C:\\Users\\win-laptop\\Documents\\Aendstate\\Setups\\setup_2025-12-22_21-03-31.jsonc');
       expect(result.apps).toHaveLength(3);
       expect(result.lastProcessedApp).toBe('Old.App');
       expect(result.processedCount).toBe(3);

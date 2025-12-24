@@ -1,11 +1,11 @@
-# Autosuite UX–Engine Contract
+# Endstate UX–Engine Contract
 
 This document defines the binding contract between:
 - User Experience (GUI)
 - Engine behavior
 - CLI capabilities
 
-Its purpose is to ensure Autosuite remains coherent, inspectable,
+Its purpose is to ensure Endstate remains coherent, inspectable,
 and predictable across interfaces.
 
 If GUI and CLI behavior diverge, the system is broken.
@@ -38,8 +38,8 @@ No exceptions.
 ### CLI
 
 ~~~bash
-autosuite capture --profile "My Setup"
-autosuite apply --profile "My Setup"
+endstate capture --profile "My Setup"
+endstate apply --profile "My Setup"
 ~~~
 
 ---
@@ -54,13 +54,13 @@ autosuite apply --profile "My Setup"
 ### Engine
 Profiles are stored under:
 
-Documents/Autosuite/Profiles
+Documents/Endstate/Profiles
 
 ### CLI
 
 ~~~bash
-autosuite profiles list
-autosuite profiles path "My Setup"
+endstate profiles list
+endstate profiles path "My Setup"
 ~~~
 
 ---
@@ -80,7 +80,7 @@ autosuite profiles path "My Setup"
 ### CLI
 
 ~~~bash
-autosuite capture --include-config vscode,git
+endstate capture --include-config vscode,git
 ~~~
 
 No flag means install-only.
@@ -119,7 +119,7 @@ It never unlocks unsafe behavior.
 ### CLI
 
 ~~~bash
-autosuite validate profile
+endstate validate profile
 ~~~
 
 Blocked behavior cannot be overridden.
@@ -140,8 +140,8 @@ Blocked behavior cannot be overridden.
 ### CLI
 
 ~~~bash
-autosuite apply --profile "My Setup"
-autosuite verify --profile "My Setup"
+endstate apply --profile "My Setup"
+endstate verify --profile "My Setup"
 ~~~
 
 ---
@@ -170,7 +170,7 @@ The following are bugs:
 
 ## Final Intent
 
-Autosuite is a transparent system.
+Endstate is a transparent system.
 
 Users should always be able to:
 - understand what will happen

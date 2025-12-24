@@ -1,8 +1,8 @@
-# Autosuite GUI - Testing Strategy
+# Endstate GUI - Testing Strategy
 
 ## Overview
 
-The GUI test suite validates that the application remains "dumb" - it only discovers files, spawns autosuite, parses JSON, and renders. No business logic is implemented in the GUI.
+The GUI test suite validates that the application remains "dumb" - it only discovers files, spawns endstate, parses JSON, and renders. No business logic is implemented in the GUI.
 
 ## Quick Start
 
@@ -51,20 +51,20 @@ npm test && npm run test:e2e
 **Command:** `npm run test:contract`
 
 **Coverage:**
-- `autosuite capabilities --json` - validates envelope structure
-- `autosuite report --json` - validates envelope structure
-- `autosuite verify --profile Missing --json` - validates error handling
-- `autosuite apply --profile Missing --dry-run --json` - validates error handling
+- `endstate capabilities --json` - validates envelope structure
+- `endstate report --json` - validates envelope structure
+- `endstate verify --profile Missing --json` - validates error handling
+- `endstate apply --profile Missing --dry-run --json` - validates error handling
 
 **Characteristics:**
-- Spawns real autosuite CLI using same method as GUI (pwsh -File)
+- Spawns real endstate CLI using same method as GUI (pwsh -File)
 - Captures stdout/stderr
 - Validates JSON envelope structure
-- Skips gracefully if autosuite not found at expected path
+- Skips gracefully if endstate not found at expected path
 - No state changes (uses Missing profile or dry-run)
 
 **What it validates:**
-- Autosuite CLI is accessible and executable
+- Endstate CLI is accessible and executable
 - All commands return valid JSON envelopes on stdout
 - Envelope structure matches contract (schemaVersion, cliVersion, command, success, data, error)
 - Error envelopes contain structured error objects
@@ -105,7 +105,7 @@ npm test && npm run test:e2e
 npm test
 npm run test:unit
 
-# Contract integration tests (requires autosuite)
+# Contract integration tests (requires endstate)
 npm run test:contract
 
 # E2E smoke test (requires built Tauri app)
@@ -118,7 +118,7 @@ npm test && npm run test:contract && npm run test:e2e
 ## Test Philosophy
 
 1. **GUI stays dumb** - Tests validate the GUI doesn't implement business logic
-2. **Autosuite is the authority** - Contract tests treat autosuite as black box
+2. **Endstate is the authority** - Contract tests treat endstate as black box
 3. **Deterministic** - No flaky timing, no network calls, no random data
 4. **Fast feedback** - Unit tests run in < 2 seconds
 5. **Minimal E2E** - E2E tests cover critical user flows and contracts
@@ -145,7 +145,7 @@ This philosophy ensures the UI remains predictable and prevents recurring regres
 
 ## What Tests DON'T Cover
 
-- Autosuite business logic (tested in autosuite repo)
+- Endstate business logic (tested in endstate repo)
 - Complex UI interactions (not needed for dumb renderer)
 - Error recovery flows (validated by contract tests)
 - Performance/load testing

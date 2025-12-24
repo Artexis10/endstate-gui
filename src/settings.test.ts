@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { loadSettings, saveSettings, AppSettings } from './settings';
 
 // Unit tests run in happy-dom (not Tauri), so storage uses "web" namespace
-const NAMESPACED_KEY = 'web:autosuite-gui-settings';
-const LEGACY_KEY = 'autosuite-gui-settings';
+const NAMESPACED_KEY = 'web:endstate-gui-settings';
+const LEGACY_KEY = 'endstate-gui-settings';
 
 describe('settings', () => {
   beforeEach(() => {
@@ -16,7 +16,7 @@ describe('settings', () => {
       const settings = loadSettings();
       
       expect(settings.engineMode).toBe('script');
-      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\autosuite\\autosuite.ps1');
+      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1');
       expect(settings.customProfilesDirectory).toBe('');
       expect(settings.lastSelectedProfile).toBe('');
       expect(settings.dryRunEnabled).toBe(true);

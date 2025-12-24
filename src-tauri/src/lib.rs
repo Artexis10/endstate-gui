@@ -1,6 +1,6 @@
-//! Autosuite GUI - Tauri Backend
+//! Endstate GUI - Tauri Backend
 //!
-//! This module provides the Rust backend for Autosuite GUI, handling CLI execution
+//! This module provides the Rust backend for Endstate GUI, handling CLI execution
 //! via std::process::Command and exposing results to the frontend via Tauri commands.
 
 mod engine_adapter;
@@ -43,37 +43,37 @@ impl From<std::io::Error> for ExecError {
     }
 }
 
-/// Execute the Autosuite CLI with the given arguments.
+/// Execute the Endstate CLI with the given arguments.
 ///
-/// This command invokes `autosuite` from PATH with the provided arguments,
+/// This command invokes `endstate` from PATH with the provided arguments,
 /// captures stdout, stderr, and exit code, and returns them to the frontend.
 ///
 /// # Arguments
-/// * `args` - Command line arguments to pass to autosuite CLI
+/// * `args` - Command line arguments to pass to endstate CLI
 ///
 /// # Returns
 /// * `Ok(ExecResult)` - Execution completed (check exit_code for success)
 /// * `Err(ExecError)` - Execution failed to start (e.g., CLI not found)
 #[tauri::command]
-fn autosuite_exec(args: Vec<String>) -> Result<ExecResult, ExecError> {
-    let autosuite_path = std::env::var("AUTOSUITE_PATH")
+fn endstate_exec(args: Vec<String>) -> Result<ExecResult, ExecError> {
+    let endstate_path = std::env::var("ENDSTATE_PATH")
         .unwrap_or_else(|_| {
             if cfg!(windows) {
-                "C:\\Users\\win-laptop\\Desktop\\projects\\autosuite\\autosuite.ps1".to_string()
+                "C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1".to_string()
             } else {
-                "autosuite".to_string()
+                "endstate".to_string()
             }
         });
 
-    let output = if cfg!(windows) && autosuite_path.ends_with(".ps1") {
+    let output = if cfg!(windows) && endstate_path.ends_with(".ps1") {
         Command::new("pwsh")
             .arg("-NoProfile")
             .arg("-File")
-            .arg(&autosuite_path)
+            .arg(&endstate_path)
             .args(&args)
             .output()?
     } else {
-        Command::new(&autosuite_path)
+        Command::new(&endstate_path)
             .args(&args)
             .output()?
     };
@@ -89,10 +89,10 @@ fn autosuite_exec(args: Vec<String>) -> Result<ExecResult, ExecError> {
     })
 }
 
-/// Run the Autosuite CLI with streaming NDJSON output.
+/// Run the Endstate CLI with streaming NDJSON output.
 ///
 /// This command spawns the CLI process and streams events to the frontend
-/// via the "autosuite://event" channel. Each line of output is parsed:
+/// via the "endstate://event" channel. Each line of output is parsed:
 /// - Valid JSON is emitted with runId injected
 /// - Plain text from stdout becomes {"type":"log","level":"info","message":"...","runId":"..."}
 /// - Plain text from stderr becomes {"type":"log","level":"error","message":"...","runId":"..."}
@@ -105,7 +105,7 @@ fn autosuite_exec(args: Vec<String>) -> Result<ExecResult, ExecError> {
 ///
 /// # Arguments
 /// * `app` - Tauri app handle for emitting events
-/// * `exe` - Path to the executable (typically "autosuite")
+/// * `exe` - Path to the executable (typically "endstate")
 /// * `args` - Command line arguments to pass to the CLI
 /// * `run_state` - Shared state for tracking the running process
 ///
@@ -187,7 +187,7 @@ fn check_file_exists(path: String) -> Result<bool, String> {
 
 /// Get the default profiles directory path.
 ///
-/// Returns %USERPROFILE%\Documents\Autosuite\Setups on Windows.
+/// Returns %USERPROFILE%\Documents\Endstate\Setups on Windows.
 /// Creates the directory if it doesn't exist.
 ///
 /// # Returns
@@ -198,7 +198,7 @@ fn get_default_profiles_directory() -> Result<String, String> {
     let home_dir = dirs::document_dir()
         .ok_or_else(|| "Failed to determine Documents directory".to_string())?;
     
-    let profiles_dir = home_dir.join("Autosuite").join("Setups");
+    let profiles_dir = home_dir.join("Endstate").join("Setups");
     
     fs::create_dir_all(&profiles_dir)
         .map_err(|e| format!("Failed to create setups directory: {}", e))?;
@@ -335,7 +335,7 @@ fn list_manifest_files(directory: String) -> Result<Vec<String>, String> {
     Ok(manifest_files)
 }
 
-/// Run autosuite with streaming output.
+/// Run endstate with streaming output.
 ///
 /// Spawns the process and emits events to the specified channel:
 /// - {"type": "stdout", "data": "..."}
@@ -352,7 +352,7 @@ fn list_manifest_files(directory: String) -> Result<Vec<String>, String> {
 /// * `Ok(())` - Process completed
 /// * `Err(String)` - Failed to start process
 #[tauri::command]
-async fn run_autosuite_streaming(
+async fn run_endstate_streaming(
     app: AppHandle,
     exe: String,
     args: Vec<String>,
@@ -426,13 +426,13 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(create_run_state())
         .invoke_handler(tauri::generate_handler![
-            autosuite_exec,
+            endstate_exec,
             engine_run,
             engine_cancel,
             engine_is_running,
             engine_get_run_id,
             list_manifest_files,
-            run_autosuite_streaming,
+            run_endstate_streaming,
             check_file_exists,
             get_default_profiles_directory,
             ensure_dir,

@@ -1,6 +1,6 @@
 //! Engine Adapter Module
 //!
-//! This module provides the streaming interface between Autosuite CLI and the GUI.
+//! This module provides the streaming interface between Endstate CLI and the GUI.
 //! It spawns the CLI process, reads stdout/stderr concurrently, and emits NDJSON
 //! events to the frontend via Tauri events.
 //!
@@ -21,7 +21,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 /// Event channel name for all engine events
-pub const EVENT_CHANNEL: &str = "autosuite://event";
+pub const EVENT_CHANNEL: &str = "endstate://event";
 
 /// Shared state for the currently running engine process
 pub struct RunState {
@@ -83,7 +83,7 @@ impl From<std::io::Error> for EngineError {
         };
         EngineError {
             code: code.to_string(),
-            message: format!("Failed to execute autosuite: {}", err),
+            message: format!("Failed to execute endstate: {}", err),
         }
     }
 }
@@ -195,7 +195,7 @@ fn extract_command_name(args: &[String]) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-/// Spawn the autosuite CLI and stream events to the frontend.
+/// Spawn the endstate CLI and stream events to the frontend.
 ///
 /// This function:
 /// 1. Checks if another run is active (returns error if so)
@@ -208,7 +208,7 @@ fn extract_command_name(args: &[String]) -> String {
 ///
 /// # Arguments
 /// * `app` - Tauri app handle for emitting events
-/// * `exe` - Path to the executable (typically "autosuite")
+/// * `exe` - Path to the executable (typically "endstate")
 /// * `args` - Command line arguments
 /// * `run_state` - Shared state for tracking the running process
 ///

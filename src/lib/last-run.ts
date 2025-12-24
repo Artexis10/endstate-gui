@@ -31,13 +31,13 @@ export interface LastRunData {
 
 // Storage keys per command
 const STORAGE_KEYS: Record<LastRunCommand, string> = {
-  capture: 'autosuite-last-run-capture',
-  apply: 'autosuite-last-run-apply',
-  verify: 'autosuite-last-run-verify',
+  capture: 'endstate-last-run-capture',
+  apply: 'endstate-last-run-apply',
+  verify: 'endstate-last-run-verify',
 };
 
 // Legacy key for migration
-const LEGACY_STORAGE_KEY = 'autosuite-last-run';
+const LEGACY_STORAGE_KEY = 'endstate-last-run';
 
 /**
  * Save last run data for a specific command

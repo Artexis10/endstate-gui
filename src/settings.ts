@@ -9,11 +9,11 @@ export interface AppSettings {
   dryRunEnabled: boolean;
 }
 
-const SETTINGS_KEY = 'autosuite-gui-settings';
+const SETTINGS_KEY = 'endstate-gui-settings';
 
 const DEFAULT_SETTINGS: AppSettings = {
   engineMode: 'script',
-  engineScriptPath: 'C:\\Users\\win-laptop\\Desktop\\projects\\autosuite\\autosuite.ps1',
+  engineScriptPath: 'C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1',
   customProfilesDirectory: '',
   lastSelectedProfile: '',
   lastSelectedProfilePath: '',

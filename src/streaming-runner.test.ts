@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runAutosuiteStreaming } from './streaming-runner';
+import { runEndstateStreaming } from './streaming-runner';
 import { AppSettings } from './settings';
 import { invoke, listen } from './lib/tauri-bridge';
 
@@ -11,7 +11,7 @@ vi.mock('./lib/tauri-bridge', () => ({
 describe('streaming-runner', () => {
   const mockSettings: AppSettings = {
     engineMode: 'script',
-    engineScriptPath: 'C:\\test\\autosuite.ps1',
+    engineScriptPath: 'C:\\test\\endstate.ps1',
     customProfilesDirectory: '',
     lastSelectedProfile: '',
     lastSelectedProfilePath: '',
@@ -22,7 +22,7 @@ describe('streaming-runner', () => {
     vi.clearAllMocks();
   });
 
-  describe('runAutosuiteStreaming', () => {
+  describe('runEndstateStreaming', () => {
     it('parses valid JSON envelope from stdout', async () => {
       const mockEnvelope = {
         schemaVersion: '1.0',
@@ -50,7 +50,7 @@ describe('streaming-runner', () => {
       });
 
       const onEvent = vi.fn();
-      const result = await runAutosuiteStreaming(mockSettings, 'capabilities', [], onEvent);
+      const result = await runEndstateStreaming(mockSettings, 'capabilities', [], onEvent);
 
       expect(result.envelope).toEqual(mockEnvelope);
       expect(result.exitCode).toBe(0);
@@ -73,7 +73,7 @@ describe('streaming-runner', () => {
       });
 
       const onEvent = vi.fn();
-      const result = await runAutosuiteStreaming(mockSettings, 'test', [], onEvent);
+      const result = await runEndstateStreaming(mockSettings, 'test', [], onEvent);
 
       expect(result.envelope).toBeNull();
       expect(result.exitCode).toBe(1);
@@ -95,7 +95,7 @@ describe('streaming-runner', () => {
       });
 
       const onEvent = vi.fn();
-      const result = await runAutosuiteStreaming(mockSettings, 'test', [], onEvent);
+      const result = await runEndstateStreaming(mockSettings, 'test', [], onEvent);
 
       expect(result.envelope).toBeNull();
       expect(result.exitCode).toBe(0);
@@ -119,7 +119,7 @@ describe('streaming-runner', () => {
       });
 
       const onEvent = vi.fn();
-      const result = await runAutosuiteStreaming(mockSettings, 'test', [], onEvent);
+      const result = await runEndstateStreaming(mockSettings, 'test', [], onEvent);
 
       expect(result.stderr).toBe('Error message\n');
       expect(result.stdout).toBe('{"test": true}');
@@ -142,7 +142,7 @@ describe('streaming-runner', () => {
       });
 
       const onEvent = vi.fn();
-      await runAutosuiteStreaming(mockSettings, 'test', [], onEvent);
+      await runEndstateStreaming(mockSettings, 'test', [], onEvent);
 
       expect(onEvent).toHaveBeenCalledTimes(3);
       expect(onEvent).toHaveBeenCalledWith({ type: 'stdout', data: 'line1\n' });
@@ -169,12 +169,12 @@ describe('streaming-runner', () => {
         return true;
       });
 
-      await runAutosuiteStreaming(pathSettings, 'capabilities', [], vi.fn());
+      await runEndstateStreaming(pathSettings, 'capabilities', [], vi.fn());
 
       expect(invoke).toHaveBeenCalledWith(
-        'run_autosuite_streaming',
+        'run_endstate_streaming',
         expect.objectContaining({
-          exe: 'autosuite',
+          exe: 'endstate',
           args: ['capabilities', '--json'],
         })
       );
@@ -194,10 +194,10 @@ describe('streaming-runner', () => {
         return true;
       });
 
-      await runAutosuiteStreaming(mockSettings, 'verify', ['--profile', 'test.jsonc'], vi.fn());
+      await runEndstateStreaming(mockSettings, 'verify', ['--profile', 'test.jsonc'], vi.fn());
 
       expect(invoke).toHaveBeenCalledWith(
-        'run_autosuite_streaming',
+        'run_endstate_streaming',
         expect.objectContaining({
           exe: 'pwsh',
           args: [
@@ -205,7 +205,7 @@ describe('streaming-runner', () => {
             '-ExecutionPolicy',
             'Bypass',
             '-File',
-            'C:\\test\\autosuite.ps1',
+            'C:\\test\\endstate.ps1',
             'verify',
             '--json',
             '--profile',
@@ -229,10 +229,10 @@ describe('streaming-runner', () => {
         return true;
       });
 
-      await runAutosuiteStreaming(mockSettings, 'capture', ['--out', 'C:\\test\\dir'], vi.fn());
+      await runEndstateStreaming(mockSettings, 'capture', ['--out', 'C:\\test\\dir'], vi.fn());
 
       expect(invoke).toHaveBeenCalledWith(
-        'run_autosuite_streaming',
+        'run_endstate_streaming',
         expect.objectContaining({
           exe: 'pwsh',
           args: [
@@ -240,7 +240,7 @@ describe('streaming-runner', () => {
             '-ExecutionPolicy',
             'Bypass',
             '-File',
-            'C:\\test\\autosuite.ps1',
+            'C:\\test\\endstate.ps1',
             'capture',
             '--json',
             '--out',
@@ -266,7 +266,7 @@ describe('streaming-runner', () => {
       });
 
       const onEvent = vi.fn();
-      const result = await runAutosuiteStreaming(mockSettings, 'test', [], onEvent);
+      const result = await runEndstateStreaming(mockSettings, 'test', [], onEvent);
 
       expect(result.envelope).toBeNull();
       expect(result.stdout).toBe('{invalid json}');
@@ -293,7 +293,7 @@ describe('streaming-runner', () => {
       });
 
       const onEvent = vi.fn();
-      const result = await runAutosuiteStreaming(mockSettings, 'capture', ['--out', 'C:\\profiles\\setup.jsonc'], onEvent);
+      const result = await runEndstateStreaming(mockSettings, 'capture', ['--out', 'C:\\profiles\\setup.jsonc'], onEvent);
 
       expect(result.envelope).not.toBeNull();
       expect(result.envelope?.success).toBe(true);
@@ -328,7 +328,7 @@ describe('streaming-runner', () => {
       });
 
       const onEvent = vi.fn();
-      const result = await runAutosuiteStreaming(mockSettings, 'capture', ['--out', 'C:\\profiles\\setup.jsonc'], onEvent);
+      const result = await runEndstateStreaming(mockSettings, 'capture', ['--out', 'C:\\profiles\\setup.jsonc'], onEvent);
 
       expect(result.envelope).not.toBeNull();
       expect(result.envelope?.success).toBe(true);
@@ -351,7 +351,7 @@ describe('streaming-runner', () => {
       });
 
       const onEvent = vi.fn();
-      const result = await runAutosuiteStreaming(mockSettings, 'capture', ['--out', 'C:\\profiles\\setup.jsonc'], onEvent);
+      const result = await runEndstateStreaming(mockSettings, 'capture', ['--out', 'C:\\profiles\\setup.jsonc'], onEvent);
 
       expect(result.envelope).toBeNull();
       expect(result.exitCode).toBe(0);

@@ -1,7 +1,7 @@
-# Autosuite UX Guardrails
+# Endstate UX Guardrails
 
 This document defines behaviors, features, terminology, and UX patterns that  
-**Autosuite must never introduce**.
+**Endstate must never introduce**.
 
 These guardrails exist to prevent UX drift, accidental complexity,  
 semantic ambiguity, and unsafe automation as the project grows.
@@ -13,7 +13,7 @@ If a proposed change violates any rule in this document,
 
 ## Core Principle
 
-Autosuite optimizes for:
+Endstate optimizes for:
 
 - safety  
 - clarity  
@@ -30,7 +30,7 @@ Automation coverage is always secondary.
 
 ### ❌ Automatic Configuration Restore
 
-Autosuite must never:
+Endstate must never:
 
 - restore app settings without explicit user opt-in  
 - infer that a configuration “should” be restored  
@@ -42,7 +42,7 @@ Install-only is the default and must remain so.
 
 ### ❌ Secrets or Credentials Handling
 
-Autosuite must never:
+Endstate must never:
 
 - capture browser profiles  
 - restore authentication tokens  
@@ -58,7 +58,7 @@ There is no UI, CLI flag, or override for secrets.
 
 ### ❌ Hidden State
 
-Autosuite must never:
+Endstate must never:
 
 - store profiles in AppData  
 - maintain invisible internal state  
@@ -84,7 +84,7 @@ If explanation requires jargon, it belongs in **Advanced Mode** or documentation
 
 ### ❌ Treating Normal Outcomes as Errors
 
-Autosuite must never warn or error for:
+Endstate must never warn or error for:
 
 - install-only profiles  
 - apps without restorable configuration  
@@ -110,7 +110,7 @@ Advanced Mode is visibility, not authority.
 
 ### ❌ GUI–CLI Divergence
 
-Autosuite must never:
+Endstate must never:
 
 - allow the GUI to do something the CLI cannot  
 - produce artifacts the CLI cannot reproduce  
@@ -124,7 +124,7 @@ The CLI remains the source of truth.
 
 ### ❌ Ambiguous Status Language
 
-Autosuite must never:
+Endstate must never:
 
 - overload a single status to mean multiple things  
 - conflate *skipped*, *already installed*, and *no-op*  
@@ -136,7 +136,7 @@ Each outcome must map to **one semantic meaning**.
 
 ### ❌ Collapsing Preview and Execution Semantics
 
-Autosuite must never:
+Endstate must never:
 
 - treat preview (dry-run) output as execution results  
 - mark “would install” as “installed”  
@@ -148,7 +148,7 @@ Preview must always be explicitly hypothetical.
 
 ### ❌ Multiple Sources of Truth
 
-Autosuite must never:
+Endstate must never:
 
 - compute counts differently across UI components  
 - infer state from logs instead of structured envelopes  
@@ -160,7 +160,7 @@ All state must come from **engine envelopes**.
 
 ### ❌ Silent Re-Execution
 
-Autosuite must never:
+Endstate must never:
 
 - re-run Apply implicitly after preview  
 - auto-trigger installs after modal confirmation  
@@ -227,9 +227,9 @@ If **yes** to any → redesign required.
 
 ## Long-Term Intent
 
-Autosuite is **not** a data migration tool.  
-Autosuite is **not** a personalization sync tool.
+Endstate is **not** a data migration tool.  
+Endstate is **not** a personalization sync tool.
 
-Autosuite is a **machine provisioning and hydration system**.
+Endstate is a **machine provisioning and hydration system**.
 
 Trust is the product.

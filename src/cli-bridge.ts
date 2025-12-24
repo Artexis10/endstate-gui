@@ -1,8 +1,8 @@
 /**
- * Autosuite CLI Bridge
+ * Endstate CLI Bridge
  * 
- * This module provides the platform-agnostic interface between Autosuite GUI
- * and the Autosuite CLI. All CLI interactions go through this bridge to ensure
+ * This module provides the platform-agnostic interface between Endstate GUI
+ * and the Endstate CLI. All CLI interactions go through this bridge to ensure
  * proper versioning and compatibility checks.
  * 
  * Execution Model:
@@ -12,7 +12,7 @@
  * This module defines types and validation only. Platform-specific execution
  * must be implemented by the runtime layer.
  * 
- * @see docs/cli-json-contract.md in the autosuite repository for the full contract.
+ * @see docs/cli-json-contract.md in the endstate repository for the full contract.
  * @see .windsurf/rules/project-ruleset.md for authoritative contract rules.
  */
 
@@ -22,7 +22,7 @@ const MIN_SCHEMA_VERSION = '1.0';
 const MAX_SCHEMA_VERSION = '1.0';
 
 /**
- * Standard JSON envelope returned by all Autosuite CLI commands with --json flag.
+ * Standard JSON envelope returned by all Endstate CLI commands with --json flag.
  */
 export interface CliEnvelope<T = unknown> {
   schemaVersion: string;
@@ -47,7 +47,7 @@ export interface CliError {
 }
 
 /**
- * Capabilities data returned by `autosuite capabilities --json`.
+ * Capabilities data returned by `endstate capabilities --json`.
  */
 export interface CapabilitiesData {
   supportedSchemaVersions: {
@@ -156,8 +156,8 @@ export class SchemaIncompatibleError extends Error {
     public readonly requiredSchemaVersion: string
   ) {
     super(
-      `Autosuite CLI (v${cliVersion}, schema ${cliSchemaVersion}) is not compatible ` +
-      `with this version of Autosuite GUI (requires schema ${requiredSchemaVersion}).`
+      `Endstate CLI (v${cliVersion}, schema ${cliSchemaVersion}) is not compatible ` +
+      `with this version of Endstate GUI (requires schema ${requiredSchemaVersion}).`
     );
     this.name = 'SchemaIncompatibleError';
   }
@@ -169,8 +169,8 @@ export class SchemaIncompatibleError extends Error {
 export class CliNotFoundError extends Error {
   constructor(public readonly searchPath: string) {
     super(
-      `Autosuite CLI not found. Searched in: ${searchPath}. ` +
-      `Please ensure Autosuite is installed and available on PATH.`
+      `Endstate CLI not found. Searched in: ${searchPath}. ` +
+      `Please ensure Endstate is installed and available on PATH.`
     );
     this.name = 'CliNotFoundError';
   }
@@ -243,7 +243,7 @@ export function parseCliOutput<T>(jsonOutput: string): CliEnvelope<T> {
 }
 
 /**
- * CLI Bridge class for interacting with Autosuite CLI.
+ * CLI Bridge class for interacting with Endstate CLI.
  * 
  * Usage:
  * ```typescript
@@ -253,7 +253,7 @@ export function parseCliOutput<T>(jsonOutput: string): CliEnvelope<T> {
  * ```
  */
 export class CliBridge {
-  private _cliPath: string = 'autosuite'; // Default: resolve from PATH
+  private _cliPath: string = 'endstate'; // Default: resolve from PATH
   private capabilities: CapabilitiesData | null = null;
   private cliVersion: string | null = null;
   private schemaVersion: string | null = null;
@@ -383,12 +383,12 @@ export class CliBridge {
  */
 export function formatIncompatibilityError(error: SchemaIncompatibleError): string {
   return `
-Autosuite CLI Incompatible
+Endstate CLI Incompatible
 
-The installed Autosuite CLI (v${error.cliVersion}, schema ${error.cliSchemaVersion}) 
-is not compatible with this version of Autosuite GUI (requires schema ${error.requiredSchemaVersion}).
+The installed Endstate CLI (v${error.cliVersion}, schema ${error.cliSchemaVersion}) 
+is not compatible with this version of Endstate GUI (requires schema ${error.requiredSchemaVersion}).
 
-Please update Autosuite CLI or use a compatible GUI version.
+Please update Endstate CLI or use a compatible GUI version.
 `.trim();
 }
 

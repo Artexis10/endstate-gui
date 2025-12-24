@@ -331,7 +331,7 @@ describe('apply-utils', () => {
     it('returns null for non-progress lines', () => {
       expect(parseApplyProgressLine('')).toBeNull();
       expect(parseApplyProgressLine('Some random log line')).toBeNull();
-      expect(parseApplyProgressLine('[autosuite] Apply: starting')).toBeNull();
+      expect(parseApplyProgressLine('[endstate] Apply: starting')).toBeNull();
     });
 
     it('handles null/undefined input', () => {

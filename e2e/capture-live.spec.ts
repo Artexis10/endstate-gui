@@ -17,8 +17,8 @@ test.describe('Capture Live Progress', () => {
       };
       
       // Mock engine with streaming capture
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
           }

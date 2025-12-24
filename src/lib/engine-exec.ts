@@ -11,7 +11,7 @@ import { AppSettings } from '../settings';
 export type EngineErrorKind = 
   | 'engine_unavailable_web'  // Running in web mode without mock
   | 'command_failed'          // Command executed but failed (non-zero exit, parse error)
-  | 'command_not_found'       // autosuite binary not found
+  | 'command_not_found'       // endstate binary not found
   | 'invoke_failed'           // Tauri invoke failed
   | 'verify_failed';          // Domain failure: verify found missing apps/mismatches (not a runtime error)
 
@@ -64,32 +64,32 @@ const MOCK_CAPABILITIES = {
  */
 function hasMockEngine(): boolean {
   if (typeof window === 'undefined') return false;
-  return !!(window as any).__AUTOSUITE_MOCK_ENGINE__;
+  return !!(window as any).__ENDSTATE_MOCK_ENGINE__;
 }
 
 /**
- * Run an autosuite command once (non-streaming).
+ * Run an endstate command once (non-streaming).
  * 
- * In Tauri runtime: executes via autosuite_exec command
+ * In Tauri runtime: executes via endstate_exec command
  * In web runtime with mock: returns mock response
  * In web runtime without mock: returns typed error
  */
-export async function runAutosuiteOnce<T>(
+export async function runEndstateOnce<T>(
   settings: AppSettings,
   command: string,
   args: string[] = []
 ): Promise<EngineExecResult<T>> {
   const fullArgs = [command, '--json', ...args];
-  const commandStr = `autosuite ${fullArgs.join(' ')}`;
+  const commandStr = `endstate ${fullArgs.join(' ')}`;
   
   // Check if we're in web mode
   if (!isTauriRuntime()) {
     // Web mode - check for mock
     if (hasMockEngine()) {
       // Use mock engine
-      const mockEngine = (window as any).__AUTOSUITE_MOCK_ENGINE__;
-      if (mockEngine.runAutosuiteOnce) {
-        return mockEngine.runAutosuiteOnce(settings, command, args);
+      const mockEngine = (window as any).__ENDSTATE_MOCK_ENGINE__;
+      if (mockEngine.runEndstateOnce) {
+        return mockEngine.runEndstateOnce(settings, command, args);
       }
       // Fallback: return mock capabilities for capabilities command
       if (command === 'capabilities') {
@@ -114,7 +114,7 @@ export async function runAutosuiteOnce<T>(
     };
   }
   
-  // Tauri runtime - execute via autosuite_exec
+  // Tauri runtime - execute via endstate_exec
   // The backend handles exe selection based on platform
   let execArgs: string[];
   
@@ -132,7 +132,7 @@ export async function runAutosuiteOnce<T>(
   }
   
   try {
-    const result = await invoke<ExecResult>('autosuite_exec', {
+    const result = await invoke<ExecResult>('endstate_exec', {
       args: execArgs,
     });
     
@@ -147,7 +147,7 @@ export async function runAutosuiteOnce<T>(
           success: false,
           error: {
             kind: 'command_not_found',
-            message: 'autosuite command not found. Check that it is installed and in PATH.',
+            message: 'endstate command not found. Check that it is installed and in PATH.',
             command: commandStr,
             exitCode: result.exitCode,
             stderr: result.stderr,
@@ -272,7 +272,7 @@ export async function runAutosuiteOnce<T>(
         success: false,
         error: {
           kind: 'command_not_found',
-          message: 'autosuite command not found. Check that it is installed and in PATH.',
+          message: 'endstate command not found. Check that it is installed and in PATH.',
           command: commandStr,
           details: errMsg,
         },
@@ -299,7 +299,7 @@ export function getErrorMessage(error: EngineError): string {
     case 'engine_unavailable_web':
       return 'Engine not available in web mode. Enable mock mode for testing, or run the app in Tauri.';
     case 'command_not_found':
-      return 'autosuite command not found. Please install autosuite or configure the script path in Settings.';
+      return 'endstate command not found. Please install endstate or configure the script path in Settings.';
     case 'command_failed':
       return error.message;
     case 'invoke_failed':

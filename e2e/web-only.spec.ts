@@ -17,8 +17,8 @@ test.describe('UX Contract Tests', () => {
       };
       
       // Mock engine for streaming operations
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
           }
@@ -43,7 +43,7 @@ test.describe('UX Contract Tests', () => {
     
     // Verify we're NOT stuck on loading screen
     await expect(page.locator('text=Loading...')).not.toBeVisible();
-    await expect(page.locator('text=Running: autosuite capabilities')).not.toBeVisible();
+    await expect(page.locator('text=Running: endstate capabilities')).not.toBeVisible();
   });
 
   test('Navigation works without breaking', async ({ page }) => {
@@ -59,13 +59,13 @@ test.describe('UX Contract Tests', () => {
     // Use namespaced per-command keys - VITE_STORAGE_NS=test is set in playwright.config.ts
     await page.evaluate(() => {
       // Set capture last run
-      localStorage.setItem('test:autosuite-last-run-capture', JSON.stringify({ 
+      localStorage.setItem('test:endstate-last-run-capture', JSON.stringify({ 
         timestamp: new Date().toISOString(), 
         command: 'capture', 
         outcome: { succeeded: 10, skipped: 2, failed: 0 } 
       }));
       // Set apply last run
-      localStorage.setItem('test:autosuite-last-run-apply', JSON.stringify({ 
+      localStorage.setItem('test:endstate-last-run-apply', JSON.stringify({ 
         timestamp: new Date().toISOString(), 
         command: 'apply', 
         profile: 'test-profile',
@@ -76,8 +76,8 @@ test.describe('UX Contract Tests', () => {
     await page.waitForTimeout(1000);
     
     // Verify both per-command keys exist
-    const captureExists = await page.evaluate(() => localStorage.getItem('test:autosuite-last-run-capture') !== null);
-    const applyExists = await page.evaluate(() => localStorage.getItem('test:autosuite-last-run-apply') !== null);
+    const captureExists = await page.evaluate(() => localStorage.getItem('test:endstate-last-run-capture') !== null);
+    const applyExists = await page.evaluate(() => localStorage.getItem('test:endstate-last-run-apply') !== null);
     expect(captureExists).toBe(true);
     expect(applyExists).toBe(true);
   });

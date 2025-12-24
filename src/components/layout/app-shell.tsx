@@ -43,7 +43,7 @@ export function AppShell({
       {/* Sidebar */}
       <aside className="w-64 border-r border-border bg-panel flex flex-col">
         <div className="p-6 border-b border-border">
-          <h1 className="text-xl font-semibold text-primary">Autosuite</h1>
+          <h1 className="text-xl font-semibold text-primary">Endstate</h1>
           <p className="text-xs text-muted-foreground mt-1">Setup Management</p>
         </div>
         

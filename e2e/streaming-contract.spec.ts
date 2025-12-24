@@ -19,7 +19,7 @@ test.describe('Streaming Contract', () => {
       (window as any).__TAURI__ = {
         core: {
           invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'run_autosuite_streaming') {
+            if (cmd === 'run_endstate_streaming') {
               // Simulate streaming: emit events after a short delay
               const channel = args?.eventChannel;
               setTimeout(() => {
@@ -61,8 +61,8 @@ test.describe('Streaming Contract', () => {
       };
       
       // Also provide mock engine for non-streaming paths
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
         }
       };
@@ -92,7 +92,7 @@ test.describe('Streaming Contract', () => {
       (window as any).__TAURI__ = {
         core: {
           invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'run_autosuite_streaming') {
+            if (cmd === 'run_endstate_streaming') {
               // Simulate real transport failure
               throw new Error('IPC channel closed unexpectedly');
             }
@@ -127,13 +127,13 @@ test.describe('Streaming Contract', () => {
 
   test('Verify with missing apps shows results, not error banner', async ({ page, baseURL }) => {
     // Use the same mock pattern as web-only.spec.ts which works reliably
-    // loadInitialData uses runAutosuiteOnce which checks for __AUTOSUITE_MOCK_ENGINE__
+    // loadInitialData uses runEndstateOnce which checks for __ENDSTATE_MOCK_ENGINE__
     // NOTE: We do NOT set __TAURI__ here so isTauriRuntime() returns false
     // and the mock engine path is used instead of trying real Tauri invoke
     await page.addInitScript(() => {
-      // Mock engine - this is what runAutosuiteOnce checks for in web mode
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      // Mock engine - this is what runEndstateOnce checks for in web mode
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
           }
@@ -164,8 +164,8 @@ test.describe('Streaming Contract', () => {
           }
           return { exitCode: 0, envelope: { success: true, data: {} } };
         },
-        // Also provide runAutosuiteOnce for the non-streaming path
-        runAutosuiteOnce: async (settings: any, command: string, args: string[]) => {
+        // Also provide runEndstateOnce for the non-streaming path
+        runEndstateOnce: async (settings: any, command: string, args: string[]) => {
           if (command === 'capabilities') {
             return {
               success: true,

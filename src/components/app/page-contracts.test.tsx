@@ -37,10 +37,10 @@ describe('Page-Level UX Contracts', () => {
     });
 
     it('renders Settings page heading', () => {
-      render(<PageHeader title="Settings" subtitle="Configure autosuite engine and preferences" />);
+      render(<PageHeader title="Settings" subtitle="Configure endstate engine and preferences" />);
       
       expect(screen.getByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument();
-      expect(screen.getByText('Configure autosuite engine and preferences')).toBeInTheDocument();
+      expect(screen.getByText('Configure endstate engine and preferences')).toBeInTheDocument();
     });
 
     it('renders heading without subtitle', () => {

@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 // Helper to create mock engine for Apply-only flow
 function createApplyMockEngine(applyResponse: any) {
   return {
-    runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+    runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
       if (command === 'capabilities') {
         return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
       }
@@ -34,8 +34,8 @@ test.describe('Apply Page - Apply Only Flow', () => {
       };
       
       // Default mock: all apps already installed
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }
@@ -129,8 +129,8 @@ test.describe('Apply Modal - All Already Installed', () => {
         }
       };
       
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }
@@ -209,8 +209,8 @@ test.describe('Apply Modal - With Failures', () => {
         }
       };
       
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }
@@ -292,8 +292,8 @@ test.describe('Apply Modal - Pending Installs (Dry Run)', () => {
         }
       };
       
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }

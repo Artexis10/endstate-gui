@@ -34,8 +34,8 @@ test.describe('Persistence Boundaries on Reload', () => {
         }
       };
       
-      (window as any).__AUTOSUITE_MOCK_ENGINE__ = {
-        runAutosuiteStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
           }
@@ -70,13 +70,13 @@ test.describe('Persistence Boundaries on Reload', () => {
     await page.evaluate(() => {
       const settings = {
         engineMode: 'script',
-        engineScriptPath: 'C:\\test\\autosuite.ps1',
+        engineScriptPath: 'C:\\test\\endstate.ps1',
         customProfilesDirectory: '',
         lastSelectedProfile: 'test-profile',
         lastSelectedProfilePath: 'C:\\test\\profiles\\test-profile.jsonc',
         dryRunEnabled: false,
       };
-      localStorage.setItem('test:autosuite-gui-settings', JSON.stringify(settings));
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
       
       const lastRun = {
         timestamp: '2024-12-24T10:00:00Z',
@@ -84,7 +84,7 @@ test.describe('Persistence Boundaries on Reload', () => {
         profile: 'test-profile',
         outcome: { installed: 5, alreadyPresent: 3, needsAttention: 1 },
       };
-      localStorage.setItem('test:autosuite-last-run-apply', JSON.stringify(lastRun));
+      localStorage.setItem('test:endstate-last-run-apply', JSON.stringify(lastRun));
     });
     
     // Step 2: Reload the page
@@ -95,8 +95,8 @@ test.describe('Persistence Boundaries on Reload', () => {
     // Step 3: Verify PERSISTED preferences survived reload
     const afterReload = await page.evaluate(() => {
       const keys = Object.keys(localStorage);
-      const settingsKey = keys.find(k => k.includes('autosuite-gui-settings'));
-      const lastRunKey = keys.find(k => k.includes('autosuite-last-run-apply'));
+      const settingsKey = keys.find(k => k.includes('endstate-gui-settings'));
+      const lastRunKey = keys.find(k => k.includes('endstate-last-run-apply'));
       
       const settings = settingsKey ? JSON.parse(localStorage.getItem(settingsKey) || '{}') : null;
       const lastRun = lastRunKey ? JSON.parse(localStorage.getItem(lastRunKey) || '{}') : null;
@@ -181,13 +181,13 @@ test.describe('Persistence Boundaries on Reload', () => {
     await page.evaluate(() => {
       const settings = {
         engineMode: 'script',
-        engineScriptPath: 'C:\\test\\autosuite.ps1',
+        engineScriptPath: 'C:\\test\\endstate.ps1',
         customProfilesDirectory: '',
         lastSelectedProfile: 'profile-v1',
         lastSelectedProfilePath: 'C:\\test\\profiles\\profile-v1.jsonc',
         dryRunEnabled: true,
       };
-      localStorage.setItem('test:autosuite-gui-settings', JSON.stringify(settings));
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
     });
     
     // Reload
@@ -197,7 +197,7 @@ test.describe('Persistence Boundaries on Reload', () => {
     
     // Verify first preference persisted
     let persistedSettings = await page.evaluate(() => {
-      const settingsKey = Object.keys(localStorage).find(k => k.includes('autosuite-gui-settings'));
+      const settingsKey = Object.keys(localStorage).find(k => k.includes('endstate-gui-settings'));
       return settingsKey ? JSON.parse(localStorage.getItem(settingsKey) || '{}') : null;
     });
     
@@ -208,13 +208,13 @@ test.describe('Persistence Boundaries on Reload', () => {
     await page.evaluate(() => {
       const settings = {
         engineMode: 'script',
-        engineScriptPath: 'C:\\test\\autosuite.ps1',
+        engineScriptPath: 'C:\\test\\endstate.ps1',
         customProfilesDirectory: '',
         lastSelectedProfile: 'profile-v2',
         lastSelectedProfilePath: 'C:\\test\\profiles\\profile-v2.jsonc',
         dryRunEnabled: false,
       };
-      localStorage.setItem('test:autosuite-gui-settings', JSON.stringify(settings));
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
     });
     
     // Reload again
@@ -224,7 +224,7 @@ test.describe('Persistence Boundaries on Reload', () => {
     
     // Verify updated preference persisted
     persistedSettings = await page.evaluate(() => {
-      const settingsKey = Object.keys(localStorage).find(k => k.includes('autosuite-gui-settings'));
+      const settingsKey = Object.keys(localStorage).find(k => k.includes('endstate-gui-settings'));
       return settingsKey ? JSON.parse(localStorage.getItem(settingsKey) || '{}') : null;
     });
     

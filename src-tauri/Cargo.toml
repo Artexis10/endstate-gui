@@ -1,12 +1,12 @@
 [package]
-name = "autosuite-gui"
+name = "endstate-gui"
 version = "0.1.0"
-description = "Autosuite GUI - Desktop application for Autosuite"
+description = "Endstate GUI - Desktop application for Endstate"
 authors = ["Substrate Systems"]
 edition = "2021"
 
 [lib]
-name = "autosuite_gui_lib"
+name = "endstate_gui_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

@@ -1,5 +1,5 @@
 import { invoke, listen } from './lib/tauri-bridge';
-import { AutosuiteEnvelope } from './types';
+import { EndstateEnvelope } from './types';
 import { AppSettings } from './settings';
 
 export interface StreamEvent {
@@ -9,13 +9,13 @@ export interface StreamEvent {
 }
 
 export interface RunResult<T> {
-  envelope: AutosuiteEnvelope<T> | null;
+  envelope: EndstateEnvelope<T> | null;
   exitCode: number;
   stdout: string;
   stderr: string;
 }
 
-export async function runAutosuiteStreaming<T>(
+export async function runEndstateStreaming<T>(
   settings: AppSettings,
   command: string,
   args: string[],
@@ -27,7 +27,7 @@ export async function runAutosuiteStreaming<T>(
   let execArgs: string[];
 
   if (settings.engineMode === 'path') {
-    exe = 'autosuite';
+    exe = 'endstate';
     execArgs = fullArgs;
   } else {
     exe = 'pwsh';
@@ -41,7 +41,7 @@ export async function runAutosuiteStreaming<T>(
     ];
   }
 
-  const eventChannel = `autosuite-stream-${Date.now()}`;
+  const eventChannel = `endstate-stream-${Date.now()}`;
   let stdoutBuffer = '';
   let stderrBuffer = '';
   let exitCode = -1;
@@ -69,7 +69,7 @@ export async function runAutosuiteStreaming<T>(
     // Do NOT treat undefined/null as runtime failure.
     // Only thrown errors indicate transport failure.
     // Streaming completion is determined by receiving an 'exit' event.
-    await invoke('run_autosuite_streaming', {
+    await invoke('run_endstate_streaming', {
       exe,
       args: execArgs,
       eventChannel,
@@ -93,7 +93,7 @@ export async function runAutosuiteStreaming<T>(
   }
 
   const stdout = stdoutBuffer.trim();
-  let envelope: AutosuiteEnvelope<T> | null = null;
+  let envelope: EndstateEnvelope<T> | null = null;
 
   // Extract last JSON object from stdout (engine may output logs before JSON)
   if (stdout) {
@@ -112,7 +112,7 @@ export async function runAutosuiteStreaming<T>(
                 'schemaVersion' in parsed && 
                 'command' in parsed && 
                 'success' in parsed) {
-              envelope = parsed as AutosuiteEnvelope<T>;
+              envelope = parsed as EndstateEnvelope<T>;
               break; // Successfully parsed valid envelope, stop searching
             }
           } catch {

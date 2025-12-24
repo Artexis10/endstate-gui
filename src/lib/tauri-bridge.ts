@@ -18,7 +18,7 @@ const WEB_FALLBACK_COMMANDS: Record<string, () => any> = {
   'list_manifest_files': () => [],
   'get_default_profiles_directory': () => 'C:\\test\\profiles',
   'show_file_dialog': () => null,
-  'run_autosuite_streaming': () => null,
+  'run_endstate_streaming': () => null,
 };
 
 /**

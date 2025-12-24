@@ -6,7 +6,7 @@ interface ExecResult {
   exitCode: number;
 }
 
-export interface AutosuiteResult {
+export interface EndstateResult {
   success: boolean;
   data: unknown;
   error: {
@@ -19,19 +19,19 @@ export interface AutosuiteResult {
   rawStdout: string;
 }
 
-export async function runAutosuiteCommand(
+export async function runEndstateCommand(
   command: string,
   args: string[] = []
-): Promise<AutosuiteResult> {
+): Promise<EndstateResult> {
   const fullArgs = [command, '--json', ...args];
   
-  const result = await invoke<ExecResult>('autosuite_exec', {
+  const result = await invoke<ExecResult>('endstate_exec', {
     args: fullArgs,
   });
 
   if (!result.stdout || !result.stdout.trim().startsWith('{')) {
     throw new Error(
-      `Invalid autosuite output: STDOUT must be pure JSON. Got: ${result.stdout.substring(0, 100)}`
+      `Invalid endstate output: STDOUT must be pure JSON. Got: ${result.stdout.substring(0, 100)}`
     );
   }
 
@@ -39,7 +39,7 @@ export async function runAutosuiteCommand(
   try {
     parsed = JSON.parse(result.stdout);
   } catch (err) {
-    throw new Error(`Failed to parse JSON from autosuite STDOUT: ${err}`);
+    throw new Error(`Failed to parse JSON from endstate STDOUT: ${err}`);
   }
 
   return {
@@ -53,14 +53,14 @@ export async function runAutosuiteCommand(
   };
 }
 
-export async function runCapabilities(): Promise<AutosuiteResult> {
-  return runAutosuiteCommand('capabilities');
+export async function runCapabilities(): Promise<EndstateResult> {
+  return runEndstateCommand('capabilities');
 }
 
-export async function runVerify(profile: string): Promise<AutosuiteResult> {
-  return runAutosuiteCommand('verify', ['--profile', profile]);
+export async function runVerify(profile: string): Promise<EndstateResult> {
+  return runEndstateCommand('verify', ['--profile', profile]);
 }
 
-export async function runApply(profile: string): Promise<AutosuiteResult> {
-  return runAutosuiteCommand('apply', ['--profile', profile]);
+export async function runApply(profile: string): Promise<EndstateResult> {
+  return runEndstateCommand('apply', ['--profile', profile]);
 }

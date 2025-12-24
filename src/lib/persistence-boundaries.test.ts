@@ -32,7 +32,7 @@ describe('Persistence Boundaries', () => {
       const settings = loadSettings();
       
       expect(settings.engineMode).toBe('script');
-      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\autosuite\\autosuite.ps1');
+      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1');
       expect(settings.customProfilesDirectory).toBe('');
       expect(settings.lastSelectedProfile).toBe('');
       expect(settings.lastSelectedProfilePath).toBe('');
@@ -42,7 +42,7 @@ describe('Persistence Boundaries', () => {
     it('restores settings from localStorage when seeded', () => {
       const customSettings: AppSettings = {
         engineMode: 'path',
-        engineScriptPath: 'C:\\custom\\path\\autosuite.ps1',
+        engineScriptPath: 'C:\\custom\\path\\endstate.ps1',
         customProfilesDirectory: 'C:\\custom\\profiles',
         lastSelectedProfile: 'my-profile',
         lastSelectedProfilePath: 'C:\\custom\\profiles\\my-profile.jsonc',
@@ -50,7 +50,7 @@ describe('Persistence Boundaries', () => {
       };
 
       seedLocalStorage({
-        'web:autosuite-gui-settings': JSON.stringify(customSettings),
+        'web:endstate-gui-settings': JSON.stringify(customSettings),
       });
 
       const loaded = loadSettings();
@@ -60,7 +60,7 @@ describe('Persistence Boundaries', () => {
     it('persists settings to localStorage when saved', () => {
       const settings: AppSettings = {
         engineMode: 'path',
-        engineScriptPath: '/usr/local/bin/autosuite',
+        engineScriptPath: '/usr/local/bin/endstate',
         customProfilesDirectory: '/home/user/profiles',
         lastSelectedProfile: 'work-setup',
         lastSelectedProfilePath: '/home/user/profiles/work-setup.jsonc',
@@ -70,9 +70,9 @@ describe('Persistence Boundaries', () => {
       saveSettings(settings);
 
       const keys = getLocalStorageKeys();
-      expect(keys).toContain('web:autosuite-gui-settings');
+      expect(keys).toContain('web:endstate-gui-settings');
       
-      const stored = localStorage.getItem('web:autosuite-gui-settings');
+      const stored = localStorage.getItem('web:endstate-gui-settings');
       expect(stored).toBeTruthy();
       expect(JSON.parse(stored!)).toEqual(settings);
     });
@@ -82,13 +82,13 @@ describe('Persistence Boundaries', () => {
       saveSettings(settings);
 
       const keys = getLocalStorageKeys();
-      expect(keys).toEqual(['web:autosuite-gui-settings']);
+      expect(keys).toEqual(['web:endstate-gui-settings']);
     });
 
     it('merges partial updates with defaults', () => {
       const initial: AppSettings = {
         engineMode: 'script',
-        engineScriptPath: 'C:\\autosuite.ps1',
+        engineScriptPath: 'C:\\endstate.ps1',
         customProfilesDirectory: '',
         lastSelectedProfile: '',
         lastSelectedProfilePath: '',
@@ -139,8 +139,8 @@ describe('Persistence Boundaries', () => {
       };
 
       seedLocalStorage({
-        'web:autosuite-last-run-capture': JSON.stringify(captureRun),
-        'web:autosuite-last-run-apply': JSON.stringify(applyRun),
+        'web:endstate-last-run-capture': JSON.stringify(captureRun),
+        'web:endstate-last-run-apply': JSON.stringify(applyRun),
       });
 
       expect(loadLastRunForCommand('capture')).toEqual(captureRun);
@@ -162,9 +162,9 @@ describe('Persistence Boundaries', () => {
       saveLastRun(captureRun);
 
       const keys = getLocalStorageKeys();
-      expect(keys).toContain('web:autosuite-last-run-capture');
+      expect(keys).toContain('web:endstate-last-run-capture');
       
-      const stored = localStorage.getItem('web:autosuite-last-run-capture');
+      const stored = localStorage.getItem('web:endstate-last-run-capture');
       expect(stored).toBeTruthy();
       expect(JSON.parse(stored!)).toEqual(captureRun);
     });
@@ -200,7 +200,7 @@ describe('Persistence Boundaries', () => {
       saveLastRun(captureRun);
 
       const keys = getLocalStorageKeys();
-      expect(keys).toEqual(['web:autosuite-last-run-capture']);
+      expect(keys).toEqual(['web:endstate-last-run-capture']);
     });
   });
 
@@ -208,24 +208,24 @@ describe('Persistence Boundaries', () => {
     it('defaults to false when localStorage is empty', () => {
       // This preference is managed in App.tsx via useState
       // Default is false (collapsed)
-      const stored = localStorage.getItem('web:autosuite-show-technical-logs');
+      const stored = localStorage.getItem('web:endstate-show-technical-logs');
       expect(stored).toBeNull();
     });
 
     it('restores preference from localStorage when seeded', () => {
       seedLocalStorage({
-        'web:autosuite-show-technical-logs': 'true',
+        'web:endstate-show-technical-logs': 'true',
       });
 
-      const stored = localStorage.getItem('web:autosuite-show-technical-logs');
+      const stored = localStorage.getItem('web:endstate-show-technical-logs');
       expect(stored).toBe('true');
     });
 
     it('persists preference to localStorage', () => {
-      localStorage.setItem('web:autosuite-show-technical-logs', 'true');
+      localStorage.setItem('web:endstate-show-technical-logs', 'true');
 
       const keys = getLocalStorageKeys();
-      expect(keys).toContain('web:autosuite-show-technical-logs');
+      expect(keys).toContain('web:endstate-show-technical-logs');
     });
   });
 
@@ -432,7 +432,7 @@ describe('Persistence Boundaries', () => {
       // Save all persisted preferences
       const settings: AppSettings = {
         engineMode: 'script',
-        engineScriptPath: 'C:\\autosuite.ps1',
+        engineScriptPath: 'C:\\endstate.ps1',
         customProfilesDirectory: '',
         lastSelectedProfile: 'test',
         lastSelectedProfilePath: 'C:\\profiles\\test.jsonc',
@@ -447,14 +447,14 @@ describe('Persistence Boundaries', () => {
       };
       saveLastRun(captureRun);
 
-      localStorage.setItem('web:autosuite-show-technical-logs', 'true');
+      localStorage.setItem('web:endstate-show-technical-logs', 'true');
 
       // Verify only expected keys exist
       const keys = getLocalStorageKeys();
       expect(keys).toHaveLength(3);
-      expect(keys).toContain('web:autosuite-gui-settings');
-      expect(keys).toContain('web:autosuite-last-run-capture');
-      expect(keys).toContain('web:autosuite-show-technical-logs');
+      expect(keys).toContain('web:endstate-gui-settings');
+      expect(keys).toContain('web:endstate-last-run-capture');
+      expect(keys).toContain('web:endstate-show-technical-logs');
 
       // Verify NO transient state keys exist
       expect(keys).not.toContain('web:capture-modal-open');

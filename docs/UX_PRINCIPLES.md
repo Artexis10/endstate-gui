@@ -1,7 +1,7 @@
-# Autosuite UX Principles
+# Endstate UX Principles
 
-This document defines the non-negotiable UX principles for Autosuite.
-It exists to prevent UX drift and to ensure Autosuite remains safe,
+This document defines the non-negotiable UX principles for Endstate.
+It exists to prevent UX drift and to ensure Endstate remains safe,
 predictable, and usable for non-technical users while still empowering
 technical and power users.
 
@@ -11,7 +11,7 @@ This is a **design contract**, not user documentation.
 
 ## Core Audience
 
-Autosuite is designed **non-technical users first**.
+Endstate is designed **non-technical users first**.
 
 Power users and technical users are fully supported through:
 - transparency
@@ -19,13 +19,13 @@ Power users and technical users are fully supported through:
 - progressive disclosure
 - CLI parity
 
-At no point should Autosuite require technical knowledge to use safely.
+At no point should Endstate require technical knowledge to use safely.
 
 ---
 
 ## Core Mental Model (Must Always Hold)
 
-> A setup is a folder in Documents that Autosuite uses to reinstall your apps and optionally restore some app settings.
+> A setup is a folder in Documents that Endstate uses to reinstall your apps and optionally restore some app settings.
 
 If this statement ever becomes untrue, the product has regressed.
 
@@ -40,7 +40,7 @@ If this statement ever becomes untrue, the product has regressed.
 - Install-only profiles are a **successful outcome**
 - Profiles are stored in:
   
-  Documents/Autosuite/Profiles
+  Documents/Endstate/Profiles
 
 No configuration should ever be silently captured or restored.
 
@@ -48,7 +48,7 @@ No configuration should ever be silently captured or restored.
 
 ## Safety & Trust Principles
 
-- Autosuite must be safe to re-run infinitely
+- Endstate must be safe to re-run infinitely
 - No destructive actions without backup
 - No hidden state
 - No silent failures
@@ -82,7 +82,7 @@ This includes (but is not limited to):
 
 ## Progressive Disclosure
 
-Autosuite uses **progressive disclosure** instead of separate “modes”.
+Endstate uses **progressive disclosure** instead of separate “modes”.
 
 ### Default Mode
 - No jargon
@@ -97,7 +97,7 @@ Autosuite uses **progressive disclosure** instead of separate “modes”.
 - Does not change defaults
 - Never unlocks unsafe behavior
 
-Advanced mode reveals information; it does not change Autosuite’s safety model.
+Advanced mode reveals information; it does not change Endstate’s safety model.
 
 ---
 
@@ -109,7 +109,7 @@ Advanced mode reveals information; it does not change Autosuite’s safety model
 - Users can back up or move profiles manually
 - Profiles are never hidden in AppData
 
-Autosuite must never treat profiles as opaque internal state.
+Endstate must never treat profiles as opaque internal state.
 
 ---
 
@@ -147,7 +147,7 @@ Absence of configuration is not a failure.
 
 ## Long-Term Design Intent
 
-Autosuite is not a migration tool for personal data.
-Autosuite is a **machine provisioning and hydration system**.
+Endstate is not a migration tool for personal data.
+Endstate is a **machine provisioning and hydration system**.
 
 Automation must never come at the cost of user understanding or trust.
