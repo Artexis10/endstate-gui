@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
-const ENDSTATE_SCRIPT_PATH = 'C:\\Users\\win-laptop\\Desktop\\projects\\autosuite\\endstate.ps1';
+const ENDSTATE_SCRIPT_PATH = 'C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1';
 
 function checkEndstateAvailable() {
   if (!existsSync(ENDSTATE_SCRIPT_PATH)) {
