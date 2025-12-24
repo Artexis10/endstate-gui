@@ -11,6 +11,11 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
+interface NavIndicator {
+  type: 'success' | 'warning' | 'info' | 'activity';
+  tooltip?: string;
+}
+
 interface AppShellProps {
   children: ReactNode;
   currentPage: 'capture' | 'apply' | 'verify' | 'report' | 'settings';
@@ -19,6 +24,7 @@ interface AppShellProps {
   pageTitle?: string;
   pageSubtitle?: string;
   actions?: ReactNode;
+  navIndicators?: Partial<Record<'capture' | 'apply' | 'verify' | 'report', NavIndicator>>;
 }
 
 export function AppShell({
@@ -29,6 +35,7 @@ export function AppShell({
   pageTitle,
   pageSubtitle,
   actions,
+  navIndicators,
 }: AppShellProps) {
   const navItems = [
     { id: 'capture' as const, label: 'Capture computer', icon: ScanSearch },
@@ -52,6 +59,8 @@ export function AppShell({
             const Icon = item.icon;
             const isActive = currentPage === item.id;
             
+            const indicator = navIndicators?.[item.id as keyof typeof navIndicators];
+            
             return (
               <button
                 key={item.id}
@@ -62,6 +71,7 @@ export function AppShell({
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'
                 )}
+                title={indicator?.tooltip}
               >
                 {isActive && (
                   <motion.div
@@ -71,7 +81,18 @@ export function AppShell({
                   />
                 )}
                 <Icon className="h-4 w-4 relative z-10" />
-                <span className="relative z-10">{item.label}</span>
+                <span className="relative z-10 flex-1 text-left">{item.label}</span>
+                {indicator && (
+                  <span 
+                    className={cn(
+                      'w-2 h-2 rounded-full relative z-10',
+                      indicator.type === 'success' && 'bg-success',
+                      indicator.type === 'warning' && 'bg-warning',
+                      indicator.type === 'info' && 'bg-primary',
+                      indicator.type === 'activity' && 'bg-primary animate-pulse'
+                    )}
+                  />
+                )}
               </button>
             );
           })}

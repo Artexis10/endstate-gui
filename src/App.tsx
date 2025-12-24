@@ -18,6 +18,7 @@ import { LogBuffer } from './log-buffer';
 import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
 import { parseApplyProgressLine, StreamingLineBuffer } from './lib/apply-utils';
 import { saveLastRun, loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
+import { loadLifecycleState, recordLifecycleEvent, hasRecentScan, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
 import { AppShell } from './components/layout/app-shell';
@@ -106,6 +107,9 @@ function App() {
   const [safeMode, setSafeMode] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const logBufferRef = useRef<LogBuffer | null>(null);
+  
+  // Global lifecycle state - tracks last capture, preview, apply, verify
+  const [lifecycleState, setLifecycleState] = useState<LifecycleState>(loadLifecycleState());
   
   // Apply modal state - single source of truth for apply flow
   const [applyRunPhase, setApplyRunPhase] = useState<ApplyRunPhase>('idle');
@@ -379,6 +383,22 @@ function App() {
       updateActivity('Preview ready', 'success', 1);
       setCheckStep('ready');
       setApplyRunPhase('previewResult');  // Show preview modal
+      
+      // Record lifecycle event for preview
+      const previewEvent: LifecycleEvent = {
+        timestamp: new Date().toISOString(),
+        profile: selectedProfile,
+        profilePath: selectedProfilePath,
+        success: true,
+        summary: {
+          total: applyResult.envelope?.data ? (applyResult.envelope.data as EndstateApplyResultData).counts?.total : 0,
+          installed: applyResult.envelope?.data ? (applyResult.envelope.data as EndstateApplyResultData).counts?.installed : 0,
+          alreadyPresent: applyResult.envelope?.data ? (applyResult.envelope.data as EndstateApplyResultData).counts?.alreadyInstalled : 0,
+          failed: applyResult.envelope?.data ? (applyResult.envelope.data as EndstateApplyResultData).counts?.failed : 0,
+        },
+      };
+      const newState = recordLifecycleEvent('preview', previewEvent);
+      setLifecycleState(newState);
     } catch (err) {
       updateActivity('Preview failed', 'error');
       setCheckStep('idle');
@@ -517,6 +537,22 @@ function App() {
       // Transition to applyResult - show final results
       setApplyRunPhase('applyResult');
       setCheckStep('ready');
+      
+      // Record lifecycle event for apply
+      const applyEvent: LifecycleEvent = {
+        timestamp: new Date().toISOString(),
+        profile: selectedProfile,
+        profilePath: selectedProfilePath,
+        success: applyResult.envelope?.success ?? true,
+        summary: {
+          total: envelopeData?.counts?.total ?? 0,
+          installed: envelopeData?.counts?.installed ?? 0,
+          alreadyPresent: envelopeData?.counts?.alreadyInstalled ?? 0,
+          failed: envelopeData?.counts?.failed ?? 0,
+        },
+      };
+      const newLifecycleState = recordLifecycleEvent('apply', applyEvent);
+      setLifecycleState(newLifecycleState);
     } catch (err) {
       updateActivity('Apply failed', 'error', 1);
       setApplyRunPhase('idle');
@@ -748,6 +784,17 @@ function App() {
         };
         saveLastRun(lastRunData);
         setLastRunCapture(lastRunData);
+        
+        // Record lifecycle event for capture
+        const captureEvent: LifecycleEvent = {
+          timestamp: new Date().toISOString(),
+          success: true,
+          summary: {
+            total: finalStats.succeeded,
+          },
+        };
+        const newLifecycleState = recordLifecycleEvent('capture', captureEvent);
+        setLifecycleState(newLifecycleState);
         
         await refreshProfiles();
         
@@ -1099,16 +1146,25 @@ function App() {
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
-                    {isPreviewReady && hasPendingInstalls && (
-                      <Button onClick={handleSetupMachine} disabled={isRunning || !selectedProfile}>
-                        {isRunning ? 'Installing...' : 'Apply changes'}
-                      </Button>
-                    )}
+                    {/* Primary action button - label changes based on preview toggle */}
                     {!isPreviewReady && (
-                      <Button onClick={handlePreviewChanges} disabled={isRunning || !selectedProfile}>
-                        {isRunning ? 'Checking...' : 'Check what will change'}
+                      <Button 
+                        onClick={settings.dryRunEnabled ? handlePreviewChanges : handleSetupMachine} 
+                        disabled={isRunning || !selectedProfile}
+                      >
+                        {isRunning 
+                          ? (settings.dryRunEnabled ? 'Previewing...' : 'Applying...') 
+                          : (settings.dryRunEnabled ? 'Preview changes' : 'Apply setup')
+                        }
                       </Button>
                     )}
+                    {/* After preview: show apply button if there are pending installs */}
+                    {isPreviewReady && hasPendingInstalls && (
+                      <Button onClick={handleApplyFromPreview} disabled={isRunning || !selectedProfile}>
+                        {isRunning ? 'Applying...' : 'Apply changes'}
+                      </Button>
+                    )}
+                    {/* After preview: done button if nothing to do */}
                     {isPreviewReady && !hasPendingInstalls && !hasFailures && (
                       <Button variant="secondary" onClick={() => setCheckStep('idle')} disabled={isRunning}>
                         Done
@@ -1252,38 +1308,348 @@ function App() {
         );
 
       case 'verify':
+        // Check if we have a recent scan for this profile
+        const recentScan = selectedProfilePath ? hasRecentScan(lifecycleState, selectedProfilePath) : false;
+        const lastScanTime = lifecycleState.lastPreview?.profilePath === selectedProfilePath 
+          ? lifecycleState.lastPreview.timestamp 
+          : lifecycleState.lastVerify?.profilePath === selectedProfilePath 
+            ? lifecycleState.lastVerify.timestamp 
+            : null;
+        
         return (
           <div className="space-y-6">
             {errorBanner}
             <PageHeader
               title="Check computer"
-              subtitle="Checks whether this computer matches your setup. Does not make changes."
+              subtitle="Verify this computer matches your setup profile. No changes will be made."
             />
+            
+            {/* Profile Selection */}
             <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">
-                  This page is under construction. Use the "Set up computer" page for now.
-                </p>
+              <CardHeader>
+                <CardTitle>Setup Profile</CardTitle>
+                <CardDescription>Select a profile to check against</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {profiles.length > 0 ? (
+                  <select
+                    value={selectedProfile}
+                    onChange={(e) => {
+                      const selected = profiles.find(p => p.name === e.target.value);
+                      setSelectedProfile(e.target.value);
+                      setSelectedProfilePath(selected?.path || '');
+                      updateSettings({ lastSelectedProfile: e.target.value, lastSelectedProfilePath: selected?.path || '' });
+                    }}
+                    disabled={isRunning}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">-- Select a setup --</option>
+                    {profiles.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="p-3 rounded-md bg-warning/10 border border-warning/20 text-sm text-warning-foreground">
+                    No setups found. Please capture or import a setup first.
+                  </div>
+                )}
+                
+                {/* Recent scan notice */}
+                {recentScan && lastScanTime && selectedProfile && (
+                  <div className="p-3 rounded-md bg-muted/50 border border-border text-sm">
+                    <p className="font-medium">Recent scan available</p>
+                    <p className="text-muted-foreground text-xs mt-1">
+                      Last checked {formatRelativeTime(lastScanTime)}
+                    </p>
+                  </div>
+                )}
+                
+                {/* Action buttons */}
+                <div className="flex gap-2 pt-2">
+                  {recentScan ? (
+                    <>
+                      <Button 
+                        variant="secondary"
+                        onClick={() => setCurrentPage('apply')}
+                        disabled={!selectedProfile}
+                      >
+                        Use existing scan
+                      </Button>
+                      <Button 
+                        onClick={handlePreviewChanges}
+                        disabled={isRunning || !selectedProfile}
+                      >
+                        {isRunning ? 'Checking...' : 'Recheck anyway'}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button 
+                      onClick={handlePreviewChanges}
+                      disabled={isRunning || !selectedProfile}
+                    >
+                      {isRunning ? 'Checking...' : 'Check computer'}
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
+            
+            {/* Show last verify result if available */}
+            {lifecycleState.lastVerify && lifecycleState.lastVerify.profilePath === selectedProfilePath && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Last Check Result</CardTitle>
+                  <CardDescription className="text-xs">
+                    {formatRelativeTime(lifecycleState.lastVerify.timestamp)}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-4 text-sm">
+                    {lifecycleState.lastVerify.summary?.alreadyPresent !== undefined && (
+                      <div>
+                        <span className="text-muted-foreground">Present: </span>
+                        <span className="font-medium text-success">{lifecycleState.lastVerify.summary.alreadyPresent}</span>
+                      </div>
+                    )}
+                    {lifecycleState.lastVerify.summary?.missing !== undefined && lifecycleState.lastVerify.summary.missing > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Missing: </span>
+                        <span className="font-medium text-warning">{lifecycleState.lastVerify.summary.missing}</span>
+                      </div>
+                    )}
+                    {lifecycleState.lastVerify.summary?.failed !== undefined && lifecycleState.lastVerify.summary.failed > 0 && (
+                      <div>
+                        <span className="text-muted-foreground">Failed: </span>
+                        <span className="font-medium text-destructive">{lifecycleState.lastVerify.summary.failed}</span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         );
 
       case 'report':
+        // Build recent runs from lifecycle state and last run data
+        const recentRuns: Array<{
+          id: string;
+          timestamp: string;
+          command: string;
+          mode: 'preview' | 'apply' | 'capture' | 'verify';
+          profile?: string;
+          status: 'success' | 'partial' | 'failed';
+          summary: { installed?: number; alreadyPresent?: number; failed?: number; captured?: number };
+        }> = [];
+        
+        // Add from lifecycle state
+        if (lifecycleState.lastApply) {
+          recentRuns.push({
+            id: `apply-${lifecycleState.lastApply.timestamp}`,
+            timestamp: lifecycleState.lastApply.timestamp,
+            command: 'apply',
+            mode: 'apply',
+            profile: lifecycleState.lastApply.profile,
+            status: lifecycleState.lastApply.success 
+              ? (lifecycleState.lastApply.summary?.failed ? 'partial' : 'success') 
+              : 'failed',
+            summary: {
+              installed: lifecycleState.lastApply.summary?.installed,
+              alreadyPresent: lifecycleState.lastApply.summary?.alreadyPresent,
+              failed: lifecycleState.lastApply.summary?.failed,
+            },
+          });
+        }
+        
+        if (lifecycleState.lastPreview) {
+          recentRuns.push({
+            id: `preview-${lifecycleState.lastPreview.timestamp}`,
+            timestamp: lifecycleState.lastPreview.timestamp,
+            command: 'apply --dry-run',
+            mode: 'preview',
+            profile: lifecycleState.lastPreview.profile,
+            status: lifecycleState.lastPreview.success ? 'success' : 'failed',
+            summary: {
+              installed: lifecycleState.lastPreview.summary?.installed,
+              alreadyPresent: lifecycleState.lastPreview.summary?.alreadyPresent,
+              failed: lifecycleState.lastPreview.summary?.failed,
+            },
+          });
+        }
+        
+        if (lifecycleState.lastCapture) {
+          recentRuns.push({
+            id: `capture-${lifecycleState.lastCapture.timestamp}`,
+            timestamp: lifecycleState.lastCapture.timestamp,
+            command: 'capture',
+            mode: 'capture',
+            status: lifecycleState.lastCapture.success ? 'success' : 'failed',
+            summary: {
+              captured: lifecycleState.lastCapture.summary?.total,
+            },
+          });
+        }
+        
+        // Add from lastRunCapture/lastRunApply if not already in lifecycle
+        if (lastRunCapture && !lifecycleState.lastCapture) {
+          recentRuns.push({
+            id: `capture-legacy-${lastRunCapture.timestamp}`,
+            timestamp: lastRunCapture.timestamp,
+            command: 'capture',
+            mode: 'capture',
+            status: lastRunCapture.outcome.failed ? 'partial' : 'success',
+            summary: {
+              captured: lastRunCapture.outcome.succeeded,
+            },
+          });
+        }
+        
+        if (lastRunApply && !lifecycleState.lastApply) {
+          recentRuns.push({
+            id: `apply-legacy-${lastRunApply.timestamp}`,
+            timestamp: lastRunApply.timestamp,
+            command: 'apply',
+            mode: 'apply',
+            profile: lastRunApply.profile,
+            status: lastRunApply.outcome.needsAttention ? 'partial' : 'success',
+            summary: {
+              installed: lastRunApply.outcome.installed,
+              alreadyPresent: lastRunApply.outcome.alreadyPresent,
+              failed: lastRunApply.outcome.needsAttention,
+            },
+          });
+        }
+        
+        // Sort by timestamp descending
+        recentRuns.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        
         return (
           <div className="space-y-6">
             {errorBanner}
             <PageHeader
               title="Report"
-              subtitle="View history and state"
+              subtitle="View recent activity and run history"
             />
+            
+            {/* Recent Runs */}
             <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">
-                  This page is under construction. Use the "Set up computer" page for now.
-                </p>
+              <CardHeader>
+                <CardTitle>Recent Runs</CardTitle>
+                <CardDescription>History of capture, preview, and apply operations</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {recentRuns.length > 0 ? (
+                  <div className="space-y-3">
+                    {recentRuns.map((run) => (
+                      <details key={run.id} className="group border border-border rounded-lg">
+                        <summary className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-2 h-2 rounded-full ${
+                              run.status === 'success' ? 'bg-success' : 
+                              run.status === 'partial' ? 'bg-warning' : 'bg-destructive'
+                            }`} />
+                            <div>
+                              <span className="font-medium capitalize">{run.mode}</span>
+                              {run.profile && (
+                                <span className="text-muted-foreground ml-2">• {run.profile}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            <span>{formatRelativeTime(run.timestamp)}</span>
+                            <ChevronRight className="h-4 w-4 group-open:rotate-90 transition-transform" />
+                          </div>
+                        </summary>
+                        <div className="px-3 pb-3 pt-1 border-t border-border bg-muted/30">
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Command: </span>
+                              <code className="text-xs bg-muted px-1 rounded">{run.command}</code>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Time: </span>
+                              <span>{new Date(run.timestamp).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Status: </span>
+                              <span className={`font-medium ${
+                                run.status === 'success' ? 'text-success' : 
+                                run.status === 'partial' ? 'text-warning' : 'text-destructive'
+                              }`}>
+                                {run.status === 'success' ? 'Success' : 
+                                 run.status === 'partial' ? 'Partial' : 'Failed'}
+                              </span>
+                            </div>
+                            {run.mode === 'capture' && run.summary.captured !== undefined && (
+                              <div>
+                                <span className="text-muted-foreground">Captured: </span>
+                                <span className="font-medium">{run.summary.captured}</span>
+                              </div>
+                            )}
+                            {(run.mode === 'apply' || run.mode === 'preview') && (
+                              <>
+                                {run.summary.installed !== undefined && (
+                                  <div>
+                                    <span className="text-muted-foreground">
+                                      {run.mode === 'preview' ? 'Would install: ' : 'Installed: '}
+                                    </span>
+                                    <span className="font-medium">{run.summary.installed}</span>
+                                  </div>
+                                )}
+                                {run.summary.alreadyPresent !== undefined && (
+                                  <div>
+                                    <span className="text-muted-foreground">Already present: </span>
+                                    <span className="font-medium">{run.summary.alreadyPresent}</span>
+                                  </div>
+                                )}
+                                {run.summary.failed !== undefined && run.summary.failed > 0 && (
+                                  <div>
+                                    <span className="text-muted-foreground">Failed: </span>
+                                    <span className="font-medium text-destructive">{run.summary.failed}</span>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No recent activity</p>
+                )}
               </CardContent>
             </Card>
+            
+            {/* Backend Report Data (if available) */}
+            {state.report?.data?.reports && state.report.data.reports.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Engine Reports</CardTitle>
+                  <CardDescription className="text-xs">Data from endstate engine</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {state.report.data.reports.slice(0, 5).map((report) => (
+                      <div key={report.runId} className="flex items-center justify-between text-sm p-2 rounded bg-muted/30">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium capitalize">{report.command}</span>
+                          {report.dryRun && <span className="text-xs text-muted-foreground">(preview)</span>}
+                          {report.manifest?.name && (
+                            <span className="text-muted-foreground">• {report.manifest.name}</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(report.timestamp).toLocaleDateString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         );
 
@@ -1365,6 +1731,37 @@ function App() {
     }
   };
 
+  // Build nav indicators from lifecycle state
+  const navIndicators: Partial<Record<'capture' | 'apply' | 'verify' | 'report', { type: 'success' | 'warning' | 'info' | 'activity'; tooltip?: string }>> = {};
+  
+  // Show activity indicator when running
+  if (isRunning) {
+    if (currentPage === 'capture') {
+      navIndicators.capture = { type: 'activity', tooltip: 'Capturing...' };
+    } else if (currentPage === 'apply') {
+      navIndicators.apply = { type: 'activity', tooltip: 'Running...' };
+    } else if (currentPage === 'verify') {
+      navIndicators.verify = { type: 'activity', tooltip: 'Checking...' };
+    }
+  }
+  
+  // Show success/warning indicators based on recent lifecycle events
+  if (!isRunning && lifecycleState.lastApply) {
+    const timeSinceApply = Date.now() - new Date(lifecycleState.lastApply.timestamp).getTime();
+    if (timeSinceApply < 5 * 60 * 1000) { // Within 5 minutes
+      navIndicators.apply = lifecycleState.lastApply.summary?.failed 
+        ? { type: 'warning', tooltip: 'Completed with issues' }
+        : { type: 'success', tooltip: 'Setup complete' };
+    }
+  }
+  
+  if (!isRunning && lifecycleState.lastCapture) {
+    const timeSinceCapture = Date.now() - new Date(lifecycleState.lastCapture.timestamp).getTime();
+    if (timeSinceCapture < 5 * 60 * 1000) {
+      navIndicators.capture = { type: 'success', tooltip: 'Profile captured' };
+    }
+  }
+
   return (
     <>
       <AppShell
@@ -1372,6 +1769,7 @@ function App() {
         onNavigate={setCurrentPage}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         pageTitle={currentPage.charAt(0).toUpperCase() + currentPage.slice(1)}
+        navIndicators={navIndicators}
       >
         {renderPage()}
       </AppShell>
