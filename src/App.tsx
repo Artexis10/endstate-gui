@@ -19,6 +19,8 @@ import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
 import { parseApplyProgressLine, StreamingLineBuffer } from './lib/apply-utils';
 import { saveLastRun, loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, hasRecentScan, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
+import { loadUIMode, saveUIMode, toggleUIMode, type UIMode } from './lib/ui-mode';
+import { OverviewScreen } from './components/app/overview-screen';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
 import { AppShell } from './components/layout/app-shell';
@@ -36,7 +38,7 @@ import { Switch } from './components/ui/switch';
 import { Loader2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 
 type AppStatus = 'loading' | 'ready' | 'error';
-type PageType = 'capture' | 'apply' | 'verify' | 'report' | 'settings';
+type PageType = 'overview' | 'capture' | 'apply' | 'verify' | 'report' | 'settings';
 type CheckStep = 'idle' | 'scanning' | 'comparing' | 'ready';
 
 /**
@@ -69,7 +71,8 @@ interface AppState {
 
 function App() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
-  const [currentPage, setCurrentPage] = useState<PageType>('apply');
+  const [currentPage, setCurrentPage] = useState<PageType>('overview');
+  const [uiMode, setUIMode] = useState<UIMode>(loadUIMode());
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState('');
@@ -110,6 +113,13 @@ function App() {
   
   // Global lifecycle state - tracks last capture, preview, apply, verify
   const [lifecycleState, setLifecycleState] = useState<LifecycleState>(loadLifecycleState());
+  
+  // Handle UI mode toggle with persistence
+  const handleToggleUIMode = () => {
+    const newMode = toggleUIMode(uiMode);
+    setUIMode(newMode);
+    saveUIMode(newMode);
+  };
   
   // Apply modal state - single source of truth for apply flow
   const [applyRunPhase, setApplyRunPhase] = useState<ApplyRunPhase>('idle');
@@ -996,6 +1006,36 @@ function App() {
     const errorBanner = renderErrorBanner();
     
     switch (currentPage) {
+      case 'overview':
+        return (
+          <div className="space-y-6">
+            {errorBanner}
+            <OverviewScreen
+              lifecycleState={lifecycleState}
+              selectedProfile={selectedProfile}
+              profiles={profiles}
+              isRunning={isRunning}
+              onNavigate={setCurrentPage}
+              onCapture={handleCapture}
+              onSetup={() => {
+                setCurrentPage('apply');
+                if (settings.dryRunEnabled) {
+                  handlePreviewChanges();
+                }
+              }}
+              onCheck={() => {
+                setCurrentPage('verify');
+                handlePreviewChanges();
+              }}
+              onProfileChange={(profile, path) => {
+                setSelectedProfile(profile);
+                setSelectedProfilePath(path);
+                updateSettings({ lastSelectedProfile: profile, lastSelectedProfilePath: path });
+              }}
+            />
+          </div>
+        );
+        
       case 'capture':
         return (
           <div className="space-y-6">
@@ -1762,14 +1802,29 @@ function App() {
     }
   }
 
+  // Generate page title based on current page
+  const getPageTitle = () => {
+    switch (currentPage) {
+      case 'overview': return '';
+      case 'capture': return 'Capture computer';
+      case 'apply': return 'Set up computer';
+      case 'verify': return 'Check computer';
+      case 'report': return 'Report';
+      case 'settings': return 'Settings';
+      default: return '';
+    }
+  };
+
   return (
     <>
       <AppShell
         currentPage={currentPage}
         onNavigate={setCurrentPage}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
-        pageTitle={currentPage.charAt(0).toUpperCase() + currentPage.slice(1)}
+        pageTitle={getPageTitle()}
         navIndicators={navIndicators}
+        uiMode={uiMode}
+        onToggleUIMode={handleToggleUIMode}
       >
         {renderPage()}
       </AppShell>

@@ -47,6 +47,8 @@ export const KNOWN_KEYS = [
   'endstate-gui-settings',
   'endstate-last-run',
   'endstate-show-technical-logs',
+  'endstate-lifecycle-state',
+  'endstate-ui-mode',
 ] as const;
 
 /**

@@ -13,6 +13,7 @@ import {
   FileText,
   Settings,
   FolderOpen,
+  Home,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +28,7 @@ interface Command {
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onNavigate: (page: 'capture' | 'apply' | 'verify' | 'report' | 'settings') => void;
+  onNavigate: (page: 'overview' | 'capture' | 'apply' | 'verify' | 'report' | 'settings') => void;
   onOpenLogsFolder?: () => void;
   onOpenOutputFolder?: () => void;
 }
@@ -43,6 +44,16 @@ export function CommandPalette({
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const commands: Command[] = [
+    {
+      id: 'nav-overview',
+      label: 'Go to Overview',
+      icon: Home,
+      action: () => {
+        onNavigate('overview');
+        onOpenChange(false);
+      },
+      category: 'navigate',
+    },
     {
       id: 'nav-capture',
       label: 'Go to Capture',
