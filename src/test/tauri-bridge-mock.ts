@@ -1,11 +1,16 @@
-import { vi } from 'vitest';
+import { vi, type Mock } from 'vitest';
 
+/**
+ * Typed mock interface for tauri-bridge functions.
+ * Uses Mock<T, Y> where T is args tuple and Y is return type.
+ * These are intentionally permissive to allow calling without args in tests.
+ */
 export interface TauriBridgeMock {
-  invoke: ReturnType<typeof vi.fn>;
-  listen: ReturnType<typeof vi.fn>;
-  isTauriRuntime: ReturnType<typeof vi.fn>;
-  getProfilesDirectory: ReturnType<typeof vi.fn>;
-  ensureDirectory: ReturnType<typeof vi.fn>;
+  invoke: Mock<(cmd?: string, args?: Record<string, unknown>) => Promise<unknown>>;
+  listen: Mock<(event?: string, handler?: (event: { payload: unknown }) => void) => Promise<() => void>>;
+  isTauriRuntime: Mock<() => boolean>;
+  getProfilesDirectory: Mock<(customDir?: string) => Promise<string>>;
+  ensureDirectory: Mock<(path?: string) => Promise<void>>;
 }
 
 export function createTauriBridgeMock(overrides?: Partial<TauriBridgeMock>): TauriBridgeMock {
