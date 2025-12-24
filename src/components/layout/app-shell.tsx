@@ -10,7 +10,8 @@ import {
   Home,
   PanelLeftOpen,
   PanelLeftClose,
-  Sparkles
+  Sparkles,
+  ArrowLeft
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,8 @@ interface AppShellProps {
   navIndicators?: Partial<Record<'capture' | 'apply' | 'verify' | 'report', NavIndicator>>;
   uiMode: UIMode;
   onToggleUIMode: () => void;
+  previousPage?: PageType | null;
+  onBack?: () => void;
 }
 
 export function AppShell({
@@ -47,6 +50,8 @@ export function AppShell({
   navIndicators,
   uiMode,
   onToggleUIMode,
+  previousPage,
+  onBack,
 }: AppShellProps) {
   const showSidebar = uiMode === 'advanced';
   
@@ -139,8 +144,21 @@ export function AppShell({
         {/* Topbar */}
         <header className="h-16 border-b border-border bg-panel px-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {/* Sidebar toggle for default mode */}
-            {!showSidebar && (
+            {/* Back button - shown when navigated from Overview in Default mode */}
+            {!showSidebar && previousPage && onBack && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onBack}
+                className="gap-2"
+                title="Back to Overview"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="text-sm">Back</span>
+              </Button>
+            )}
+            {/* Sidebar toggle for default mode - only show if no back button */}
+            {!showSidebar && !previousPage && (
               <Button
                 variant="ghost"
                 size="sm"

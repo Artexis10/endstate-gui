@@ -237,17 +237,16 @@ export function OverviewScreen({
   ).slice(0, 3);
 
   // Card expansion animation variants
+  // Simplified animation - use opacity only, let layout handle height
   const contentVariants = {
-    hidden: { opacity: 0, height: 0 },
+    hidden: { opacity: 0 },
     visible: { 
-      opacity: 1, 
-      height: 'auto',
-      transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] as const }
+      opacity: 1,
+      transition: { duration: 0.15, ease: [0.4, 0, 0.2, 1] as const }
     },
     exit: { 
-      opacity: 0, 
-      height: 0,
-      transition: { duration: 0.15, ease: [0.4, 0, 1, 1] as const }
+      opacity: 0,
+      transition: { duration: 0.1, ease: [0.4, 0, 1, 1] as const }
     },
   };
 
@@ -305,10 +304,10 @@ export function OverviewScreen({
                 }}
                 onClick={(e) => e.stopPropagation()}
                 disabled={isRunning}
-                className="w-full bg-transparent text-sm font-medium border-0 p-0 focus:ring-0 focus:outline-none cursor-pointer"
+                className="w-full text-sm font-medium border-0 p-0 focus:ring-0 focus:outline-none cursor-pointer bg-transparent text-foreground [&>option]:bg-popover [&>option]:text-popover-foreground"
               >
                 {profiles.map((p) => (
-                  <option key={p.name} value={p.name}>
+                  <option key={p.name} value={p.name} className="bg-popover text-popover-foreground">
                     {p.name}
                   </option>
                 ))}
@@ -505,10 +504,10 @@ export function OverviewScreen({
                   onProfileChange(e.target.value, selected?.path || '');
                 }}
                 disabled={isRunning}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                className="h-8 rounded-md border border-input bg-background text-foreground px-2 text-xs [&>option]:bg-popover [&>option]:text-popover-foreground"
               >
                 {profiles.map((p) => (
-                  <option key={p.name} value={p.name}>
+                  <option key={p.name} value={p.name} className="bg-popover text-popover-foreground">
                     {p.name}
                   </option>
                 ))}

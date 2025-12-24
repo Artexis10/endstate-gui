@@ -72,7 +72,24 @@ interface AppState {
 function App() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [currentPage, setCurrentPage] = useState<PageType>('overview');
+  const [previousPage, setPreviousPage] = useState<PageType | null>(null);
   const [uiMode, setUIMode] = useState<UIMode>(loadUIMode());
+  
+  // Navigation with back support - tracks previous page when navigating from Overview
+  const navigateWithHistory = (page: PageType) => {
+    if (currentPage === 'overview' && page !== 'overview') {
+      setPreviousPage('overview');
+    }
+    setCurrentPage(page);
+  };
+  
+  // Go back to previous page
+  const handleBack = () => {
+    if (previousPage) {
+      setCurrentPage(previousPage);
+      setPreviousPage(null);
+    }
+  };
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState('');
@@ -901,12 +918,25 @@ function App() {
       throw new Error(captureResult.envelope?.error?.message || 'Capture failed');
     }
 
+    // Get count from envelope data (preferred) or fall back to log parsing
+    const envelopeData = captureResult.envelope?.data as EndstateCaptureData | undefined;
+    let capturedCount = 0;
+    
+    if (envelopeData?.counts?.included !== undefined) {
+      capturedCount = envelopeData.counts.included;
+    } else if (envelopeData?.appsIncluded) {
+      capturedCount = envelopeData.appsIncluded.length;
+    } else {
+      // Fall back to log parsing
+      const finalStats = parseCaptureOutput(runLogs);
+      capturedCount = finalStats.succeeded;
+    }
+
     // Update state with results
-    const finalStats = parseCaptureOutput(runLogs);
     const captureEvent: LifecycleEvent = {
       timestamp: new Date().toISOString(),
       success: true,
-      summary: { total: finalStats.succeeded },
+      summary: { total: capturedCount },
     };
     const newLifecycleState = recordLifecycleEvent('capture', captureEvent);
     setLifecycleState(newLifecycleState);
@@ -920,7 +950,8 @@ function App() {
       updateSettings({ lastSelectedProfile: newest.name, lastSelectedProfilePath: newest.path });
     }
     
-    setOverviewActionProgress({ message: `${finalStats.succeeded} apps captured` });
+    // Return the count so the caller can use it for the result
+    return capturedCount;
   };
 
   const handlePreviewFromOverview = async () => {
@@ -981,6 +1012,8 @@ function App() {
     setOverviewActionProgress({ 
       message: `${installed} to install, ${alreadyPresent} already present` 
     });
+    
+    return { installed, alreadyPresent, profile: selectedProfile };
   };
 
   const handleCheckFromOverview = async () => {
@@ -1044,6 +1077,8 @@ function App() {
     } else {
       setOverviewActionProgress({ message: `All ${present} apps present` });
     }
+    
+    return { missing, present, profile: selectedProfile };
   };
 
   const handleApplyFromOverview = async () => {
@@ -1071,9 +1106,10 @@ function App() {
           for (const line of completeLines) {
             const progress = parseApplyProgressLine(line);
             if (progress) {
+              // Show action-specific message (Installing, Installed, Skipped, Failed, etc.)
               setOverviewActionProgress({ 
-                message: 'Installing applications...', 
-                detail: progress.app 
+                message: `${progress.action}: ${progress.app}`,
+                detail: progress.action === 'Installing' ? 'Please wait...' : undefined
               });
             }
           }
@@ -1109,6 +1145,10 @@ function App() {
     setOverviewActionProgress({ 
       message: `${installed} installed, ${alreadyPresent} already present` 
     });
+    
+    const failed = envelopeData?.counts?.failed ?? 0;
+    const skipped = envelopeData?.counts?.skippedFiltered ?? 0;
+    return { installed, alreadyPresent, failed, skipped, profile: selectedProfile };
   };
 
   const handleImportProfile = async () => {
@@ -1300,18 +1340,26 @@ function App() {
               actionProgress={overviewActionProgress}
               actionResult={overviewActionResult}
               uiMode={uiMode}
-              onNavigate={setCurrentPage}
+              onNavigate={navigateWithHistory}
               onCapture={async () => {
+                if (isRunning) return; // Guard against double-click
                 setOverviewRunningAction('capture');
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Scanning installed applications...' });
                 try {
-                  await handleCaptureFromOverview();
+                  const capturedCount = await handleCaptureFromOverview();
                   setOverviewActionStatus('success');
+                  const countText = capturedCount === 0 
+                    ? 'No apps detected' 
+                    : `${capturedCount} apps captured`;
+                  setOverviewActionProgress({ message: countText });
                   setOverviewActionResult({ 
                     action: 'capture', 
                     status: 'success', 
-                    summary: 'Profile saved successfully' 
+                    summary: countText,
+                    details: capturedCount > 0 
+                      ? [`Profile saved successfully`, `${capturedCount} applications included`]
+                      : ['Profile saved (empty)', 'No applications were detected on this computer']
                   });
                 } catch (err) {
                   setOverviewActionStatus('error');
@@ -1323,6 +1371,7 @@ function App() {
                 }
               }}
               onSetup={async (intent) => {
+                if (isRunning) return; // Guard against double-click
                 setOverviewRunningAction('setup');
                 setOverviewActionStatus('running');
                 const isApply = intent === 'apply';
@@ -1331,20 +1380,33 @@ function App() {
                 });
                 try {
                   if (isApply) {
-                    await handleApplyFromOverview();
+                    const result = await handleApplyFromOverview();
                     setOverviewActionStatus('success');
+                    const details = [
+                      `Profile: ${result.profile}`,
+                      `Installed: ${result.installed}`,
+                      `Already present: ${result.alreadyPresent}`,
+                    ];
+                    if (result.skipped > 0) details.push(`Skipped: ${result.skipped}`);
+                    if (result.failed > 0) details.push(`Failed: ${result.failed}`);
                     setOverviewActionResult({ 
                       action: 'setup', 
                       status: 'success', 
-                      summary: 'Applications installed successfully' 
+                      summary: `${result.installed} installed, ${result.alreadyPresent} already present`,
+                      details
                     });
                   } else {
-                    await handlePreviewFromOverview();
+                    const result = await handlePreviewFromOverview();
                     setOverviewActionStatus('success');
                     setOverviewActionResult({ 
                       action: 'setup', 
                       status: 'success', 
-                      summary: 'Preview complete' 
+                      summary: `${result.installed} to install, ${result.alreadyPresent} already present`,
+                      details: [
+                        `Profile: ${result.profile}`,
+                        `To install: ${result.installed}`,
+                        `Already present: ${result.alreadyPresent}`,
+                      ]
                     });
                   }
                 } catch (err) {
@@ -1357,16 +1419,25 @@ function App() {
                 }
               }}
               onCheck={async () => {
+                if (isRunning) return; // Guard against double-click
                 setOverviewRunningAction('check');
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Checking computer...' });
                 try {
-                  await handleCheckFromOverview();
+                  const result = await handleCheckFromOverview();
                   setOverviewActionStatus('success');
+                  const summaryText = result.missing > 0 
+                    ? `${result.missing} missing, ${result.present} present`
+                    : `All ${result.present} apps present`;
                   setOverviewActionResult({ 
                     action: 'check', 
                     status: 'success', 
-                    summary: 'Check complete' 
+                    summary: summaryText,
+                    details: [
+                      `Profile: ${result.profile}`,
+                      `Present: ${result.present}`,
+                      `Missing: ${result.missing}`,
+                    ]
                   });
                 } catch (err) {
                   setOverviewActionStatus('error');
@@ -2176,6 +2247,8 @@ function App() {
         navIndicators={navIndicators}
         uiMode={uiMode}
         onToggleUIMode={handleToggleUIMode}
+        previousPage={previousPage}
+        onBack={handleBack}
       >
         {renderPage()}
       </AppShell>
