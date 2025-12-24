@@ -160,6 +160,7 @@ function App() {
     };
     profile?: string;
     timestamp?: string;
+    wasPreview?: boolean; // Track if this was a preview (for showing Apply button)
   }
   
   // Live counters during apply/preview
@@ -1011,8 +1012,8 @@ function App() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
-    // Collect app events during preview
-    const collectedEvents: AppEvent[] = [];
+    // Collect app events during preview - deduplicated by app
+    const appEventMap = new Map<string, AppEvent>();
     
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
@@ -1025,10 +1026,10 @@ function App() {
           for (const line of completeLines) {
             const progress = parseApplyProgressLine(line);
             if (progress) {
-              // Track per-app events for preview
+              // Track per-app events for preview - deduplicated
               const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
-              collectedEvents.push(appEvent);
-              setLiveAppEvents(prev => [...prev.slice(-20), appEvent]);
+              appEventMap.set(progress.app, appEvent);
+              setLiveAppEvents(Array.from(appEventMap.values()).slice(-20));
               
               setOverviewActionProgress({ 
                 message: 'Analyzing setup...', 
@@ -1039,6 +1040,9 @@ function App() {
         }
       }
     );
+    
+    // Convert map to array for final result
+    const collectedEvents = Array.from(appEventMap.values());
 
     logBufferRef.current?.flush();
     applyLineBufferRef.current?.clear();
@@ -1153,8 +1157,8 @@ function App() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
-    // Collect app events during streaming
-    const collectedEvents: AppEvent[] = [];
+    // Collect app events during streaming - deduplicated by app
+    const appEventMap = new Map<string, AppEvent>(); // Dedupe: latest event per app
     const counters = { installed: 0, skipped: 0, failed: 0 };
     
     const applyResult = await runEngineStreaming<EndstateApplyData>(
@@ -1168,21 +1172,32 @@ function App() {
           for (const line of completeLines) {
             const progress = parseApplyProgressLine(line);
             if (progress) {
-              // Track per-app events
               const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
-              collectedEvents.push(appEvent);
-              setLiveAppEvents(prev => [...prev.slice(-20), appEvent]); // Keep last 20
               
-              // Update counters based on action
-              if (progress.action === 'Installed') counters.installed++;
-              else if (progress.action === 'Already installed' || progress.action === 'Skipped') counters.skipped++;
-              else if (progress.action === 'Failed') counters.failed++;
+              // Deduplicate: update existing entry or add new one
+              // Only update counters when action changes to a final state
+              const existing = appEventMap.get(progress.app);
+              const isFinalAction = ['Installed', 'Skipped', 'Failed'].includes(progress.action);
+              const wasProcessing = existing?.action === 'Processing';
+              
+              if (isFinalAction && (!existing || wasProcessing || existing.action === 'Processing')) {
+                // Update counters only for final actions (not Processing)
+                if (progress.action === 'Installed') counters.installed++;
+                else if (progress.action === 'Skipped') counters.skipped++;
+                else if (progress.action === 'Failed') counters.failed++;
+              }
+              
+              appEventMap.set(progress.app, appEvent);
+              
+              // Update live events for UI (show recent activity)
+              setLiveAppEvents(Array.from(appEventMap.values()).slice(-20));
               setLiveCounters({ ...counters });
               
-              // Show action-specific message with counters
+              // Show truthful headline - use final action if available
+              const displayAction = progress.action === 'Processing' ? 'Processing' : progress.action;
               const counterText = `Installed ${counters.installed} · Skipped ${counters.skipped}${counters.failed > 0 ? ` · Failed ${counters.failed}` : ''}`;
               setOverviewActionProgress({ 
-                message: `${progress.action}: ${progress.app}`,
+                message: `${displayAction}: ${progress.app}`,
                 detail: counterText
               });
             }
@@ -1190,6 +1205,9 @@ function App() {
         }
       }
     );
+    
+    // Convert map to array for final result
+    const collectedEvents = Array.from(appEventMap.values());
 
     logBufferRef.current?.flush();
     applyLineBufferRef.current?.clear();
@@ -1497,6 +1515,7 @@ function App() {
                         alreadyPresent: result.alreadyPresent,
                       },
                       appEvents: result.appEvents,
+                      wasPreview: true, // Flag for showing "Apply changes" button
                     });
                   }
                 } catch (err) {

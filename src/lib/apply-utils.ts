@@ -199,16 +199,17 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
   }
 
   // [OK] App.Id (driver: ...) - message
+  // [OK] means the app is already present, NOT that we installed it
   const okMatch = line.match(/\[OK\]\s+(\S+)/i);
   if (okMatch) {
-    const isAlready = line.toLowerCase().includes('already');
-    return { app: okMatch[1], action: isAlready ? 'Already installed' : 'Installed' };
+    return { app: okMatch[1], action: 'Skipped' };
   }
 
-  // [INSTALL] App.Id (driver: ...)
+  // [INSTALL] App.Id (driver: ...) - this is the START of an install, not completion
+  // Treat as "Processing" - the actual result comes later
   const installMatch = line.match(/\[INSTALL\]\s+(\S+)/i);
   if (installMatch) {
-    return { app: installMatch[1], action: 'Installing' };
+    return { app: installMatch[1], action: 'Processing' };
   }
 
   // [PLAN] App.Id - would install
@@ -217,17 +218,16 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
     return { app: planMatch[1], action: 'Would install' };
   }
 
-  // [ACTION] Installing App.Id via winget
+  // [ACTION] Installing App.Id via winget - this is processing, not completion
   const actionMatch = line.match(/\[ACTION\]\s+(?:Installing|Checking)\s+(\S+)/i);
   if (actionMatch) {
-    return { app: actionMatch[1], action: 'Installing' };
+    return { app: actionMatch[1], action: 'Processing' };
   }
 
-  // [SKIP] App.Id - reason
+  // [SKIP] App.Id - reason - always "Skipped"
   const skipMatch = line.match(/\[SKIP\]\s+(\S+)/i);
   if (skipMatch) {
-    const isAlready = line.toLowerCase().includes('already');
-    return { app: skipMatch[1], action: isAlready ? 'Already installed' : 'Skipped' };
+    return { app: skipMatch[1], action: 'Skipped' };
   }
 
   // [FAIL] App.Id - error
@@ -251,8 +251,9 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
   // Winget-style: Found/Installing/Successfully installed App.Name [App.Id]
   const wingetMatch = line.match(/(?:Found|Installing|Successfully installed)\s+[^\[]*\[([^\]]+)\]/i);
   if (wingetMatch) {
-    const action = line.toLowerCase().includes('successfully') ? 'Installed' :
-                   line.toLowerCase().includes('installing') ? 'Installing' : 'Checking';
+    // Only "Successfully installed" is a definitive install - others are processing
+    const action = line.toLowerCase().includes('successfully installed') ? 'Installed' :
+                   line.toLowerCase().includes('installing') ? 'Processing' : 'Processing';
     return { app: wingetMatch[1], action };
   }
 

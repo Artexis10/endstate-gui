@@ -21,6 +21,7 @@ import {
   CheckCircle,
   ChevronRight,
   ChevronUp,
+  ChevronDown,
   Clock,
   FileText,
   Loader2,
@@ -76,6 +77,7 @@ interface ActionResult {
   };
   profile?: string;
   timestamp?: string;
+  wasPreview?: boolean; // Track if this was a preview (for showing Apply button)
 }
 
 interface LiveCounters {
@@ -126,6 +128,7 @@ export function OverviewScreen({
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced'); // Collapsed by default in Default mode
   const hasProfile = !!selectedProfile && profiles.length > 0;
   
   // Handle card click based on UI mode
@@ -395,7 +398,7 @@ export function OverviewScreen({
 
         {/* Running state */}
         {isThisRunning && actionProgress && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center gap-3 bg-primary/5 rounded-md px-3 py-3">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               <div className="flex-1 min-w-0">
@@ -406,32 +409,47 @@ export function OverviewScreen({
               </div>
             </div>
             
-            {/* Live activity stack for Setup card */}
+            {/* Collapsible live activity for Setup card */}
             {action === 'setup' && liveAppEvents.length > 0 && (
-              <div className="bg-muted/30 rounded-md px-3 py-2 space-y-1">
-                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                  <span>Recent activity</span>
-                  {liveCounters && (
-                    <span>
-                      {liveCounters.installed > 0 && <span className="text-green-600">✓{liveCounters.installed}</span>}
-                      {liveCounters.skipped > 0 && <span className="ml-2 text-muted-foreground">⊘{liveCounters.skipped}</span>}
-                      {liveCounters.failed > 0 && <span className="ml-2 text-red-600">✗{liveCounters.failed}</span>}
-                    </span>
-                  )}
-                </div>
-                {liveAppEvents.slice(-5).reverse().map((event, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    <span className={`w-14 text-right font-medium ${
-                      event.action === 'Installed' ? 'text-green-600' :
-                      event.action === 'Failed' ? 'text-red-600' :
-                      event.action === 'Already installed' || event.action === 'Skipped' ? 'text-muted-foreground' :
-                      'text-blue-600'
-                    }`}>
-                      {event.action === 'Already installed' ? 'SKIP' : event.action.toUpperCase().slice(0, 7)}
-                    </span>
-                    <span className="font-mono truncate flex-1">{event.app}</span>
+              <div className="rounded-md border border-border/50">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActivityExpanded(!activityExpanded);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
+                >
+                  <span className="font-medium">Live activity</span>
+                  <div className="flex items-center gap-2">
+                    {liveCounters && (
+                      <span className="flex items-center gap-1.5">
+                        {liveCounters.installed > 0 && <span className="text-green-600">✓{liveCounters.installed}</span>}
+                        {liveCounters.skipped > 0 && <span className="text-muted-foreground">⊘{liveCounters.skipped}</span>}
+                        {liveCounters.failed > 0 && <span className="text-red-600">✗{liveCounters.failed}</span>}
+                      </span>
+                    )}
+                    {activityExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   </div>
-                ))}
+                </button>
+                {activityExpanded && (
+                  <div className="px-3 pb-2 space-y-1 border-t border-border/50">
+                    {liveAppEvents.slice(-5).reverse().map((event, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs pt-1">
+                        <span className={`w-12 text-right font-medium ${
+                          event.action === 'Installed' ? 'text-green-600' :
+                          event.action === 'Failed' ? 'text-red-600' :
+                          event.action === 'Skipped' || event.action === 'Already installed' ? 'text-muted-foreground' :
+                          'text-blue-600'
+                        }`}>
+                          {event.action === 'Already installed' || event.action === 'Skipped' ? 'SKIP' : 
+                           event.action === 'Installing' ? 'PROC' : 
+                           event.action.toUpperCase().slice(0, 6)}
+                        </span>
+                        <span className="font-mono truncate flex-1">{event.app}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -511,6 +529,23 @@ export function OverviewScreen({
               >
                 Done
               </Button>
+              {/* Show "Apply changes" button after successful Preview */}
+              {action === 'setup' && actionResult?.wasPreview && actionStatus === 'success' && (
+                <Button
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Reset state and trigger apply
+                    onDismissResult();
+                    setSetupIntent('apply');
+                    // Small delay to ensure state is reset before triggering
+                    setTimeout(() => onSetup('apply'), 50);
+                  }}
+                >
+                  <Zap className="h-3 w-3 mr-1.5" />
+                  Apply changes
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -849,30 +884,31 @@ export function OverviewScreen({
             </div>
           )}
           
-          {/* App events list */}
+          {/* App events list - full list, scrollable */}
           {actionResult?.appEvents && actionResult.appEvents.length > 0 && (
             <div className="flex-1 min-h-0 overflow-hidden">
               <p className="text-xs text-muted-foreground mb-2">
-                Apps ({actionResult.appEvents.length > 15 ? `showing 15 of ${actionResult.appEvents.length}` : actionResult.appEvents.length})
+                Apps ({actionResult.appEvents.length})
               </p>
-              <div className="max-h-48 overflow-y-auto rounded-md border border-border">
+              <div className="max-h-[50vh] overflow-y-auto rounded-md border border-border">
                 <div className="divide-y divide-border">
-                  {/* Show failed first, then installed, then skipped/others */}
+                  {/* Show failed first, then installed, then skipped/others - NO LIMIT */}
                   {[
-                    ...actionResult.appEvents.filter(e => e.action === 'Failed').slice(0, 10),
-                    ...actionResult.appEvents.filter(e => e.action === 'Installed').slice(0, 10),
-                    ...actionResult.appEvents.filter(e => !['Failed', 'Installed'].includes(e.action)).slice(0, 10),
-                  ].slice(0, 15).map((event, i) => (
+                    ...actionResult.appEvents.filter(e => e.action === 'Failed'),
+                    ...actionResult.appEvents.filter(e => e.action === 'Installed'),
+                    ...actionResult.appEvents.filter(e => !['Failed', 'Installed'].includes(e.action)),
+                  ].map((event, i) => (
                     <div key={i} className="flex items-center justify-between px-3 py-1.5 text-xs">
                       <span className="font-mono truncate flex-1">{event.app}</span>
-                      <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${
                         event.action === 'Installed' ? 'bg-green-500/10 text-green-600' :
                         event.action === 'Failed' ? 'bg-red-500/10 text-red-600' :
-                        event.action === 'Already installed' || event.action === 'Skipped' ? 'bg-muted text-muted-foreground' :
+                        event.action === 'Skipped' ? 'bg-muted text-muted-foreground' :
                         event.action === 'Would install' || event.action === 'Missing' ? 'bg-blue-500/10 text-blue-600' :
                         'bg-muted text-muted-foreground'
                       }`}>
-                        {event.action}
+                        {/* Unify language: use "Skipped (already installed)" consistently */}
+                        {event.action === 'Already installed' ? 'Skipped (already installed)' : event.action}
                       </span>
                     </div>
                   ))}
