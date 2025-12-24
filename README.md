@@ -135,10 +135,16 @@ See `.windsurf/rules/project-ruleset.md` in the endstate repository for the auth
 
 ## License
 
-Copyright © Substrate Systems OÜ.  
+This software is proprietary and confidential.
+
+Copyright © 2025 Substrate Systems OÜ.
 All rights reserved.
 
-This repository does not grant permission to use, modify, or redistribute the code unless explicitly stated otherwise.
+Use, modification, or redistribution of this software is prohibited
+except as explicitly permitted by a written agreement with
+Substrate Systems OÜ.
+
+See the LICENSE file for details.
 
 ## Development Notes
 
