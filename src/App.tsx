@@ -1177,13 +1177,15 @@ function App() {
               // Deduplicate: update existing entry or add new one
               // Only update counters when action changes to a final state
               const existing = appEventMap.get(progress.app);
-              const isFinalAction = ['Installed', 'Skipped', 'Failed'].includes(progress.action);
-              const wasProcessing = existing?.action === 'Processing';
+              // Final actions that count: Installed, Skipped, Failed, OK
+              // OK is "verified present" - count it separately or with skipped for display
+              const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK'].includes(progress.action);
+              const wasNonFinal = !existing || existing.action === 'Processing' || existing.action === 'Would install';
               
-              if (isFinalAction && (!existing || wasProcessing || existing.action === 'Processing')) {
+              if (isFinalAction && wasNonFinal) {
                 // Update counters only for final actions (not Processing)
                 if (progress.action === 'Installed') counters.installed++;
-                else if (progress.action === 'Skipped') counters.skipped++;
+                else if (progress.action === 'Skipped' || progress.action === 'OK') counters.skipped++; // OK counts as "already present"
                 else if (progress.action === 'Failed') counters.failed++;
               }
               

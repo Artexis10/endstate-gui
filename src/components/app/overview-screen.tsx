@@ -13,7 +13,7 @@
  * In Advanced mode, cards navigate to their respective pages.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ScanSearch, 
@@ -128,8 +128,18 @@ export function OverviewScreen({
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced'); // Collapsed by default in Default mode
+  // Activity collapsed by default in Default mode, expanded in Advanced mode
+  // Reset when a new run starts based on mode
+  const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced');
   const hasProfile = !!selectedProfile && profiles.length > 0;
+  
+  // Reset activity expanded state when a new run starts
+  useEffect(() => {
+    if (isRunning && runningAction) {
+      // Default mode: collapse for calm UI; Advanced mode: expand to show details
+      setActivityExpanded(uiMode === 'advanced');
+    }
+  }, [isRunning, runningAction, uiMode]);
   
   // Handle card click based on UI mode
   const handleCardClick = (action: ActionType) => {
@@ -438,11 +448,13 @@ export function OverviewScreen({
                         <span className={`w-12 text-right font-medium ${
                           event.action === 'Installed' ? 'text-green-600' :
                           event.action === 'Failed' ? 'text-red-600' :
-                          event.action === 'Skipped' || event.action === 'Already installed' ? 'text-muted-foreground' :
-                          'text-blue-600'
+                          event.action === 'Skipped' || event.action === 'OK' ? 'text-muted-foreground' :
+                          event.action === 'Processing' ? 'text-blue-600' :
+                          'text-muted-foreground'
                         }`}>
-                          {event.action === 'Already installed' || event.action === 'Skipped' ? 'SKIP' : 
-                           event.action === 'Installing' ? 'PROC' : 
+                          {event.action === 'Skipped' ? 'SKIP' : 
+                           event.action === 'OK' ? 'OK' :
+                           event.action === 'Processing' ? 'PROC' : 
                            event.action.toUpperCase().slice(0, 6)}
                         </span>
                         <span className="font-mono truncate flex-1">{event.app}</span>
@@ -904,11 +916,13 @@ export function OverviewScreen({
                         event.action === 'Installed' ? 'bg-green-500/10 text-green-600' :
                         event.action === 'Failed' ? 'bg-red-500/10 text-red-600' :
                         event.action === 'Skipped' ? 'bg-muted text-muted-foreground' :
+                        event.action === 'OK' ? 'bg-muted text-muted-foreground' :
                         event.action === 'Would install' || event.action === 'Missing' ? 'bg-blue-500/10 text-blue-600' :
+                        event.action === 'Processing' ? 'bg-blue-500/10 text-blue-600' :
                         'bg-muted text-muted-foreground'
                       }`}>
-                        {/* Unify language: use "Skipped (already installed)" consistently */}
-                        {event.action === 'Already installed' ? 'Skipped (already installed)' : event.action}
+                        {/* Display action truthfully - OK means verified/present */}
+                        {event.action}
                       </span>
                     </div>
                   ))}

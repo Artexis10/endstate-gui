@@ -199,10 +199,11 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
   }
 
   // [OK] App.Id (driver: ...) - message
-  // [OK] means the app is already present, NOT that we installed it
+  // [OK] means verified/present - NOT the same as Skipped or Installed
+  // Keep it truthful: OK means "verified OK" not "skipped" or "installed"
   const okMatch = line.match(/\[OK\]\s+(\S+)/i);
   if (okMatch) {
-    return { app: okMatch[1], action: 'Skipped' };
+    return { app: okMatch[1], action: 'OK' };
   }
 
   // [INSTALL] App.Id (driver: ...) - this is the START of an install, not completion
