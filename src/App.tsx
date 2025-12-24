@@ -134,16 +134,48 @@ function App() {
   // Overview action state - tracks which action is running and its status
   type OverviewActionType = 'capture' | 'setup' | 'check' | null;
   type OverviewActionStatus = 'idle' | 'running' | 'success' | 'error';
+  
+  // Per-app event for detailed tracking
+  interface AppEvent {
+    app: string;
+    action: 'Installed' | 'Already installed' | 'Skipped' | 'Failed' | 'Would install' | 'Missing' | 'Installing' | string;
+    timestamp?: number;
+  }
+  
+  // Enhanced action result with app events
   interface OverviewActionResult {
     action: OverviewActionType;
     status: 'success' | 'error';
     summary: string;
     details?: string[];
+    appEvents?: AppEvent[];
+    counts?: {
+      installed?: number;
+      skipped?: number;
+      failed?: number;
+      alreadyPresent?: number;
+      toInstall?: number;
+      missing?: number;
+      total?: number;
+    };
+    profile?: string;
+    timestamp?: string;
   }
+  
+  // Live counters during apply/preview
+  interface LiveCounters {
+    installed: number;
+    skipped: number;
+    failed: number;
+  }
+  
   const [overviewRunningAction, setOverviewRunningAction] = useState<OverviewActionType>(null);
   const [overviewActionStatus, setOverviewActionStatus] = useState<OverviewActionStatus>('idle');
   const [overviewActionProgress, setOverviewActionProgress] = useState<{ message: string; detail?: string } | null>(null);
   const [overviewActionResult, setOverviewActionResult] = useState<OverviewActionResult | null>(null);
+  const [liveAppEvents, setLiveAppEvents] = useState<AppEvent[]>([]);
+  const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, skipped: 0, failed: 0 });
+  const isRunningRef = useRef(false); // Robust guard against double-run
   
   // Reset overview action state
   const resetOverviewActionState = () => {
@@ -151,6 +183,9 @@ function App() {
     setOverviewActionStatus('idle');
     setOverviewActionProgress(null);
     setOverviewActionResult(null);
+    setLiveAppEvents([]);
+    setLiveCounters({ installed: 0, skipped: 0, failed: 0 });
+    isRunningRef.current = false;
   };
   
   // Handle UI mode toggle with persistence
@@ -950,8 +985,16 @@ function App() {
       updateSettings({ lastSelectedProfile: newest.name, lastSelectedProfilePath: newest.path });
     }
     
-    // Return the count so the caller can use it for the result
-    return capturedCount;
+    // Get app list from envelope data
+    const appsList = envelopeData?.appsIncluded?.map(a => a.id) || [];
+    
+    // Get profile name from the newest discovered profile
+    const profileName = discovered.length > 0 
+      ? discovered.sort((a, b) => b.path.localeCompare(a.path))[0].name 
+      : 'Unknown';
+    
+    // Return structured result
+    return { count: capturedCount, profileName, apps: appsList };
   };
 
   const handlePreviewFromOverview = async () => {
@@ -968,6 +1011,9 @@ function App() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
+    // Collect app events during preview
+    const collectedEvents: AppEvent[] = [];
+    
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
       'apply',
@@ -979,6 +1025,11 @@ function App() {
           for (const line of completeLines) {
             const progress = parseApplyProgressLine(line);
             if (progress) {
+              // Track per-app events for preview
+              const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
+              collectedEvents.push(appEvent);
+              setLiveAppEvents(prev => [...prev.slice(-20), appEvent]);
+              
               setOverviewActionProgress({ 
                 message: 'Analyzing setup...', 
                 detail: progress.app 
@@ -1013,7 +1064,7 @@ function App() {
       message: `${installed} to install, ${alreadyPresent} already present` 
     });
     
-    return { installed, alreadyPresent, profile: selectedProfile };
+    return { installed, alreadyPresent, profile: selectedProfile, appEvents: collectedEvents };
   };
 
   const handleCheckFromOverview = async () => {
@@ -1030,6 +1081,9 @@ function App() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
+    // Collect app events during check
+    const collectedEvents: AppEvent[] = [];
+    
     // Use apply --dry-run for checking (same as preview)
     const checkResult = await runEngineStreaming<EndstateApplyData>(
       settings,
@@ -1042,6 +1096,10 @@ function App() {
           for (const line of completeLines) {
             const progress = parseApplyProgressLine(line);
             if (progress) {
+              // Track per-app events for check
+              const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
+              collectedEvents.push(appEvent);
+              
               setOverviewActionProgress({ 
                 message: 'Checking computer...', 
                 detail: progress.app 
@@ -1078,7 +1136,7 @@ function App() {
       setOverviewActionProgress({ message: `All ${present} apps present` });
     }
     
-    return { missing, present, profile: selectedProfile };
+    return { missing, present, profile: selectedProfile, appEvents: collectedEvents };
   };
 
   const handleApplyFromOverview = async () => {
@@ -1095,6 +1153,10 @@ function App() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
+    // Collect app events during streaming
+    const collectedEvents: AppEvent[] = [];
+    const counters = { installed: 0, skipped: 0, failed: 0 };
+    
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
       'apply',
@@ -1106,10 +1168,22 @@ function App() {
           for (const line of completeLines) {
             const progress = parseApplyProgressLine(line);
             if (progress) {
-              // Show action-specific message (Installing, Installed, Skipped, Failed, etc.)
+              // Track per-app events
+              const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
+              collectedEvents.push(appEvent);
+              setLiveAppEvents(prev => [...prev.slice(-20), appEvent]); // Keep last 20
+              
+              // Update counters based on action
+              if (progress.action === 'Installed') counters.installed++;
+              else if (progress.action === 'Already installed' || progress.action === 'Skipped') counters.skipped++;
+              else if (progress.action === 'Failed') counters.failed++;
+              setLiveCounters({ ...counters });
+              
+              // Show action-specific message with counters
+              const counterText = `Installed ${counters.installed} · Skipped ${counters.skipped}${counters.failed > 0 ? ` · Failed ${counters.failed}` : ''}`;
               setOverviewActionProgress({ 
                 message: `${progress.action}: ${progress.app}`,
-                detail: progress.action === 'Installing' ? 'Please wait...' : undefined
+                detail: counterText
               });
             }
           }
@@ -1148,7 +1222,7 @@ function App() {
     
     const failed = envelopeData?.counts?.failed ?? 0;
     const skipped = envelopeData?.counts?.skippedFiltered ?? 0;
-    return { installed, alreadyPresent, failed, skipped, profile: selectedProfile };
+    return { installed, alreadyPresent, failed, skipped, profile: selectedProfile, appEvents: collectedEvents };
   };
 
   const handleImportProfile = async () => {
@@ -1338,28 +1412,34 @@ function App() {
               runningAction={overviewRunningAction}
               actionStatus={overviewActionStatus}
               actionProgress={overviewActionProgress}
+              liveAppEvents={liveAppEvents}
+              liveCounters={liveCounters}
               actionResult={overviewActionResult}
               uiMode={uiMode}
               onNavigate={navigateWithHistory}
               onCapture={async () => {
-                if (isRunning) return; // Guard against double-click
+                // Robust double-run guard using ref
+                if (isRunning || isRunningRef.current) return;
+                isRunningRef.current = true;
+                
                 setOverviewRunningAction('capture');
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Scanning installed applications...' });
                 try {
-                  const capturedCount = await handleCaptureFromOverview();
+                  const result = await handleCaptureFromOverview();
                   setOverviewActionStatus('success');
-                  const countText = capturedCount === 0 
+                  const countText = result.count === 0 
                     ? 'No apps detected' 
-                    : `${capturedCount} apps captured`;
+                    : `${result.count} apps captured`;
                   setOverviewActionProgress({ message: countText });
                   setOverviewActionResult({ 
                     action: 'capture', 
                     status: 'success', 
                     summary: countText,
-                    details: capturedCount > 0 
-                      ? [`Profile saved successfully`, `${capturedCount} applications included`]
-                      : ['Profile saved (empty)', 'No applications were detected on this computer']
+                    profile: result.profileName,
+                    timestamp: new Date().toISOString(),
+                    counts: { total: result.count },
+                    appEvents: result.apps?.map(app => ({ app, action: 'Captured' })),
                   });
                 } catch (err) {
                   setOverviewActionStatus('error');
@@ -1368,10 +1448,17 @@ function App() {
                     status: 'error', 
                     summary: err instanceof Error ? err.message : 'Capture failed' 
                   });
+                } finally {
+                  isRunningRef.current = false;
                 }
               }}
               onSetup={async (intent) => {
-                if (isRunning) return; // Guard against double-click
+                // Robust double-run guard using ref
+                if (isRunning || isRunningRef.current) return;
+                isRunningRef.current = true;
+                setLiveAppEvents([]);
+                setLiveCounters({ installed: 0, skipped: 0, failed: 0 });
+                
                 setOverviewRunningAction('setup');
                 setOverviewActionStatus('running');
                 const isApply = intent === 'apply';
@@ -1382,18 +1469,19 @@ function App() {
                   if (isApply) {
                     const result = await handleApplyFromOverview();
                     setOverviewActionStatus('success');
-                    const details = [
-                      `Profile: ${result.profile}`,
-                      `Installed: ${result.installed}`,
-                      `Already present: ${result.alreadyPresent}`,
-                    ];
-                    if (result.skipped > 0) details.push(`Skipped: ${result.skipped}`);
-                    if (result.failed > 0) details.push(`Failed: ${result.failed}`);
                     setOverviewActionResult({ 
                       action: 'setup', 
                       status: 'success', 
                       summary: `${result.installed} installed, ${result.alreadyPresent} already present`,
-                      details
+                      profile: result.profile,
+                      timestamp: new Date().toISOString(),
+                      counts: {
+                        installed: result.installed,
+                        alreadyPresent: result.alreadyPresent,
+                        skipped: result.skipped,
+                        failed: result.failed,
+                      },
+                      appEvents: result.appEvents,
                     });
                   } else {
                     const result = await handlePreviewFromOverview();
@@ -1402,11 +1490,13 @@ function App() {
                       action: 'setup', 
                       status: 'success', 
                       summary: `${result.installed} to install, ${result.alreadyPresent} already present`,
-                      details: [
-                        `Profile: ${result.profile}`,
-                        `To install: ${result.installed}`,
-                        `Already present: ${result.alreadyPresent}`,
-                      ]
+                      profile: result.profile,
+                      timestamp: new Date().toISOString(),
+                      counts: {
+                        toInstall: result.installed,
+                        alreadyPresent: result.alreadyPresent,
+                      },
+                      appEvents: result.appEvents,
                     });
                   }
                 } catch (err) {
@@ -1416,10 +1506,15 @@ function App() {
                     status: 'error', 
                     summary: err instanceof Error ? err.message : 'Setup failed' 
                   });
+                } finally {
+                  isRunningRef.current = false;
                 }
               }}
               onCheck={async () => {
-                if (isRunning) return; // Guard against double-click
+                // Robust double-run guard using ref
+                if (isRunning || isRunningRef.current) return;
+                isRunningRef.current = true;
+                
                 setOverviewRunningAction('check');
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Checking computer...' });
@@ -1433,11 +1528,13 @@ function App() {
                     action: 'check', 
                     status: 'success', 
                     summary: summaryText,
-                    details: [
-                      `Profile: ${result.profile}`,
-                      `Present: ${result.present}`,
-                      `Missing: ${result.missing}`,
-                    ]
+                    profile: result.profile,
+                    timestamp: new Date().toISOString(),
+                    counts: {
+                      missing: result.missing,
+                      alreadyPresent: result.present,
+                    },
+                    appEvents: result.appEvents,
                   });
                 } catch (err) {
                   setOverviewActionStatus('error');
@@ -1446,6 +1543,8 @@ function App() {
                     status: 'error', 
                     summary: err instanceof Error ? err.message : 'Check failed' 
                   });
+                } finally {
+                  isRunningRef.current = false;
                 }
               }}
               onProfileChange={(profile, path) => {

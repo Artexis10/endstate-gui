@@ -52,11 +52,36 @@ interface ActionProgress {
   detail?: string;
 }
 
+// Per-app event for detailed tracking
+interface AppEvent {
+  app: string;
+  action: string;
+  timestamp?: number;
+}
+
 interface ActionResult {
   action: ActionType;
   status: 'success' | 'error';
   summary: string;
   details?: string[];
+  appEvents?: AppEvent[];
+  counts?: {
+    installed?: number;
+    skipped?: number;
+    failed?: number;
+    alreadyPresent?: number;
+    toInstall?: number;
+    missing?: number;
+    total?: number;
+  };
+  profile?: string;
+  timestamp?: string;
+}
+
+interface LiveCounters {
+  installed: number;
+  skipped: number;
+  failed: number;
 }
 
 interface OverviewScreenProps {
@@ -68,6 +93,8 @@ interface OverviewScreenProps {
   actionStatus: ActionStatus;
   actionProgress: ActionProgress | null;
   actionResult: ActionResult | null;
+  liveAppEvents?: AppEvent[];
+  liveCounters?: LiveCounters;
   uiMode: UIMode;
   onNavigate: (page: 'capture' | 'apply' | 'verify' | 'report' | 'settings') => void;
   onCapture: () => void;
@@ -86,6 +113,8 @@ export function OverviewScreen({
   actionStatus,
   actionProgress,
   actionResult,
+  liveAppEvents = [],
+  liveCounters,
   uiMode,
   onNavigate,
   onCapture,
@@ -282,7 +311,7 @@ export function OverviewScreen({
         initial="hidden"
         animate="visible"
         exit="exit"
-        className="border-t border-border mt-2 pt-3 space-y-3 pb-2"
+        className="border-t border-border mt-3 pt-4 space-y-3 pb-4"
       >
         {/* Description */}
         <p className="text-sm text-muted-foreground">
@@ -366,14 +395,45 @@ export function OverviewScreen({
 
         {/* Running state */}
         {isThisRunning && actionProgress && (
-          <div className="flex items-center gap-3 bg-primary/5 rounded-md px-3 py-3">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{actionProgress.message}</p>
-              {actionProgress.detail && (
-                <p className="text-xs text-muted-foreground truncate">{actionProgress.detail}</p>
-              )}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 bg-primary/5 rounded-md px-3 py-3">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{actionProgress.message}</p>
+                {actionProgress.detail && (
+                  <p className="text-xs text-muted-foreground truncate">{actionProgress.detail}</p>
+                )}
+              </div>
             </div>
+            
+            {/* Live activity stack for Setup card */}
+            {action === 'setup' && liveAppEvents.length > 0 && (
+              <div className="bg-muted/30 rounded-md px-3 py-2 space-y-1">
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                  <span>Recent activity</span>
+                  {liveCounters && (
+                    <span>
+                      {liveCounters.installed > 0 && <span className="text-green-600">✓{liveCounters.installed}</span>}
+                      {liveCounters.skipped > 0 && <span className="ml-2 text-muted-foreground">⊘{liveCounters.skipped}</span>}
+                      {liveCounters.failed > 0 && <span className="ml-2 text-red-600">✗{liveCounters.failed}</span>}
+                    </span>
+                  )}
+                </div>
+                {liveAppEvents.slice(-5).reverse().map((event, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className={`w-14 text-right font-medium ${
+                      event.action === 'Installed' ? 'text-green-600' :
+                      event.action === 'Failed' ? 'text-red-600' :
+                      event.action === 'Already installed' || event.action === 'Skipped' ? 'text-muted-foreground' :
+                      'text-blue-600'
+                    }`}>
+                      {event.action === 'Already installed' ? 'SKIP' : event.action.toUpperCase().slice(0, 7)}
+                    </span>
+                    <span className="font-mono truncate flex-1">{event.app}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -407,7 +467,7 @@ export function OverviewScreen({
         <div className="border-t border-border/50 pt-3 mt-1" />
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 pb-1">
+        <div className="flex items-center gap-2">
           {!isThisComplete ? (
             <>
               <Button
@@ -734,39 +794,125 @@ export function OverviewScreen({
 
       {/* Details Modal - shows logs/results without navigation */}
       <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>
-              {runningAction === 'capture' && 'Capture Details'}
-              {runningAction === 'setup' && 'Setup Details'}
-              {runningAction === 'check' && 'Check Details'}
-              {!runningAction && 'Details'}
+              {actionResult?.action === 'capture' && 'Capture Details'}
+              {actionResult?.action === 'setup' && 'Setup Details'}
+              {actionResult?.action === 'check' && 'Check Details'}
+              {!actionResult?.action && 'Details'}
             </DialogTitle>
             <DialogDescription>
               {actionResult?.summary || actionProgress?.message || 'Action completed.'}
             </DialogDescription>
           </DialogHeader>
           
-          {/* Result details */}
-          {actionResult?.details && actionResult.details.length > 0 && (
-            <div className="max-h-64 overflow-y-auto">
-              <div className="space-y-1 text-sm font-mono bg-muted/50 rounded-md p-3">
-                {actionResult.details.map((line, i) => (
-                  <p key={i} className="text-muted-foreground">{line}</p>
-                ))}
+          {/* Summary info */}
+          {actionResult && (
+            <div className="space-y-3 text-sm">
+              {/* Profile and timestamp */}
+              <div className="flex items-center justify-between text-muted-foreground">
+                {actionResult.profile && (
+                  <span>Profile: <span className="text-foreground font-medium">{actionResult.profile}</span></span>
+                )}
+                {actionResult.timestamp && (
+                  <span>{formatRelativeTime(actionResult.timestamp)}</span>
+                )}
+              </div>
+              
+              {/* Counts summary */}
+              {actionResult.counts && (
+                <div className="flex flex-wrap gap-3 text-xs">
+                  {actionResult.counts.total !== undefined && (
+                    <span className="px-2 py-1 bg-muted rounded">Total: {actionResult.counts.total}</span>
+                  )}
+                  {actionResult.counts.installed !== undefined && actionResult.counts.installed > 0 && (
+                    <span className="px-2 py-1 bg-green-500/10 text-green-600 rounded">Installed: {actionResult.counts.installed}</span>
+                  )}
+                  {actionResult.counts.toInstall !== undefined && actionResult.counts.toInstall > 0 && (
+                    <span className="px-2 py-1 bg-blue-500/10 text-blue-600 rounded">To install: {actionResult.counts.toInstall}</span>
+                  )}
+                  {actionResult.counts.alreadyPresent !== undefined && actionResult.counts.alreadyPresent > 0 && (
+                    <span className="px-2 py-1 bg-muted rounded">Already present: {actionResult.counts.alreadyPresent}</span>
+                  )}
+                  {actionResult.counts.skipped !== undefined && actionResult.counts.skipped > 0 && (
+                    <span className="px-2 py-1 bg-yellow-500/10 text-yellow-600 rounded">Skipped: {actionResult.counts.skipped}</span>
+                  )}
+                  {actionResult.counts.failed !== undefined && actionResult.counts.failed > 0 && (
+                    <span className="px-2 py-1 bg-red-500/10 text-red-600 rounded">Failed: {actionResult.counts.failed}</span>
+                  )}
+                  {actionResult.counts.missing !== undefined && actionResult.counts.missing > 0 && (
+                    <span className="px-2 py-1 bg-orange-500/10 text-orange-600 rounded">Missing: {actionResult.counts.missing}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* App events list */}
+          {actionResult?.appEvents && actionResult.appEvents.length > 0 && (
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <p className="text-xs text-muted-foreground mb-2">
+                Apps ({actionResult.appEvents.length > 15 ? `showing 15 of ${actionResult.appEvents.length}` : actionResult.appEvents.length})
+              </p>
+              <div className="max-h-48 overflow-y-auto rounded-md border border-border">
+                <div className="divide-y divide-border">
+                  {/* Show failed first, then installed, then skipped/others */}
+                  {[
+                    ...actionResult.appEvents.filter(e => e.action === 'Failed').slice(0, 10),
+                    ...actionResult.appEvents.filter(e => e.action === 'Installed').slice(0, 10),
+                    ...actionResult.appEvents.filter(e => !['Failed', 'Installed'].includes(e.action)).slice(0, 10),
+                  ].slice(0, 15).map((event, i) => (
+                    <div key={i} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                      <span className="font-mono truncate flex-1">{event.app}</span>
+                      <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        event.action === 'Installed' ? 'bg-green-500/10 text-green-600' :
+                        event.action === 'Failed' ? 'bg-red-500/10 text-red-600' :
+                        event.action === 'Already installed' || event.action === 'Skipped' ? 'bg-muted text-muted-foreground' :
+                        event.action === 'Would install' || event.action === 'Missing' ? 'bg-blue-500/10 text-blue-600' :
+                        'bg-muted text-muted-foreground'
+                      }`}>
+                        {event.action}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Fallback if no details */}
-          {(!actionResult?.details || actionResult.details.length === 0) && (
+          {/* Fallback if no app events */}
+          {(!actionResult?.appEvents || actionResult.appEvents.length === 0) && actionResult?.status === 'success' && (
             <div className="text-sm text-muted-foreground py-4 text-center">
-              {actionStatus === 'success' && 'Operation completed successfully.'}
-              {actionStatus === 'error' && 'An error occurred during the operation.'}
+              {actionResult.action === 'capture' && actionResult.counts?.total === 0 
+                ? 'No applications were detected on this computer.'
+                : 'Operation completed successfully.'}
+            </div>
+          )}
+          
+          {actionResult?.status === 'error' && (
+            <div className="text-sm text-destructive py-4 text-center">
+              An error occurred during the operation.
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 gap-2">
+            {actionResult?.action === 'setup' && (
+              <Button variant="secondary" size="sm" onClick={() => {
+                setDetailsModalOpen(false);
+                onNavigate('apply');
+              }}>
+                View full report
+              </Button>
+            )}
+            {actionResult?.action === 'check' && (
+              <Button variant="secondary" size="sm" onClick={() => {
+                setDetailsModalOpen(false);
+                onNavigate('verify');
+              }}>
+                View full report
+              </Button>
+            )}
             <Button onClick={() => setDetailsModalOpen(false)}>
               Done
             </Button>
