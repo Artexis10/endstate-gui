@@ -82,6 +82,7 @@ interface ActionResult {
 
 interface LiveCounters {
   installed: number;
+  alreadyPresent: number;
   skipped: number;
   failed: number;
 }
@@ -434,7 +435,8 @@ export function OverviewScreen({
                     {liveCounters && (
                       <span className="flex items-center gap-1.5">
                         {liveCounters.installed > 0 && <span className="text-green-600">✓{liveCounters.installed}</span>}
-                        {liveCounters.skipped > 0 && <span className="text-muted-foreground">⊘{liveCounters.skipped}</span>}
+                        {liveCounters.alreadyPresent > 0 && <span className="text-muted-foreground">●{liveCounters.alreadyPresent}</span>}
+                        {liveCounters.skipped > 0 && <span className="text-yellow-600">⊘{liveCounters.skipped}</span>}
                         {liveCounters.failed > 0 && <span className="text-red-600">✗{liveCounters.failed}</span>}
                       </span>
                     )}
@@ -442,20 +444,21 @@ export function OverviewScreen({
                   </div>
                 </button>
                 {activityExpanded && (
-                  <div className="px-3 pb-2 space-y-1 border-t border-border/50">
+                  <div className="px-3 pb-3 space-y-1 border-t border-border/50">
                     {liveAppEvents.slice(-5).reverse().map((event, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs pt-1">
-                        <span className={`w-12 text-right font-medium ${
+                      <div key={i} className="flex items-center gap-2 text-xs pt-1.5">
+                        <span className={`w-14 text-right font-medium ${
                           event.action === 'Installed' ? 'text-green-600' :
                           event.action === 'Failed' ? 'text-red-600' :
-                          event.action === 'Skipped' || event.action === 'OK' ? 'text-muted-foreground' :
+                          event.action === 'OK' ? 'text-muted-foreground' :
+                          event.action === 'Skipped' ? 'text-yellow-600' :
                           event.action === 'Processing' ? 'text-blue-600' :
                           'text-muted-foreground'
                         }`}>
-                          {event.action === 'Skipped' ? 'SKIP' : 
-                           event.action === 'OK' ? 'OK' :
+                          {event.action === 'OK' ? 'PRESENT' : 
+                           event.action === 'Skipped' ? 'SKIP' : 
                            event.action === 'Processing' ? 'PROC' : 
-                           event.action.toUpperCase().slice(0, 6)}
+                           event.action.toUpperCase().slice(0, 7)}
                         </span>
                         <span className="font-mono truncate flex-1">{event.app}</span>
                       </div>
@@ -841,8 +844,8 @@ export function OverviewScreen({
 
       {/* Details Modal - shows logs/results without navigation */}
       <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {actionResult?.action === 'capture' && 'Capture Details'}
               {actionResult?.action === 'setup' && 'Setup Details'}
@@ -854,9 +857,9 @@ export function OverviewScreen({
             </DialogDescription>
           </DialogHeader>
           
-          {/* Summary info */}
+          {/* Summary info - fixed header section */}
           {actionResult && (
-            <div className="space-y-3 text-sm">
+            <div className="flex-shrink-0 space-y-3 text-sm">
               {/* Profile and timestamp */}
               <div className="flex items-center justify-between text-muted-foreground">
                 {actionResult.profile && (
@@ -869,7 +872,7 @@ export function OverviewScreen({
               
               {/* Counts summary */}
               {actionResult.counts && (
-                <div className="flex flex-wrap gap-3 text-xs">
+                <div className="flex flex-wrap gap-2 text-xs">
                   {actionResult.counts.total !== undefined && (
                     <span className="px-2 py-1 bg-muted rounded">Total: {actionResult.counts.total}</span>
                   )}
@@ -896,33 +899,34 @@ export function OverviewScreen({
             </div>
           )}
           
-          {/* App events list - full list, scrollable */}
+          {/* App events list - scrollable section with proper constraints */}
           {actionResult?.appEvents && actionResult.appEvents.length > 0 && (
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <p className="text-xs text-muted-foreground mb-2">
+            <div className="flex-1 min-h-0 flex flex-col">
+              <p className="flex-shrink-0 text-xs text-muted-foreground mb-2">
                 Apps ({actionResult.appEvents.length})
               </p>
-              <div className="max-h-[50vh] overflow-y-auto rounded-md border border-border">
+              <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border">
                 <div className="divide-y divide-border">
-                  {/* Show failed first, then installed, then skipped/others - NO LIMIT */}
+                  {/* Show failed first, then installed, then OK/skipped/others - NO LIMIT */}
                   {[
                     ...actionResult.appEvents.filter(e => e.action === 'Failed'),
                     ...actionResult.appEvents.filter(e => e.action === 'Installed'),
-                    ...actionResult.appEvents.filter(e => !['Failed', 'Installed'].includes(e.action)),
+                    ...actionResult.appEvents.filter(e => e.action === 'OK'),
+                    ...actionResult.appEvents.filter(e => !['Failed', 'Installed', 'OK'].includes(e.action)),
                   ].map((event, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                    <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
                       <span className="font-mono truncate flex-1">{event.app}</span>
                       <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${
                         event.action === 'Installed' ? 'bg-green-500/10 text-green-600' :
                         event.action === 'Failed' ? 'bg-red-500/10 text-red-600' :
-                        event.action === 'Skipped' ? 'bg-muted text-muted-foreground' :
                         event.action === 'OK' ? 'bg-muted text-muted-foreground' :
+                        event.action === 'Skipped' ? 'bg-yellow-500/10 text-yellow-600' :
                         event.action === 'Would install' || event.action === 'Missing' ? 'bg-blue-500/10 text-blue-600' :
                         event.action === 'Processing' ? 'bg-blue-500/10 text-blue-600' :
                         'bg-muted text-muted-foreground'
                       }`}>
-                        {/* Display action truthfully - OK means verified/present */}
-                        {event.action}
+                        {/* Friendly label for OK, truthful for others */}
+                        {event.action === 'OK' ? 'Already present' : event.action}
                       </span>
                     </div>
                   ))}
@@ -933,7 +937,7 @@ export function OverviewScreen({
 
           {/* Fallback if no app events */}
           {(!actionResult?.appEvents || actionResult.appEvents.length === 0) && actionResult?.status === 'success' && (
-            <div className="text-sm text-muted-foreground py-4 text-center">
+            <div className="flex-shrink-0 text-sm text-muted-foreground py-4 text-center">
               {actionResult.action === 'capture' && actionResult.counts?.total === 0 
                 ? 'No applications were detected on this computer.'
                 : 'Operation completed successfully.'}
@@ -941,12 +945,12 @@ export function OverviewScreen({
           )}
           
           {actionResult?.status === 'error' && (
-            <div className="text-sm text-destructive py-4 text-center">
+            <div className="flex-shrink-0 text-sm text-destructive py-4 text-center">
               An error occurred during the operation.
             </div>
           )}
 
-          <DialogFooter className="flex-shrink-0 gap-2">
+          <DialogFooter className="flex-shrink-0 pt-4 gap-2">
             {actionResult?.action === 'setup' && (
               <Button variant="secondary" size="sm" onClick={() => {
                 setDetailsModalOpen(false);

@@ -164,8 +164,14 @@ function App() {
   }
   
   // Live counters during apply/preview
+  // Option A: Truthful model with friendly grouping
+  // - installed: count of Installed
+  // - alreadyPresent: count of OK (verified present)
+  // - skipped: count of Skipped (non-OK skips)
+  // - failed: count of Failed
   interface LiveCounters {
     installed: number;
+    alreadyPresent: number;
     skipped: number;
     failed: number;
   }
@@ -175,7 +181,7 @@ function App() {
   const [overviewActionProgress, setOverviewActionProgress] = useState<{ message: string; detail?: string } | null>(null);
   const [overviewActionResult, setOverviewActionResult] = useState<OverviewActionResult | null>(null);
   const [liveAppEvents, setLiveAppEvents] = useState<AppEvent[]>([]);
-  const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, skipped: 0, failed: 0 });
+  const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
   const isRunningRef = useRef(false); // Robust guard against double-run
   
   // Reset overview action state
@@ -185,7 +191,7 @@ function App() {
     setOverviewActionProgress(null);
     setOverviewActionResult(null);
     setLiveAppEvents([]);
-    setLiveCounters({ installed: 0, skipped: 0, failed: 0 });
+    setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
     isRunningRef.current = false;
   };
   
@@ -1159,7 +1165,8 @@ function App() {
 
     // Collect app events during streaming - deduplicated by app
     const appEventMap = new Map<string, AppEvent>(); // Dedupe: latest event per app
-    const counters = { installed: 0, skipped: 0, failed: 0 };
+    // Option A: Separate counters for truthful grouping
+    const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 };
     
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
@@ -1178,14 +1185,14 @@ function App() {
               // Only update counters when action changes to a final state
               const existing = appEventMap.get(progress.app);
               // Final actions that count: Installed, Skipped, Failed, OK
-              // OK is "verified present" - count it separately or with skipped for display
               const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK'].includes(progress.action);
               const wasNonFinal = !existing || existing.action === 'Processing' || existing.action === 'Would install';
               
               if (isFinalAction && wasNonFinal) {
-                // Update counters only for final actions (not Processing)
+                // Option A: Separate counters - OK goes to alreadyPresent, Skipped stays separate
                 if (progress.action === 'Installed') counters.installed++;
-                else if (progress.action === 'Skipped' || progress.action === 'OK') counters.skipped++; // OK counts as "already present"
+                else if (progress.action === 'OK') counters.alreadyPresent++;
+                else if (progress.action === 'Skipped') counters.skipped++;
                 else if (progress.action === 'Failed') counters.failed++;
               }
               
@@ -1195,11 +1202,20 @@ function App() {
               setLiveAppEvents(Array.from(appEventMap.values()).slice(-20));
               setLiveCounters({ ...counters });
               
-              // Show truthful headline - use final action if available
-              const displayAction = progress.action === 'Processing' ? 'Processing' : progress.action;
-              const counterText = `Installed ${counters.installed} · Skipped ${counters.skipped}${counters.failed > 0 ? ` · Failed ${counters.failed}` : ''}`;
+              // Friendly headline mapping (Option A)
+              const friendlyAction = progress.action === 'OK' ? 'Already present' :
+                                     progress.action === 'Processing' ? 'Processing' :
+                                     progress.action;
+              // Friendly counter text
+              const parts: string[] = [];
+              if (counters.installed > 0) parts.push(`Installed ${counters.installed}`);
+              if (counters.alreadyPresent > 0) parts.push(`Already present ${counters.alreadyPresent}`);
+              if (counters.skipped > 0) parts.push(`Skipped ${counters.skipped}`);
+              if (counters.failed > 0) parts.push(`Failed ${counters.failed}`);
+              const counterText = parts.join(' · ') || 'Processing...';
+              
               setOverviewActionProgress({ 
-                message: `${displayAction}: ${progress.app}`,
+                message: `${friendlyAction}: ${progress.app}`,
                 detail: counterText
               });
             }
@@ -1477,7 +1493,7 @@ function App() {
                 if (isRunning || isRunningRef.current) return;
                 isRunningRef.current = true;
                 setLiveAppEvents([]);
-                setLiveCounters({ installed: 0, skipped: 0, failed: 0 });
+                setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
                 
                 setOverviewRunningAction('setup');
                 setOverviewActionStatus('running');
