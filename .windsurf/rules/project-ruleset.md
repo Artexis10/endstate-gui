@@ -1,11 +1,11 @@
-# Autosuite GUI — Project Ruleset
+# Endstate GUI — Project Ruleset
 
 ## Purpose
 
-The autosuite-gui project is a **thin, deterministic user interface** over the Autosuite CLI (engine).
+The Endstate-gui project is a **thin, deterministic user interface** over the Endstate CLI (engine).
 
 The GUI is responsible for **presentation and orchestration only**.
-All provisioning logic, validation, state, and truth live in the Autosuite engine.
+All provisioning logic, validation, state, and truth live in the Endstate engine.
 
 This ruleset exists to prevent logic drift, contract violations, and accidental reimplementation of engine behavior in the GUI.
 
@@ -14,7 +14,7 @@ This ruleset exists to prevent logic drift, contract violations, and accidental 
 ## Core Architectural Principles
 
 ### Engine Is the Source of Truth
-- Autosuite CLI is authoritative for:
+- Endstate CLI is authoritative for:
   - install state
   - verification results
   - errors
@@ -23,7 +23,7 @@ This ruleset exists to prevent logic drift, contract violations, and accidental 
 - The GUI MUST NOT infer, reconstruct, or override engine state.
 
 ### JSON Is the Contract
-- The GUI MUST invoke the Autosuite CLI with `--json` (or equivalent) **at all times**.
+- The GUI MUST invoke the Endstate CLI with `--json` (or equivalent) **at all times**.
 - The GUI MUST rely exclusively on structured JSON output.
 - The GUI MUST NOT parse or depend on human-readable CLI text.
 
@@ -90,7 +90,7 @@ This ruleset exists to prevent logic drift, contract violations, and accidental 
 ## Evolution Rules
 
 - Any change to the CLI JSON schema or behavior MUST:
-  - be documented in the Autosuite engine ruleset
+  - be documented in the Endstate engine ruleset
   - be reflected here if it affects GUI assumptions
 - The GUI must remain backward-compatible with the documented engine contract.
 
@@ -98,11 +98,11 @@ This ruleset exists to prevent logic drift, contract violations, and accidental 
 
 ## Non-Goals
 
-- autosuite-gui is NOT a configuration management engine.
-- autosuite-gui is NOT a policy engine.
-- autosuite-gui is NOT responsible for idempotency or safety guarantees.
+- Endstate-gui is NOT a configuration management engine.
+- Endstate-gui is NOT a policy engine.
+- Endstate-gui is NOT responsible for idempotency or safety guarantees.
 
-Those guarantees belong exclusively to Autosuite (engine).
+Those guarantees belong exclusively to Endstate (engine).
 
 ---
 
@@ -113,9 +113,9 @@ Those guarantees belong exclusively to Autosuite (engine).
 
 When in doubt, push logic down into the engine.
 
-## Project-Specific Bindings (autosuite-gui)
+## Project-Specific Bindings (Endstate-gui)
 
-This section binds the general GUI rules to the concrete structure and technologies used in autosuite-gui.
+This section binds the general GUI rules to the concrete structure and technologies used in Endstate-gui.
 
 ### Frontend (Vite + React + TypeScript)
 - UI logic lives under `src/` 
@@ -124,11 +124,11 @@ This section binds the general GUI rules to the concrete structure and technolog
 
 ### CLI Integration Layer
 - `src/cli-bridge.ts` is the canonical location for:
-  - spawning the Autosuite CLI
+  - spawning the Endstate CLI
   - passing arguments
   - capturing stdout, stderr, and exit code
   - parsing JSON envelopes
-- No other file may invoke the Autosuite CLI directly
+- No other file may invoke the Endstate CLI directly
 
 ### Engine Abstraction
 - `src/engine-bridge.ts` exists to:
@@ -137,7 +137,7 @@ This section binds the general GUI rules to the concrete structure and technolog
 
 ## Canonical paths (do not guess)
 Project ruleset file (canonical, always edit this exact file when updating rules):
-C:\Users\win-laptop\Desktop\projects\autosuite\.windsurf\rules\project-ruleset.md
+C:\Users\win-laptop\Desktop\projects\Endstate\.windsurf\rules\project-ruleset.md
 
 Do not use PowerShell to edit normal repo files unless a write persistence issue is proven in this session. Default to normal edits. PowerShell fallback only after one failed normal edit, and only for the specific file that failed.
 ## Storage Namespace Isolation
@@ -151,9 +151,9 @@ To prevent test/web settings from affecting Tauri runtime, localStorage keys are
 
 ### Key Format
 Keys are prefixed with namespace: `{namespace}:{key}`
-- Tauri: `tauri:autosuite-gui-settings`
-- Web: `web:autosuite-gui-settings`
-- Test: `test:autosuite-gui-settings`
+- Tauri: `tauri:Endstate-gui-settings`
+- Web: `web:Endstate-gui-settings`
+- Test: `test:Endstate-gui-settings`
 
 ### Migration Rules
 - **Tauri runtime**: NEVER reads from legacy un-namespaced keys (prevents pollution from web/test)
@@ -167,7 +167,7 @@ Playwright tests set `VITE_STORAGE_NS=test` in playwright.config.ts webServer.en
 
 ## Engine Probe and Error Handling
 
-The app probes the autosuite engine on startup via `capabilities --json`. This probe is **non-fatal**:
+The app probes the Endstate engine on startup via `capabilities --json`. This probe is **non-fatal**:
 
 ### Non-Blocking Error State
 - Engine connection errors display as a **banner** within the normal UI, not a blocking modal
@@ -228,9 +228,9 @@ Deterministic localStorage helpers prevent test pollution:
 import { seedLocalStorage, assertLocalStorageKey } from './test/localStorage-helpers';
 
 it('persists settings', () => {
-  seedLocalStorage({ 'web:autosuite-gui-settings': { theme: 'dark' } });
+  seedLocalStorage({ 'web:Endstate-gui-settings': { theme: 'dark' } });
   // ... component interaction
-  assertLocalStorageKey('web:autosuite-gui-settings', { theme: 'dark' });
+  assertLocalStorageKey('web:Endstate-gui-settings', { theme: 'dark' });
 });
 ```
 

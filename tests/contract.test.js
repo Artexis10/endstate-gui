@@ -2,25 +2,25 @@ import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
-const AUTOSUITE_SCRIPT_PATH = 'C:\\Users\\win-laptop\\Desktop\\projects\\autosuite\\autosuite.ps1';
+const ENDSTATE_SCRIPT_PATH = 'C:\\Users\\win-laptop\\Desktop\\projects\\autosuite\\endstate.ps1';
 
-function checkAutosuiteAvailable() {
-  if (!existsSync(AUTOSUITE_SCRIPT_PATH)) {
-    console.log('⚠️  Autosuite not found at:', AUTOSUITE_SCRIPT_PATH);
+function checkEndstateAvailable() {
+  if (!existsSync(ENDSTATE_SCRIPT_PATH)) {
+    console.log('⚠️  Endstate not found at:', ENDSTATE_SCRIPT_PATH);
     console.log('   Skipping contract tests.');
     return false;
   }
   return true;
 }
 
-function runAutosuite(command, args = []) {
+function runEndstate(command, args = []) {
   return new Promise((resolve, reject) => {
     const fullArgs = [
       '-NoProfile',
       '-ExecutionPolicy',
       'Bypass',
       '-File',
-      AUTOSUITE_SCRIPT_PATH,
+      ENDSTATE_SCRIPT_PATH,
       command,
       '--json',
       ...args,
@@ -60,9 +60,9 @@ function parseEnvelope(stdout) {
 }
 
 async function testCapabilities() {
-  console.log('\n📋 Testing: autosuite capabilities --json');
+  console.log('\n📋 Testing: endstate capabilities --json');
   
-  const result = await runAutosuite('capabilities');
+  const result = await runEndstate('capabilities');
   
   if (result.exitCode !== 0) {
     throw new Error(`capabilities exited with code ${result.exitCode}`);
@@ -90,9 +90,9 @@ async function testCapabilities() {
 }
 
 async function testReport() {
-  console.log('\n📋 Testing: autosuite report --json');
+  console.log('\n📋 Testing: endstate report --json');
   
-  const result = await runAutosuite('report');
+  const result = await runEndstate('report');
   
   if (result.exitCode !== 0) {
     throw new Error(`report exited with code ${result.exitCode}`);
@@ -116,9 +116,9 @@ async function testReport() {
 }
 
 async function testVerifyMissing() {
-  console.log('\n📋 Testing: autosuite verify --profile Missing --json');
+  console.log('\n📋 Testing: endstate verify --profile Missing --json');
   
-  const result = await runAutosuite('verify', ['--profile', 'Missing']);
+  const result = await runEndstate('verify', ['--profile', 'Missing']);
   
   const envelope = parseEnvelope(result.stdout);
   
@@ -142,9 +142,9 @@ async function testVerifyMissing() {
 }
 
 async function testApplyMissing() {
-  console.log('\n📋 Testing: autosuite apply --profile Missing --dry-run --json');
+  console.log('\n📋 Testing: endstate apply --profile Missing --dry-run --json');
   
-  const result = await runAutosuite('apply', ['--profile', 'Missing', '--dry-run']);
+  const result = await runEndstate('apply', ['--profile', 'Missing', '--dry-run']);
   
   const envelope = parseEnvelope(result.stdout);
   
@@ -171,7 +171,7 @@ async function runTests() {
   console.log('🧪 Contract Integration Tests');
   console.log('================================');
   
-  if (!checkAutosuiteAvailable()) {
+  if (!checkEndstateAvailable()) {
     process.exit(0);
   }
 
