@@ -274,13 +274,15 @@ UI/UX contracts (modals, toggles, persistence, navigation) MUST be enforced by t
 - `npm run test:contract` - Run contract tests (Node.js)
 
 ### Coverage Thresholds
-Coverage is tracked with gentle minimums to catch regressions early:
-- Lines: 15%
-- Functions: 10%
-- Branches: 10%
-- Statements: 15%
+Coverage is tracked with meaningful guardrails to catch regressions early:
+- Statements: 70%
+- Lines: 70%
+- Branches: 60%
+- Functions: 55%
 
-Thresholds are reviewed and ratcheted up **weekly** as coverage improves. Never decrease, only increase in small increments (5-10%).
+These thresholds are aligned with actual coverage (77.62% statements, 79.44% lines, 76.16% branches, 67.7% functions) and provide meaningful protection against regressions.
+
+Thresholds are increased as coverage improves organically through new tests. Never decrease, only increase in small increments (5-10%).
 
 ### Regression Prevention Principle
 **Any UI/UX bug that reaches production MUST result in a new test.**

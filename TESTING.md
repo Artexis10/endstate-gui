@@ -161,17 +161,19 @@ This philosophy ensures the UI remains predictable and prevents recurring regres
 
 Coverage is tracked to catch regressions early without blocking progress.
 
-**Current Thresholds (Gentle Minimums):**
-- Lines: 15%
-- Functions: 10%
-- Branches: 10%
-- Statements: 15%
+**Current Thresholds (Meaningful Guardrails):**
+- Statements: 70%
+- Lines: 70%
+- Branches: 60%
+- Functions: 55%
+
+These thresholds are aligned with actual coverage (77.62% statements, 79.44% lines, 76.16% branches, 67.7% functions) and provide meaningful protection against regressions.
 
 **Ratcheting Strategy:**
-- Thresholds are reviewed and increased **weekly** as coverage improves
+- Thresholds are increased as coverage improves organically through new tests
 - Never decrease thresholds (only increase)
 - Increases are small and achievable (5-10% increments)
-- Goal: Gradual improvement without blocking development
+- Goal: Maintain quality without blocking development
 
 **Coverage Reports:**
 ```bash
