@@ -114,6 +114,20 @@ function App() {
   // Global lifecycle state - tracks last capture, preview, apply, verify
   const [lifecycleState, setLifecycleState] = useState<LifecycleState>(loadLifecycleState());
   
+  // Overview action state - tracks which action is running and its status
+  type OverviewActionType = 'capture' | 'setup' | 'check' | null;
+  type OverviewActionStatus = 'idle' | 'running' | 'success' | 'error';
+  const [overviewRunningAction, setOverviewRunningAction] = useState<OverviewActionType>(null);
+  const [overviewActionStatus, setOverviewActionStatus] = useState<OverviewActionStatus>('idle');
+  const [overviewActionProgress, setOverviewActionProgress] = useState<{ message: string; detail?: string } | null>(null);
+  
+  // Reset overview action state
+  const resetOverviewActionState = () => {
+    setOverviewRunningAction(null);
+    setOverviewActionStatus('idle');
+    setOverviewActionProgress(null);
+  };
+  
   // Handle UI mode toggle with persistence
   const handleToggleUIMode = () => {
     const newMode = toggleUIMode(uiMode);
@@ -831,6 +845,199 @@ function App() {
     }
   };
 
+  // Overview-specific handlers that execute in-place without navigation or modals
+  const handleCaptureFromOverview = async () => {
+    setIsRunning(true);
+    setRunLogs('');
+    setLogTruncated(false);
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(prev => prev + logs);
+      setLogTruncated(truncated);
+    });
+
+    const dir = await loadProfilesDirectory();
+    if (!dir) {
+      throw new Error('Failed to determine profiles directory');
+    }
+    
+    await ensureDirectory(dir);
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+    const filename = `setup_${timestamp}.jsonc`;
+    const outputPath = `${dir}\\${filename}`;
+
+    const captureResult = await runEngineStreaming(
+      settings,
+      'capture',
+      ['--out', outputPath],
+      (event: StreamEvent) => {
+        if (event.type === 'stdout' || event.type === 'stderr') {
+          logBufferRef.current?.append(event.data);
+          const parsed = parseCaptureOutput(runLogs + event.data);
+          if (parsed.lastProcessedApp) {
+            setOverviewActionProgress({ 
+              message: 'Scanning applications...', 
+              detail: parsed.lastProcessedApp 
+            });
+          }
+        }
+      }
+    );
+
+    logBufferRef.current?.flush();
+    setIsRunning(false);
+
+    const isSuccess = captureResult.envelope?.success ?? (captureResult.exitCode === 0);
+    
+    if (!isSuccess) {
+      throw new Error(captureResult.envelope?.error?.message || 'Capture failed');
+    }
+
+    // Update state with results
+    const finalStats = parseCaptureOutput(runLogs);
+    const captureEvent: LifecycleEvent = {
+      timestamp: new Date().toISOString(),
+      success: true,
+      summary: { total: finalStats.succeeded },
+    };
+    const newLifecycleState = recordLifecycleEvent('capture', captureEvent);
+    setLifecycleState(newLifecycleState);
+    
+    await refreshProfiles();
+    const discovered = await discoverProfiles(dir);
+    if (discovered.length > 0) {
+      const newest = discovered.sort((a, b) => b.path.localeCompare(a.path))[0];
+      setSelectedProfile(newest.name);
+      setSelectedProfilePath(newest.path);
+      updateSettings({ lastSelectedProfile: newest.name, lastSelectedProfilePath: newest.path });
+    }
+    
+    setOverviewActionProgress({ message: `${finalStats.succeeded} apps captured` });
+  };
+
+  const handlePreviewFromOverview = async () => {
+    if (!selectedProfile) {
+      throw new Error('Please select a setup profile');
+    }
+
+    setIsRunning(true);
+    setRunLogs('');
+    setLogTruncated(false);
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(prev => prev + logs);
+      setLogTruncated(truncated);
+    });
+    applyLineBufferRef.current = new StreamingLineBuffer();
+
+    const applyResult = await runEngineStreaming<EndstateApplyData>(
+      settings,
+      'apply',
+      ['--profile', selectedProfilePath, '--dry-run'],
+      (event: StreamEvent) => {
+        if (event.type === 'stdout' || event.type === 'stderr') {
+          logBufferRef.current?.append(event.data);
+          const completeLines = applyLineBufferRef.current?.append(event.data) || [];
+          for (const line of completeLines) {
+            const progress = parseApplyProgressLine(line);
+            if (progress) {
+              setOverviewActionProgress({ 
+                message: 'Analyzing setup...', 
+                detail: progress.app 
+              });
+            }
+          }
+        }
+      }
+    );
+
+    logBufferRef.current?.flush();
+    applyLineBufferRef.current?.clear();
+    setIsRunning(false);
+
+    // Process result
+    const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
+    const installed = envelopeData?.counts?.installed ?? 0;
+    const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? 0;
+    
+    // Record lifecycle event
+    const previewEvent: LifecycleEvent = {
+      timestamp: new Date().toISOString(),
+      profile: selectedProfile,
+      profilePath: selectedProfilePath,
+      success: true,
+      summary: { installed, alreadyPresent },
+    };
+    const newState = recordLifecycleEvent('preview', previewEvent);
+    setLifecycleState(newState);
+    
+    setOverviewActionProgress({ 
+      message: `${installed} to install, ${alreadyPresent} already present` 
+    });
+  };
+
+  const handleCheckFromOverview = async () => {
+    if (!selectedProfile) {
+      throw new Error('Please select a setup profile');
+    }
+
+    setIsRunning(true);
+    setRunLogs('');
+    setLogTruncated(false);
+    logBufferRef.current = new LogBuffer((logs, truncated) => {
+      setRunLogs(prev => prev + logs);
+      setLogTruncated(truncated);
+    });
+    applyLineBufferRef.current = new StreamingLineBuffer();
+
+    // Use apply --dry-run for checking (same as preview)
+    const checkResult = await runEngineStreaming<EndstateApplyData>(
+      settings,
+      'apply',
+      ['--profile', selectedProfilePath, '--dry-run'],
+      (event: StreamEvent) => {
+        if (event.type === 'stdout' || event.type === 'stderr') {
+          logBufferRef.current?.append(event.data);
+          const completeLines = applyLineBufferRef.current?.append(event.data) || [];
+          for (const line of completeLines) {
+            const progress = parseApplyProgressLine(line);
+            if (progress) {
+              setOverviewActionProgress({ 
+                message: 'Checking computer...', 
+                detail: progress.app 
+              });
+            }
+          }
+        }
+      }
+    );
+
+    logBufferRef.current?.flush();
+    applyLineBufferRef.current?.clear();
+    setIsRunning(false);
+
+    // Process result
+    const envelopeData = checkResult.envelope?.data as EndstateApplyResultData | undefined;
+    const missing = envelopeData?.counts?.installed ?? 0; // "installed" in dry-run = would install = missing
+    const present = envelopeData?.counts?.alreadyInstalled ?? 0;
+    
+    // Record lifecycle event as verify
+    const verifyEvent: LifecycleEvent = {
+      timestamp: new Date().toISOString(),
+      profile: selectedProfile,
+      profilePath: selectedProfilePath,
+      success: true,
+      summary: { missing, alreadyPresent: present },
+    };
+    const newState = recordLifecycleEvent('verify', verifyEvent);
+    setLifecycleState(newState);
+    
+    if (missing > 0) {
+      setOverviewActionProgress({ message: `${missing} missing, ${present} present` });
+    } else {
+      setOverviewActionProgress({ message: `All ${present} apps present` });
+    }
+  };
+
   const handleImportProfile = async () => {
     const { invoke } = await import('./lib/tauri-bridge');
 
@@ -1015,23 +1222,56 @@ function App() {
               selectedProfile={selectedProfile}
               profiles={profiles}
               isRunning={isRunning}
+              runningAction={overviewRunningAction}
+              actionStatus={overviewActionStatus}
+              actionProgress={overviewActionProgress}
+              uiMode={uiMode}
               onNavigate={setCurrentPage}
-              onCapture={handleCapture}
-              onSetup={() => {
-                setCurrentPage('apply');
-                if (settings.dryRunEnabled) {
-                  handlePreviewChanges();
+              onCapture={async () => {
+                setOverviewRunningAction('capture');
+                setOverviewActionStatus('running');
+                setOverviewActionProgress({ message: 'Scanning installed applications...' });
+                try {
+                  await handleCaptureFromOverview();
+                  setOverviewActionStatus('success');
+                  setOverviewActionProgress({ message: `Profile saved successfully` });
+                } catch {
+                  setOverviewActionStatus('error');
+                  setOverviewActionProgress({ message: 'Capture failed' });
                 }
               }}
-              onCheck={() => {
-                setCurrentPage('verify');
-                handlePreviewChanges();
+              onSetup={async () => {
+                setOverviewRunningAction('setup');
+                setOverviewActionStatus('running');
+                setOverviewActionProgress({ message: 'Analyzing profile...' });
+                try {
+                  await handlePreviewFromOverview();
+                  setOverviewActionStatus('success');
+                  setOverviewActionProgress({ message: 'Preview complete' });
+                } catch {
+                  setOverviewActionStatus('error');
+                  setOverviewActionProgress({ message: 'Preview failed' });
+                }
+              }}
+              onCheck={async () => {
+                setOverviewRunningAction('check');
+                setOverviewActionStatus('running');
+                setOverviewActionProgress({ message: 'Checking computer...' });
+                try {
+                  await handleCheckFromOverview();
+                  setOverviewActionStatus('success');
+                  setOverviewActionProgress({ message: 'Check complete' });
+                } catch {
+                  setOverviewActionStatus('error');
+                  setOverviewActionProgress({ message: 'Check failed' });
+                }
               }}
               onProfileChange={(profile, path) => {
                 setSelectedProfile(profile);
                 setSelectedProfilePath(path);
                 updateSettings({ lastSelectedProfile: profile, lastSelectedProfilePath: path });
               }}
+              onDismissResult={resetOverviewActionState}
             />
           </div>
         );

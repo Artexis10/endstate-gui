@@ -8,32 +8,55 @@
  * 
  * Non-technical users should be able to complete core tasks
  * without ever needing to navigate away from this screen.
+ * 
+ * In Default mode, action cards expand in-place to execute actions.
+ * In Advanced mode, cards navigate to their respective pages.
  */
 
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ScanSearch, 
   PlayCircle, 
   CheckCircle,
   ChevronRight,
+  ChevronUp,
   Clock,
-  FileText
+  FileText,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  ExternalLink
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { formatRelativeTime, type LifecycleState } from '@/lib/lifecycle-state';
+import { formatRelativeTime, type LifecycleState, type LifecycleEvent } from '@/lib/lifecycle-state';
 import type { DiscoveredProfile } from '@/file-discovery';
+import type { UIMode } from '@/lib/ui-mode';
+
+type ActionType = 'capture' | 'setup' | 'check' | null;
+type ActionStatus = 'idle' | 'running' | 'success' | 'error';
+
+interface ActionProgress {
+  message: string;
+  detail?: string;
+}
 
 interface OverviewScreenProps {
   lifecycleState: LifecycleState;
   selectedProfile: string;
   profiles: DiscoveredProfile[];
   isRunning: boolean;
+  runningAction: ActionType;
+  actionStatus: ActionStatus;
+  actionProgress: ActionProgress | null;
+  uiMode: UIMode;
   onNavigate: (page: 'capture' | 'apply' | 'verify' | 'report' | 'settings') => void;
   onCapture: () => void;
   onSetup: () => void;
   onCheck: () => void;
   onProfileChange: (profile: string, path: string) => void;
+  onDismissResult: () => void;
 }
 
 export function OverviewScreen({
@@ -41,14 +64,111 @@ export function OverviewScreen({
   selectedProfile,
   profiles,
   isRunning,
+  runningAction,
+  actionStatus,
+  actionProgress,
+  uiMode,
   onNavigate,
   onCapture,
   onSetup,
   onCheck,
   onProfileChange,
+  onDismissResult,
 }: OverviewScreenProps) {
+  const [expandedCard, setExpandedCard] = useState<ActionType>(null);
   const hasProfile = !!selectedProfile && profiles.length > 0;
   
+  // Handle card click based on UI mode
+  const handleCardClick = (action: ActionType) => {
+    if (isRunning) return;
+    
+    if (uiMode === 'advanced') {
+      // In advanced mode, navigate to the page
+      switch (action) {
+        case 'capture':
+          onNavigate('capture');
+          break;
+        case 'setup':
+          if (hasProfile) onNavigate('apply');
+          break;
+        case 'check':
+          if (hasProfile) onNavigate('verify');
+          break;
+      }
+    } else {
+      // In default mode, toggle card expansion
+      if (expandedCard === action) {
+        // Only collapse if not running and not showing result
+        if (actionStatus === 'idle') {
+          setExpandedCard(null);
+        }
+      } else {
+        setExpandedCard(action);
+      }
+    }
+  };
+
+  // Execute action from expanded card
+  const handleExecuteAction = (action: ActionType) => {
+    switch (action) {
+      case 'capture':
+        onCapture();
+        break;
+      case 'setup':
+        onSetup();
+        break;
+      case 'check':
+        onCheck();
+        break;
+    }
+  };
+
+  // Collapse card and dismiss result
+  const handleDismiss = () => {
+    setExpandedCard(null);
+    onDismissResult();
+  };
+
+  // Get last event for an action type
+  const getLastEvent = (action: ActionType): LifecycleEvent | null => {
+    switch (action) {
+      case 'capture':
+        return lifecycleState.lastCapture;
+      case 'setup':
+        return lifecycleState.lastApply || lifecycleState.lastPreview;
+      case 'check':
+        return lifecycleState.lastVerify || lifecycleState.lastPreview;
+      default:
+        return null;
+    }
+  };
+
+  // Format last event summary
+  const formatLastEventSummary = (action: ActionType): string | null => {
+    const event = getLastEvent(action);
+    if (!event) return null;
+    
+    switch (action) {
+      case 'capture':
+        return event.summary?.total ? `${event.summary.total} apps captured` : null;
+      case 'setup':
+        if (event.summary?.installed !== undefined) {
+          return `${event.summary.installed} installed, ${event.summary.alreadyPresent || 0} already present`;
+        }
+        return null;
+      case 'check':
+        if (event.summary?.missing !== undefined && event.summary.missing > 0) {
+          return `${event.summary.missing} missing`;
+        }
+        if (event.summary?.alreadyPresent !== undefined) {
+          return `${event.summary.alreadyPresent} present`;
+        }
+        return null;
+      default:
+        return null;
+    }
+  };
+
   const recentActivity = [
     lifecycleState.lastCapture && {
       type: 'capture' as const,
@@ -95,6 +215,181 @@ export function OverviewScreen({
     new Date(b!.timestamp).getTime() - new Date(a!.timestamp).getTime()
   ).slice(0, 3);
 
+  // Card expansion animation variants
+  const contentVariants = {
+    hidden: { opacity: 0, height: 0 },
+    visible: { 
+      opacity: 1, 
+      height: 'auto',
+      transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] as const }
+    },
+    exit: { 
+      opacity: 0, 
+      height: 0,
+      transition: { duration: 0.15, ease: [0.4, 0, 1, 1] as const }
+    },
+  };
+
+  // Render expanded content for a card
+  const renderExpandedContent = (action: ActionType) => {
+    const isThisRunning = runningAction === action && isRunning;
+    const isThisComplete = runningAction === action && !isRunning && actionStatus !== 'idle';
+    const lastEvent = getLastEvent(action);
+    const lastSummary = formatLastEventSummary(action);
+    
+    // Action-specific descriptions
+    const descriptions: Record<NonNullable<ActionType>, string> = {
+      capture: 'Scan your computer for installed applications and save them as a reusable setup profile.',
+      setup: 'Install applications from your selected profile. Preview changes first to see what will be installed.',
+      check: 'Compare your computer against the selected profile to see what\'s installed and what\'s missing.',
+    };
+
+    // Action-specific button labels
+    const buttonLabels: Record<NonNullable<ActionType>, { idle: string; running: string }> = {
+      capture: { idle: 'Start capture', running: 'Capturing...' },
+      setup: { idle: 'Preview changes', running: 'Analyzing...' },
+      check: { idle: 'Check now', running: 'Checking...' },
+    };
+
+    if (!action) return null;
+
+    return (
+      <motion.div
+        variants={contentVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="border-t border-border mt-3 pt-4 space-y-4"
+      >
+        {/* Description */}
+        <p className="text-sm text-muted-foreground">
+          {descriptions[action]}
+        </p>
+
+        {/* Last run info */}
+        {lastEvent && !isThisRunning && !isThisComplete && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+            <Clock className="h-3 w-3" />
+            <span>Last run {formatRelativeTime(lastEvent.timestamp)}</span>
+            {lastSummary && (
+              <>
+                <span className="text-border">•</span>
+                <span>{lastSummary}</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Running state */}
+        {isThisRunning && actionProgress && (
+          <div className="flex items-center gap-3 bg-primary/5 rounded-md px-3 py-3">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{actionProgress.message}</p>
+              {actionProgress.detail && (
+                <p className="text-xs text-muted-foreground truncate">{actionProgress.detail}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Success state */}
+        {isThisComplete && actionStatus === 'success' && (
+          <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
+            <CheckCircle2 className="h-4 w-4 text-success" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-success">Completed successfully</p>
+              {actionProgress?.message && (
+                <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Error state */}
+        {isThisComplete && actionStatus === 'error' && (
+          <div className="flex items-center gap-3 bg-destructive/10 rounded-md px-3 py-3">
+            <XCircle className="h-4 w-4 text-destructive" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-destructive">Something went wrong</p>
+              {actionProgress?.message && (
+                <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
+          {!isThisComplete ? (
+            <>
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExecuteAction(action);
+                }}
+                disabled={isRunning || (action !== 'capture' && !hasProfile)}
+                size="sm"
+              >
+                {isThisRunning ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                    {buttonLabels[action].running}
+                  </>
+                ) : (
+                  buttonLabels[action].idle
+                )}
+              </Button>
+              {!isThisRunning && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpandedCard(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDismiss();
+                }}
+                size="sm"
+              >
+                Done
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const page = action === 'capture' ? 'capture' : action === 'setup' ? 'apply' : 'verify';
+                  onNavigate(page);
+                }}
+              >
+                View details
+                <ExternalLink className="h-3 w-3 ml-1" />
+              </Button>
+            </>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
+  // Check if a card should be disabled (another action is running)
+  const isCardDisabled = (action: ActionType) => {
+    if (isRunning && runningAction !== action) return true;
+    if (action !== 'capture' && !hasProfile) return true;
+    return false;
+  };
+
   return (
     <div className="space-y-8">
       {/* Welcome Header */}
@@ -137,86 +432,149 @@ export function OverviewScreen({
         </Card>
       )}
 
-      {/* Primary Actions */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {/* Capture */}
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
+      {/* Primary Actions - Expandable Cards */}
+      <div className="space-y-4">
+        {/* Capture Card */}
+        <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
           <Card 
-            className="cursor-pointer hover:border-primary/50 transition-colors h-full"
-            onClick={() => !isRunning && onCapture()}
+            className={`cursor-pointer transition-all duration-200 ${
+              expandedCard === 'capture' 
+                ? 'border-blue-500/50 shadow-md' 
+                : 'hover:border-primary/30'
+            } ${isCardDisabled('capture') ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => handleCardClick('capture')}
           >
             <CardHeader className="pb-2">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <ScanSearch className="h-5 w-5 text-blue-500" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <ScanSearch className="h-5 w-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Capture computer</CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Save your current setup as a reusable profile
+                    </CardDescription>
+                  </div>
                 </div>
-                <CardTitle className="text-base">Capture computer</CardTitle>
+                {uiMode === 'default' && (
+                  <motion.div
+                    animate={{ rotate: expandedCard === 'capture' ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  </motion.div>
+                )}
+                {uiMode === 'advanced' && (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
               </div>
             </CardHeader>
-            <CardContent>
-              <CardDescription>
-                Save your current setup as a reusable profile
-              </CardDescription>
-            </CardContent>
+            <AnimatePresence>
+              {expandedCard === 'capture' && uiMode === 'default' && (
+                <CardContent className="pt-0">
+                  {renderExpandedContent('capture')}
+                </CardContent>
+              )}
+            </AnimatePresence>
           </Card>
         </motion.div>
 
-        {/* Set up */}
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
+        {/* Setup Card */}
+        <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
           <Card 
-            className={`cursor-pointer hover:border-primary/50 transition-colors h-full ${!hasProfile ? 'opacity-60' : ''}`}
-            onClick={() => !isRunning && hasProfile && onSetup()}
+            className={`cursor-pointer transition-all duration-200 ${
+              expandedCard === 'setup' 
+                ? 'border-green-500/50 shadow-md' 
+                : 'hover:border-primary/30'
+            } ${isCardDisabled('setup') ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => handleCardClick('setup')}
           >
             <CardHeader className="pb-2">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <PlayCircle className="h-5 w-5 text-green-500" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <PlayCircle className="h-5 w-5 text-green-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Set up computer</CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      {hasProfile 
+                        ? 'Install apps from your saved profile'
+                        : 'Capture a profile first to get started'
+                      }
+                    </CardDescription>
+                  </div>
                 </div>
-                <CardTitle className="text-base">Set up computer</CardTitle>
+                {uiMode === 'default' && (
+                  <motion.div
+                    animate={{ rotate: expandedCard === 'setup' ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  </motion.div>
+                )}
+                {uiMode === 'advanced' && (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
               </div>
             </CardHeader>
-            <CardContent>
-              <CardDescription>
-                {hasProfile 
-                  ? 'Install apps from your saved profile'
-                  : 'Capture a profile first to get started'
-                }
-              </CardDescription>
-            </CardContent>
+            <AnimatePresence>
+              {expandedCard === 'setup' && uiMode === 'default' && (
+                <CardContent className="pt-0">
+                  {renderExpandedContent('setup')}
+                </CardContent>
+              )}
+            </AnimatePresence>
           </Card>
         </motion.div>
 
-        {/* Check */}
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
+        {/* Check Card */}
+        <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
           <Card 
-            className={`cursor-pointer hover:border-primary/50 transition-colors h-full ${!hasProfile ? 'opacity-60' : ''}`}
-            onClick={() => !isRunning && hasProfile && onCheck()}
+            className={`cursor-pointer transition-all duration-200 ${
+              expandedCard === 'check' 
+                ? 'border-amber-500/50 shadow-md' 
+                : 'hover:border-primary/30'
+            } ${isCardDisabled('check') ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => handleCardClick('check')}
           >
             <CardHeader className="pb-2">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-amber-500/10">
-                  <CheckCircle className="h-5 w-5 text-amber-500" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/10">
+                    <CheckCircle className="h-5 w-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Check computer</CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      {hasProfile 
+                        ? 'Verify your setup matches the profile'
+                        : 'Capture a profile first to get started'
+                      }
+                    </CardDescription>
+                  </div>
                 </div>
-                <CardTitle className="text-base">Check computer</CardTitle>
+                {uiMode === 'default' && (
+                  <motion.div
+                    animate={{ rotate: expandedCard === 'check' ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  </motion.div>
+                )}
+                {uiMode === 'advanced' && (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
               </div>
             </CardHeader>
-            <CardContent>
-              <CardDescription>
-                {hasProfile 
-                  ? 'Verify your setup matches the profile'
-                  : 'Capture a profile first to get started'
-                }
-              </CardDescription>
-            </CardContent>
+            <AnimatePresence>
+              {expandedCard === 'check' && uiMode === 'default' && (
+                <CardContent className="pt-0">
+                  {renderExpandedContent('check')}
+                </CardContent>
+              )}
+            </AnimatePresence>
           </Card>
         </motion.div>
       </div>
