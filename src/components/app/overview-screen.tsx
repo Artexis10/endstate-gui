@@ -147,6 +147,7 @@ export function OverviewScreen({
   // Activity collapsed by default in Default mode, expanded in Advanced mode
   // Reset when a new run starts based on mode
   const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const hasProfile = !!selectedProfile && profiles.length > 0;
   
   // Reset activity expanded state when a new run starts
@@ -396,13 +397,22 @@ export function OverviewScreen({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  onRefreshProfiles();
+                  setIsRefreshing(true);
+                  await onRefreshProfiles();
+                  setIsRefreshing(false);
                 }}
-                disabled={isRunning}
+                disabled={isRunning || isRefreshing}
+                data-testid="refresh-profiles-button"
+                aria-label={isRefreshing ? "Refreshing profiles..." : "Refresh profiles"}
               >
-                <RefreshCw className="h-3 w-3" />
+                <motion.div
+                  animate={{ rotate: isRefreshing ? 360 : 0 }}
+                  transition={{ duration: 1, repeat: isRefreshing ? Infinity : 0, ease: "linear" }}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </motion.div>
               </Button>
             </div>
           </div>
@@ -653,7 +663,7 @@ export function OverviewScreen({
       {/* Current Profile Card (if any) */}
       {hasProfile && (
         <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="pt-4 pb-6 space-y-3">
+          <CardContent className="py-4 space-y-3" data-testid="current-profile-card-content">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-primary" />
@@ -704,10 +714,21 @@ export function OverviewScreen({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2"
-                onClick={onRefreshProfiles}
-                disabled={isRunning}
+                onClick={async () => {
+                  setIsRefreshing(true);
+                  await onRefreshProfiles();
+                  setIsRefreshing(false);
+                }}
+                disabled={isRunning || isRefreshing}
+                data-testid="refresh-profiles-button"
+                aria-label={isRefreshing ? "Refreshing profiles..." : "Refresh profiles"}
               >
-                <RefreshCw className="h-3 w-3" />
+                <motion.div
+                  animate={{ rotate: isRefreshing ? 360 : 0 }}
+                  transition={{ duration: 1, repeat: isRefreshing ? Infinity : 0, ease: "linear" }}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </motion.div>
               </Button>
             </div>
           </CardContent>
@@ -755,7 +776,7 @@ export function OverviewScreen({
             </CardHeader>
             <AnimatePresence>
               {expandedCard === 'capture' && uiMode === 'default' && (
-                <CardContent className="pt-0">
+                <CardContent className="pt-0 pb-4" data-testid="capture-card-expanded-content">
                   {renderExpandedContent('capture')}
                 </CardContent>
               )}
@@ -805,7 +826,7 @@ export function OverviewScreen({
             </CardHeader>
             <AnimatePresence>
               {expandedCard === 'setup' && uiMode === 'default' && (
-                <CardContent className="pt-0">
+                <CardContent className="pt-0 pb-4" data-testid="setup-card-expanded-content">
                   {renderExpandedContent('setup')}
                 </CardContent>
               )}
@@ -855,7 +876,7 @@ export function OverviewScreen({
             </CardHeader>
             <AnimatePresence>
               {expandedCard === 'check' && uiMode === 'default' && (
-                <CardContent className="pt-0">
+                <CardContent className="pt-0 pb-4" data-testid="check-card-expanded-content">
                   {renderExpandedContent('check')}
                 </CardContent>
               )}
@@ -867,7 +888,7 @@ export function OverviewScreen({
       {/* No Profile Prompt */}
       {!hasProfile && profiles.length === 0 && (
         <Card className="border-dashed">
-          <CardContent className="pt-6 text-center">
+          <CardContent className="py-6 text-center" data-testid="no-profile-card-content">
             <p className="text-sm text-muted-foreground mb-4">
               No setup profiles found. Start by capturing your current computer setup.
             </p>

@@ -32,6 +32,7 @@ export function ApplyResultModal({
 }: ApplyResultModalProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   
   // Local guard to prevent double-click on Apply button
   const applyClickedRef = useRef(false);
@@ -149,6 +150,28 @@ export function ApplyResultModal({
     });
   }, [items]);
 
+  // Filter items based on active filters
+  const filteredItems = useMemo(() => {
+    if (activeFilters.size === 0) return sortedItems;
+    return sortedItems.filter(item => {
+      const badge = getActionBadge(item);
+      return activeFilters.has(badge.label);
+    });
+  }, [sortedItems, activeFilters]);
+
+  // Toggle filter
+  const toggleFilter = (label: string) => {
+    setActiveFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
+      return next;
+    });
+  };
+
   // Total apps checked = all items in the list
   const totalChecked = items.length;
 
@@ -238,42 +261,77 @@ export function ApplyResultModal({
             <>
               {/* Will be installed (preview only - from dry-run, NOT during applying) */}
               {isDryRun && willBeInstalled > 0 && (
-                <div className="flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20">
+                <button
+                  onClick={() => toggleFilter('Will be installed')}
+                  className={`flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20 w-full text-left transition-opacity ${
+                    activeFilters.size > 0 && !activeFilters.has('Will be installed') ? 'opacity-50' : ''
+                  }`}
+                  data-testid="filter-will-be-installed"
+                  aria-pressed={activeFilters.has('Will be installed')}
+                >
                   <span className="text-sm font-medium">Will be installed</span>
                   <span className="text-2xl font-semibold text-warning">{willBeInstalled}</span>
-                </div>
+                </button>
               )}
               
               {/* Installed this run (apply result only - never shown in preview) */}
               {!isDryRun && installedThisRun > 0 && (
-                <div className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20">
+                <button
+                  onClick={() => toggleFilter('Installed this run')}
+                  className={`flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20 w-full text-left transition-opacity ${
+                    activeFilters.size > 0 && !activeFilters.has('Installed this run') ? 'opacity-50' : ''
+                  }`}
+                  data-testid="filter-installed-this-run"
+                  aria-pressed={activeFilters.has('Installed this run')}
+                >
                   <span className="text-sm font-medium">Installed this run</span>
                   <span className="text-2xl font-semibold text-success">{installedThisRun}</span>
-                </div>
+                </button>
               )}
               
               {/* Already present */}
               {alreadyPresent > 0 && (
-                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
+                <button
+                  onClick={() => toggleFilter('Already present')}
+                  className={`flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20 w-full text-left transition-opacity ${
+                    activeFilters.size > 0 && !activeFilters.has('Already present') ? 'opacity-50' : ''
+                  }`}
+                  data-testid="filter-already-present"
+                  aria-pressed={activeFilters.has('Already present')}
+                >
                   <span className="text-sm font-medium">Already present</span>
                   <span className="text-2xl font-semibold text-muted-foreground">{alreadyPresent}</span>
-                </div>
+                </button>
               )}
               
               {/* Needs attention (failures) */}
               {needsAttention > 0 && (
-                <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                <button
+                  onClick={() => toggleFilter('Needs attention')}
+                  className={`flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/20 w-full text-left transition-opacity ${
+                    activeFilters.size > 0 && !activeFilters.has('Needs attention') ? 'opacity-50' : ''
+                  }`}
+                  data-testid="filter-needs-attention"
+                  aria-pressed={activeFilters.has('Needs attention')}
+                >
                   <span className="text-sm font-medium">Needs attention</span>
                   <span className="text-2xl font-semibold text-destructive">{needsAttention}</span>
-                </div>
+                </button>
               )}
               
               {/* Skipped (advanced - only show if > 0) */}
               {skippedCount > 0 && (
-                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20">
+                <button
+                  onClick={() => toggleFilter('Skipped')}
+                  className={`flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20 w-full text-left transition-opacity ${
+                    activeFilters.size > 0 && !activeFilters.has('Skipped') ? 'opacity-50' : ''
+                  }`}
+                  data-testid="filter-skipped"
+                  aria-pressed={activeFilters.has('Skipped')}
+                >
                   <span className="text-sm font-medium">Skipped</span>
                   <span className="text-2xl font-semibold text-muted-foreground">{skippedCount}</span>
-                </div>
+                </button>
               )}
             </>
           )}
@@ -289,14 +347,14 @@ export function ApplyResultModal({
                 aria-expanded={showDetails}
               >
                 {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                Details ({items.length} apps)
+                Details ({activeFilters.size > 0 ? `${filteredItems.length} of ${items.length}` : items.length} apps)
               </button>
               
               {showDetails && (
                 <div className="mt-3 space-y-1">
                   {/* Single unified list - actionable items shown first */}
                   <div className="border border-border rounded-lg max-h-48 overflow-y-auto pb-1">
-                    {sortedItems.map((item, idx) => {
+                    {filteredItems.map((item, idx) => {
                       const badge = getActionBadge(item);
                       const isActionable = item.reason === 'would_install' || item.reason === 'installed' || item.status === 'failed';
                       return (

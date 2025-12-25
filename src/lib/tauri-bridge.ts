@@ -144,9 +144,9 @@ export async function openFolder(path: string): Promise<void> {
     await safeInvoke('open_folder', { path });
   } catch (err) {
     console.error('Failed to open folder:', err);
-    // Only show alert fallback in web environment (not Tauri)
-    if (!inTauri && typeof window !== 'undefined') {
-      alert(`Profiles folder: ${path}`);
+    // In web environment, throw error with path so caller can show modal
+    if (!inTauri) {
+      throw new Error(`WEB_FALLBACK:${path}`);
     } else {
       // In Tauri, re-throw the error so caller knows it failed
       throw err;

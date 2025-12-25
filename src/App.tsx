@@ -44,6 +44,7 @@ import {
   SelectValue,
 } from './components/ui/select';
 import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
 import { Loader2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 
 type AppStatus = 'loading' | 'ready' | 'error';
@@ -172,6 +173,8 @@ function App() {
   const [liveAppEvents, setLiveAppEvents] = useState<AppEvent[]>([]);
   const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
   const isRunningRef = useRef(false); // Robust guard against double-run
+  const [showFolderPathModal, setShowFolderPathModal] = useState(false);
+  const [folderPathForModal, setFolderPathForModal] = useState('');
   
   // Reset overview action state
   const resetOverviewActionState = () => {
@@ -182,6 +185,15 @@ function App() {
     setLiveAppEvents([]);
     setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
     isRunningRef.current = false;
+  };
+
+  // Dismiss result - only collapse UI, preserve summary for Overview display
+  const dismissOverviewResult = () => {
+    // Only reset transient UI state (expanded/collapsed, filters)
+    // Keep overviewActionResult so the summary remains visible on Overview
+    setOverviewActionProgress(null);
+    setLiveAppEvents([]);
+    setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
   };
   
   // Navigation with back support - tracks previous page when navigating from Overview
@@ -267,7 +279,19 @@ function App() {
 
   const handleOpenProfilesFolder = async () => {
     if (profilesDirectory) {
-      await openFolder(profilesDirectory);
+      try {
+        await openFolder(profilesDirectory);
+      } catch (err) {
+        // Check if this is web fallback error
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.startsWith('WEB_FALLBACK:')) {
+          const path = errMsg.replace('WEB_FALLBACK:', '');
+          setFolderPathForModal(path);
+          setShowFolderPathModal(true);
+        } else {
+          console.error('Failed to open folder:', err);
+        }
+      }
     }
   };
 
@@ -1654,7 +1678,7 @@ function App() {
                 setSelectedProfilePath(path);
                 updateSettings({ lastSelectedProfile: profile, lastSelectedProfilePath: path });
               }}
-              onDismissResult={resetOverviewActionState}
+              onDismissResult={dismissOverviewResult}
             />
           </div>
         );
@@ -2487,6 +2511,39 @@ function App() {
         onOpenChange={setCommandPaletteOpen}
         onNavigate={setCurrentPage}
       />
+
+      {/* Folder Path Modal (web fallback) */}
+      <Dialog open={showFolderPathModal} onOpenChange={setShowFolderPathModal}>
+        <DialogContent data-testid="folder-path-modal">
+          <DialogHeader>
+            <DialogTitle>Profiles Folder</DialogTitle>
+            <DialogDescription>
+              Your profiles are stored in the following location:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="flex items-center gap-2">
+              <Input 
+                value={folderPathForModal} 
+                readOnly 
+                className="flex-1 font-mono text-sm"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(folderPathForModal);
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowFolderPathModal(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
