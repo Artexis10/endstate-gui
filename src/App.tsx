@@ -1686,7 +1686,7 @@ function App() {
             </Card>
             
             {isRunning && (
-              <Card>
+              <Card data-testid="activity-card">
                 <CardHeader>
                   <CardTitle className="text-base">Activity</CardTitle>
                 </CardHeader>
@@ -1867,7 +1867,7 @@ function App() {
                       }}
                       disabled={isRunning}
                     >
-                      <SelectTrigger className="w-full h-10">
+                      <SelectTrigger data-testid="profile-select" className="w-full h-10">
                         <SelectValue placeholder="-- Select a setup --" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2008,7 +2008,7 @@ function App() {
                     }}
                     disabled={isRunning}
                   >
-                    <SelectTrigger className="w-full h-10">
+                    <SelectTrigger data-testid="profile-select-verify" className="w-full h-10">
                       <SelectValue placeholder="-- Select a setup --" />
                     </SelectTrigger>
                     <SelectContent>

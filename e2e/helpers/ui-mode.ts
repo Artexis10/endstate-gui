@@ -11,11 +11,16 @@ import { Page, expect } from '@playwright/test';
  */
 
 /**
- * Seeds settings with a pre-selected profile.
+ * Seeds settings with a pre-selected profile IF not already set.
  * Call this via addInitScript BEFORE page.goto().
+ * Uses seed-if-missing to avoid clobbering tests that assert persistence.
  */
 export function seedProfileSettings(page: Page, profileName = 'test-profile', dryRunEnabled = true): Promise<void> {
   return page.addInitScript(([name, dryRun]) => {
+    // Only seed if settings don't already exist (seed-if-missing)
+    const existingSettings = localStorage.getItem('test:endstate-gui-settings') || localStorage.getItem('endstate-gui-settings');
+    if (existingSettings) return;
+    
     const settings = {
       engineMode: 'path',
       engineScriptPath: '',
@@ -51,26 +56,50 @@ export function forceDefaultMode(page: Page): Promise<void> {
 }
 
 /**
- * Navigate to Apply page ("Set up computer") from Overview in Advanced mode.
- * Clicks the sidebar nav button and asserts the page heading is visible.
+ * Navigate to Apply page ("Set up computer").
+ * Works in both Default mode (clicks Overview card) and Advanced mode (clicks sidebar nav).
  */
 export async function goToApplyPage(page: Page): Promise<void> {
-  await page.locator('nav >> button:has-text("Set up computer")').click();
+  // Try sidebar nav first (Advanced mode), fall back to Overview card (Default mode)
+  const sidebarNav = page.locator('[data-testid="nav-apply"]');
+  const overviewCard = page.locator('[data-testid="overview-card-apply"]');
+  
+  if (await sidebarNav.isVisible({ timeout: 500 }).catch(() => false)) {
+    await sidebarNav.click();
+  } else {
+    await overviewCard.click();
+  }
   await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
 }
 
 /**
- * Navigate to Capture page from Overview in Advanced mode.
+ * Navigate to Capture page.
+ * Works in both Default mode (clicks Overview card) and Advanced mode (clicks sidebar nav).
  */
 export async function goToCapturePage(page: Page): Promise<void> {
-  await page.locator('nav >> button:has-text("Capture computer")').click();
+  const sidebarNav = page.locator('[data-testid="nav-capture"]');
+  const overviewCard = page.locator('[data-testid="overview-card-capture"]');
+  
+  if (await sidebarNav.isVisible({ timeout: 500 }).catch(() => false)) {
+    await sidebarNav.click();
+  } else {
+    await overviewCard.click();
+  }
   await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible({ timeout: 5000 });
 }
 
 /**
- * Navigate to Verify page ("Check computer") from Overview in Advanced mode.
+ * Navigate to Verify page ("Check computer").
+ * Works in both Default mode (clicks Overview card) and Advanced mode (clicks sidebar nav).
  */
 export async function goToVerifyPage(page: Page): Promise<void> {
-  await page.locator('nav >> button:has-text("Check computer")').click();
+  const sidebarNav = page.locator('[data-testid="nav-verify"]');
+  const overviewCard = page.locator('[data-testid="overview-card-verify"]');
+  
+  if (await sidebarNav.isVisible({ timeout: 500 }).catch(() => false)) {
+    await sidebarNav.click();
+  } else {
+    await overviewCard.click();
+  }
   await expect(page.locator('h1:has-text("Check computer")')).toBeVisible({ timeout: 5000 });
 }

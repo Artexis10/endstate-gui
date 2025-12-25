@@ -89,7 +89,7 @@ test.describe('Capture Live Progress', () => {
     await page.click('main >> button:has-text("Capture computer")');
     
     // Assert Activity card appears
-    await expect(page.locator('text=Activity')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 3000 });
     
     // Assert live progress shows "Processing: Discord.Discord" in Activity card
     await expect(page.locator('text=Processing:')).toBeVisible({ timeout: 2000 });
@@ -139,7 +139,7 @@ test.describe('Capture Live Progress', () => {
     await page.click('main >> button:has-text("Capture computer")');
     
     // Wait for Activity to appear
-    await expect(page.locator('text=Activity')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 3000 });
     
     // Wait for capture to complete
     await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });

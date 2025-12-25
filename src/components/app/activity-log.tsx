@@ -61,7 +61,7 @@ export function ActivityLog({
   const hasActivity = activities.length > 0;
 
   return (
-    <Card>
+    <Card data-testid="activity-card">
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Activity</CardTitle>
       </CardHeader>

@@ -59,7 +59,7 @@ test.describe('Live Activity Stability', () => {
     await page.click('button:has-text("Preview changes")');
     
     // Wait for Activity card to appear
-    await expect(page.locator('text=Activity')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 5000 });
     
     // Verify activity is showing
     expect(true).toBe(true); // Test passes if we get here without error
@@ -73,7 +73,7 @@ test.describe('Live Activity Stability', () => {
     await page.click('button:has-text("Preview changes")');
     
     // Wait for Activity card to appear
-    await expect(page.locator('text=Activity')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 5000 });
     
     // Verify activity is showing
     expect(true).toBe(true); // Test passes if we get here without error
@@ -87,7 +87,7 @@ test.describe('Live Activity Stability', () => {
     await page.click('button:has-text("Preview changes")');
     
     // Wait for Activity card to appear
-    await expect(page.locator('text=Activity')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 5000 });
     
     // Verify activity is showing
     expect(true).toBe(true); // Test passes if we get here without error
@@ -101,7 +101,7 @@ test.describe('Live Activity Stability', () => {
     await page.click('button:has-text("Preview changes")');
     
     // Wait for Activity card to appear
-    await expect(page.locator('text=Activity')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 5000 });
     
     // Verify activity is showing
     expect(true).toBe(true); // Test passes if we get here without error
@@ -153,7 +153,7 @@ test.describe('Double-Run Prevention', () => {
     await page.click('button:has-text("Preview changes")');
     
     // Wait for Activity card to appear
-    await expect(page.locator('text=Activity')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 5000 });
     
     // Verify activity is showing
     expect(true).toBe(true); // Test passes if we get here without error
@@ -167,7 +167,7 @@ test.describe('Double-Run Prevention', () => {
     await page.click('button:has-text("Preview changes")');
     
     // Wait for Activity card to appear
-    await expect(page.locator('text=Activity')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 5000 });
     
     // Verify activity is showing
     expect(true).toBe(true); // Test passes if we get here without error

@@ -95,7 +95,7 @@ test.describe('Apply Page - Apply Only Flow', () => {
     await page.click('button:has-text("Preview changes")');
     
     // Wait for activity card to show
-    await expect(page.locator('text=Activity')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 3000 });
   });
 
   test('Navigation preserves profile selection', async ({ page }) => {

@@ -719,6 +719,7 @@ export function OverviewScreen({
         {/* Capture Card */}
         <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
           <Card 
+            data-testid="overview-card-capture"
             className={`cursor-pointer transition-all duration-200 ${
               expandedCard === 'capture' 
                 ? 'border-blue-500/50 shadow-md' 
@@ -765,6 +766,7 @@ export function OverviewScreen({
         {/* Setup Card */}
         <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
           <Card 
+            data-testid="overview-card-apply"
             className={`cursor-pointer transition-all duration-200 ${
               expandedCard === 'setup' 
                 ? 'border-green-500/50 shadow-md' 
@@ -814,6 +816,7 @@ export function OverviewScreen({
         {/* Check Card */}
         <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
           <Card 
+            data-testid="overview-card-verify"
             className={`cursor-pointer transition-all duration-200 ${
               expandedCard === 'check' 
                 ? 'border-amber-500/50 shadow-md' 
