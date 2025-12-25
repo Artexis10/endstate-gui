@@ -137,5 +137,17 @@ export async function ensureDirectory(path: string): Promise<void> {
   }
 }
 
+export async function openFolder(path: string): Promise<void> {
+  try {
+    await safeInvoke('open_folder', { path });
+  } catch (err) {
+    console.error('Failed to open folder:', err);
+    // Fallback: try to open in browser (web environment)
+    if (typeof window !== 'undefined') {
+      alert(`Profiles folder: ${path}`);
+    }
+  }
+}
+
 export const invoke = safeInvoke;
 export const listen = safeListen;

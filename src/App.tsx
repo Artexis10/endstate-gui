@@ -21,7 +21,7 @@ import { saveLastRun, loadLastRunForCommand, migrateLegacyLastRun, type LastRunD
 import { loadLifecycleState, recordLifecycleEvent, hasRecentScan, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadUIMode, saveUIMode, toggleUIMode, type UIMode } from './lib/ui-mode';
 import { OverviewScreen } from './components/app/overview-screen';
-import { getProfilesDirectory, ensureDirectory, isTauriRuntime } from './lib/tauri-bridge';
+import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
@@ -92,6 +92,7 @@ function App() {
   };
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
+  const [profilesDirectory, setProfilesDirectory] = useState('');
   const [selectedProfile, setSelectedProfile] = useState('');
   const [selectedProfilePath, setSelectedProfilePath] = useState('');
   
@@ -252,8 +253,15 @@ function App() {
   const refreshProfiles = async () => {
     const dir = await loadProfilesDirectory();
     if (dir) {
+      setProfilesDirectory(dir);
       const discovered = await discoverProfiles(dir);
       setProfiles(discovered);
+    }
+  };
+
+  const handleOpenProfilesFolder = async () => {
+    if (profilesDirectory) {
+      await openFolder(profilesDirectory);
     }
   };
 
@@ -1453,6 +1461,7 @@ function App() {
               lifecycleState={lifecycleState}
               selectedProfile={selectedProfile}
               profiles={profiles}
+              profilesDirectory={profilesDirectory}
               isRunning={isRunning}
               runningAction={overviewRunningAction}
               actionStatus={overviewActionStatus}
@@ -1462,6 +1471,8 @@ function App() {
               actionResult={overviewActionResult}
               uiMode={uiMode}
               onNavigate={navigateWithHistory}
+              onOpenProfilesFolder={handleOpenProfilesFolder}
+              onRefreshProfiles={refreshProfiles}
               onCapture={async () => {
                 // Robust double-run guard using ref
                 if (isRunning || isRunningRef.current) return;
@@ -2327,6 +2338,31 @@ function App() {
                   <Button variant="ghost" onClick={resetSettings}>
                     Reset to Defaults
                   </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>User Interface</CardTitle>
+                <CardDescription>Customize your experience</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Show technical details</label>
+                    <p className="text-xs text-muted-foreground">
+                      Display technical logs, raw output, and advanced debugging information by default
+                    </p>
+                  </div>
+                  <Switch
+                    checked={uiMode === 'advanced'}
+                    onCheckedChange={(checked) => {
+                      const newMode = checked ? 'advanced' : 'default';
+                      saveUIMode(newMode);
+                      window.location.reload();
+                    }}
+                  />
                 </div>
               </CardContent>
             </Card>

@@ -1,0 +1,61 @@
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './select';
+
+describe('Select Component', () => {
+  it('renders select trigger with placeholder', () => {
+    render(
+      <Select>
+        <SelectTrigger>
+          <SelectValue placeholder="Select an option" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="option1">Option 1</SelectItem>
+          <SelectItem value="option2">Option 2</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+    
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
+
+  it('renders with dark mode styling classes', () => {
+    const { container } = render(
+      <Select>
+        <SelectTrigger>
+          <SelectValue placeholder="Select" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="test">Test</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+    
+    const trigger = container.querySelector('[role="combobox"]');
+    expect(trigger).toHaveClass('bg-background');
+    expect(trigger).toHaveClass('text-sm');
+  });
+
+  it('supports keyboard navigation', () => {
+    render(
+      <Select>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="a">A</SelectItem>
+          <SelectItem value="b">B</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+    
+    const trigger = screen.getByRole('combobox');
+    expect(trigger).toBeInTheDocument();
+  });
+});

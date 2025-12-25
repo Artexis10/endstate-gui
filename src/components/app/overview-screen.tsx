@@ -28,10 +28,19 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
-  Zap
+  Zap,
+  FolderOpen,
+  RefreshCw
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -91,6 +100,7 @@ interface OverviewScreenProps {
   lifecycleState: LifecycleState;
   selectedProfile: string;
   profiles: DiscoveredProfile[];
+  profilesDirectory: string;
   isRunning: boolean;
   runningAction: ActionType;
   actionStatus: ActionStatus;
@@ -105,12 +115,15 @@ interface OverviewScreenProps {
   onCheck: () => void;
   onProfileChange: (profile: string, path: string) => void;
   onDismissResult: () => void;
+  onOpenProfilesFolder: () => void;
+  onRefreshProfiles: () => void;
 }
 
 export function OverviewScreen({
   lifecycleState,
   selectedProfile,
   profiles,
+  profilesDirectory,
   isRunning,
   runningAction,
   actionStatus,
@@ -125,6 +138,8 @@ export function OverviewScreen({
   onCheck,
   onProfileChange,
   onDismissResult,
+  onOpenProfilesFolder,
+  onRefreshProfiles,
 }: OverviewScreenProps) {
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
@@ -334,37 +349,61 @@ export function OverviewScreen({
 
         {/* Profile selector for Check and Setup cards */}
         {(action === 'check' || action === 'setup') && hasProfile && !isThisRunning && !isThisComplete && (
-          <div className="flex items-center gap-3 bg-muted/50 rounded-md px-3 py-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground">Profile</p>
-              <select
-                value={selectedProfile}
-                onChange={(e) => {
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 bg-muted/50 rounded-md px-3 py-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground mb-1">Profile</p>
+                <Select
+                  value={selectedProfile}
+                  onValueChange={(value) => {
+                    const selected = profiles.find(p => p.name === value);
+                    onProfileChange(value, selected?.path || '');
+                  }}
+                  disabled={isRunning}
+                >
+                  <SelectTrigger className="h-7 border-0 p-0 focus:ring-0 bg-transparent text-sm font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles.map((p) => (
+                      <SelectItem key={p.name} value={p.name}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground px-3">
+              <span className="flex-1 truncate" title={profilesDirectory}>
+                Profiles folder: {profilesDirectory}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2"
+                onClick={(e) => {
                   e.stopPropagation();
-                  const selected = profiles.find(p => p.name === e.target.value);
-                  onProfileChange(e.target.value, selected?.path || '');
+                  onOpenProfilesFolder();
                 }}
-                onClick={(e) => e.stopPropagation()}
                 disabled={isRunning}
-                className="w-full text-sm font-medium border-0 p-0 focus:ring-0 focus:outline-none cursor-pointer bg-transparent text-foreground"
-                style={{
-                  colorScheme: 'dark',
-                  WebkitAppearance: 'none',
-                  MozAppearance: 'none',
-                  appearance: 'none',
-                  backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%23888\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 0.5rem center',
-                  paddingRight: '1.5rem'
-                }}
               >
-                {profiles.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                <FolderOpen className="h-3 w-3 mr-1" />
+                Open
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRefreshProfiles();
+                }}
+                disabled={isRunning}
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
             </div>
           </div>
         )}
@@ -608,7 +647,7 @@ export function OverviewScreen({
       {/* Current Profile Card (if any) */}
       {hasProfile && (
         <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="pt-4 pb-4">
+          <CardContent className="pt-4 pb-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-primary" />
@@ -617,22 +656,49 @@ export function OverviewScreen({
                   <p className="text-xs text-muted-foreground">{selectedProfile}</p>
                 </div>
               </div>
-              <select
+              <Select
                 value={selectedProfile}
-                onChange={(e) => {
-                  const selected = profiles.find(p => p.name === e.target.value);
-                  onProfileChange(e.target.value, selected?.path || '');
+                onValueChange={(value) => {
+                  const selected = profiles.find(p => p.name === value);
+                  onProfileChange(value, selected?.path || '');
                 }}
                 disabled={isRunning}
-                className="h-8 rounded-md border border-input bg-background text-foreground px-2 text-xs"
-                style={{ colorScheme: 'dark' }}
               >
-                {profiles.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-[180px] h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.name} value={p.name}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex-1 truncate" title={profilesDirectory}>
+                Profiles folder: {profilesDirectory}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2"
+                onClick={onOpenProfilesFolder}
+                disabled={isRunning}
+              >
+                <FolderOpen className="h-3 w-3 mr-1" />
+                Open
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2"
+                onClick={onRefreshProfiles}
+                disabled={isRunning}
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
             </div>
           </CardContent>
         </Card>
