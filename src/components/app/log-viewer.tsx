@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Copy, Trash2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -55,11 +56,9 @@ export function LogViewer({
           {showControls && (
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={autoScroll}
-                  onChange={(e) => setAutoScroll(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(checked) => setAutoScroll(checked === true)}
                 />
                 Auto-scroll
               </label>

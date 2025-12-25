@@ -46,6 +46,37 @@ Endstate GUI is a separate project with its own licensing and distribution model
 
 ---
 
+## UI Component Guidelines
+
+**All visible interactive UI components must use shadcn/ui components unless there is a documented exception.**
+
+This ensures:
+- Consistent theming and dark mode support
+- Accessible keyboard navigation
+- Predictable behavior across the application
+
+### Standard Components
+
+Use these shadcn components for interactive elements:
+- **Select** (`@/components/ui/select`) - for dropdowns and selectors
+- **Button** (`@/components/ui/button`) - for all clickable actions
+- **Checkbox** (`@/components/ui/checkbox`) - for boolean toggles in forms
+- **RadioGroup** (`@/components/ui/radio-group`) - for mutually exclusive options
+- **Switch** (`@/components/ui/switch`) - for on/off toggles
+- **Dialog** (`@/components/ui/dialog`) - for modals and overlays
+- **Input** (`@/components/ui/input`) - for text inputs
+
+### Exceptions
+
+Native HTML elements may be used for:
+- Custom interactive patterns without shadcn equivalents (e.g., collapsible sections, custom toggle groups)
+- Non-interactive semantic markup
+- Cases where shadcn components would conflict with existing behavior
+
+All exceptions should be documented in code comments.
+
+---
+
 ## CLI Integration Architecture
 
 ### Design Principles

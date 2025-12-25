@@ -35,6 +35,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './com
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Switch } from './components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './components/ui/select';
+import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
 import { Loader2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 
 type AppStatus = 'loading' | 'ready' | 'error';
@@ -1806,13 +1814,13 @@ function App() {
                     </Button>
                   </div>
                   {profiles.length > 0 ? (
-                    <select
+                    <Select
                       value={selectedProfile}
-                      onChange={(e) => {
-                        const selected = profiles.find(p => p.name === e.target.value);
-                        setSelectedProfile(e.target.value);
+                      onValueChange={(value) => {
+                        const selected = profiles.find(p => p.name === value);
+                        setSelectedProfile(value);
                         setSelectedProfilePath(selected?.path || '');
-                        updateSettings({ lastSelectedProfile: e.target.value, lastSelectedProfilePath: selected?.path || '' });
+                        updateSettings({ lastSelectedProfile: value, lastSelectedProfilePath: selected?.path || '' });
                         setCheckStep('idle');
                         // Reset apply data when profile changes
                         setApplyData({
@@ -1821,15 +1829,18 @@ function App() {
                         });
                       }}
                       disabled={isRunning}
-                      className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
-                      <option value="">-- Select a setup --</option>
-                      {profiles.map((p) => (
-                        <option key={p.name} value={p.name}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full h-10">
+                        <SelectValue placeholder="-- Select a setup --" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {profiles.map((p) => (
+                          <SelectItem key={p.name} value={p.name}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <div className="p-3 rounded-md bg-warning/10 border border-warning/20 text-sm text-warning-foreground">
                       No setups found. Please capture or import a setup first.
@@ -1950,24 +1961,27 @@ function App() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {profiles.length > 0 ? (
-                  <select
+                  <Select
                     value={selectedProfile}
-                    onChange={(e) => {
-                      const selected = profiles.find(p => p.name === e.target.value);
-                      setSelectedProfile(e.target.value);
+                    onValueChange={(value) => {
+                      const selected = profiles.find(p => p.name === value);
+                      setSelectedProfile(value);
                       setSelectedProfilePath(selected?.path || '');
-                      updateSettings({ lastSelectedProfile: e.target.value, lastSelectedProfilePath: selected?.path || '' });
+                      updateSettings({ lastSelectedProfile: value, lastSelectedProfilePath: selected?.path || '' });
                     }}
                     disabled={isRunning}
-                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
-                    <option value="">-- Select a setup --</option>
-                    {profiles.map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue placeholder="-- Select a setup --" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profiles.map((p) => (
+                        <SelectItem key={p.name} value={p.name}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 ) : (
                   <div className="p-3 rounded-md bg-warning/10 border border-warning/20 text-sm text-warning-foreground">
                     No setups found. Please capture or import a setup first.
@@ -2285,26 +2299,23 @@ function App() {
                 <CardDescription>Choose how to run the endstate engine</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={settings.engineMode === 'path'}
-                      onChange={() => updateSettings({ engineMode: 'path' })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">Use endstate from PATH</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={settings.engineMode === 'script'}
-                      onChange={() => updateSettings({ engineMode: 'script' })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">Use endstate script path</span>
-                  </label>
-                </div>
+                <RadioGroup
+                  value={settings.engineMode}
+                  onValueChange={(value: 'path' | 'script') => updateSettings({ engineMode: value })}
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="path" id="engine-path" />
+                    <label htmlFor="engine-path" className="text-sm cursor-pointer">
+                      Use endstate from PATH
+                    </label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="script" id="engine-script" />
+                    <label htmlFor="engine-script" className="text-sm cursor-pointer">
+                      Use endstate script path
+                    </label>
+                  </div>
+                </RadioGroup>
 
                 {settings.engineMode === 'script' && (
                   <div className="space-y-2">
