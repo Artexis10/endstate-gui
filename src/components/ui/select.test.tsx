@@ -80,10 +80,9 @@ describe('Select Component', () => {
     // Testing it would require opening the select, which is beyond unit test scope
   });
 
-  it('verifies SelectContent uses popover styling classes', () => {
-    // Verify that SelectContent component uses the correct Tailwind classes
-    // This ensures it will have a solid background when CSS is loaded
-    const { container } = render(
+  it('verifies SelectContent has opaque background classes', () => {
+    // Verify that SelectContent uses bg-popover (solid background) and NOT transparent classes
+    const { baseElement } = render(
       <Select defaultOpen>
         <SelectTrigger>
           <SelectValue placeholder="Select" />
@@ -94,9 +93,17 @@ describe('Select Component', () => {
       </Select>
     );
     
-    // SelectContent renders in a portal, so we check the component definition
-    // The key assertion is that the component code includes bg-popover and text-popover-foreground
-    // This is a structural test - the actual CSS variables are defined in globals.css
-    expect(container).toBeInTheDocument();
+    // SelectContent renders in a portal, find it in baseElement (includes portals)
+    const content = baseElement.querySelector('[role="listbox"]');
+    expect(content).toBeInTheDocument();
+    
+    // Assert it has bg-popover class for solid background
+    expect(content).toHaveClass('bg-popover');
+    expect(content).toHaveClass('text-popover-foreground');
+    
+    // Assert it does NOT have transparent or opacity classes
+    const classList = content?.className || '';
+    expect(classList).not.toMatch(/bg-transparent/);
+    expect(classList).not.toMatch(/opacity-\d+/);
   });
 });

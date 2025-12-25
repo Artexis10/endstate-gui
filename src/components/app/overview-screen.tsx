@@ -405,7 +405,8 @@ export function OverviewScreen({
                 }}
                 disabled={isRunning || isRefreshing}
                 data-testid="refresh-profiles-button"
-                aria-label={isRefreshing ? "Refreshing profiles..." : "Refresh profiles"}
+                aria-label={isRefreshing ? "Refreshing profile list..." : "Refresh profile list"}
+                title={isRefreshing ? "Refreshing profile list..." : "Refresh profile list"}
               >
                 <motion.div
                   animate={{ rotate: isRefreshing ? 360 : 0 }}
@@ -721,7 +722,8 @@ export function OverviewScreen({
                 }}
                 disabled={isRunning || isRefreshing}
                 data-testid="refresh-profiles-button"
-                aria-label={isRefreshing ? "Refreshing profiles..." : "Refresh profiles"}
+                aria-label={isRefreshing ? "Refreshing profile list..." : "Refresh profile list"}
+                title={isRefreshing ? "Refreshing profile list..." : "Refresh profile list"}
               >
                 <motion.div
                   animate={{ rotate: isRefreshing ? 360 : 0 }}

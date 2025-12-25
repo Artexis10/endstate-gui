@@ -280,17 +280,15 @@ function App() {
   const handleOpenProfilesFolder = async () => {
     if (profilesDirectory) {
       try {
-        await openFolder(profilesDirectory);
-      } catch (err) {
-        // Check if this is web fallback error
-        const errMsg = err instanceof Error ? err.message : String(err);
-        if (errMsg.startsWith('WEB_FALLBACK:')) {
-          const path = errMsg.replace('WEB_FALLBACK:', '');
-          setFolderPathForModal(path);
+        const result = await openFolder(profilesDirectory);
+        if (!result.ok && result.reason === 'web' && result.path) {
+          // Web mode: show modal with path
+          setFolderPathForModal(result.path);
           setShowFolderPathModal(true);
-        } else {
-          console.error('Failed to open folder:', err);
         }
+        // If ok: true, folder opened successfully in Tauri (no action needed)
+      } catch (err) {
+        console.error('Failed to open folder:', err);
       }
     }
   };
@@ -2514,9 +2512,9 @@ function App() {
 
       {/* Folder Path Modal (web fallback) */}
       <Dialog open={showFolderPathModal} onOpenChange={setShowFolderPathModal}>
-        <DialogContent data-testid="folder-path-modal">
+        <DialogContent data-testid="folder-path-modal" role="dialog">
           <DialogHeader>
-            <DialogTitle>Profiles Folder</DialogTitle>
+            <DialogTitle>Profiles folder</DialogTitle>
             <DialogDescription>
               Your profiles are stored in the following location:
             </DialogDescription>
@@ -2526,7 +2524,8 @@ function App() {
               <Input 
                 value={folderPathForModal} 
                 readOnly 
-                className="flex-1 font-mono text-sm"
+                className="flex-1 font-mono text-sm select-all"
+                data-testid="folder-path-input"
               />
               <Button
                 variant="secondary"
@@ -2534,6 +2533,7 @@ function App() {
                 onClick={() => {
                   navigator.clipboard.writeText(folderPathForModal);
                 }}
+                aria-label="Copy path"
               >
                 <Copy className="h-4 w-4" />
               </Button>

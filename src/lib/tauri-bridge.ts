@@ -137,20 +137,21 @@ export async function ensureDirectory(path: string): Promise<void> {
   }
 }
 
-export async function openFolder(path: string): Promise<void> {
+export async function openFolder(path: string): Promise<{ ok: boolean; reason?: string; path?: string }> {
   const inTauri = isTauriRuntime();
   
+  // In web mode, return failure immediately (no Tauri bridge available)
+  if (!inTauri) {
+    return { ok: false, reason: 'web', path };
+  }
+  
+  // In Tauri mode, try to invoke the command
   try {
     await safeInvoke('open_folder', { path });
+    return { ok: true };
   } catch (err) {
     console.error('Failed to open folder:', err);
-    // In web environment, throw error with path so caller can show modal
-    if (!inTauri) {
-      throw new Error(`WEB_FALLBACK:${path}`);
-    } else {
-      // In Tauri, re-throw the error so caller knows it failed
-      throw err;
-    }
+    throw err;
   }
 }
 
