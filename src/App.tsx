@@ -83,22 +83,6 @@ function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('overview');
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
   const [uiMode, setUIMode] = useState<UIMode>(loadUIMode());
-  
-  // Navigation with back support - tracks previous page when navigating from Overview
-  const navigateWithHistory = (page: PageType) => {
-    if (currentPage === 'overview' && page !== 'overview') {
-      setPreviousPage('overview');
-    }
-    setCurrentPage(page);
-  };
-  
-  // Go back to previous page
-  const handleBack = () => {
-    if (previousPage) {
-      setCurrentPage(previousPage);
-      setPreviousPage(null);
-    }
-  };
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [profilesDirectory, setProfilesDirectory] = useState('');
@@ -198,6 +182,24 @@ function App() {
     setLiveAppEvents([]);
     setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
     isRunningRef.current = false;
+  };
+  
+  // Navigation with back support - tracks previous page when navigating from Overview
+  const navigateWithHistory = (page: PageType) => {
+    if (currentPage === 'overview' && page !== 'overview') {
+      setPreviousPage('overview');
+      // Reset overview action state to prevent stale state when returning
+      resetOverviewActionState();
+    }
+    setCurrentPage(page);
+  };
+  
+  // Go back to previous page
+  const handleBack = () => {
+    if (previousPage) {
+      setCurrentPage(previousPage);
+      setPreviousPage(null);
+    }
   };
   
   // Handle UI mode toggle with persistence
