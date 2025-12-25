@@ -11,6 +11,9 @@
     --muted: 217 10% 25%;
     --muted-foreground: 215 20% 65%;
     
+    --popover: 220 13% 12%;
+    --popover-foreground: 210 40% 98%;
+    
     --border: 217 10% 20%;
     --input: 217 10% 20%;
     --ring: 346 77% 60%;
@@ -43,6 +46,9 @@
     
     --muted: 210 40% 96%;
     --muted-foreground: 215 16% 47%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
     
     --border: 214 32% 91%;
     --input: 214 32% 91%;

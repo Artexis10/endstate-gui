@@ -23,6 +23,7 @@ import { loadUIMode, saveUIMode, toggleUIMode, type UIMode } from './lib/ui-mode
 import { OverviewScreen } from './components/app/overview-screen';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
+import { saveProfileMetadata } from './lib/profile-metadata';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -270,6 +271,18 @@ function App() {
   const handleOpenProfilesFolder = async () => {
     if (profilesDirectory) {
       await openFolder(profilesDirectory);
+    }
+  };
+
+  const promptForProfileName = async (profilePath: string): Promise<void> => {
+    const displayName = prompt('Give this profile a name (optional):');
+    if (displayName && displayName.trim()) {
+      try {
+        await saveProfileMetadata(profilePath, { displayName: displayName.trim() });
+        await refreshProfiles();
+      } catch (err) {
+        console.error('Failed to save profile name:', err);
+      }
     }
   };
 
@@ -911,6 +924,9 @@ function App() {
           setSelectedProfile(newest.name);
           setSelectedProfilePath(newest.path);
           updateSettings({ lastSelectedProfile: newest.name, lastSelectedProfilePath: newest.path });
+          
+          // Prompt for optional display name
+          await promptForProfileName(newest.path);
         }
         
         setShowCaptureModal(true);
@@ -1006,14 +1022,18 @@ function App() {
       setSelectedProfile(newest.name);
       setSelectedProfilePath(newest.path);
       updateSettings({ lastSelectedProfile: newest.name, lastSelectedProfilePath: newest.path });
+      
+      // Prompt for optional display name
+      await promptForProfileName(newest.path);
     }
     
     // Get app list from envelope data
     const appsList = envelopeData?.appsIncluded?.map(a => a.id) || [];
     
-    // Get profile name from the newest discovered profile
-    const profileName = discovered.length > 0 
-      ? discovered.sort((a, b) => b.path.localeCompare(a.path))[0].name 
+    // Get profile name from the newest discovered profile (refresh to get display name)
+    const refreshedProfiles = await discoverProfiles(dir);
+    const profileName = refreshedProfiles.length > 0 
+      ? refreshedProfiles.sort((a, b) => b.path.localeCompare(a.path))[0].name 
       : 'Unknown';
     
     // Return structured result

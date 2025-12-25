@@ -58,4 +58,25 @@ describe('Select Component', () => {
     const trigger = screen.getByRole('combobox');
     expect(trigger).toBeInTheDocument();
   });
+
+  it('has solid background styling on trigger', () => {
+    const { container } = render(
+      <Select>
+        <SelectTrigger data-testid="select-trigger">
+          <SelectValue placeholder="Select" />
+        </SelectTrigger>
+        <SelectContent data-testid="select-content">
+          <SelectItem value="test">Test</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+    
+    // Verify trigger has bg-background and border-input for solid, readable appearance
+    const trigger = container.querySelector('[role="combobox"]');
+    expect(trigger).toHaveClass('bg-background');
+    expect(trigger).toHaveClass('border-input');
+    
+    // Note: SelectContent renders in a portal with bg-popover class
+    // Testing it would require opening the select, which is beyond unit test scope
+  });
 });

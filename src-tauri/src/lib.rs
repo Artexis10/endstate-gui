@@ -335,6 +335,81 @@ fn list_manifest_files(directory: String) -> Result<Vec<String>, String> {
     Ok(manifest_files)
 }
 
+/// Read a text file from disk.
+///
+/// # Arguments
+/// * `path` - Path to the file to read
+///
+/// # Returns
+/// * `Ok(String)` - File contents
+/// * `Err(String)` - Failed to read file
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    use std::path::Path;
+    
+    let file_path = Path::new(&path);
+    if !file_path.exists() || !file_path.is_file() {
+        return Err("File does not exist".to_string());
+    }
+    
+    fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))
+}
+
+/// Write a text file to disk.
+///
+/// # Arguments
+/// * `path` - Path to the file to write
+/// * `content` - Content to write
+///
+/// # Returns
+/// * `Ok(())` - File written successfully
+/// * `Err(String)` - Failed to write file
+#[tauri::command]
+fn write_text_file(path: String, content: String) -> Result<(), String> {
+    fs::write(&path, content)
+        .map_err(|e| format!("Failed to write file: {}", e))
+}
+
+/// Open a folder in the OS file explorer.
+///
+/// # Arguments
+/// * `path` - Path to the folder to open
+///
+/// # Returns
+/// * `Ok(())` - Folder opened successfully
+/// * `Err(String)` - Failed to open folder
+#[tauri::command]
+fn open_folder(path: String) -> Result<(), String> {
+    use std::process::Command;
+    
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    
+    Ok(())
+}
+
 /// Run endstate with streaming output.
 ///
 /// Spawns the process and emits events to the specified channel:
@@ -437,7 +512,10 @@ pub fn run() {
             get_default_profiles_directory,
             ensure_dir,
             import_profile,
-            show_file_dialog
+            show_file_dialog,
+            open_folder,
+            read_text_file,
+            write_text_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -368,7 +368,7 @@ export function OverviewScreen({
                   <SelectContent>
                     {profiles.map((p) => (
                       <SelectItem key={p.name} value={p.name}>
-                        {p.name}
+                        {p.displayName ? `${p.displayName} (${p.name})` : p.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -647,13 +647,17 @@ export function OverviewScreen({
       {/* Current Profile Card (if any) */}
       {hasProfile && (
         <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="pt-4 pb-4 space-y-3">
+          <CardContent className="pt-4 pb-6 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-primary" />
                 <div>
                   <p className="text-sm font-medium">Current Profile</p>
-                  <p className="text-xs text-muted-foreground">{selectedProfile}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {profiles.find(p => p.name === selectedProfile)?.displayName 
+                      ? `${profiles.find(p => p.name === selectedProfile)?.displayName} (${selectedProfile})`
+                      : selectedProfile}
+                  </p>
                 </div>
               </div>
               <Select
@@ -670,7 +674,7 @@ export function OverviewScreen({
                 <SelectContent>
                   {profiles.map((p) => (
                     <SelectItem key={p.name} value={p.name}>
-                      {p.name}
+                      {p.displayName ? `${p.displayName} (${p.name})` : p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
