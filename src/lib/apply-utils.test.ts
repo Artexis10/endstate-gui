@@ -8,6 +8,10 @@ import {
   isPreviewResult,
   parseApplyProgressLine,
   StreamingLineBuffer,
+  reconcileLiveActivity,
+  reasonToAction,
+  getFailedItemMessage,
+  type AppEvent,
 } from './apply-utils';
 import type { ApplyItem } from '../types';
 
@@ -265,17 +269,17 @@ describe('apply-utils', () => {
   describe('parseApplyProgressLine', () => {
     it('parses [OK] with already installed', () => {
       const result = parseApplyProgressLine('[OK] Discord.Discord (driver: winget) - already installed');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Already installed' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'OK' });
     });
 
     it('parses [OK] with installed successfully', () => {
       const result = parseApplyProgressLine('[OK] Discord.Discord (driver: winget) - Installed successfully');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Installed' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'OK' });
     });
 
     it('parses [INSTALL] line', () => {
       const result = parseApplyProgressLine('[INSTALL] Discord.Discord (driver: winget)');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Installing' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'Processing' });
     });
 
     it('parses [PLAN] line', () => {
@@ -285,12 +289,12 @@ describe('apply-utils', () => {
 
     it('parses [ACTION] Installing line', () => {
       const result = parseApplyProgressLine('[ACTION] Installing Discord.Discord via winget');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Installing' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'Processing' });
     });
 
     it('parses [SKIP] with already installed', () => {
       const result = parseApplyProgressLine('[SKIP] Discord.Discord - already installed');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Already installed' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'Skipped' });
     });
 
     it('parses [SKIP] with filtered', () => {
@@ -315,12 +319,12 @@ describe('apply-utils', () => {
 
     it('parses winget Found line', () => {
       const result = parseApplyProgressLine('Found Discord [Discord.Discord]');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Checking' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'Processing' });
     });
 
     it('parses winget Installing line', () => {
       const result = parseApplyProgressLine('Installing Discord [Discord.Discord]...');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Installing' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'Processing' });
     });
 
     it('parses winget Successfully installed line', () => {
@@ -386,6 +390,184 @@ describe('apply-utils', () => {
       const buffer = new StreamingLineBuffer();
       const lines = buffer.append('A\n\nB\n');
       expect(lines).toEqual(['A', '', 'B']);
+    });
+  });
+
+  describe('reasonToAction', () => {
+    it('maps failed status to Failed', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'failed', reason: 'install_failed' };
+      expect(reasonToAction(item)).toBe('Failed');
+    });
+
+    it('maps user_denied to Cancelled', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'skipped', reason: 'user_denied' };
+      expect(reasonToAction(item)).toBe('Cancelled');
+    });
+
+    it('maps installed to Installed', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'ok', reason: 'installed' };
+      expect(reasonToAction(item)).toBe('Installed');
+    });
+
+    it('maps already_installed to OK', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'skipped', reason: 'already_installed' };
+      expect(reasonToAction(item)).toBe('OK');
+    });
+
+    it('maps would_install to Would install', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'ok', reason: 'would_install' };
+      expect(reasonToAction(item)).toBe('Would install');
+    });
+
+    it('maps skipped status to Skipped', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'skipped', reason: 'filtered' };
+      expect(reasonToAction(item)).toBe('Skipped');
+    });
+  });
+
+  describe('getFailedItemMessage', () => {
+    it('returns item message when present', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'failed', message: 'Network error' };
+      expect(getFailedItemMessage(item)).toBe('Network error');
+    });
+
+    it('returns fallback when message is null', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'failed' };
+      expect(getFailedItemMessage(item)).toBe('Install failed (no details returned)');
+    });
+
+    it('returns fallback when message is empty string', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'failed', message: '' };
+      expect(getFailedItemMessage(item)).toBe('Install failed (no details returned)');
+    });
+
+    it('returns fallback when message is whitespace only', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'failed', message: '   ' };
+      expect(getFailedItemMessage(item)).toBe('Install failed (no details returned)');
+    });
+  });
+
+  describe('reconcileLiveActivity', () => {
+    it('updates Working entry to Failed when envelope shows failure', () => {
+      const liveEvents: AppEvent[] = [
+        { app: 'Notepad++.Notepad++', action: 'Processing', timestamp: 1000 },
+      ];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'Notepad++.Notepad++', driver: 'winget', status: 'failed', reason: 'install_failed' },
+      ];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].app).toBe('Notepad++.Notepad++');
+      expect(result[0].action).toBe('Failed');
+      // Should NOT be 'Processing' or 'Working'
+      expect(result[0].action).not.toBe('Processing');
+    });
+
+    it('preserves order from live events when reconciling', () => {
+      const liveEvents: AppEvent[] = [
+        { app: 'App1', action: 'Processing', timestamp: 1000 },
+        { app: 'App2', action: 'Processing', timestamp: 2000 },
+        { app: 'App3', action: 'Processing', timestamp: 3000 },
+      ];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'App1', driver: 'winget', status: 'ok', reason: 'installed' },
+        { id: 'App2', driver: 'winget', status: 'failed', reason: 'install_failed' },
+        { id: 'App3', driver: 'winget', status: 'skipped', reason: 'already_installed' },
+      ];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      expect(result).toHaveLength(3);
+      expect(result[0].app).toBe('App1');
+      expect(result[0].action).toBe('Installed');
+      expect(result[1].app).toBe('App2');
+      expect(result[1].action).toBe('Failed');
+      expect(result[2].app).toBe('App3');
+      expect(result[2].action).toBe('OK');
+    });
+
+    it('adds envelope items not in live events', () => {
+      const liveEvents: AppEvent[] = [
+        { app: 'App1', action: 'Installed', timestamp: 1000 },
+      ];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'App1', driver: 'winget', status: 'ok', reason: 'installed' },
+        { id: 'App2', driver: 'winget', status: 'skipped', reason: 'already_installed' },
+      ];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].app).toBe('App1');
+      expect(result[1].app).toBe('App2');
+      expect(result[1].action).toBe('OK');
+    });
+
+    it('handles empty live events', () => {
+      const liveEvents: AppEvent[] = [];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'App1', driver: 'winget', status: 'ok', reason: 'installed' },
+      ];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].app).toBe('App1');
+      expect(result[0].action).toBe('Installed');
+    });
+
+    it('handles empty envelope items', () => {
+      const liveEvents: AppEvent[] = [
+        { app: 'App1', action: 'Processing', timestamp: 1000 },
+      ];
+      const envelopeItems: ApplyItem[] = [];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].app).toBe('App1');
+      expect(result[0].action).toBe('Processing'); // Not reconciled, stays as-is
+    });
+
+    it('handles user_denied as Cancelled', () => {
+      const liveEvents: AppEvent[] = [
+        { app: 'App1', action: 'Processing', timestamp: 1000 },
+      ];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'App1', driver: 'winget', status: 'skipped', reason: 'user_denied' },
+      ];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].action).toBe('Cancelled');
+    });
+
+    it('CRITICAL: Working entry MUST become Failed when envelope shows failure', () => {
+      // This is the exact bug scenario reported by the user
+      const liveEvents: AppEvent[] = [
+        { app: 'Notepad++.Notepad++', action: 'Processing', timestamp: 1000 },
+      ];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'Notepad++.Notepad++', driver: 'winget', status: 'failed', reason: 'install_failed', message: null as unknown as string },
+      ];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      // The bug was: live activity showed "Working..." even after engine reported failure
+      // After fix: must show "Failed"
+      expect(result[0].action).toBe('Failed');
+      expect(result[0].action).not.toBe('Processing');
+      expect(result[0].action).not.toBe('Working');
+    });
+  });
+
+  describe('normalizeApplyStatus - user_denied', () => {
+    it('maps user_denied to skipped category', () => {
+      const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'skipped', reason: 'user_denied' };
+      expect(normalizeApplyStatus(item)).toBe('skipped');
     });
   });
 });

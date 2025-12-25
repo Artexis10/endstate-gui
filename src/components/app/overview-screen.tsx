@@ -501,11 +501,13 @@ export function OverviewScreen({
                           event.action === 'Failed' ? 'text-red-600' :
                           event.action === 'OK' ? 'text-muted-foreground' :
                           event.action === 'Skipped' ? 'text-yellow-600' :
+                          event.action === 'Cancelled' ? 'text-yellow-600' :
                           event.action === 'Processing' ? 'text-blue-600' :
                           'text-muted-foreground'
                         }`}>
                           {event.action === 'OK' ? 'PRESENT' : 
                            event.action === 'Skipped' ? 'SKIPPED' : 
+                           event.action === 'Cancelled' ? 'CANCEL' :
                            event.action === 'Processing' ? 'WORKING' : 
                            event.action.toUpperCase().slice(0, 7)}
                         </span>
@@ -532,12 +534,16 @@ export function OverviewScreen({
           </div>
         )}
 
-        {/* Error state */}
+        {/* Error state - distinguish partial failures from hard errors */}
         {isThisComplete && actionStatus === 'error' && (
           <div className="flex items-center gap-3 bg-destructive/10 rounded-md px-3 py-3">
             <XCircle className="h-4 w-4 text-destructive" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-destructive">Something went wrong</p>
+              <p className="text-sm font-medium text-destructive">
+                {actionResult?.counts?.failed && actionResult.counts.failed > 0
+                  ? `Some apps failed to install (${actionResult.counts.failed} failed)`
+                  : 'Something went wrong'}
+              </p>
               {actionProgress?.message && (
                 <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
               )}

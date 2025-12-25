@@ -16,7 +16,7 @@ import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
-import { parseApplyProgressLine, StreamingLineBuffer } from './lib/apply-utils';
+import { parseApplyProgressLine, StreamingLineBuffer, reconcileLiveActivity, type AppEvent } from './lib/apply-utils';
 import { saveLastRun, loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, hasRecentScan, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadUIMode, saveUIMode, toggleUIMode, type UIMode } from './lib/ui-mode';
@@ -145,12 +145,7 @@ function App() {
   type OverviewActionType = 'capture' | 'setup' | 'check' | null;
   type OverviewActionStatus = 'idle' | 'running' | 'success' | 'error';
   
-  // Per-app event for detailed tracking
-  interface AppEvent {
-    app: string;
-    action: 'Installed' | 'Already installed' | 'Skipped' | 'Failed' | 'Would install' | 'Missing' | 'Installing' | string;
-    timestamp?: number;
-  }
+  // Per-app event for detailed tracking - uses AppEvent from apply-utils
   
   // Enhanced action result with app events
   interface OverviewActionResult {
@@ -1268,42 +1263,62 @@ function App() {
         }
       }
     );
-    
-    // Final result maintains append order
-    const collectedEvents = appEventList;
 
     logBufferRef.current?.flush();
     applyLineBufferRef.current?.clear();
     setIsRunning(false);
 
-    const isSuccess = applyResult.envelope?.success ?? (applyResult.exitCode === 0);
-    if (!isSuccess) {
-      throw new Error(applyResult.envelope?.error?.message || 'Apply failed');
-    }
-
-    // Process result
+    // Process result - envelope is source of truth
     const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
+    const envelopeItems = envelopeData?.items ?? [];
+    
+    // CRITICAL: Reconcile live activity with final envelope
+    // This ensures "Working..." entries are updated to their final status (Failed, Installed, etc.)
+    const reconciledEvents = reconcileLiveActivity(appEventList, envelopeItems);
+    setLiveAppEvents(reconciledEvents.slice(-20));
+    
+    // Update counters from envelope (source of truth)
     const installed = envelopeData?.counts?.installed ?? 0;
     const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? 0;
+    const failed = envelopeData?.counts?.failed ?? 0;
+    const skipped = envelopeData?.counts?.skippedFiltered ?? 0;
+    
+    setLiveCounters({ installed, alreadyPresent, skipped, failed });
+
+    // Determine success: envelope.success is authoritative
+    // Partial failure = success:false but error:null with failed > 0
+    const isSuccess = applyResult.envelope?.success ?? (applyResult.exitCode === 0);
+    const isPartialFailure = !isSuccess && applyResult.envelope?.error === null && failed > 0;
+    
+    // Only throw for hard errors, not partial failures
+    if (!isSuccess && !isPartialFailure) {
+      throw new Error(applyResult.envelope?.error?.message || 'Apply failed');
+    }
     
     // Record lifecycle event
     const applyEvent: LifecycleEvent = {
       timestamp: new Date().toISOString(),
       profile: selectedProfile,
       profilePath: selectedProfilePath,
-      success: true,
-      summary: { installed, alreadyPresent },
+      success: isSuccess,
+      summary: { installed, alreadyPresent, failed },
     };
     const newState = recordLifecycleEvent('apply', applyEvent);
     setLifecycleState(newState);
     
-    setOverviewActionProgress({ 
-      message: `${installed} installed, ${alreadyPresent} already present` 
-    });
+    // Update progress message based on outcome
+    if (failed > 0) {
+      setOverviewActionProgress({ 
+        message: `${installed} installed, ${failed} failed`,
+        detail: `${alreadyPresent} already present`
+      });
+    } else {
+      setOverviewActionProgress({ 
+        message: `${installed} installed, ${alreadyPresent} already present` 
+      });
+    }
     
-    const failed = envelopeData?.counts?.failed ?? 0;
-    const skipped = envelopeData?.counts?.skippedFiltered ?? 0;
-    return { installed, alreadyPresent, failed, skipped, profile: selectedProfile, appEvents: collectedEvents };
+    return { installed, alreadyPresent, failed, skipped, profile: selectedProfile, appEvents: reconciledEvents };
   };
 
   const handleImportProfile = async () => {

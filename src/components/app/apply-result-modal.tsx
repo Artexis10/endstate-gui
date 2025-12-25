@@ -116,8 +116,11 @@ export function ApplyResultModal({
     if (item.reason === 'already_installed' || item.reason === 'already_present') {
       return { label: 'Already present', className: 'bg-muted/20 text-muted-foreground border-muted/30' };
     }
-    if (item.status === 'failed' || item.reason === 'failed') {
+    if (item.status === 'failed' || item.reason === 'failed' || item.reason === 'install_failed') {
       return { label: 'Needs attention', className: 'bg-destructive/20 text-destructive border-destructive/30' };
+    }
+    if (item.reason === 'user_denied') {
+      return { label: 'Cancelled', className: 'bg-warning/20 text-warning border-warning/30' };
     }
     if (item.reason === 'skipped' || item.reason === 'filtered') {
       return { label: 'Skipped', className: 'bg-muted/20 text-muted-foreground border-muted/30' };
@@ -131,15 +134,17 @@ export function ApplyResultModal({
     const priorityOrder: Record<string, number> = {
       'would_install': 0,
       'failed': 1,
+      'install_failed': 1,
       'installed': 2,
       'already_installed': 3,
       'already_present': 3,
-      'skipped': 4,
-      'filtered': 4,
+      'user_denied': 4,
+      'skipped': 5,
+      'filtered': 5,
     };
     return [...items].sort((a, b) => {
-      const aPriority = priorityOrder[a.reason || ''] ?? 5;
-      const bPriority = priorityOrder[b.reason || ''] ?? 5;
+      const aPriority = priorityOrder[a.reason || ''] ?? 6;
+      const bPriority = priorityOrder[b.reason || ''] ?? 6;
       return aPriority - bPriority;
     });
   }, [items]);

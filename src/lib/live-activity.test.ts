@@ -139,3 +139,67 @@ describe('Live Activity Logic', () => {
     expect(last20[19].app).toBe('app19'); // Last (newest)
   });
 });
+
+describe('Idempotency Guard Logic', () => {
+  /**
+   * Simulates the idempotency guard pattern used in App.tsx
+   * to prevent double-run when Apply is triggered twice quickly.
+   */
+  it('should prevent double-run with ref guard', () => {
+    let runCount = 0;
+    let isRunningRef = false;
+    
+    const startRun = () => {
+      // Guard: if already running, ignore
+      if (isRunningRef) {
+        return false;
+      }
+      isRunningRef = true;
+      runCount++;
+      return true;
+    };
+    
+    const endRun = () => {
+      isRunningRef = false;
+    };
+    
+    // First call should succeed
+    expect(startRun()).toBe(true);
+    expect(runCount).toBe(1);
+    
+    // Second call while first is running should be ignored
+    expect(startRun()).toBe(false);
+    expect(runCount).toBe(1); // Still 1
+    
+    // Third call while first is running should also be ignored
+    expect(startRun()).toBe(false);
+    expect(runCount).toBe(1); // Still 1
+    
+    // End the first run
+    endRun();
+    
+    // Now a new run should succeed
+    expect(startRun()).toBe(true);
+    expect(runCount).toBe(2);
+  });
+
+  it('should handle rapid double-click scenario', () => {
+    let runCount = 0;
+    let isRunningRef = false;
+    
+    const startRun = () => {
+      if (isRunningRef) return false;
+      isRunningRef = true;
+      runCount++;
+      return true;
+    };
+    
+    // Simulate rapid double-click (both calls happen before any async work)
+    const result1 = startRun();
+    const result2 = startRun();
+    
+    expect(result1).toBe(true);
+    expect(result2).toBe(false);
+    expect(runCount).toBe(1); // Only one run started
+  });
+});

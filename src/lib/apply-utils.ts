@@ -1,6 +1,15 @@
 import type { ApplyItem } from '../types';
 
 /**
+ * AppEvent represents a live activity entry during streaming.
+ */
+export interface AppEvent {
+  app: string;
+  action: string;
+  timestamp?: number;
+}
+
+/**
  * UI categories for Apply results.
  * 
  * These are semantic categories that map to user-facing labels:
@@ -39,6 +48,7 @@ export interface CategorizedApplyGroups {
  * - already_installed → alreadyPresent
  * - install_failed → needsAttention
  * - skipped_filtered → skipped
+ * - user_denied → skipped (shown as "Cancelled")
  */
 export function normalizeApplyStatus(item: ApplyItem): ApplyCategory {
   const status = item.status?.toLowerCase() || '';
@@ -62,6 +72,11 @@ export function normalizeApplyStatus(item: ApplyItem): ApplyCategory {
   // already_installed = already present on system
   if (reason === 'already_installed') {
     return 'alreadyPresent';
+  }
+
+  // user_denied = user cancelled/denied the install
+  if (reason === 'user_denied') {
+    return 'skipped';
   }
 
   // OK status without specific reason - check if it's a dry-run or real apply
@@ -299,4 +314,134 @@ export class StreamingLineBuffer {
   clear(): void {
     this.buffer = '';
   }
+}
+
+/**
+ * Map engine item reason to a user-friendly action string for live activity.
+ * This is the source of truth for how items appear in the live activity list.
+ */
+export function reasonToAction(item: ApplyItem): string {
+  const reason = item.reason?.toLowerCase() || '';
+  const status = item.status?.toLowerCase() || '';
+
+  // Failed states
+  if (status === 'failed' || reason === 'install_failed' || reason === 'failed') {
+    return 'Failed';
+  }
+
+  // User denied/cancelled
+  if (reason === 'user_denied') {
+    return 'Cancelled';
+  }
+
+  // Installed this run
+  if (reason === 'installed') {
+    return 'Installed';
+  }
+
+  // Already present
+  if (reason === 'already_installed') {
+    return 'OK';
+  }
+
+  // Would install (preview)
+  if (reason === 'would_install') {
+    return 'Would install';
+  }
+
+  // Skipped/filtered
+  if (status === 'skipped' || reason === 'skipped' || reason === 'filtered') {
+    return 'Skipped';
+  }
+
+  // OK status without reason
+  if (status === 'ok') {
+    return 'OK';
+  }
+
+  // Fallback
+  return 'Unknown';
+}
+
+/**
+ * Reconcile live activity events with the final JSON envelope.
+ * 
+ * This function takes the streaming live activity state and reconciles it
+ * with the authoritative final JSON envelope from the engine. This ensures:
+ * - Any "Working..." entries are updated to their final status
+ * - Failed items show as "Failed" even if streaming missed the failure
+ * - Items with null message get a fallback message
+ * 
+ * @param liveEvents - Current live activity events from streaming
+ * @param envelopeItems - Final items from the JSON envelope (source of truth)
+ * @returns Reconciled app events with correct final statuses
+ */
+export function reconcileLiveActivity(
+  liveEvents: AppEvent[],
+  envelopeItems: ApplyItem[]
+): AppEvent[] {
+  // Build a map of envelope items by id for O(1) lookup
+  const envelopeMap = new Map<string, ApplyItem>();
+  for (const item of envelopeItems) {
+    envelopeMap.set(item.id, item);
+  }
+
+  // Build result: start with live events, update from envelope
+  const resultMap = new Map<string, AppEvent>();
+  
+  // First, add all live events
+  for (const event of liveEvents) {
+    resultMap.set(event.app, event);
+  }
+
+  // Then, reconcile with envelope (envelope is source of truth)
+  for (const item of envelopeItems) {
+    const action = reasonToAction(item);
+    const existing = resultMap.get(item.id);
+    
+    // Always update to final status from envelope
+    resultMap.set(item.id, {
+      app: item.id,
+      action,
+      timestamp: existing?.timestamp ?? Date.now(),
+    });
+  }
+
+  // Convert back to array, preserving insertion order from live events
+  // then adding any envelope items that weren't in live events
+  const result: AppEvent[] = [];
+  const seen = new Set<string>();
+  
+  // First, add items in live event order (with updated actions)
+  for (const event of liveEvents) {
+    const reconciled = resultMap.get(event.app);
+    if (reconciled && !seen.has(event.app)) {
+      result.push(reconciled);
+      seen.add(event.app);
+    }
+  }
+  
+  // Then, add any envelope items not in live events
+  for (const item of envelopeItems) {
+    if (!seen.has(item.id)) {
+      const reconciled = resultMap.get(item.id);
+      if (reconciled) {
+        result.push(reconciled);
+        seen.add(item.id);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Get a user-friendly message for a failed item.
+ * If the item has no message, returns a fallback.
+ */
+export function getFailedItemMessage(item: ApplyItem): string {
+  if (item.message && item.message.trim()) {
+    return item.message;
+  }
+  return 'Install failed (no details returned)';
 }
