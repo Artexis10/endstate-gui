@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { forceAdvancedMode, seedProfileSettings, goToApplyPage } from './helpers/ui-mode';
 
 // Helper to create mock engine for Apply-only flow
 function createApplyMockEngine(applyResponse: any) {
@@ -20,6 +21,10 @@ function createApplyMockEngine(applyResponse: any) {
 
 test.describe('Apply Page - Apply Only Flow', () => {
   test.beforeEach(async ({ page, baseURL }) => {
+    // Force Advanced mode and seed profile settings
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', true);
+
     await page.addInitScript(() => {
       (window as any).__TAURI__ = {
         core: {
@@ -74,32 +79,27 @@ test.describe('Apply Page - Apply Only Flow', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
+    // App starts on Overview - navigate to Apply page
+    await goToApplyPage(page);
   });
 
   test('Apply page loads with profile selector and Preview button', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
-    // Check what will change button should be visible
-    await expect(page.locator('button:has-text("Check what will change")')).toBeVisible();
+    // Profile is pre-selected via seedProfileSettings
+    // Preview changes button should be visible (dryRunEnabled=true)
+    await expect(page.locator('button:has-text("Preview changes")')).toBeVisible();
   });
 
   test('Activity card appears during preview', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
-    // Click Check what will change
-    await page.click('button:has-text("Check what will change")');
+    // Profile is pre-selected via seedProfileSettings
+    // Click Preview changes
+    await page.click('button:has-text("Preview changes")');
     
     // Wait for activity card to show
     await expect(page.locator('text=Activity')).toBeVisible({ timeout: 3000 });
   });
 
   test('Navigation preserves profile selection', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
+    // Profile is pre-selected via seedProfileSettings
     // Navigate to Capture page
     await page.click('nav >> text=Capture computer');
     await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
@@ -108,14 +108,18 @@ test.describe('Apply Page - Apply Only Flow', () => {
     await page.click('nav >> text=Set up computer');
     await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
     
-    // Profile should still be selected
-    await expect(page.locator('select')).toHaveValue('test-profile');
+    // Profile should still be selected (stored in settings)
+    await expect(page.locator('button:has-text("Preview changes")')).toBeVisible();
   });
 });
 
 // Test: All apps already installed => "Your computer is ready"
 test.describe('Apply Modal - All Already Installed', () => {
   test.beforeEach(async ({ page, baseURL }) => {
+    // Force Advanced mode and seed profile settings
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', true);
+
     await page.addInitScript(() => {
       (window as any).__TAURI__ = {
         core: {
@@ -171,15 +175,14 @@ test.describe('Apply Modal - All Already Installed', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
+    // App starts on Overview - navigate to Apply page
+    await goToApplyPage(page);
   });
 
   test('shows "Your computer is ready" when all apps already installed', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
-    // Click Check what will change to run apply --dry-run
-    await page.click('button:has-text("Check what will change")');
+    // Profile is pre-selected via seedProfileSettings
+    // Click Preview changes to run apply --dry-run
+    await page.click('button:has-text("Preview changes")');
     
     // Wait for apply modal
     await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
@@ -196,6 +199,10 @@ test.describe('Apply Modal - All Already Installed', () => {
 // Test: Some apps failed => "Setup incomplete" + Needs attention
 test.describe('Apply Modal - With Failures', () => {
   test.beforeEach(async ({ page, baseURL }) => {
+    // Force Advanced mode and seed profile settings
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', true);
+
     await page.addInitScript(() => {
       (window as any).__TAURI__ = {
         core: {
@@ -251,15 +258,14 @@ test.describe('Apply Modal - With Failures', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
+    // App starts on Overview - navigate to Apply page
+    await goToApplyPage(page);
   });
 
   test('shows "Setup incomplete" and Needs attention when apps fail', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
-    // Click Check what will change
-    await page.click('button:has-text("Check what will change")');
+    // Profile is pre-selected via seedProfileSettings
+    // Click Preview changes
+    await page.click('button:has-text("Preview changes")');
     
     // Wait for apply modal with issues
     await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
@@ -279,6 +285,10 @@ test.describe('Apply Modal - With Failures', () => {
 // Test: Pending installs from dry-run => "Changes ready to apply" with Install button
 test.describe('Apply Modal - Pending Installs (Dry Run)', () => {
   test.beforeEach(async ({ page, baseURL }) => {
+    // Force Advanced mode and seed profile settings
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', true);
+
     await page.addInitScript(() => {
       (window as any).__TAURI__ = {
         core: {
@@ -333,15 +343,14 @@ test.describe('Apply Modal - Pending Installs (Dry Run)', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
+    // App starts on Overview - navigate to Apply page
+    await goToApplyPage(page);
   });
 
   test('shows "Changes ready to apply" with Install button when apps need installing', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
-    // Click Check what will change
-    await page.click('button:has-text("Check what will change")');
+    // Profile is pre-selected via seedProfileSettings
+    // Click Preview changes
+    await page.click('button:has-text("Preview changes")');
     
     // Wait for apply modal
     const dialog = page.locator('[role="dialog"]');

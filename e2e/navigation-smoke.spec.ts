@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { forceAdvancedMode, goToApplyPage, goToCapturePage, goToVerifyPage } from './helpers/ui-mode';
 
 /**
  * Navigation Smoke Test
@@ -6,10 +7,16 @@ import { test, expect } from '@playwright/test';
  * Verifies basic navigation between all pages works correctly.
  * Does NOT depend on profiles, preview, or any operation execution.
  * Only checks stable landmarks (page headings) exist after navigation.
+ * 
+ * NOTE: These tests require Advanced mode (sidebar navigation visible).
+ * App always starts on Overview; tests navigate explicitly.
  */
 
 test.describe('Navigation Smoke', () => {
   test.beforeEach(async ({ page }) => {
+    // Force Advanced mode for sidebar navigation tests
+    await forceAdvancedMode(page);
+
     // Mock Tauri bridge
     await page.addInitScript(() => {
       (window as any).__TAURI__ = {
@@ -67,38 +74,33 @@ test.describe('Navigation Smoke', () => {
   });
 
   test('navigates through all pages and verifies stable landmarks', async ({ page }) => {
-    // Start on Apply page (default)
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 10000 });
+    // App starts on Overview - navigate to Apply first
+    await goToApplyPage(page);
     
     // Navigate to Capture
-    await page.locator('nav >> button:has-text("Capture computer")').click();
-    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible({ timeout: 5000 });
+    await goToCapturePage(page);
     
     // Navigate to Verify (Check computer)
-    await page.locator('nav >> button:has-text("Check computer")').click();
-    await expect(page.locator('h1:has-text("Check computer")')).toBeVisible({ timeout: 5000 });
+    await goToVerifyPage(page);
     
     // Navigate to Settings
     await page.locator('nav >> button:has-text("Settings")').click();
     await expect(page.locator('h1:has-text("Settings")')).toBeVisible({ timeout: 5000 });
     
     // Navigate back to Apply (Set up computer)
-    await page.locator('nav >> button:has-text("Set up computer")').click();
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
+    await goToApplyPage(page);
   });
 
   test('each page has unique stable heading', async ({ page }) => {
-    // Apply page
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 10000 });
+    // App starts on Overview - navigate to Apply first
+    await goToApplyPage(page);
     
     // Capture page
-    await page.locator('nav >> button:has-text("Capture computer")').click();
-    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible({ timeout: 5000 });
+    await goToCapturePage(page);
     await expect(page.locator('h1:has-text("Set up computer")')).not.toBeVisible();
     
     // Verify page
-    await page.locator('nav >> button:has-text("Check computer")').click();
-    await expect(page.locator('h1:has-text("Check computer")')).toBeVisible({ timeout: 5000 });
+    await goToVerifyPage(page);
     await expect(page.locator('h1:has-text("Capture computer")')).not.toBeVisible();
     
     // Settings page
@@ -110,29 +112,25 @@ test.describe('Navigation Smoke', () => {
   test('navigation preserves app state (no crashes)', async ({ page }) => {
     // Navigate through all pages multiple times
     for (let i = 0; i < 2; i++) {
-      await page.locator('nav >> button:has-text("Capture computer")').click();
-      await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible({ timeout: 5000 });
-      
-      await page.locator('nav >> button:has-text("Check computer")').click();
-      await expect(page.locator('h1:has-text("Check computer")')).toBeVisible({ timeout: 5000 });
+      await goToCapturePage(page);
+      await goToVerifyPage(page);
       
       await page.locator('nav >> button:has-text("Settings")').click();
       await expect(page.locator('h1:has-text("Settings")')).toBeVisible({ timeout: 5000 });
       
-      await page.locator('nav >> button:has-text("Set up computer")').click();
-      await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
+      await goToApplyPage(page);
     }
   });
 
   test('empty state messages are user-friendly', async ({ page }) => {
+    // App starts on Overview - navigate to Apply first
+    await goToApplyPage(page);
     // Apply page - no profiles
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('text=No setups found')).toBeVisible();
     await expect(page.locator('text=capture or import a setup first')).toBeVisible();
     
-    // Verify page shows under construction message
-    await page.locator('nav >> button:has-text("Check computer")').click();
-    await expect(page.locator('h1:has-text("Check computer")')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('text=This page is under construction')).toBeVisible();
+    // Verify page shows check computer heading and subtitle
+    await goToVerifyPage(page);
+    await expect(page.locator('text=Verify this computer matches your setup profile')).toBeVisible();
   });
 });

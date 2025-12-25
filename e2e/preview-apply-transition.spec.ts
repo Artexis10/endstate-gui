@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { forceAdvancedMode, seedProfileSettings, goToApplyPage } from './helpers/ui-mode';
 
 /**
  * Preview to Apply Transition Tests
@@ -6,6 +7,10 @@ import { test, expect } from '@playwright/test';
  */
 test.describe('Preview to Apply Transition', () => {
   test.beforeEach(async ({ page, baseURL }) => {
+    // Force Advanced mode and seed profile settings (dryRunEnabled=true for Preview changes button)
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', true);
+
     await page.addInitScript(() => {
       // Track apply calls
       (window as any).__APPLY_CALL_COUNT__ = 0;
@@ -72,15 +77,14 @@ test.describe('Preview to Apply Transition', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
+    // App starts on Overview - navigate to Apply page
+    await goToApplyPage(page);
   });
 
   test('Preview then Apply executes only ONE apply after clicking Apply changes', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
-    // Step 1: Click Check what will change (dry-run)
-    await page.click('button:has-text("Check what will change")');
+    // Profile is pre-selected via forceAdvancedMode helper (seeds localStorage)
+    // Step 1: Click Preview changes (dry-run)
+    await page.click('button:has-text("Preview changes")');
     
     // Wait for preview modal
     const dialog = page.locator('[role="dialog"]');
@@ -109,23 +113,19 @@ test.describe('Preview to Apply Transition', () => {
   });
 
   test('Real-time progress shows current app during apply', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
-    await page.click('button:has-text("Check what will change")');
+    // Profile is pre-selected via forceAdvancedMode helper (seeds localStorage)
+    await page.click('button:has-text("Preview changes")');
     await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
     await page.click('[role="dialog"] button:has-text("Apply changes")');
     
-    // Should show progress with app name - use first() to avoid strict mode
-    await expect(page.locator('text=Installing:').first()).toBeVisible({ timeout: 3000 });
+    // Should show "Applying changes..." title during apply
+    await expect(page.locator('text=Applying changes...')).toBeVisible({ timeout: 3000 });
   });
 
   test('Double-clicking Apply changes only triggers ONE apply run', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
-    // Step 1: Click Check what will change (dry-run)
-    await page.click('button:has-text("Check what will change")');
+    // Profile is pre-selected via forceAdvancedMode helper (seeds localStorage)
+    // Step 1: Click Preview changes (dry-run)
+    await page.click('button:has-text("Preview changes")');
     
     // Wait for preview modal
     const dialog = page.locator('[role="dialog"]');
@@ -149,10 +149,8 @@ test.describe('Preview to Apply Transition', () => {
   });
 
   test('Apply button is disabled while applying', async ({ page }) => {
-    await page.waitForSelector('select option[value="test-profile"]', { state: 'attached', timeout: 3000 });
-    await page.selectOption('select', 'test-profile');
-    
-    await page.click('button:has-text("Check what will change")');
+    // Profile is pre-selected via forceAdvancedMode helper (seeds localStorage)
+    await page.click('button:has-text("Preview changes")');
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
     

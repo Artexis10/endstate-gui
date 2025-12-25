@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { forceAdvancedMode, goToApplyPage, goToVerifyPage } from './helpers/ui-mode';
 
 /**
  * Streaming Contract Tests
@@ -11,6 +12,9 @@ import { test, expect } from '@playwright/test';
 test.describe('Streaming Contract', () => {
   
   test('Streaming invoke returns undefined but succeeds - no error banner', async ({ page, baseURL }) => {
+    // Force Advanced mode for sidebar navigation tests
+    await forceAdvancedMode(page);
+
     // Setup: Mock Tauri APIs where invoke returns undefined (as Tauri v2 does)
     // but streaming events are emitted correctly
     await page.addInitScript(() => {
@@ -69,9 +73,7 @@ test.describe('Streaming Contract', () => {
     });
     
     await page.goto(baseURL || '/');
-    
-    // Wait for app to load - should reach ready state
-    await page.waitForSelector('text=Set up computer', { timeout: 15000 });
+    await page.waitForLoadState('networkidle');
     
     // CRITICAL ASSERTIONS:
     // 1. No error banner should be visible
@@ -82,11 +84,14 @@ test.describe('Streaming Contract', () => {
     // 2. App should be in ready state, not error state
     await expect(page.locator('text=Loading...')).not.toBeVisible();
     
-    // 3. Navigation should work
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
+    // 3. Navigation should work - navigate to Apply page
+    await goToApplyPage(page);
   });
 
   test('Streaming invoke throws - error banner appears', async ({ page, baseURL }) => {
+    // Force Advanced mode for sidebar navigation tests
+    await forceAdvancedMode(page);
+
     // Setup: Mock Tauri APIs where invoke throws (real transport failure)
     await page.addInitScript(() => {
       (window as any).__TAURI__ = {
@@ -121,11 +126,14 @@ test.describe('Streaming Contract', () => {
     await expect(page.locator('text=Engine Connection Issue')).toBeVisible();
     
     // 2. UI should remain navigable (non-blocking error)
-    await expect(page.locator('text=Capture computer')).toBeVisible();
-    await expect(page.locator('text=Settings')).toBeVisible();
+    await expect(page.locator('nav >> button:has-text("Capture computer")')).toBeVisible();
+    await expect(page.locator('nav >> button:has-text("Settings")')).toBeVisible();
   });
 
   test('Verify with missing apps shows results, not error banner', async ({ page, baseURL }) => {
+    // Force Advanced mode for sidebar navigation tests
+    await forceAdvancedMode(page);
+
     // Use the same mock pattern as web-only.spec.ts which works reliably
     // loadInitialData uses runEndstateOnce which checks for __ENDSTATE_MOCK_ENGINE__
     // NOTE: We do NOT set __TAURI__ here so isTauriRuntime() returns false
@@ -216,14 +224,14 @@ test.describe('Streaming Contract', () => {
     });
     
     await page.goto(baseURL || '/');
-    await page.waitForSelector('text=Set up computer', { timeout: 15000 });
+    await page.waitForLoadState('networkidle');
     
     // CRITICAL ASSERTIONS:
     // Domain failure (VERIFY_FAILED) should NOT show error banner
     await expect(page.locator('text=Engine Connection Issue')).not.toBeVisible();
     await expect(page.locator('text=Tauri streaming not available')).not.toBeVisible();
     
-    // App should be usable
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
+    // App should be usable - navigate to Apply page
+    await goToApplyPage(page);
   });
 });

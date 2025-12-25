@@ -1,7 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { forceAdvancedMode, goToCapturePage } from './helpers/ui-mode';
 
 test.describe('Capture Live Progress', () => {
   test.beforeEach(async ({ page, baseURL }) => {
+    // Force Advanced mode for sidebar navigation tests
+    await forceAdvancedMode(page);
+
     await page.addInitScript(() => {
       // Mock Tauri FIRST (mock-first approach)
       (window as any).__TAURI__ = {
@@ -74,13 +78,12 @@ test.describe('Capture Live Progress', () => {
     });
     
     await page.goto(baseURL || '/');
-    await page.waitForSelector('text=Set up computer', { timeout: 10000 });
+    await page.waitForLoadState('networkidle');
   });
 
   test('Shows live per-app progress in Activity during capture', async ({ page }) => {
     // Navigate to Capture page
-    await page.click('text=Capture computer');
-    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
+    await goToCapturePage(page);
     
     // Click Capture button
     await page.click('main >> button:has-text("Capture computer")');
@@ -101,8 +104,7 @@ test.describe('Capture Live Progress', () => {
 
   test('Capture modal shows correct app count and list from envelope', async ({ page }) => {
     // Navigate to Capture page
-    await page.click('text=Capture computer');
-    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
+    await goToCapturePage(page);
     
     // Click Capture button
     await page.click('main >> button:has-text("Capture computer")');
@@ -131,8 +133,7 @@ test.describe('Capture Live Progress', () => {
 
   test('Technical details is closed by default and shows continuous log when opened', async ({ page }) => {
     // Navigate to Capture page
-    await page.click('text=Capture computer');
-    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
+    await goToCapturePage(page);
     
     // Click Capture button
     await page.click('main >> button:has-text("Capture computer")');

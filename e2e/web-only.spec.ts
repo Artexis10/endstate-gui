@@ -1,7 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { forceAdvancedMode, goToApplyPage, goToCapturePage } from './helpers/ui-mode';
 
 test.describe('UX Contract Tests', () => {
   test.beforeEach(async ({ page, baseURL }) => {
+    // Force Advanced mode for sidebar navigation tests
+    await forceAdvancedMode(page);
+
     await page.addInitScript(() => {
       // Mock Tauri APIs for web-only testing
       (window as any).__TAURI__ = {
@@ -33,13 +37,13 @@ test.describe('UX Contract Tests', () => {
       };
     });
     await page.goto(baseURL || '/');
-    await page.waitForSelector('text=Set up computer', { timeout: 10000 });
+    await page.waitForLoadState('networkidle');
   });
 
   test('Boot does not hang - reaches ready state within timeout', async ({ page }) => {
     // This test verifies the app boots successfully and doesn't hang at "Loading..."
-    // The beforeEach already waits for 'Set up computer' to be visible, which means boot completed
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
+    // Navigate to Apply page to verify app is ready
+    await goToApplyPage(page);
     
     // Verify we're NOT stuck on loading screen
     await expect(page.locator('text=Loading...')).not.toBeVisible();
@@ -47,11 +51,9 @@ test.describe('UX Contract Tests', () => {
   });
 
   test('Navigation works without breaking', async ({ page }) => {
-    await page.click('text=Capture computer');
-    await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible();
-    await page.click('text=Set up computer');
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
-    await page.click('text=Capture computer');
+    await goToCapturePage(page);
+    await goToApplyPage(page);
+    await goToCapturePage(page);
     await expect(page.locator('main >> button:has-text("Capture computer")')).toBeVisible();
   });
 

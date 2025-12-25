@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { forceAdvancedMode, seedProfileSettings, goToApplyPage } from './helpers/ui-mode';
 
 /**
  * Persistence Boundaries E2E Test
@@ -21,6 +22,9 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Persistence Boundaries on Reload', () => {
   test.beforeEach(async ({ page }) => {
+    // Force Advanced mode (do NOT seed profile settings - tests manage their own localStorage)
+    await forceAdvancedMode(page);
+
     await page.addInitScript(() => {
       (window as any).__TAURI__ = {
         core: {
@@ -62,7 +66,6 @@ test.describe('Persistence Boundaries on Reload', () => {
     
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    await page.waitForSelector('text=Apply', { timeout: 10000 });
   });
 
   test('persisted preferences survive reload while transient states reset', async ({ page }) => {
@@ -90,7 +93,6 @@ test.describe('Persistence Boundaries on Reload', () => {
     // Step 2: Reload the page
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await page.waitForSelector('text=Apply', { timeout: 10000 });
     
     // Step 3: Verify PERSISTED preferences survived reload
     const afterReload = await page.evaluate(() => {
@@ -136,9 +138,8 @@ test.describe('Persistence Boundaries on Reload', () => {
     expect(transientCheck.hasRunningState).toBe(false);
     
     // Step 5: Verify UI defaults (transient states)
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
-    // No running activities should be visible (only "No recent activity" message)
-    await expect(page.locator('text=No recent activity')).toBeVisible();
+    // App starts on Overview in all modes
+    await expect(page.locator('main >> h1:has-text("Endstate")')).toBeVisible();
   });
 
   test('localStorage pollution does not affect transient state initialization', async ({ page }) => {
@@ -158,7 +159,6 @@ test.describe('Persistence Boundaries on Reload', () => {
     // Reload to see if pollution affects initialization
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await page.waitForSelector('text=Apply', { timeout: 10000 });
     
     // Verify app ignores polluted transient state
     
@@ -166,8 +166,8 @@ test.describe('Persistence Boundaries on Reload', () => {
     await expect(page.locator('text=Profile created')).not.toBeVisible();
     await expect(page.locator('text=Here\'s what will change')).not.toBeVisible();
     
-    // App should start on Apply page (not Capture)
-    await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible();
+    // App should start on Overview page (not Capture or Apply)
+    await expect(page.locator('main >> h1:has-text("Endstate")')).toBeVisible();
     
     // No running state should be visible
     await expect(page.locator('[data-status="running"]')).not.toBeVisible();
@@ -193,7 +193,6 @@ test.describe('Persistence Boundaries on Reload', () => {
     // Reload
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await page.waitForSelector('text=Apply', { timeout: 10000 });
     
     // Verify first preference persisted
     let persistedSettings = await page.evaluate(() => {
@@ -220,7 +219,6 @@ test.describe('Persistence Boundaries on Reload', () => {
     // Reload again
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await page.waitForSelector('text=Apply', { timeout: 10000 });
     
     // Verify updated preference persisted
     persistedSettings = await page.evaluate(() => {
