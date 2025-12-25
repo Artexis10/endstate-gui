@@ -1163,8 +1163,9 @@ function App() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
-    // Collect app events during streaming - deduplicated by app
-    const appEventMap = new Map<string, AppEvent>(); // Dedupe: latest event per app
+    // Collect app events during streaming - maintain insertion order for append semantics
+    const appEventList: AppEvent[] = []; // Append order preserved
+    const appEventIndex = new Map<string, number>(); // Track last index per app for updates
     // Option A: Separate counters for truthful grouping
     const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 };
     
@@ -1181,25 +1182,32 @@ function App() {
             if (progress) {
               const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
               
-              // Deduplicate: update existing entry or add new one
-              // Only update counters when action changes to a final state
-              const existing = appEventMap.get(progress.app);
-              // Final actions that count: Installed, Skipped, Failed, OK
-              const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK'].includes(progress.action);
-              const wasNonFinal = !existing || existing.action === 'Processing' || existing.action === 'Would install';
-              
-              if (isFinalAction && wasNonFinal) {
-                // Option A: Separate counters - OK goes to alreadyPresent, Skipped stays separate
-                if (progress.action === 'Installed') counters.installed++;
-                else if (progress.action === 'OK') counters.alreadyPresent++;
-                else if (progress.action === 'Skipped') counters.skipped++;
-                else if (progress.action === 'Failed') counters.failed++;
+              // Append semantics: update existing entry in-place or append new
+              const existingIndex = appEventIndex.get(progress.app);
+              if (existingIndex !== undefined) {
+                // Update existing entry in-place (maintains position)
+                const existing = appEventList[existingIndex];
+                // Only update counters when action changes to a final state
+                const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK'].includes(progress.action);
+                const wasNonFinal = existing.action === 'Processing' || existing.action === 'Would install';
+                
+                if (isFinalAction && wasNonFinal) {
+                  // Option A: Separate counters - OK goes to alreadyPresent, Skipped stays separate
+                  if (progress.action === 'Installed') counters.installed++;
+                  else if (progress.action === 'OK') counters.alreadyPresent++;
+                  else if (progress.action === 'Skipped') counters.skipped++;
+                  else if (progress.action === 'Failed') counters.failed++;
+                }
+                
+                appEventList[existingIndex] = appEvent;
+              } else {
+                // Append new entry (stream order preserved)
+                appEventIndex.set(progress.app, appEventList.length);
+                appEventList.push(appEvent);
               }
               
-              appEventMap.set(progress.app, appEvent);
-              
-              // Update live events for UI (show recent activity)
-              setLiveAppEvents(Array.from(appEventMap.values()).slice(-20));
+              // Update live events for UI (show last 20, append order)
+              setLiveAppEvents(appEventList.slice(-20));
               setLiveCounters({ ...counters });
               
               // Friendly headline mapping (Option A)
@@ -1225,8 +1233,8 @@ function App() {
       }
     );
     
-    // Convert map to array for final result
-    const collectedEvents = Array.from(appEventMap.values());
+    // Final result maintains append order
+    const collectedEvents = appEventList;
 
     logBufferRef.current?.flush();
     applyLineBufferRef.current?.clear();

@@ -347,10 +347,20 @@ export function OverviewScreen({
                 }}
                 onClick={(e) => e.stopPropagation()}
                 disabled={isRunning}
-                className="w-full text-sm font-medium border-0 p-0 focus:ring-0 focus:outline-none cursor-pointer bg-transparent text-foreground [&>option]:bg-popover [&>option]:text-popover-foreground"
+                className="w-full text-sm font-medium border-0 p-0 focus:ring-0 focus:outline-none cursor-pointer bg-transparent text-foreground"
+                style={{
+                  colorScheme: 'dark',
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'none',
+                  appearance: 'none',
+                  backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%23888\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 0.5rem center',
+                  paddingRight: '1.5rem'
+                }}
               >
                 {profiles.map((p) => (
-                  <option key={p.name} value={p.name} className="bg-popover text-popover-foreground">
+                  <option key={p.name} value={p.name}>
                     {p.name}
                   </option>
                 ))}
@@ -444,9 +454,9 @@ export function OverviewScreen({
                   </div>
                 </button>
                 {activityExpanded && (
-                  <div className="px-3 pb-3 space-y-1 border-t border-border/50 max-h-32 overflow-y-auto">
-                    {liveAppEvents.slice(-5).reverse().map((event, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs pt-1.5">
+                  <div className="px-3 pb-3 space-y-1 border-t border-border/50 max-h-56 overflow-y-auto">
+                    {liveAppEvents.slice(-10).map((event) => (
+                      <div key={`${event.app}-${event.timestamp}`} className="flex items-center gap-2 text-xs pt-1.5">
                         <span className={`w-14 text-right font-medium ${
                           event.action === 'Installed' ? 'text-green-600' :
                           event.action === 'Failed' ? 'text-red-600' :
@@ -614,10 +624,11 @@ export function OverviewScreen({
                   onProfileChange(e.target.value, selected?.path || '');
                 }}
                 disabled={isRunning}
-                className="h-8 rounded-md border border-input bg-background text-foreground px-2 text-xs [&>option]:bg-popover [&>option]:text-popover-foreground"
+                className="h-8 rounded-md border border-input bg-background text-foreground px-2 text-xs"
+                style={{ colorScheme: 'dark' }}
               >
                 {profiles.map((p) => (
-                  <option key={p.name} value={p.name} className="bg-popover text-popover-foreground">
+                  <option key={p.name} value={p.name}>
                     {p.name}
                   </option>
                 ))}
