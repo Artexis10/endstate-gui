@@ -1,6 +1,134 @@
 import type { ApplyItem } from '../types';
 
 /**
+ * Canonical status keys used for filtering and internal logic.
+ * These are the source of truth for status identification.
+ * See docs/UX_LANGUAGE.md for the full contract.
+ */
+export type StatusKey = 
+  | 'to_install'      // Preview: will be installed
+  | 'already_present' // Already on system
+  | 'skipped'         // Skipped by filter/policy
+  | 'failed'          // Failed (preview or apply)
+  | 'installing'      // Apply activity: in progress
+  | 'installed'       // Apply result: successfully installed
+  | 'cancelled';      // User cancelled
+
+/**
+ * Canonical UI labels per UX_LANGUAGE.md contract.
+ * Single source of truth for all user-facing status text.
+ */
+export const STATUS_LABELS = {
+  // Preview decision labels
+  preview: {
+    to_install: 'To install',
+    already_present: 'Already present',
+    skipped: 'Skipped',
+    failed: 'Failed (preview)',
+  },
+  // Apply activity verbs (in-progress)
+  activity: {
+    installing: 'Installing…',
+    skipping: 'Skipping…',
+    verifying: 'Verifying…',
+    failed: 'Failed',
+  },
+  // Apply result labels (terminal states)
+  result: {
+    installed: 'Installed',
+    already_present: 'Already present',
+    skipped: 'Skipped',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+  },
+} as const;
+
+/**
+ * Map engine reason to canonical StatusKey.
+ * This is the single source of truth for status normalization.
+ */
+export function reasonToStatusKey(item: ApplyItem): StatusKey {
+  const reason = item.reason?.toLowerCase() || '';
+  const status = item.status?.toLowerCase() || '';
+
+  // Failed states
+  if (status === 'failed' || reason === 'install_failed' || reason === 'failed') {
+    return 'failed';
+  }
+
+  // User denied/cancelled
+  if (reason === 'user_denied') {
+    return 'cancelled';
+  }
+
+  // Installed this run
+  if (reason === 'installed') {
+    return 'installed';
+  }
+
+  // Already present
+  if (reason === 'already_installed' || reason === 'already_present') {
+    return 'already_present';
+  }
+
+  // Would install (preview)
+  if (reason === 'would_install') {
+    return 'to_install';
+  }
+
+  // Skipped/filtered
+  if (status === 'skipped' || reason === 'skipped' || reason === 'filtered') {
+    return 'skipped';
+  }
+
+  // OK status without reason = already present
+  if (status === 'ok') {
+    return 'already_present';
+  }
+
+  // Fallback
+  return 'skipped';
+}
+
+/**
+ * Get the user-facing label for a status key in a given phase.
+ */
+export function getStatusLabel(
+  statusKey: StatusKey,
+  phase: 'preview' | 'activity' | 'result'
+): string {
+  if (phase === 'preview') {
+    if (statusKey === 'to_install') return STATUS_LABELS.preview.to_install;
+    if (statusKey === 'already_present') return STATUS_LABELS.preview.already_present;
+    if (statusKey === 'skipped' || statusKey === 'cancelled') return STATUS_LABELS.preview.skipped;
+    if (statusKey === 'failed') return STATUS_LABELS.preview.failed;
+    return STATUS_LABELS.preview.skipped;
+  }
+  
+  if (phase === 'activity') {
+    if (statusKey === 'installing') return STATUS_LABELS.activity.installing;
+    if (statusKey === 'failed') return STATUS_LABELS.activity.failed;
+    return STATUS_LABELS.activity.verifying;
+  }
+  
+  // Result phase
+  if (statusKey === 'installed') return STATUS_LABELS.result.installed;
+  if (statusKey === 'already_present') return STATUS_LABELS.result.already_present;
+  if (statusKey === 'skipped') return STATUS_LABELS.result.skipped;
+  if (statusKey === 'failed') return STATUS_LABELS.result.failed;
+  if (statusKey === 'cancelled') return STATUS_LABELS.result.cancelled;
+  return STATUS_LABELS.result.skipped;
+}
+
+/**
+ * Get the canonical filter key for a status.
+ * Used for filtering lists by status.
+ */
+export function getFilterKey(item: ApplyItem): StatusKey {
+  return reasonToStatusKey(item);
+}
+
+/**
  * AppEvent represents a live activity entry during streaming.
  */
 export interface AppEvent {
@@ -228,10 +356,10 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
     return { app: installMatch[1], action: 'Processing' };
   }
 
-  // [PLAN] App.Id - would install
+  // [PLAN] App.Id - to install (preview)
   const planMatch = line.match(/\[PLAN\]\s+(\S+)/i);
   if (planMatch) {
-    return { app: planMatch[1], action: 'Would install' };
+    return { app: planMatch[1], action: 'To install' };
   }
 
   // [ACTION] Installing App.Id via winget - this is processing, not completion
@@ -344,9 +472,9 @@ export function reasonToAction(item: ApplyItem): string {
     return 'OK';
   }
 
-  // Would install (preview)
+  // To install (preview) - canonical label per UX_LANGUAGE.md
   if (reason === 'would_install') {
-    return 'Would install';
+    return 'To install';
   }
 
   // Skipped/filtered

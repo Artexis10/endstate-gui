@@ -30,7 +30,9 @@ import {
   Eye,
   Zap,
   FolderOpen,
-  RefreshCw
+  RefreshCw,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -117,6 +119,9 @@ interface OverviewScreenProps {
   onDismissResult: () => void;
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => void;
+  onRenameProfile?: (path: string, currentName: string) => void;
+  onDeleteProfile?: (path: string, displayName: string) => void;
+  selectedProfilePath?: string;
 }
 
 export function OverviewScreen({
@@ -140,6 +145,9 @@ export function OverviewScreen({
   onDismissResult,
   onOpenProfilesFolder,
   onRefreshProfiles,
+  onRenameProfile,
+  onDeleteProfile,
+  selectedProfilePath,
 }: OverviewScreenProps) {
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
@@ -328,7 +336,7 @@ export function OverviewScreen({
     const getButtonLabel = (act: NonNullable<ActionType>, running: boolean): string => {
       if (act === 'capture') return running ? 'Capturing...' : 'Start capture';
       if (act === 'setup') {
-        if (running) return setupIntent === 'preview' ? 'Previewing...' : 'Applying...';
+        if (running) return setupIntent === 'preview' ? 'Evaluating…' : 'Applying...';
         return setupIntent === 'preview' ? 'Preview changes' : 'Apply changes';
       }
       return running ? 'Checking...' : 'Check now';
@@ -376,6 +384,41 @@ export function OverviewScreen({
                   </SelectContent>
                 </Select>
               </div>
+              {/* Profile management actions */}
+              {selectedProfilePath && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const currentProfile = profiles.find(p => p.path === selectedProfilePath);
+                      onRenameProfile?.(selectedProfilePath, currentProfile?.displayName || '');
+                    }}
+                    disabled={isRunning}
+                    title="Rename profile"
+                    aria-label="Rename profile"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const currentProfile = profiles.find(p => p.path === selectedProfilePath);
+                      onDeleteProfile?.(selectedProfilePath, currentProfile?.displayName || currentProfile?.name || '');
+                    }}
+                    disabled={isRunning}
+                    title="Delete profile"
+                    aria-label="Delete profile"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground px-3">
               <span className="flex-1 truncate" title={profilesDirectory}>
@@ -1005,11 +1048,11 @@ export function OverviewScreen({
                   {actionResult.counts.toInstall !== undefined && actionResult.counts.toInstall > 0 && (
                     <button
                       role="tab"
-                      aria-selected={detailsFilter === 'Would install'}
-                      onClick={() => setDetailsFilter(detailsFilter === 'Would install' ? null : 'Would install')}
+                      aria-selected={detailsFilter === 'To install'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'To install' ? null : 'To install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'Would install' ? 'ring-2 ring-blue-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'Would install' ? 'opacity-50' : ''} bg-blue-500/10 text-blue-600`}
+                        detailsFilter === 'To install' ? 'ring-2 ring-blue-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'To install' ? 'opacity-50' : ''} bg-blue-500/10 text-blue-600`}
                     >
                       To install: {actionResult.counts.toInstall}
                     </button>
@@ -1073,7 +1116,7 @@ export function OverviewScreen({
             const filteredEvents = detailsFilter
               ? actionResult.appEvents.filter(e => {
                   if (detailsFilter === 'OK') return e.action === 'OK';
-                  if (detailsFilter === 'Would install') return e.action === 'Would install' || e.action === 'Missing';
+                  if (detailsFilter === 'To install') return e.action === 'To install' || e.action === 'Missing';
                   return e.action === detailsFilter;
                 })
               : actionResult.appEvents;
@@ -1101,7 +1144,7 @@ export function OverviewScreen({
                           event.action === 'Failed' ? 'bg-red-500/10 text-red-600' :
                           event.action === 'OK' ? 'bg-muted text-muted-foreground' :
                           event.action === 'Skipped' ? 'bg-yellow-500/10 text-yellow-600' :
-                          event.action === 'Would install' || event.action === 'Missing' ? 'bg-blue-500/10 text-blue-600' :
+                          event.action === 'To install' || event.action === 'Missing' ? 'bg-blue-500/10 text-blue-600' :
                           event.action === 'Processing' ? 'bg-blue-500/10 text-blue-600' :
                           'bg-muted text-muted-foreground'
                         }`}>

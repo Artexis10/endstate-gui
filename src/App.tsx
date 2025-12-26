@@ -176,6 +176,17 @@ function App() {
   const [showFolderPathModal, setShowFolderPathModal] = useState(false);
   const [folderPathForModal, setFolderPathForModal] = useState('');
   
+  // Profile naming modal state
+  const [showProfileNameModal, setShowProfileNameModal] = useState(false);
+  const [profileNameModalPath, setProfileNameModalPath] = useState('');
+  const [profileNameModalValue, setProfileNameModalValue] = useState('');
+  const [profileNameModalMode, setProfileNameModalMode] = useState<'save' | 'rename'>('save');
+  
+  // Profile delete confirmation modal state
+  const [showDeleteProfileModal, setShowDeleteProfileModal] = useState(false);
+  const [deleteProfilePath, setDeleteProfilePath] = useState('');
+  const [deleteProfileName, setDeleteProfileName] = useState('');
+  
   // Reset overview action state
   const resetOverviewActionState = () => {
     setOverviewRunningAction(null);
@@ -293,16 +304,58 @@ function App() {
     }
   };
 
-  const promptForProfileName = async (profilePath: string): Promise<void> => {
-    const displayName = prompt('Give this profile a name (optional):');
-    if (displayName && displayName.trim()) {
+  const openProfileNameModal = (profilePath: string, existingName: string = '', mode: 'save' | 'rename' = 'save') => {
+    setProfileNameModalPath(profilePath);
+    setProfileNameModalValue(existingName);
+    setProfileNameModalMode(mode);
+    setShowProfileNameModal(true);
+  };
+
+  const handleSaveProfileName = async () => {
+    if (profileNameModalValue.trim()) {
       try {
-        await saveProfileMetadata(profilePath, { displayName: displayName.trim() });
+        await saveProfileMetadata(profileNameModalPath, { displayName: profileNameModalValue.trim() });
         await refreshProfiles();
       } catch (err) {
         console.error('Failed to save profile name:', err);
       }
     }
+    setShowProfileNameModal(false);
+    setProfileNameModalPath('');
+    setProfileNameModalValue('');
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!deleteProfilePath) return;
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('delete_file', { path: deleteProfilePath });
+      // Also try to delete the metadata file
+      const metaPath = deleteProfilePath.replace(/\.(jsonc?|json5)$/i, '.meta.json');
+      try {
+        await invoke('delete_file', { path: metaPath });
+      } catch {
+        // Metadata file may not exist, ignore
+      }
+      await refreshProfiles();
+      // Clear selection if deleted profile was selected
+      if (selectedProfilePath === deleteProfilePath) {
+        setSelectedProfile('');
+        setSelectedProfilePath('');
+      }
+    } catch (err) {
+      console.error('Failed to delete profile:', err);
+    }
+    setShowDeleteProfileModal(false);
+    setDeleteProfilePath('');
+    setDeleteProfileName('');
+  };
+
+  const promptForProfileName = async (profilePath: string): Promise<void> => {
+    // Generate a default name based on timestamp
+    const now = new Date();
+    const defaultName = `Profile ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    openProfileNameModal(profilePath, defaultName, 'save');
   };
 
   useEffect(() => {
@@ -1093,8 +1146,8 @@ function App() {
               setLiveAppEvents(Array.from(appEventMap.values()).slice(-20));
               
               setOverviewActionProgress({ 
-                message: `Previewing: ${progress.app}`, 
-                detail: 'Checking what will change…' 
+                message: 'Evaluating changes', 
+                detail: `Determining install actions… ${progress.app}` 
               });
             }
           }
@@ -1244,7 +1297,7 @@ function App() {
                 const existing = appEventList[existingIndex];
                 // Only update counters when action changes to a final state
                 const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK'].includes(progress.action);
-                const wasNonFinal = existing.action === 'Processing' || existing.action === 'Would install';
+                const wasNonFinal = existing.action === 'Processing' || existing.action === 'To install';
                 
                 if (isFinalAction && wasNonFinal) {
                   // Option A: Separate counters - OK goes to alreadyPresent, Skipped stays separate
@@ -1271,7 +1324,7 @@ function App() {
               const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK', 'Cancelled'].includes(progress.action);
               const friendlyAction = progress.action === 'OK' ? 'Already present' :
                                      progress.action === 'Processing' ? 'Installing' :
-                                     progress.action === 'Would install' ? 'Checking' :
+                                     progress.action === 'To install' ? 'Evaluating' :
                                      isFinalAction ? progress.action :
                                      'Working on';
               // Friendly counter text
@@ -1544,6 +1597,15 @@ function App() {
               onNavigate={navigateWithHistory}
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
+              selectedProfilePath={selectedProfilePath}
+              onRenameProfile={(path, currentName) => {
+                openProfileNameModal(path, currentName, 'rename');
+              }}
+              onDeleteProfile={(path, displayName) => {
+                setDeleteProfilePath(path);
+                setDeleteProfileName(displayName);
+                setShowDeleteProfileModal(true);
+              }}
               onCapture={async () => {
                 // Robust double-run guard using ref
                 if (isRunning || isRunningRef.current) return;
@@ -1590,7 +1652,7 @@ function App() {
                 setOverviewActionStatus('running');
                 const isApply = intent === 'apply';
                 setOverviewActionProgress({ 
-                  message: isApply ? 'Installing applications...' : 'Previewing changes...' 
+                  message: isApply ? 'Installing applications...' : 'Evaluating changes' 
                 });
                 try {
                   if (isApply) {
@@ -1846,7 +1908,7 @@ function App() {
                         disabled={isRunning || !selectedProfile}
                       >
                         {isRunning 
-                          ? (settings.dryRunEnabled ? 'Previewing...' : 'Applying...') 
+                          ? (settings.dryRunEnabled ? 'Evaluating…' : 'Applying...') 
                           : (settings.dryRunEnabled ? 'Preview changes' : 'Apply setup')
                         }
                       </Button>
@@ -2292,7 +2354,7 @@ function App() {
                                 {run.summary.installed !== undefined && (
                                   <div>
                                     <span className="text-muted-foreground">
-                                      {run.mode === 'preview' ? 'Would install: ' : 'Installed: '}
+                                      {run.mode === 'preview' ? 'To install: ' : 'Installed: '}
                                     </span>
                                     <span className="font-medium">{run.summary.installed}</span>
                                   </div>
@@ -2549,6 +2611,63 @@ function App() {
           </div>
           <DialogFooter>
             <Button onClick={() => setShowFolderPathModal(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Profile Name Modal */}
+      <Dialog open={showProfileNameModal} onOpenChange={setShowProfileNameModal}>
+        <DialogContent data-testid="profile-name-modal" role="dialog">
+          <DialogHeader>
+            <DialogTitle>{profileNameModalMode === 'rename' ? 'Rename profile' : 'Save profile'}</DialogTitle>
+            <DialogDescription>
+              {profileNameModalMode === 'rename' 
+                ? 'Enter a new name for this profile.'
+                : 'Give this profile a name (optional).'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input 
+              value={profileNameModalValue}
+              onChange={(e) => setProfileNameModalValue(e.target.value)}
+              placeholder="Profile name"
+              className="w-full"
+              data-testid="profile-name-input"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSaveProfileName();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="secondary" onClick={() => setShowProfileNameModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveProfileName}>
+              {profileNameModalMode === 'rename' ? 'Rename' : 'Save profile'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Profile Confirmation Modal */}
+      <Dialog open={showDeleteProfileModal} onOpenChange={setShowDeleteProfileModal}>
+        <DialogContent data-testid="delete-profile-modal" role="alertdialog">
+          <DialogHeader>
+            <DialogTitle>Delete profile</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deleteProfileName || 'this profile'}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="secondary" onClick={() => setShowDeleteProfileModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleDeleteProfile}>
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

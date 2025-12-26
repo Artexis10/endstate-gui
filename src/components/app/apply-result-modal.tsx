@@ -109,7 +109,7 @@ export function ApplyResultModal({
   const getActionBadge = (item: ApplyItem): { label: string; className: string } => {
     // Map reason to user-friendly action label
     if (item.reason === 'would_install') {
-      return { label: 'Will be installed', className: 'bg-warning/20 text-warning border-warning/30' };
+      return { label: 'To install', className: 'bg-warning/20 text-warning border-warning/30' };
     }
     if (item.reason === 'installed') {
       return { label: 'Installed this run', className: 'bg-success/20 text-success border-success/30' };
@@ -259,17 +259,17 @@ export function ApplyResultModal({
             </div>
           ) : (
             <>
-              {/* Will be installed (preview only - from dry-run, NOT during applying) */}
+              {/* To install (preview only - from dry-run, NOT during applying) */}
               {isDryRun && willBeInstalled > 0 && (
                 <button
-                  onClick={() => toggleFilter('Will be installed')}
+                  onClick={() => toggleFilter('To install')}
                   className={`flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20 w-full text-left transition-opacity ${
-                    activeFilters.size > 0 && !activeFilters.has('Will be installed') ? 'opacity-50' : ''
+                    activeFilters.size > 0 && !activeFilters.has('To install') ? 'opacity-50' : ''
                   }`}
-                  data-testid="filter-will-be-installed"
-                  aria-pressed={activeFilters.has('Will be installed')}
+                  data-testid="filter-to-install"
+                  aria-pressed={activeFilters.has('To install')}
                 >
-                  <span className="text-sm font-medium">Will be installed</span>
+                  <span className="text-sm font-medium">To install</span>
                   <span className="text-2xl font-semibold text-warning">{willBeInstalled}</span>
                 </button>
               )}

@@ -283,8 +283,8 @@ describe('apply-utils', () => {
     });
 
     it('parses [PLAN] line', () => {
-      const result = parseApplyProgressLine('[PLAN] Discord.Discord - would install (driver: winget)');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Would install' });
+      const result = parseApplyProgressLine('[PLAN] Discord.Discord - to install (driver: winget)');
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'To install' });
     });
 
     it('parses [ACTION] Installing line', () => {
@@ -414,9 +414,9 @@ describe('apply-utils', () => {
       expect(reasonToAction(item)).toBe('OK');
     });
 
-    it('maps would_install to Would install', () => {
+    it('maps would_install to To install', () => {
       const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'ok', reason: 'would_install' };
-      expect(reasonToAction(item)).toBe('Would install');
+      expect(reasonToAction(item)).toBe('To install');
     });
 
     it('maps skipped status to Skipped', () => {
@@ -582,7 +582,7 @@ describe('apply-utils', () => {
       const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK', 'Cancelled'].includes(action);
       const friendlyAction = action === 'OK' ? 'Already present' :
                              action === 'Processing' ? 'Installing' :
-                             action === 'Would install' ? 'Checking' :
+                             action === 'To install' ? 'Evaluating' :
                              isFinalAction ? action :
                              'Working on';
       return friendlyAction;
@@ -594,8 +594,8 @@ describe('apply-utils', () => {
       expect(getBannerLabel('Processing')).not.toBe('Working...');
     });
 
-    it('Would install action shows "Checking" during preview', () => {
-      expect(getBannerLabel('Would install')).toBe('Checking');
+    it('To install action shows "Evaluating" during preview', () => {
+      expect(getBannerLabel('To install')).toBe('Evaluating');
     });
 
     it('OK action shows "Already present"', () => {
@@ -638,7 +638,7 @@ describe('apply-utils', () => {
       if (!filter) return events;
       return events.filter(e => {
         if (filter === 'OK') return e.action === 'OK';
-        if (filter === 'Would install') return e.action === 'Would install' || e.action === 'Missing';
+        if (filter === 'To install') return e.action === 'To install' || e.action === 'Missing';
         return e.action === filter;
       });
     }
@@ -648,7 +648,7 @@ describe('apply-utils', () => {
       { app: 'App2', action: 'OK' },
       { app: 'App3', action: 'Failed' },
       { app: 'App4', action: 'Skipped' },
-      { app: 'App5', action: 'Would install' },
+      { app: 'App5', action: 'To install' },
       { app: 'App6', action: 'Missing' },
     ];
 
@@ -681,8 +681,8 @@ describe('apply-utils', () => {
       expect(result[0].app).toBe('App4');
     });
 
-    it('Would install filter returns Would install AND Missing events', () => {
-      const result = filterEvents(testEvents, 'Would install');
+    it('To install filter returns To install AND Missing events', () => {
+      const result = filterEvents(testEvents, 'To install');
       expect(result).toHaveLength(2);
       expect(result.map(e => e.app)).toContain('App5');
       expect(result.map(e => e.app)).toContain('App6');
