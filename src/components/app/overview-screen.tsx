@@ -121,6 +121,7 @@ interface OverviewScreenProps {
   onRefreshProfiles: () => void;
   onRenameProfile?: (path: string, currentName: string) => void;
   onDeleteProfile?: (path: string, displayName: string) => void;
+  onOpenProfileFolder?: (path: string) => void;
   selectedProfilePath?: string;
 }
 
@@ -147,6 +148,7 @@ export function OverviewScreen({
   onRefreshProfiles,
   onRenameProfile,
   onDeleteProfile,
+  onOpenProfileFolder,
   selectedProfilePath,
 }: OverviewScreenProps) {
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
@@ -387,6 +389,20 @@ export function OverviewScreen({
               {/* Profile management actions */}
               {selectedProfilePath && (
                 <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenProfileFolder?.(selectedProfilePath);
+                    }}
+                    disabled={isRunning}
+                    title="Open profile folder"
+                    aria-label="Open profile folder"
+                  >
+                    <FolderOpen className="h-3 w-3" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

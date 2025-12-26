@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { discoverProfiles } from './file-discovery';
+import { discoverProfiles, discoverProfileDescriptors, getMetaPath } from './file-discovery';
 import { invoke } from './lib/tauri-bridge';
 
 vi.mock('./lib/tauri-bridge', () => ({
@@ -95,6 +95,116 @@ describe('file-discovery', () => {
       const profiles = await discoverProfiles('C:\\empty');
 
       expect(profiles).toEqual([]);
+    });
+
+    it('excludes .meta.json files from profile list', async () => {
+      vi.mocked(invoke).mockResolvedValue([
+        'C:\\manifests\\setup_laptop.json',
+        'C:\\manifests\\setup_laptop.meta.json',
+        'C:\\manifests\\setup_desktop.jsonc',
+        'C:\\manifests\\setup_desktop.meta.json',
+      ]);
+
+      const profiles = await discoverProfiles('C:\\manifests');
+
+      // Should only include setup files, not .meta.json files
+      expect(profiles).toHaveLength(2);
+      expect(profiles.map(p => p.name)).toEqual(['setup_laptop', 'setup_desktop']);
+      expect(profiles.map(p => p.path)).not.toContain('C:\\manifests\\setup_laptop.meta.json');
+      expect(profiles.map(p => p.path)).not.toContain('C:\\manifests\\setup_desktop.meta.json');
+    });
+  });
+
+  describe('discoverProfileDescriptors', () => {
+    it('excludes .meta.json files and returns ProfileDescriptor objects', async () => {
+      vi.mocked(invoke)
+        .mockResolvedValueOnce([
+          'C:\\manifests\\setup_laptop.json',
+          'C:\\manifests\\setup_laptop.meta.json',
+          'C:\\manifests\\setup_desktop.jsonc',
+        ])
+        .mockResolvedValueOnce(false) // check_file_exists for setup_laptop.meta.json
+        .mockResolvedValueOnce(false); // check_file_exists for setup_desktop.meta.json
+
+      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+
+      expect(descriptors).toHaveLength(2);
+      expect(descriptors[0]).toMatchObject({
+        id: 'setup_laptop',
+        setupPath: 'C:\\manifests\\setup_laptop.json',
+        metaPath: 'C:\\manifests\\setup_laptop.meta.json',
+        label: 'setup_laptop',
+      });
+      expect(descriptors[1]).toMatchObject({
+        id: 'setup_desktop',
+        setupPath: 'C:\\manifests\\setup_desktop.jsonc',
+        metaPath: 'C:\\manifests\\setup_desktop.meta.json',
+        label: 'setup_desktop',
+      });
+    });
+
+    it('loads displayName from metadata file when present', async () => {
+      vi.mocked(invoke)
+        .mockResolvedValueOnce(['C:\\manifests\\setup_laptop.json'])
+        .mockResolvedValueOnce(true) // check_file_exists
+        .mockResolvedValueOnce(JSON.stringify({ displayName: 'My Laptop' })); // read_text_file
+
+      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+
+      expect(descriptors).toHaveLength(1);
+      expect(descriptors[0].displayName).toBe('My Laptop');
+      expect(descriptors[0].label).toBe('My Laptop');
+    });
+
+    it('uses id as label when displayName is not present', async () => {
+      vi.mocked(invoke)
+        .mockResolvedValueOnce(['C:\\manifests\\setup_laptop.json'])
+        .mockResolvedValueOnce(false); // check_file_exists - no meta file
+
+      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+
+      expect(descriptors).toHaveLength(1);
+      expect(descriptors[0].displayName).toBeUndefined();
+      expect(descriptors[0].label).toBe('setup_laptop');
+    });
+
+    it('never includes .meta.json files as selectable profiles', async () => {
+      // This is a critical test - .meta.json files must NEVER appear as profiles
+      vi.mocked(invoke).mockResolvedValueOnce([
+        'C:\\manifests\\setup_work.json',
+        'C:\\manifests\\setup_work.meta.json',
+        'C:\\manifests\\config.meta.json',
+        'C:\\manifests\\random.meta.json',
+      ]);
+
+      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+
+      // Only setup_work.json should be included
+      expect(descriptors).toHaveLength(1);
+      expect(descriptors[0].id).toBe('setup_work');
+      
+      // Verify no .meta.json paths in setupPath
+      for (const d of descriptors) {
+        expect(d.setupPath.toLowerCase()).not.toContain('.meta.json');
+      }
+    });
+  });
+
+  describe('getMetaPath', () => {
+    it('converts .json to .meta.json', () => {
+      expect(getMetaPath('C:\\profiles\\setup.json')).toBe('C:\\profiles\\setup.meta.json');
+    });
+
+    it('converts .jsonc to .meta.json', () => {
+      expect(getMetaPath('C:\\profiles\\setup.jsonc')).toBe('C:\\profiles\\setup.meta.json');
+    });
+
+    it('converts .json5 to .meta.json', () => {
+      expect(getMetaPath('C:\\profiles\\setup.json5')).toBe('C:\\profiles\\setup.meta.json');
+    });
+
+    it('handles Unix paths', () => {
+      expect(getMetaPath('/home/user/profiles/setup.json')).toBe('/home/user/profiles/setup.meta.json');
     });
   });
 });

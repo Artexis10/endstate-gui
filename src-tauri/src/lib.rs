@@ -371,6 +371,30 @@ fn write_text_file(path: String, content: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to write file: {}", e))
 }
 
+/// Delete a file from disk.
+///
+/// # Arguments
+/// * `path` - Path to the file to delete
+///
+/// # Returns
+/// * `Ok(())` - File deleted successfully
+/// * `Err(String)` - Failed to delete file
+#[tauri::command]
+fn delete_file(path: String) -> Result<(), String> {
+    use std::path::Path;
+    
+    let file_path = Path::new(&path);
+    if !file_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+    if !file_path.is_file() {
+        return Err("Path is not a file".to_string());
+    }
+    
+    fs::remove_file(file_path)
+        .map_err(|e| format!("Failed to delete file: {}", e))
+}
+
 /// Open a folder in the OS file explorer.
 ///
 /// # Arguments
@@ -515,7 +539,8 @@ pub fn run() {
             show_file_dialog,
             open_folder,
             read_text_file,
-            write_text_file
+            write_text_file,
+            delete_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

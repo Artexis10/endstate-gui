@@ -23,7 +23,7 @@ import { loadUIMode, saveUIMode, toggleUIMode, type UIMode } from './lib/ui-mode
 import { OverviewScreen } from './components/app/overview-screen';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
-import { saveProfileMetadata } from './lib/profile-metadata';
+import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -327,22 +327,20 @@ function App() {
 
   const handleDeleteProfile = async () => {
     if (!deleteProfilePath) return;
+    
+    // Safety check: prevent deleting the currently selected profile
+    if (deleteProfilePath === selectedProfilePath) {
+      console.error('Cannot delete the currently selected profile');
+      setShowDeleteProfileModal(false);
+      setDeleteProfilePath('');
+      setDeleteProfileName('');
+      return;
+    }
+    
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('delete_file', { path: deleteProfilePath });
-      // Also try to delete the metadata file
-      const metaPath = deleteProfilePath.replace(/\.(jsonc?|json5)$/i, '.meta.json');
-      try {
-        await invoke('delete_file', { path: metaPath });
-      } catch {
-        // Metadata file may not exist, ignore
-      }
+      // Delete both setup and metadata files
+      await deleteProfileFiles(deleteProfilePath);
       await refreshProfiles();
-      // Clear selection if deleted profile was selected
-      if (selectedProfilePath === deleteProfilePath) {
-        setSelectedProfile('');
-        setSelectedProfilePath('');
-      }
     } catch (err) {
       console.error('Failed to delete profile:', err);
     }
@@ -1606,6 +1604,13 @@ function App() {
                 setDeleteProfileName(displayName);
                 setShowDeleteProfileModal(true);
               }}
+              onOpenProfileFolder={async (path) => {
+                // Open the folder containing the profile file
+                const separator = path.includes('\\') ? '\\' : '/';
+                const lastSepIndex = path.lastIndexOf(separator);
+                const folderPath = lastSepIndex > 0 ? path.substring(0, lastSepIndex) : path;
+                await openFolder(folderPath);
+              }}
               onCapture={async () => {
                 // Robust double-run guard using ref
                 if (isRunning || isRunningRef.current) return;
@@ -2658,16 +2663,24 @@ function App() {
           <DialogHeader>
             <DialogTitle>Delete profile</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{deleteProfileName || 'this profile'}"? This action cannot be undone.
+              {deleteProfilePath === selectedProfilePath ? (
+                <span className="text-warning">
+                  You can't delete the profile currently in use. Select a different profile first.
+                </span>
+              ) : (
+                <>Are you sure you want to delete "{deleteProfileName || 'this profile'}"? This action cannot be undone.</>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="secondary" onClick={() => setShowDeleteProfileModal(false)}>
-              Cancel
+              {deleteProfilePath === selectedProfilePath ? 'Close' : 'Cancel'}
             </Button>
-            <Button variant="danger" onClick={handleDeleteProfile}>
-              Delete
-            </Button>
+            {deleteProfilePath !== selectedProfilePath && (
+              <Button variant="danger" onClick={handleDeleteProfile}>
+                Delete
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
