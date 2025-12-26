@@ -365,7 +365,7 @@ export function ApplyResultModal({
                           <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                           <span className="font-mono truncate flex-1" title={item.id}>{item.id}</span>
                           <span className="text-muted-foreground text-xs flex-shrink-0">({item.driver})</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${badge.className}`}>
+                          <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 whitespace-nowrap min-w-fit ${badge.className}`}>
                             {badge.label}
                           </span>
                         </div>
@@ -410,7 +410,7 @@ export function ApplyResultModal({
             className="w-full h-10"
             disabled={isApplying}
           >
-            {isApplying ? 'Please wait...' : hasPendingChanges ? 'Cancel' : hasFailures ? 'Close' : 'Done'}
+            {isApplying ? 'Please wait...' : hasPendingChanges ? 'Cancel' : 'Close'}
           </Button>
         </DialogFooter>
       </DialogContent>

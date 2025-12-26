@@ -144,6 +144,7 @@ export function OverviewScreen({
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [detailsFilter, setDetailsFilter] = useState<string | null>(null); // Filter for Setup Details modal
   // Activity collapsed by default in Default mode, expanded in Advanced mode
   // Reset when a new run starts based on mode
   const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced');
@@ -608,7 +609,7 @@ export function OverviewScreen({
                 }}
                 size="sm"
               >
-                Done
+                Dismiss
               </Button>
               {/* Show "Apply changes" button after successful Preview */}
               {action === 'setup' && actionResult?.wasPreview && actionStatus === 'success' && (
@@ -956,7 +957,10 @@ export function OverviewScreen({
       )}
 
       {/* Details Modal - shows logs/results without navigation */}
-      <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
+      <Dialog open={detailsModalOpen} onOpenChange={(open) => {
+        setDetailsModalOpen(open);
+        if (!open) setDetailsFilter(null); // Reset filter when closing
+      }}>
         <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>
@@ -983,29 +987,80 @@ export function OverviewScreen({
                 )}
               </div>
               
-              {/* Counts summary */}
+              {/* Filter pills - clickable to filter the list */}
               {actionResult.counts && (
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {actionResult.counts.total !== undefined && (
-                    <span className="px-2 py-1 bg-muted rounded">Total: {actionResult.counts.total}</span>
-                  )}
+                <div className="flex flex-wrap gap-2 text-xs" role="tablist" aria-label="Filter by status">
                   {actionResult.counts.installed !== undefined && actionResult.counts.installed > 0 && (
-                    <span className="px-2 py-1 bg-green-500/10 text-green-600 rounded">Installed: {actionResult.counts.installed}</span>
+                    <button
+                      role="tab"
+                      aria-selected={detailsFilter === 'Installed'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'Installed' ? null : 'Installed')}
+                      className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                        detailsFilter === 'Installed' ? 'ring-2 ring-green-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'Installed' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
+                    >
+                      Installed: {actionResult.counts.installed}
+                    </button>
                   )}
                   {actionResult.counts.toInstall !== undefined && actionResult.counts.toInstall > 0 && (
-                    <span className="px-2 py-1 bg-blue-500/10 text-blue-600 rounded">To install: {actionResult.counts.toInstall}</span>
+                    <button
+                      role="tab"
+                      aria-selected={detailsFilter === 'Would install'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'Would install' ? null : 'Would install')}
+                      className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                        detailsFilter === 'Would install' ? 'ring-2 ring-blue-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'Would install' ? 'opacity-50' : ''} bg-blue-500/10 text-blue-600`}
+                    >
+                      To install: {actionResult.counts.toInstall}
+                    </button>
                   )}
                   {actionResult.counts.alreadyPresent !== undefined && actionResult.counts.alreadyPresent > 0 && (
-                    <span className="px-2 py-1 bg-muted rounded">Already present: {actionResult.counts.alreadyPresent}</span>
+                    <button
+                      role="tab"
+                      aria-selected={detailsFilter === 'OK'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'OK' ? null : 'OK')}
+                      className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                        detailsFilter === 'OK' ? 'ring-2 ring-gray-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'OK' ? 'opacity-50' : ''} bg-muted`}
+                    >
+                      Already present: {actionResult.counts.alreadyPresent}
+                    </button>
                   )}
                   {actionResult.counts.skipped !== undefined && actionResult.counts.skipped > 0 && (
-                    <span className="px-2 py-1 bg-yellow-500/10 text-yellow-600 rounded">Skipped: {actionResult.counts.skipped}</span>
+                    <button
+                      role="tab"
+                      aria-selected={detailsFilter === 'Skipped'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'Skipped' ? null : 'Skipped')}
+                      className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                        detailsFilter === 'Skipped' ? 'ring-2 ring-yellow-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'Skipped' ? 'opacity-50' : ''} bg-yellow-500/10 text-yellow-600`}
+                    >
+                      Skipped: {actionResult.counts.skipped}
+                    </button>
                   )}
                   {actionResult.counts.failed !== undefined && actionResult.counts.failed > 0 && (
-                    <span className="px-2 py-1 bg-red-500/10 text-red-600 rounded">Failed: {actionResult.counts.failed}</span>
+                    <button
+                      role="tab"
+                      aria-selected={detailsFilter === 'Failed'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'Failed' ? null : 'Failed')}
+                      className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                        detailsFilter === 'Failed' ? 'ring-2 ring-red-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'Failed' ? 'opacity-50' : ''} bg-red-500/10 text-red-600`}
+                    >
+                      Failed: {actionResult.counts.failed}
+                    </button>
                   )}
                   {actionResult.counts.missing !== undefined && actionResult.counts.missing > 0 && (
-                    <span className="px-2 py-1 bg-orange-500/10 text-orange-600 rounded">Missing: {actionResult.counts.missing}</span>
+                    <button
+                      role="tab"
+                      aria-selected={detailsFilter === 'Missing'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'Missing' ? null : 'Missing')}
+                      className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                        detailsFilter === 'Missing' ? 'ring-2 ring-orange-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'Missing' ? 'opacity-50' : ''} bg-orange-500/10 text-orange-600`}
+                    >
+                      Missing: {actionResult.counts.missing}
+                    </button>
                   )}
                 </div>
               )}
@@ -1013,40 +1068,53 @@ export function OverviewScreen({
           )}
           
           {/* App events list - scrollable section with proper constraints */}
-          {actionResult?.appEvents && actionResult.appEvents.length > 0 && (
-            <div className="flex-1 min-h-0 flex flex-col">
-              <p className="flex-shrink-0 text-xs text-muted-foreground mb-2">
-                Apps ({actionResult.appEvents.length})
-              </p>
-              <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border">
-                <div className="divide-y divide-border">
-                  {/* Show failed first, then installed, then OK/skipped/others - NO LIMIT */}
-                  {[
-                    ...actionResult.appEvents.filter(e => e.action === 'Failed'),
-                    ...actionResult.appEvents.filter(e => e.action === 'Installed'),
-                    ...actionResult.appEvents.filter(e => e.action === 'OK'),
-                    ...actionResult.appEvents.filter(e => !['Failed', 'Installed', 'OK'].includes(e.action)),
-                  ].map((event, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
-                      <span className="font-mono truncate flex-1">{event.app}</span>
-                      <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${
-                        event.action === 'Installed' ? 'bg-green-500/10 text-green-600' :
-                        event.action === 'Failed' ? 'bg-red-500/10 text-red-600' :
-                        event.action === 'OK' ? 'bg-muted text-muted-foreground' :
-                        event.action === 'Skipped' ? 'bg-yellow-500/10 text-yellow-600' :
-                        event.action === 'Would install' || event.action === 'Missing' ? 'bg-blue-500/10 text-blue-600' :
-                        event.action === 'Processing' ? 'bg-blue-500/10 text-blue-600' :
-                        'bg-muted text-muted-foreground'
-                      }`}>
-                        {/* Friendly label for OK, truthful for others */}
-                        {event.action === 'OK' ? 'Already present' : event.action}
-                      </span>
-                    </div>
-                  ))}
+          {actionResult?.appEvents && actionResult.appEvents.length > 0 && (() => {
+            // Filter events based on selected filter
+            const filteredEvents = detailsFilter
+              ? actionResult.appEvents.filter(e => {
+                  if (detailsFilter === 'OK') return e.action === 'OK';
+                  if (detailsFilter === 'Would install') return e.action === 'Would install' || e.action === 'Missing';
+                  return e.action === detailsFilter;
+                })
+              : actionResult.appEvents;
+            
+            // Sort: failed first, then installed, then OK/skipped/others
+            const sortedEvents = [
+              ...filteredEvents.filter(e => e.action === 'Failed'),
+              ...filteredEvents.filter(e => e.action === 'Installed'),
+              ...filteredEvents.filter(e => e.action === 'OK'),
+              ...filteredEvents.filter(e => !['Failed', 'Installed', 'OK'].includes(e.action)),
+            ];
+            
+            return (
+              <div className="flex-1 min-h-0 flex flex-col">
+                <p className="flex-shrink-0 text-xs text-muted-foreground mb-2">
+                  Apps ({detailsFilter ? `${filteredEvents.length} of ${actionResult.appEvents.length}` : actionResult.appEvents.length})
+                </p>
+                <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border">
+                  <div className="divide-y divide-border">
+                    {sortedEvents.map((event, i) => (
+                      <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
+                        <span className="font-mono truncate flex-1">{event.app}</span>
+                        <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap min-w-fit ${
+                          event.action === 'Installed' ? 'bg-green-500/10 text-green-600' :
+                          event.action === 'Failed' ? 'bg-red-500/10 text-red-600' :
+                          event.action === 'OK' ? 'bg-muted text-muted-foreground' :
+                          event.action === 'Skipped' ? 'bg-yellow-500/10 text-yellow-600' :
+                          event.action === 'Would install' || event.action === 'Missing' ? 'bg-blue-500/10 text-blue-600' :
+                          event.action === 'Processing' ? 'bg-blue-500/10 text-blue-600' :
+                          'bg-muted text-muted-foreground'
+                        }`}>
+                          {/* Friendly label for OK, truthful for others */}
+                          {event.action === 'OK' ? 'Already present' : event.action}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Fallback if no app events */}
           {(!actionResult?.appEvents || actionResult.appEvents.length === 0) && actionResult?.status === 'success' && (
@@ -1081,7 +1149,7 @@ export function OverviewScreen({
               </Button>
             )}
             <Button onClick={() => setDetailsModalOpen(false)}>
-              Done
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

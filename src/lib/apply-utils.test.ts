@@ -570,4 +570,122 @@ describe('apply-utils', () => {
       expect(normalizeApplyStatus(item)).toBe('skipped');
     });
   });
+
+  describe('Live Activity Banner Label Mapping', () => {
+    /**
+     * Tests for the banner label mapping logic used in App.tsx
+     * The banner must show in-progress action during streaming, not final disposition
+     */
+    
+    // Helper function that mirrors the logic in App.tsx handleApplyFromOverview
+    function getBannerLabel(action: string): string {
+      const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK', 'Cancelled'].includes(action);
+      const friendlyAction = action === 'OK' ? 'Already present' :
+                             action === 'Processing' ? 'Installing' :
+                             action === 'Would install' ? 'Checking' :
+                             isFinalAction ? action :
+                             'Working on';
+      return friendlyAction;
+    }
+
+    it('Processing action shows "Installing" not "Working..."', () => {
+      expect(getBannerLabel('Processing')).toBe('Installing');
+      expect(getBannerLabel('Processing')).not.toBe('Working…');
+      expect(getBannerLabel('Processing')).not.toBe('Working...');
+    });
+
+    it('Would install action shows "Checking" during preview', () => {
+      expect(getBannerLabel('Would install')).toBe('Checking');
+    });
+
+    it('OK action shows "Already present"', () => {
+      expect(getBannerLabel('OK')).toBe('Already present');
+    });
+
+    it('Final actions pass through unchanged', () => {
+      expect(getBannerLabel('Installed')).toBe('Installed');
+      expect(getBannerLabel('Skipped')).toBe('Skipped');
+      expect(getBannerLabel('Failed')).toBe('Failed');
+      expect(getBannerLabel('Cancelled')).toBe('Cancelled');
+    });
+
+    it('Unknown actions show "Working on"', () => {
+      expect(getBannerLabel('SomeUnknownAction')).toBe('Working on');
+    });
+
+    it('CRITICAL: In-progress items must NOT show final disposition labels', () => {
+      // This is the core bug fix - during streaming, we should never show
+      // "Skipped: <app>" while subtext says "Working..."
+      // Processing = in-progress, should show "Installing"
+      const processingLabel = getBannerLabel('Processing');
+      expect(processingLabel).not.toBe('Skipped');
+      expect(processingLabel).not.toBe('Installed');
+      expect(processingLabel).not.toBe('Failed');
+      expect(processingLabel).toBe('Installing');
+    });
+  });
+
+  describe('Setup Details Filter Logic', () => {
+    /**
+     * Tests for the filter logic used in Overview Setup Details modal
+     */
+    interface AppEvent {
+      app: string;
+      action: string;
+    }
+
+    function filterEvents(events: AppEvent[], filter: string | null): AppEvent[] {
+      if (!filter) return events;
+      return events.filter(e => {
+        if (filter === 'OK') return e.action === 'OK';
+        if (filter === 'Would install') return e.action === 'Would install' || e.action === 'Missing';
+        return e.action === filter;
+      });
+    }
+
+    const testEvents: AppEvent[] = [
+      { app: 'App1', action: 'Installed' },
+      { app: 'App2', action: 'OK' },
+      { app: 'App3', action: 'Failed' },
+      { app: 'App4', action: 'Skipped' },
+      { app: 'App5', action: 'Would install' },
+      { app: 'App6', action: 'Missing' },
+    ];
+
+    it('null filter returns all events', () => {
+      const result = filterEvents(testEvents, null);
+      expect(result).toHaveLength(6);
+    });
+
+    it('Installed filter returns only Installed events', () => {
+      const result = filterEvents(testEvents, 'Installed');
+      expect(result).toHaveLength(1);
+      expect(result[0].app).toBe('App1');
+    });
+
+    it('OK filter returns only OK events', () => {
+      const result = filterEvents(testEvents, 'OK');
+      expect(result).toHaveLength(1);
+      expect(result[0].app).toBe('App2');
+    });
+
+    it('Failed filter returns only Failed events', () => {
+      const result = filterEvents(testEvents, 'Failed');
+      expect(result).toHaveLength(1);
+      expect(result[0].app).toBe('App3');
+    });
+
+    it('Skipped filter returns only Skipped events', () => {
+      const result = filterEvents(testEvents, 'Skipped');
+      expect(result).toHaveLength(1);
+      expect(result[0].app).toBe('App4');
+    });
+
+    it('Would install filter returns Would install AND Missing events', () => {
+      const result = filterEvents(testEvents, 'Would install');
+      expect(result).toHaveLength(2);
+      expect(result.map(e => e.app)).toContain('App5');
+      expect(result.map(e => e.app)).toContain('App6');
+    });
+  });
 });

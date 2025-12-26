@@ -120,8 +120,8 @@ test.describe('Accordion Navigation Bug', () => {
     await expect(dialog).toBeVisible({ timeout: 3000 });
     await expect(dialog.locator('text=Setup Details')).toBeVisible();
 
-    // Close the modal
-    await page.click('[role="dialog"] button:has-text("Done")');
+    // Close the modal (button changed from "Done" to "Close")
+    await page.click('[role="dialog"] button:has-text("Close")');
     await expect(dialog).not.toBeVisible({ timeout: 3000 });
 
     // Step 4: Navigate to Report page via "View all" in Recent Activity

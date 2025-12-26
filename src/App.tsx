@@ -1093,8 +1093,8 @@ function App() {
               setLiveAppEvents(Array.from(appEventMap.values()).slice(-20));
               
               setOverviewActionProgress({ 
-                message: 'Analyzing setup...', 
-                detail: progress.app 
+                message: `Previewing: ${progress.app}`, 
+                detail: 'Checking what will change…' 
               });
             }
           }
@@ -1266,10 +1266,14 @@ function App() {
               setLiveCounters({ ...counters });
               
               // Friendly headline mapping (Option A)
+              // CRITICAL: During streaming, show in-progress action, not final disposition
+              // Only show final labels (Skipped/Installed/etc) when the action is actually final
+              const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK', 'Cancelled'].includes(progress.action);
               const friendlyAction = progress.action === 'OK' ? 'Already present' :
-                                     progress.action === 'Processing' ? 'Working…' :
-                                     progress.action === 'Skipped' ? 'Skipped' :
-                                     progress.action;
+                                     progress.action === 'Processing' ? 'Installing' :
+                                     progress.action === 'Would install' ? 'Checking' :
+                                     isFinalAction ? progress.action :
+                                     'Working on';
               // Friendly counter text
               const parts: string[] = [];
               if (counters.installed > 0) parts.push(`${counters.installed} installed`);
@@ -1586,16 +1590,20 @@ function App() {
                 setOverviewActionStatus('running');
                 const isApply = intent === 'apply';
                 setOverviewActionProgress({ 
-                  message: isApply ? 'Installing applications...' : 'Analyzing profile...' 
+                  message: isApply ? 'Installing applications...' : 'Previewing changes...' 
                 });
                 try {
                   if (isApply) {
                     const result = await handleApplyFromOverview();
-                    setOverviewActionStatus('success');
+                    // Set status based on whether there were failures
+                    const hasFailures = result.failed > 0;
+                    setOverviewActionStatus(hasFailures ? 'error' : 'success');
                     setOverviewActionResult({ 
                       action: 'setup', 
-                      status: 'success', 
-                      summary: `${result.installed} installed, ${result.alreadyPresent} already present`,
+                      status: hasFailures ? 'error' : 'success', 
+                      summary: hasFailures 
+                        ? `${result.installed} installed, ${result.failed} failed`
+                        : `${result.installed} installed, ${result.alreadyPresent} already present`,
                       profile: result.profile,
                       timestamp: new Date().toISOString(),
                       counts: {

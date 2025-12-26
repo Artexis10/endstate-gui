@@ -596,7 +596,10 @@ describe('Apply Flow UX Contracts', () => {
       );
 
       expect(screen.getByText('Your computer is ready')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Done' })).toBeEnabled();
+      // Find the main Close button (not the X button's sr-only Close)
+      const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+      const mainCloseButton = closeButtons.find(btn => btn.classList.contains('w-full'));
+      expect(mainCloseButton).toBeEnabled();
     });
   });
 });
