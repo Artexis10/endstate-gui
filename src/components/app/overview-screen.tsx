@@ -774,7 +774,7 @@ export function OverviewScreen({
             } ${isCardDisabled('capture') ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => handleCardClick('capture')}
           >
-            <CardHeader className="pb-4">
+            <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-blue-500/10">
@@ -821,7 +821,7 @@ export function OverviewScreen({
             } ${isCardDisabled('setup') ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => handleCardClick('setup')}
           >
-            <CardHeader className="pb-4">
+            <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-green-500/10">
@@ -871,7 +871,7 @@ export function OverviewScreen({
             } ${isCardDisabled('check') ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => handleCardClick('check')}
           >
-            <CardHeader className="pb-4">
+            <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-amber-500/10">
@@ -929,7 +929,7 @@ export function OverviewScreen({
       {/* Recent Activity */}
       {recentActivity.length > 0 && (
         <Card>
-          <CardHeader className="pb-4">
+          <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
