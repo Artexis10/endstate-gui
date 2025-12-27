@@ -395,6 +395,36 @@ fn delete_file(path: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to delete file: {}", e))
 }
 
+/// Rename a file on disk.
+///
+/// # Arguments
+/// * `old_path` - Current path to the file
+/// * `new_path` - New path for the file
+///
+/// # Returns
+/// * `Ok(())` - File renamed successfully
+/// * `Err(String)` - Failed to rename file
+#[tauri::command]
+fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
+    use std::path::Path;
+    
+    let old_file = Path::new(&old_path);
+    let new_file = Path::new(&new_path);
+    
+    if !old_file.exists() {
+        return Err("Source file does not exist".to_string());
+    }
+    if !old_file.is_file() {
+        return Err("Source path is not a file".to_string());
+    }
+    if new_file.exists() {
+        return Err("Target file already exists".to_string());
+    }
+    
+    fs::rename(old_file, new_file)
+        .map_err(|e| format!("Failed to rename file: {}", e))
+}
+
 /// Profile validation result returned from validate_profile command.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -844,6 +874,7 @@ pub fn run() {
             read_text_file,
             write_text_file,
             delete_file,
+            rename_file,
             validate_profile
         ])
         .run(tauri::generate_context!())

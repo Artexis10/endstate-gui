@@ -31,6 +31,7 @@ import { LogViewer } from './components/app/log-viewer';
 import { ActivityLog } from './components/app/activity-log';
 import { CaptureResultModal } from './components/app/capture-result-modal';
 import { ApplyResultModal } from './components/app/apply-result-modal';
+import { RenameFileModal } from './components/app/rename-file-modal';
 import type { ApplyCounts, ApplyItem } from './types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
@@ -187,6 +188,11 @@ function App() {
   const [deleteProfilePath, setDeleteProfilePath] = useState('');
   const [deleteProfileName, setDeleteProfileName] = useState('');
   
+  // Profile file rename modal state
+  const [showRenameFileModal, setShowRenameFileModal] = useState(false);
+  const [renameFilePath, setRenameFilePath] = useState('');
+  const [renameFileCurrentName, setRenameFileCurrentName] = useState('');
+  
   // Reset overview action state
   const resetOverviewActionState = () => {
     setOverviewRunningAction(null);
@@ -340,13 +346,86 @@ function App() {
     try {
       // Delete both setup and metadata files
       await deleteProfileFiles(deleteProfilePath);
-      await refreshProfiles();
+      
+      // Refresh profiles to get updated list
+      const dir = await loadProfilesDirectory();
+      if (dir) {
+        setProfilesDirectory(dir);
+        const discovered = await discoverProfiles(dir);
+        setProfiles(discovered);
+        
+        // Selection fallback: if selected profile was deleted (shouldn't happen due to check above)
+        // or if it disappeared for another reason, select first available or null
+        const selectedStillExists = discovered.some(p => p.path === selectedProfilePath);
+        if (!selectedStillExists) {
+          if (discovered.length > 0) {
+            // Auto-select first profile
+            const firstProfile = discovered[0];
+            setSelectedProfile(firstProfile.name);
+            setSelectedProfilePath(firstProfile.path);
+            updateSettings({ 
+              lastSelectedProfile: firstProfile.name,
+              lastSelectedProfilePath: firstProfile.path 
+            });
+            // Show toast notification
+            console.log('Selected profile was removed. Switched to another profile.');
+          } else {
+            // No profiles remain
+            setSelectedProfile('');
+            setSelectedProfilePath('');
+            updateSettings({ lastSelectedProfile: '', lastSelectedProfilePath: '' });
+          }
+        }
+      }
     } catch (err) {
       console.error('Failed to delete profile:', err);
     }
     setShowDeleteProfileModal(false);
     setDeleteProfilePath('');
     setDeleteProfileName('');
+  };
+
+  const handleRenameFile = async (newFilename: string) => {
+    if (!renameFilePath || !newFilename) return;
+    
+    try {
+      const { invoke } = await import('./lib/tauri-bridge');
+      const { getMetaPath } = await import('./file-discovery');
+      
+      // Get directory and construct new path
+      const pathParts = renameFilePath.split(/[\\/]/);
+      const directory = pathParts.slice(0, -1).join('\\');
+      const newPath = `${directory}\\${newFilename}`;
+      
+      // Rename the manifest file
+      await invoke('rename_file', { oldPath: renameFilePath, newPath });
+      
+      // Rename the metadata file if it exists
+      const oldMetaPath = getMetaPath(renameFilePath);
+      const newMetaPath = getMetaPath(newPath);
+      const metaExists = await invoke<boolean>('check_file_exists', { path: oldMetaPath });
+      if (metaExists) {
+        await invoke('rename_file', { oldPath: oldMetaPath, newPath: newMetaPath });
+      }
+      
+      // Update selected profile if it was the renamed one
+      if (renameFilePath === selectedProfilePath) {
+        const newName = newFilename.replace(/\.(jsonc?|json5)$/i, '');
+        setSelectedProfile(newName);
+        setSelectedProfilePath(newPath);
+        updateSettings({ lastSelectedProfile: newName, lastSelectedProfilePath: newPath });
+      }
+      
+      // Refresh profiles
+      await refreshProfiles();
+    } catch (err) {
+      console.error('Failed to rename file:', err);
+      alert(`Failed to rename file: ${err}`);
+    }
+    
+    setShowRenameFileModal(false);
+    setRenameFilePath('');
+    setRenameFileCurrentName('');
   };
 
   const promptForProfileName = async (profilePath: string): Promise<void> => {
@@ -1588,27 +1667,14 @@ function App() {
               runningAction={overviewRunningAction}
               actionStatus={overviewActionStatus}
               actionProgress={overviewActionProgress}
+              actionResult={overviewActionResult}
               liveAppEvents={liveAppEvents}
               liveCounters={liveCounters}
-              actionResult={overviewActionResult}
               uiMode={uiMode}
               onNavigate={navigateWithHistory}
-              onOpenProfilesFolder={handleOpenProfilesFolder}
-              onRefreshProfiles={refreshProfiles}
-              selectedProfilePath={selectedProfilePath}
-              onRenameProfile={(path, currentName) => {
-                openProfileNameModal(path, currentName, 'rename');
-              }}
-              onDeleteProfile={(path, displayName) => {
-                setDeleteProfilePath(path);
-                setDeleteProfileName(displayName);
-                setShowDeleteProfileModal(true);
-              }}
               onCapture={async () => {
-                // Robust double-run guard using ref
                 if (isRunning || isRunningRef.current) return;
                 isRunningRef.current = true;
-                
                 setOverviewRunningAction('capture');
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Scanning installed applications...' });
@@ -1745,6 +1811,22 @@ function App() {
                 updateSettings({ lastSelectedProfile: profile, lastSelectedProfilePath: path });
               }}
               onDismissResult={dismissOverviewResult}
+              onOpenProfilesFolder={handleOpenProfilesFolder}
+              onRefreshProfiles={refreshProfiles}
+              selectedProfilePath={selectedProfilePath}
+              onRenameProfile={(path, currentName) => {
+                openProfileNameModal(path, currentName, 'rename');
+              }}
+              onDeleteProfile={(path, displayName) => {
+                setDeleteProfilePath(path);
+                setDeleteProfileName(displayName);
+                setShowDeleteProfileModal(true);
+              }}
+              onRenameFile={(path, currentFilename) => {
+                setRenameFilePath(path);
+                setRenameFileCurrentName(currentFilename);
+                setShowRenameFileModal(true);
+              }}
             />
           </div>
         );
@@ -2656,18 +2738,17 @@ function App() {
           <DialogHeader>
             <DialogTitle>Delete profile</DialogTitle>
             <DialogDescription>
-              {deleteProfilePath === selectedProfilePath ? (
-                <span className="text-warning">
-                  You can't delete the profile currently in use. Select a different profile first.
+              Are you sure you want to delete <strong>{deleteProfileName}</strong>?
+              {deleteProfilePath === selectedProfilePath && (
+                <span className="block mt-2 text-warning">
+                  You cannot delete the currently selected profile. Please select a different profile first.
                 </span>
-              ) : (
-                <>Are you sure you want to delete "{deleteProfileName || 'this profile'}"? This action cannot be undone.</>
               )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="secondary" onClick={() => setShowDeleteProfileModal(false)}>
-              {deleteProfilePath === selectedProfilePath ? 'Close' : 'Cancel'}
+              Cancel
             </Button>
             {deleteProfilePath !== selectedProfilePath && (
               <Button variant="danger" onClick={handleDeleteProfile}>
@@ -2677,6 +2758,14 @@ function App() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Rename File Modal */}
+      <RenameFileModal
+        open={showRenameFileModal}
+        onOpenChange={setShowRenameFileModal}
+        currentFilename={renameFileCurrentName}
+        onConfirm={handleRenameFile}
+      />
     </>
   );
 }
