@@ -31,7 +31,9 @@ import {
   Zap,
   FolderOpen,
   RefreshCw,
-  Pencil
+  Pencil,
+  MoreVertical,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -119,6 +121,7 @@ interface OverviewScreenProps {
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => void;
   onRenameProfile?: (path: string, currentName: string) => void;
+  onDeleteProfile?: (path: string, displayName: string) => void;
   selectedProfilePath?: string;
 }
 
@@ -144,6 +147,7 @@ export function OverviewScreen({
   onOpenProfilesFolder,
   onRefreshProfiles,
   onRenameProfile,
+  onDeleteProfile,
   selectedProfilePath,
 }: OverviewScreenProps) {
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
@@ -360,7 +364,7 @@ export function OverviewScreen({
             <div className="flex items-center gap-3 bg-muted/50 rounded-md px-3 py-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground mb-1">Profile</p>
+                <p className="text-xs text-muted-foreground leading-tight">Profile</p>
                 <Select
                   value={selectedProfile}
                   onValueChange={(value) => {
@@ -381,23 +385,66 @@ export function OverviewScreen({
                   </SelectContent>
                 </Select>
               </div>
-              {/* Profile management actions - Rename only; Delete via menu, Open via Profiles folder */}
+              {/* Profile management actions - Manage menu with Rename/Delete */}
               {selectedProfilePath && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const currentProfile = profiles.find(p => p.path === selectedProfilePath);
-                    onRenameProfile?.(selectedProfilePath, currentProfile?.displayName || '');
-                  }}
-                  disabled={isRunning}
-                  title="Rename profile"
-                  aria-label="Rename profile"
-                >
-                  <Pencil className="h-3 w-3" />
-                </Button>
+                <div className="relative group">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Toggle menu visibility via data attribute
+                      const menu = e.currentTarget.nextElementSibling;
+                      if (menu) {
+                        menu.classList.toggle('hidden');
+                      }
+                    }}
+                    disabled={isRunning}
+                    title="Manage profile"
+                    aria-label="Manage profile"
+                    aria-haspopup="true"
+                  >
+                    <MoreVertical className="h-3 w-3" />
+                  </Button>
+                  <div className="hidden absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border bg-popover p-1 shadow-md">
+                    <button
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const currentProfile = profiles.find(p => p.path === selectedProfilePath);
+                        onRenameProfile?.(selectedProfilePath, currentProfile?.displayName || '');
+                        // Close menu
+                        e.currentTarget.parentElement?.classList.add('hidden');
+                      }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Rename
+                    </button>
+                    <button
+                      className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm ${
+                        selectedProfile === profiles.find(p => p.path === selectedProfilePath)?.name
+                          ? 'text-muted-foreground cursor-not-allowed'
+                          : 'text-destructive hover:bg-accent'
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const currentProfile = profiles.find(p => p.path === selectedProfilePath);
+                        // Only allow delete if not the currently selected profile
+                        if (currentProfile && selectedProfile !== currentProfile.name) {
+                          onDeleteProfile?.(selectedProfilePath, currentProfile?.displayName || currentProfile?.name || '');
+                        }
+                        // Close menu
+                        e.currentTarget.parentElement?.classList.add('hidden');
+                      }}
+                      disabled={selectedProfile === profiles.find(p => p.path === selectedProfilePath)?.name}
+                      title={selectedProfile === profiles.find(p => p.path === selectedProfilePath)?.name ? "Can't delete the current profile" : 'Delete profile'}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Delete
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground px-3">
@@ -649,6 +696,21 @@ export function OverviewScreen({
                 >
                   <Zap className="h-3 w-3 mr-1.5" />
                   Apply changes
+                </Button>
+              )}
+              {/* Show "Run again" button for capture after completion */}
+              {action === 'capture' && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDismissResult();
+                    // Small delay to ensure state is reset before triggering
+                    setTimeout(() => onCapture(), 50);
+                  }}
+                >
+                  Run again
                 </Button>
               )}
               <Button

@@ -1599,6 +1599,11 @@ function App() {
               onRenameProfile={(path, currentName) => {
                 openProfileNameModal(path, currentName, 'rename');
               }}
+              onDeleteProfile={(path, displayName) => {
+                setDeleteProfilePath(path);
+                setDeleteProfileName(displayName);
+                setShowDeleteProfileModal(true);
+              }}
               onCapture={async () => {
                 // Robust double-run guard using ref
                 if (isRunning || isRunningRef.current) return;
