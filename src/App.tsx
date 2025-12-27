@@ -1599,18 +1599,6 @@ function App() {
               onRenameProfile={(path, currentName) => {
                 openProfileNameModal(path, currentName, 'rename');
               }}
-              onDeleteProfile={(path, displayName) => {
-                setDeleteProfilePath(path);
-                setDeleteProfileName(displayName);
-                setShowDeleteProfileModal(true);
-              }}
-              onOpenProfileFolder={async (path) => {
-                // Open the folder containing the profile file
-                const separator = path.includes('\\') ? '\\' : '/';
-                const lastSepIndex = path.lastIndexOf(separator);
-                const folderPath = lastSepIndex > 0 ? path.substring(0, lastSepIndex) : path;
-                await openFolder(folderPath);
-              }}
               onCapture={async () => {
                 // Robust double-run guard using ref
                 if (isRunning || isRunningRef.current) return;

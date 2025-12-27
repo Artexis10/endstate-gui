@@ -27,6 +27,15 @@ The profile contract defines:
 
 5. **Discovery** — GUI lists only files that pass validation
 
+6. **Display Label Resolution** — Priority order for profile labels:
+   - `.meta.json` displayName (highest)
+   - Manifest `name` field
+   - Filename stem (fallback)
+
+7. **Rename Semantics** — GUI rename updates `.meta.json` displayName only
+
+8. **Delete Semantics** — Cannot delete currently-selected profile
+
 ## GUI Implementation
 
 The GUI uses the engine validator via Tauri command:
@@ -44,8 +53,26 @@ const result = await invoke<ValidationResult>('validate_profile', { path });
 3. Validate each candidate via `validate_profile`
 4. Return only valid profiles
 
+### Display Label Resolution
+
+When displaying a profile, resolve the label in this order:
+1. `.meta.json` displayName (if present)
+2. Manifest `name` field (if present)
+3. Filename stem (fallback)
+
+### Rename Behavior
+
+- **"Rename"** updates `.meta.json` displayName only
+- Filename is never changed by GUI
+- Manifest `name` field is never modified by GUI
+
+### Delete Behavior
+
+- Deletes profile file and associated `.meta.json`
+- **Cannot delete** the currently-selected profile (blocked with clear message)
+
 ### Metadata
 
 - `displayName` stored in `<profile>.meta.json`
-- File names are never renamed by GUI
+- `.meta.json` is an implementation detail but contractually supported
 - Validity determined by content, not filename

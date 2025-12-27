@@ -31,8 +31,7 @@ import {
   Zap,
   FolderOpen,
   RefreshCw,
-  Pencil,
-  Trash2
+  Pencil
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -120,8 +119,6 @@ interface OverviewScreenProps {
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => void;
   onRenameProfile?: (path: string, currentName: string) => void;
-  onDeleteProfile?: (path: string, displayName: string) => void;
-  onOpenProfileFolder?: (path: string) => void;
   selectedProfilePath?: string;
 }
 
@@ -147,8 +144,6 @@ export function OverviewScreen({
   onOpenProfilesFolder,
   onRefreshProfiles,
   onRenameProfile,
-  onDeleteProfile,
-  onOpenProfileFolder,
   selectedProfilePath,
 }: OverviewScreenProps) {
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
@@ -386,54 +381,23 @@ export function OverviewScreen({
                   </SelectContent>
                 </Select>
               </div>
-              {/* Profile management actions */}
+              {/* Profile management actions - Rename only; Delete via menu, Open via Profiles folder */}
               {selectedProfilePath && (
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenProfileFolder?.(selectedProfilePath);
-                    }}
-                    disabled={isRunning}
-                    title="Open profile folder"
-                    aria-label="Open profile folder"
-                  >
-                    <FolderOpen className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const currentProfile = profiles.find(p => p.path === selectedProfilePath);
-                      onRenameProfile?.(selectedProfilePath, currentProfile?.displayName || '');
-                    }}
-                    disabled={isRunning}
-                    title="Rename profile"
-                    aria-label="Rename profile"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const currentProfile = profiles.find(p => p.path === selectedProfilePath);
-                      onDeleteProfile?.(selectedProfilePath, currentProfile?.displayName || currentProfile?.name || '');
-                    }}
-                    disabled={isRunning}
-                    title="Delete profile"
-                    aria-label="Delete profile"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const currentProfile = profiles.find(p => p.path === selectedProfilePath);
+                    onRenameProfile?.(selectedProfilePath, currentProfile?.displayName || '');
+                  }}
+                  disabled={isRunning}
+                  title="Rename profile"
+                  aria-label="Rename profile"
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
               )}
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground px-3">
@@ -810,7 +774,7 @@ export function OverviewScreen({
             } ${isCardDisabled('capture') ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => handleCardClick('capture')}
           >
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-blue-500/10">
@@ -857,7 +821,7 @@ export function OverviewScreen({
             } ${isCardDisabled('setup') ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => handleCardClick('setup')}
           >
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-green-500/10">
@@ -907,7 +871,7 @@ export function OverviewScreen({
             } ${isCardDisabled('check') ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => handleCardClick('check')}
           >
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-amber-500/10">
@@ -965,7 +929,7 @@ export function OverviewScreen({
       {/* Recent Activity */}
       {recentActivity.length > 0 && (
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
