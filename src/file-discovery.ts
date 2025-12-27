@@ -16,6 +16,27 @@ export interface ProfileDescriptor {
   displayName?: string;
   /** Computed label: displayName if present, else fallback to id */
   label: string;
+  /** Profile summary from validation (optional) */
+  summary?: ProfileSummary;
+}
+
+/**
+ * Profile summary returned from validation.
+ */
+export interface ProfileSummary {
+  name: string;
+  version: number;
+  appCount: number;
+  captured?: string;
+}
+
+/**
+ * Validation result from the engine.
+ */
+export interface ValidationResult {
+  valid: boolean;
+  errors: Array<{ code: string; message: string }>;
+  summary?: ProfileSummary;
 }
 
 /** @deprecated Use ProfileDescriptor instead */
@@ -60,9 +81,29 @@ async function readProfileMetadata(setupPath: string): Promise<ProfileMetadata |
 }
 
 /**
+ * Validate a profile file against the Endstate profile contract.
+ * Uses the engine validator via Tauri command.
+ */
+export async function validateProfile(path: string): Promise<ValidationResult> {
+  try {
+    const result = await invoke<ValidationResult>('validate_profile', { path });
+    return result;
+  } catch (err) {
+    return {
+      valid: false,
+      errors: [{ code: 'VALIDATION_ERROR', message: String(err) }],
+    };
+  }
+}
+
+/**
  * Discover all profiles in a directory.
  * Returns ProfileDescriptor objects with merged metadata.
- * Excludes .meta.json files from the list.
+ * Excludes .meta.json files and invalid manifests from the list.
+ * 
+ * Profile validity is determined by the engine's profile contract:
+ * - Must have version field (number, value 1)
+ * - Must have apps field (array)
  */
 export async function discoverProfileDescriptors(directory: string): Promise<ProfileDescriptor[]> {
   if (!directory || !directory.trim()) {
@@ -76,17 +117,28 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
     }
     
     // Filter out .meta.json files - they are implementation details
-    const setupFiles = files.filter(path => {
+    const candidateFiles = files.filter(path => {
       if (!path || typeof path !== 'string') return false;
       const filename = path.split(/[/\\]/).pop() || '';
       return !isMetaFile(filename);
     });
     
-    const profiles = await Promise.all(
-      setupFiles.map(async (setupPath) => {
+    // Validate each candidate and only include valid profiles
+    const profileResults = await Promise.all(
+      candidateFiles.map(async (setupPath) => {
         const filename = setupPath.split(/[/\\]/).pop() || '';
         const id = filename.replace(/\.(jsonc?|json5)$/i, '');
         const metaPath = getMetaPath(setupPath);
+        
+        // Validate against profile contract
+        const validation = await validateProfile(setupPath);
+        if (!validation.valid) {
+          // Skip invalid profiles (debug logging only)
+          console.debug(`Skipping invalid profile: ${setupPath}`, validation.errors);
+          return null;
+        }
+        
+        // Load metadata for display name
         const metadata = await readProfileMetadata(setupPath);
         const displayName = metadata?.displayName;
         
@@ -96,11 +148,19 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
           metaPath,
           displayName,
           label: displayName || id,
+          summary: validation.summary,
         };
       })
     );
     
-    return profiles;
+    // Filter out null entries (invalid profiles)
+    const validProfiles: ProfileDescriptor[] = [];
+    for (const p of profileResults) {
+      if (p !== null) {
+        validProfiles.push(p);
+      }
+    }
+    return validProfiles;
   } catch (err) {
     console.error('Failed to discover profiles:', err);
     return [];
