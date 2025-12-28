@@ -1,4 +1,5 @@
 import type { ApplyItem } from '../types';
+import type { EngineItemStatus, ItemEvent, EnginePhase } from './streaming-events';
 
 /**
  * Canonical status keys used for filtering and internal logic.
@@ -97,6 +98,59 @@ export function getColorClasses(color: SemanticColor): { text: string; bg: strin
  */
 export function getUiStatus(statusKey: StatusKey): UiStatusConfig {
   return UI_STATUS_MAP[statusKey] || UI_STATUS_MAP.skipped;
+}
+
+/**
+ * Map engine streaming status to UI StatusKey.
+ * This is the SINGLE SOURCE OF TRUTH for streaming event status mapping.
+ * 
+ * Engine Status -> UI StatusKey:
+ * - present     -> already_present (green)
+ * - to_install  -> to_install (blue)
+ * - installing  -> installing (blue)
+ * - installed   -> installed (green)
+ * - skipped     -> skipped (yellow)
+ * - failed      -> failed (red)
+ */
+export function engineStatusToStatusKey(engineStatus: EngineItemStatus): StatusKey {
+  switch (engineStatus) {
+    case 'present':
+      return 'already_present';
+    case 'to_install':
+      return 'to_install';
+    case 'installing':
+      return 'installing';
+    case 'installed':
+      return 'installed';
+    case 'skipped':
+      return 'skipped';
+    case 'failed':
+      return 'failed';
+    default:
+      return 'skipped';
+  }
+}
+
+/**
+ * Convert an ItemEvent from streaming to an AppEvent for UI display.
+ * Uses EnginePhase which includes 'plan' | 'apply' | 'verify'.
+ * Note: 'plan' phase is not relevant for UI display, so it maps to undefined.
+ */
+export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppEvent {
+  // Map streaming phase to UI-relevant phase (apply | verify only)
+  // 'plan' phase is not displayed in UI, so it maps to undefined
+  const uiPhase: 'apply' | 'verify' | undefined = 
+    phase === 'apply' ? 'apply' : 
+    phase === 'verify' ? 'verify' : 
+    undefined;
+  
+  return {
+    app: event.id,
+    action: event.message || event.status,
+    timestamp: Date.now(),
+    statusKey: engineStatusToStatusKey(event.status),
+    phase: uiPhase,
+  };
 }
 
 /**
@@ -213,11 +267,15 @@ export function getFilterKey(item: ApplyItem): StatusKey {
   return reasonToStatusKey(item);
 }
 
+// EnginePhase is imported from streaming-events.ts (single source of truth)
+// Re-export for consumers that import from apply-utils
+export type { EnginePhase } from './streaming-events';
+
 /**
- * Engine execution phase for UI clarity.
- * Apply runs first, then Verify within the same engine spawn.
+ * UI-relevant phases for display purposes.
+ * 'plan' phase from engine is not displayed in UI.
  */
-export type EnginePhase = 'apply' | 'verify';
+export type UiPhase = 'apply' | 'verify';
 
 /**
  * AppEvent represents a live activity entry during streaming.
@@ -227,7 +285,7 @@ export interface AppEvent {
   action: string;
   timestamp?: number;
   statusKey?: StatusKey;  // Canonical status for consistent display
-  phase?: EnginePhase;    // Which phase this event occurred in
+  phase?: UiPhase;        // Which phase this event occurred in (UI-relevant only)
 }
 
 /**
@@ -419,7 +477,7 @@ export interface ParsedProgressLine {
   action: string;
   statusKey: StatusKey;
   isPhaseMarker?: boolean;  // True if this line indicates a phase transition
-  phase?: EnginePhase;      // The phase this event belongs to
+  phase?: UiPhase;          // The phase this event belongs to (UI-relevant only)
 }
 
 /**

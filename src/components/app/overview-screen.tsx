@@ -56,7 +56,7 @@ import { ManageProfilesModal } from './manage-profiles-modal';
 import { 
   type AppEvent, 
   type StatusKey,
-  type EnginePhase,
+  type UiPhase,
   getColorClasses,
   getUiStatus,
 } from '@/lib/apply-utils';
@@ -68,7 +68,7 @@ type SetupIntent = 'preview' | 'apply';
 interface ActionProgress {
   message: string;
   detail?: string;
-  phase?: EnginePhase;  // Current engine phase for UI clarity
+  phase?: UiPhase;  // Current engine phase for UI clarity
 }
 
 interface ActionResult {

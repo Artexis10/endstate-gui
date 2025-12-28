@@ -1,6 +1,11 @@
 import { invoke, listen } from './lib/tauri-bridge';
 import { EndstateEnvelope } from './types';
 import { AppSettings } from './settings';
+import {
+  StreamingEvent as NdjsonEvent,
+  StreamingEventBuffer,
+  parseStreamingEvent,
+} from './lib/streaming-events';
 
 export interface StreamEvent {
   type: 'stdout' | 'stderr' | 'exit';
@@ -8,24 +13,46 @@ export interface StreamEvent {
   exitCode?: number;
 }
 
+/**
+ * Callback for NDJSON streaming events parsed from stderr.
+ * These are UI-only events for live progress updates.
+ */
+export type NdjsonEventCallback = (event: NdjsonEvent) => void;
+
 export interface RunResult<T> {
   envelope: EndstateEnvelope<T> | null;
   exitCode: number;
   stdout: string;
   stderr: string;
+  ndjsonEvents: NdjsonEvent[];
 }
 
 // Global spawn counter for double-run validation (diagnostic only)
 let globalSpawnCounter = 0;
 const activeSpawns = new Map<string, { runId: string; command: string; startTime: number }>();
 
+/**
+ * Options for streaming execution.
+ */
+export interface StreamingOptions {
+  /** Enable NDJSON streaming events from stderr */
+  enableNdjsonEvents?: boolean;
+  /** Callback for NDJSON events (only called if enableNdjsonEvents is true) */
+  onNdjsonEvent?: NdjsonEventCallback;
+}
+
 export async function runEndstateStreaming<T>(
   settings: AppSettings,
   command: string,
   args: string[],
-  onEvent: (event: StreamEvent) => void
+  onEvent: (event: StreamEvent) => void,
+  options?: StreamingOptions
 ): Promise<RunResult<T>> {
-  const fullArgs = [command, '--json', ...args];
+  // Build args: always include --json for envelope output
+  // Add --events jsonl if NDJSON streaming is enabled
+  const fullArgs = options?.enableNdjsonEvents
+    ? [command, '--json', '--events', 'jsonl', ...args]
+    : [command, '--json', ...args];
   
   // Generate unique runId for this spawn
   const runId = `${command}-${Date.now()}-${++globalSpawnCounter}`;
@@ -68,6 +95,12 @@ export async function runEndstateStreaming<T>(
   let stdoutBuffer = '';
   let stderrBuffer = '';
   let exitCode = -1;
+  
+  // NDJSON event parsing from stderr
+  const ndjsonBuffer = new StreamingEventBuffer();
+  const ndjsonEvents: NdjsonEvent[] = [];
+  const enableNdjson = options?.enableNdjsonEvents ?? false;
+  const onNdjsonEvent = options?.onNdjsonEvent;
 
   const unlisten = await listen<StreamEvent>(eventChannel, (event) => {
     const payload = event.payload;
@@ -77,8 +110,26 @@ export async function runEndstateStreaming<T>(
       stdoutBuffer += payload.data;
     } else if (payload.type === 'stderr') {
       stderrBuffer += payload.data;
+      
+      // Parse NDJSON events from stderr if enabled
+      if (enableNdjson) {
+        const events = ndjsonBuffer.append(payload.data);
+        for (const evt of events) {
+          ndjsonEvents.push(evt);
+          onNdjsonEvent?.(evt);
+        }
+      }
     } else if (payload.type === 'exit') {
       exitCode = payload.exitCode ?? -1;
+      
+      // Flush any remaining NDJSON data
+      if (enableNdjson) {
+        const finalEvent = ndjsonBuffer.flush();
+        if (finalEvent) {
+          ndjsonEvents.push(finalEvent);
+          onNdjsonEvent?.(finalEvent);
+        }
+      }
     }
   });
 
@@ -163,5 +214,14 @@ export async function runEndstateStreaming<T>(
     exitCode,
     stdout,
     stderr: stderrBuffer,
+    ndjsonEvents,
   };
+}
+
+/**
+ * Helper to check if a line from stderr is a valid NDJSON event.
+ * Useful for filtering raw stderr output.
+ */
+export function isNdjsonLine(line: string): boolean {
+  return parseStreamingEvent(line) !== null;
 }
