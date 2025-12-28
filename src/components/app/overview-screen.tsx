@@ -28,10 +28,7 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
-  Zap,
-  Pencil,
-  MoreVertical,
-  Trash2
+  Zap
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -122,7 +119,6 @@ interface OverviewScreenProps {
   onRenameProfile?: (path: string, currentName: string) => void;
   onDeleteProfile?: (path: string, displayName: string) => void;
   onRenameFile?: (path: string, currentFilename: string) => void;
-  selectedProfilePath?: string;
 }
 
 export function OverviewScreen({
@@ -149,7 +145,6 @@ export function OverviewScreen({
   onRenameProfile,
   onDeleteProfile,
   onRenameFile,
-  selectedProfilePath,
 }: OverviewScreenProps) {
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
@@ -359,92 +354,29 @@ export function OverviewScreen({
 
         {/* Profile selector for Check and Setup cards */}
         {(action === 'check' || action === 'setup') && hasProfile && !isThisRunning && !isThisComplete && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 bg-muted/50 rounded-md px-3 py-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground mb-1">Profile</p>
-                <Select
-                  value={selectedProfile}
-                  onValueChange={(value) => {
-                    const selected = profiles.find(p => p.name === value);
-                    onProfileChange(value, selected?.path || '');
-                  }}
-                  disabled={isRunning}
-                >
-                  <SelectTrigger className="h-7 border-0 p-0 focus:ring-0 bg-transparent text-sm font-medium">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {profiles.map((p) => (
-                      <SelectItem key={p.name} value={p.name}>
-                        {p.displayName ? `${p.displayName} (${p.name})` : p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {/* Profile management actions - Manage menu with Rename/Delete */}
-              {selectedProfilePath && (
-                <div className="relative group">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Toggle menu visibility via data attribute
-                      const menu = e.currentTarget.nextElementSibling;
-                      if (menu) {
-                        menu.classList.toggle('hidden');
-                      }
-                    }}
-                    disabled={isRunning}
-                    title="Manage profile"
-                    aria-label="Manage profile"
-                    aria-haspopup="true"
-                  >
-                    <MoreVertical className="h-3 w-3" />
-                  </Button>
-                  <div className="hidden absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border bg-popover p-1 shadow-md">
-                    <button
-                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const currentProfile = profiles.find(p => p.path === selectedProfilePath);
-                        onRenameProfile?.(selectedProfilePath, currentProfile?.displayName || '');
-                        // Close menu
-                        e.currentTarget.parentElement?.classList.add('hidden');
-                      }}
-                    >
-                      <Pencil className="h-3 w-3" />
-                      Rename
-                    </button>
-                    <button
-                      className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm ${
-                        selectedProfile === profiles.find(p => p.path === selectedProfilePath)?.name
-                          ? 'text-muted-foreground cursor-not-allowed'
-                          : 'text-destructive hover:bg-accent'
-                      }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const currentProfile = profiles.find(p => p.path === selectedProfilePath);
-                        // Only allow delete if not the currently selected profile
-                        if (currentProfile && selectedProfile !== currentProfile.name) {
-                          onDeleteProfile?.(selectedProfilePath, currentProfile?.displayName || currentProfile?.name || '');
-                        }
-                        // Close menu
-                        e.currentTarget.parentElement?.classList.add('hidden');
-                      }}
-                      disabled={selectedProfile === profiles.find(p => p.path === selectedProfilePath)?.name}
-                      title={selectedProfile === profiles.find(p => p.path === selectedProfilePath)?.name ? "Can't delete the current profile" : 'Delete profile'}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )}
+          <div className="flex items-center gap-3 bg-muted/50 rounded-md px-3 py-2">
+            <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              <span className="text-xs text-muted-foreground">Profile:</span>
+              <Select
+                value={selectedProfile}
+                onValueChange={(value) => {
+                  const selected = profiles.find(p => p.name === value);
+                  onProfileChange(value, selected?.path || '');
+                }}
+                disabled={isRunning}
+              >
+                <SelectTrigger className="h-6 border-0 px-1 focus:ring-0 bg-transparent text-sm font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.name} value={p.name}>
+                      {p.displayName ? `${p.displayName} (${p.name})` : p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         )}
@@ -745,7 +677,7 @@ export function OverviewScreen({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0"
+                  className="h-8 px-2 text-xs"
                   onClick={(e) => {
                     e.stopPropagation();
                     setManageProfilesOpen(true);
@@ -754,7 +686,7 @@ export function OverviewScreen({
                   title="Manage profiles"
                   aria-label="Manage profiles"
                 >
-                  <MoreVertical className="h-4 w-4" />
+                  Manage
                 </Button>
               </div>
             </div>

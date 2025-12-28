@@ -32,6 +32,7 @@ import { ActivityLog } from './components/app/activity-log';
 import { CaptureResultModal } from './components/app/capture-result-modal';
 import { ApplyResultModal } from './components/app/apply-result-modal';
 import { RenameFileModal } from './components/app/rename-file-modal';
+import { ToastProvider, useToast } from './components/ui/toast';
 import type { ApplyCounts, ApplyItem } from './types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
@@ -80,7 +81,8 @@ interface AppState {
   verify: EndstateEnvelope<EndstateVerifyData> | null;
 }
 
-function App() {
+function AppContent() {
+  const { showToast } = useToast();
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [currentPage, setCurrentPage] = useState<PageType>('overview');
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
@@ -367,8 +369,8 @@ function App() {
               lastSelectedProfile: firstProfile.name,
               lastSelectedProfilePath: firstProfile.path 
             });
-            // Show toast notification
-            console.log('Selected profile was removed. Switched to another profile.');
+            // Show toast notification for fallback selection
+            showToast(`Profile was removed. Switched to "${firstProfile.displayName || firstProfile.name}".`, 'info');
           } else {
             // No profiles remain
             setSelectedProfile('');
@@ -1813,7 +1815,6 @@ function App() {
               onDismissResult={dismissOverviewResult}
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
-              selectedProfilePath={selectedProfilePath}
               onRenameProfile={(path, currentName) => {
                 openProfileNameModal(path, currentName, 'rename');
               }}
@@ -2767,6 +2768,14 @@ function App() {
         onConfirm={handleRenameFile}
       />
     </>
+  );
+}
+
+function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }
 
