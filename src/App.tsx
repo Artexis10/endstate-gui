@@ -195,17 +195,6 @@ function AppContent() {
   const [renameFilePath, setRenameFilePath] = useState('');
   const [renameFileCurrentName, setRenameFileCurrentName] = useState('');
   
-  // Reset overview action state
-  const resetOverviewActionState = () => {
-    setOverviewRunningAction(null);
-    setOverviewActionStatus('idle');
-    setOverviewActionProgress(null);
-    setOverviewActionResult(null);
-    setLiveAppEvents([]);
-    setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
-    isRunningRef.current = false;
-  };
-
   // Dismiss result - only collapse UI, preserve summary for Overview display
   const dismissOverviewResult = () => {
     // Only reset transient UI state (expanded/collapsed, filters)
@@ -219,8 +208,8 @@ function AppContent() {
   const navigateWithHistory = (page: PageType) => {
     if (currentPage === 'overview' && page !== 'overview') {
       setPreviousPage('overview');
-      // Reset overview action state to prevent stale state when returning
-      resetOverviewActionState();
+      // DON'T reset overview action state - preserve it for return navigation
+      // User should be able to return to Overview and see last run results
     }
     setCurrentPage(page);
   };
@@ -503,63 +492,76 @@ function AppContent() {
       setLogTruncated(truncated);
     });
 
-    // Use non-streaming exec for capabilities (one-shot command)
-    const capResult = await runEndstateOnce<EndstateEnvelope<EndstateCapabilitiesData>>(
-      settings,
-      'capabilities',
-      []
-    );
+    try {
+      // Use non-streaming exec for capabilities (one-shot command)
+      const capResult = await runEndstateOnce<EndstateEnvelope<EndstateCapabilitiesData>>(
+        settings,
+        'capabilities',
+        []
+      );
 
-    if (!capResult.success) {
+      if (!capResult.success) {
+        setState({
+          status: 'error',
+          errorMessage: getErrorMessage(capResult.error),
+          errorStderr: capResult.stderr || null,
+          errorCommand: capResult.error.command || 'endstate capabilities --json',
+          capabilities: null,
+          report: null,
+          verify: null,
+        });
+        return;
+      }
+
+      // Capabilities succeeded - continue with report (also non-streaming)
+      const reportResult = await runEndstateOnce<EndstateEnvelope<EndstateReportData>>(
+        settings,
+        'report',
+        []
+      );
+
+      let verifyResult: EndstateEnvelope<EndstateVerifyData> | null = null;
+      if (selectedProfile && profiles.length > 0) {
+        const result = await runEndstateOnce<EndstateEnvelope<EndstateVerifyData>>(
+          settings,
+          'verify',
+          ['--profile', selectedProfile]
+        );
+        if (result.success) {
+          verifyResult = result.envelope;
+        } else if (result.envelope && result.envelope.error?.code === 'VERIFY_FAILED') {
+          // Domain failure (missing apps) - still use the envelope data
+          // This is NOT a runtime error, just verification found issues
+          verifyResult = result.envelope;
+        }
+      }
+
+      // Success - clear any previous error state
+      setState({
+        status: 'ready',
+        errorMessage: null,
+        errorStderr: null,
+        errorCommand: null,
+        capabilities: capResult.envelope,
+        report: reportResult.success ? reportResult.envelope : null,
+        verify: verifyResult,
+      });
+    } catch (err) {
+      // Catch any unexpected errors (timeouts, network issues, etc.)
       setState({
         status: 'error',
-        errorMessage: getErrorMessage(capResult.error),
-        errorStderr: capResult.stderr || null,
-        errorCommand: capResult.error.command || 'endstate capabilities --json',
+        errorMessage: err instanceof Error ? err.message : 'Failed to initialize engine',
+        errorStderr: null,
+        errorCommand: 'endstate capabilities --json',
         capabilities: null,
         report: null,
         verify: null,
       });
-      return;
     }
-
-    // Capabilities succeeded - continue with report (also non-streaming)
-    const reportResult = await runEndstateOnce<EndstateEnvelope<EndstateReportData>>(
-      settings,
-      'report',
-      []
-    );
-
-    let verifyResult: EndstateEnvelope<EndstateVerifyData> | null = null;
-    if (selectedProfile && profiles.length > 0) {
-      const result = await runEndstateOnce<EndstateEnvelope<EndstateVerifyData>>(
-        settings,
-        'verify',
-        ['--profile', selectedProfile]
-      );
-      if (result.success) {
-        verifyResult = result.envelope;
-      } else if (result.envelope && result.envelope.error?.code === 'VERIFY_FAILED') {
-        // Domain failure (missing apps) - still use the envelope data
-        // This is NOT a runtime error, just verification found issues
-        verifyResult = result.envelope;
-      }
-    }
-
-    // Success - clear any previous error state
-    setState({
-      status: 'ready',
-      errorMessage: null,
-      errorStderr: null,
-      errorCommand: null,
-      capabilities: capResult.envelope,
-      report: reportResult.success ? reportResult.envelope : null,
-      verify: verifyResult,
-    });
   };
 
   useEffect(() => {
-    if (settings.engineMode && (settings.engineMode === 'path' || settings.engineScriptPath)) {
+    if (settings.engineMode && (settings.engineMode === 'bundled' || settings.engineMode === 'path' || settings.engineScriptPath)) {
       loadInitialData();
     }
   }, [settings.engineMode, settings.engineScriptPath]);

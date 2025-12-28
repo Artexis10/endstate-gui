@@ -439,23 +439,25 @@ export function OverviewScreen({
                   </div>
                 </button>
                 {activityExpanded && (
-                  <div className="px-3 pb-3 space-y-1 border-t border-border/50 max-h-56 overflow-y-auto">
+                  <div className="px-3 pb-3 space-y-1 border-t border-border/50 max-h-64 overflow-y-auto scrollbar-thin">
                     {liveAppEvents.slice(-10).map((event) => (
                       <div key={`${event.app}-${event.timestamp}`} className="flex items-center gap-2 text-xs pt-1.5">
-                        <span className={`w-14 text-right font-medium ${
+                        <span className={`w-16 text-right font-medium ${
                           event.action === 'Installed' ? 'text-green-600' :
                           event.action === 'Failed' ? 'text-red-600' :
-                          event.action === 'OK' ? 'text-muted-foreground' :
+                          event.action === 'OK' ? 'text-green-600' :
                           event.action === 'Skipped' ? 'text-yellow-600' :
                           event.action === 'Cancelled' ? 'text-yellow-600' :
                           event.action === 'Processing' ? 'text-blue-600' :
+                          event.action === 'To install' ? 'text-blue-600' :
                           'text-muted-foreground'
                         }`}>
                           {event.action === 'OK' ? 'PRESENT' : 
                            event.action === 'Skipped' ? 'SKIPPED' : 
                            event.action === 'Cancelled' ? 'CANCEL' :
-                           event.action === 'Processing' ? 'WORKING' : 
-                           event.action.toUpperCase().slice(0, 7)}
+                           event.action === 'Processing' ? 'INSTALLING' : 
+                           event.action === 'To install' ? 'TO INSTALL' :
+                           event.action.toUpperCase().slice(0, 9)}
                         </span>
                         <span className="font-mono truncate flex-1">{event.app}</span>
                       </div>

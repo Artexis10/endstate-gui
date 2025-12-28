@@ -1,7 +1,7 @@
 import { getItem, setItem } from './lib/storage';
 
 export interface AppSettings {
-  engineMode: 'path' | 'script';
+  engineMode: 'bundled' | 'path' | 'script';
   engineScriptPath: string;
   customProfilesDirectory: string;
   lastSelectedProfile: string;
@@ -12,7 +12,7 @@ export interface AppSettings {
 const SETTINGS_KEY = 'endstate-gui-settings';
 
 const DEFAULT_SETTINGS: AppSettings = {
-  engineMode: 'script',
+  engineMode: 'bundled',
   engineScriptPath: 'C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1',
   customProfilesDirectory: '',
   lastSelectedProfile: '',

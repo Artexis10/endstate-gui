@@ -118,9 +118,11 @@ export async function runEndstateOnce<T>(
   // The backend handles exe selection based on platform
   let execArgs: string[];
   
-  if (settings.engineMode === 'path') {
+  if (settings.engineMode === 'bundled' || settings.engineMode === 'path') {
+    // Bundled or PATH mode: use 'endstate' directly
     execArgs = fullArgs;
   } else {
+    // Script mode: invoke via PowerShell
     execArgs = [
       '-NoProfile',
       '-ExecutionPolicy',

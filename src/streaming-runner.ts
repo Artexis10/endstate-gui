@@ -26,10 +26,15 @@ export async function runEndstateStreaming<T>(
   let exe: string;
   let execArgs: string[];
 
-  if (settings.engineMode === 'path') {
+  if (settings.engineMode === 'bundled') {
+    // Bundled mode: use 'endstate' from PATH (bundled with app)
+    exe = 'endstate';
+    execArgs = fullArgs;
+  } else if (settings.engineMode === 'path') {
     exe = 'endstate';
     execArgs = fullArgs;
   } else {
+    // Script mode
     exe = 'pwsh';
     execArgs = [
       '-NoProfile',
@@ -59,9 +64,9 @@ export async function runEndstateStreaming<T>(
     }
   });
 
-  // Timeout for streaming operations (30 seconds default, shorter for init commands)
+  // Timeout for streaming operations - capabilities needs shorter timeout to fail fast
   const isInitCommand = command === 'capabilities' || command === 'report';
-  const timeoutMs = isInitCommand ? 15000 : 60000;
+  const timeoutMs = isInitCommand ? 10000 : 120000;
   
   try {
     // IMPORTANT: Tauri invoke() for streaming commands does NOT return a value.
@@ -77,7 +82,7 @@ export async function runEndstateStreaming<T>(
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error(`Streaming command '${command}' timed out after ${timeoutMs}ms`));
+        reject(new Error(`Command '${command}' timed out after ${timeoutMs}ms. The engine may be unavailable or misconfigured.`));
       }, timeoutMs);
       
       const checkInterval = setInterval(() => {

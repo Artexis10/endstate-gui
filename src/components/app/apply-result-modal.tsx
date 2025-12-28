@@ -109,7 +109,7 @@ export function ApplyResultModal({
   const getActionBadge = (item: ApplyItem): { label: string; className: string } => {
     // Map reason to user-friendly action label
     if (item.reason === 'would_install') {
-      return { label: 'To install', className: 'bg-warning/20 text-warning border-warning/30' };
+      return { label: 'To install', className: 'bg-primary/20 text-primary border-primary/30' };
     }
     if (item.reason === 'installed') {
       return { label: 'Installed this run', className: 'bg-success/20 text-success border-success/30' };
@@ -178,7 +178,8 @@ export function ApplyResultModal({
   // Determine title and description based on status and phase
   const getTitle = () => {
     if (isApplying) return 'Applying changes...';
-    if (hasFailures) return 'Setup incomplete';
+    if (hasFailures && !isDryRun) return 'Completed with issues';
+    if (hasFailures && isDryRun) return 'Setup preview';
     if (hasPendingChanges) return "Here's what will change";
     if (isReady) return 'Your computer is ready';
     return 'Your computer is ready';
@@ -193,8 +194,12 @@ export function ApplyResultModal({
       }
       return `Installing ${appsToInstall} app${appsToInstall > 1 ? 's' : ''} (${alreadyPresent} already present)`;
     }
-    if (hasFailures) {
-      // Show checked vs needs attention
+    if (hasFailures && !isDryRun) {
+      // Apply completed with some failures
+      return `Checked ${totalChecked} apps — ${installedThisRun} installed, ${needsAttention} failed`;
+    }
+    if (hasFailures && isDryRun) {
+      // Preview showing issues
       return `Checked ${totalChecked} apps — ${needsAttention} need${needsAttention === 1 ? 's' : ''} attention`;
     }
     if (hasPendingChanges) {
@@ -363,9 +368,9 @@ export function ApplyResultModal({
                           className={`flex items-center gap-2 px-3 py-2 text-xs border-b border-border last:border-b-0 ${isActionable ? 'bg-muted/10' : ''}`}
                         >
                           <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="font-mono truncate flex-1" title={item.id}>{item.id}</span>
+                          <span className="font-mono truncate flex-1 min-w-0" title={item.id}>{item.id}</span>
                           <span className="text-muted-foreground text-xs flex-shrink-0">({item.driver})</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 whitespace-nowrap min-w-fit ${badge.className}`}>
+                          <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 whitespace-nowrap ${badge.className}`}>
                             {badge.label}
                           </span>
                         </div>
