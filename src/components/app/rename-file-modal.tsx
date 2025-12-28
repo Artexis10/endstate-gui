@@ -11,48 +11,63 @@ interface RenameFileModalProps {
   onConfirm: (newFilename: string) => void;
 }
 
+/**
+ * Extract extension from filename (.json, .jsonc, .json5)
+ */
+function getExtension(filename: string): string {
+  const match = filename.match(/\.(jsonc|json5|json)$/i);
+  return match ? match[0] : '.json';
+}
+
+/**
+ * Extract basename (filename without extension)
+ */
+function getBasename(filename: string): string {
+  return filename.replace(/\.(jsonc|json5|json)$/i, '');
+}
+
 export function RenameFileModal({
   open,
   onOpenChange,
   currentFilename,
   onConfirm,
 }: RenameFileModalProps) {
-  const [newFilename, setNewFilename] = useState('');
+  const [basename, setBasename] = useState('');
   const [error, setError] = useState('');
+  
+  // Extract extension once - it's fixed and cannot be changed
+  const extension = getExtension(currentFilename);
 
   useEffect(() => {
     if (open) {
-      setNewFilename(currentFilename);
+      setBasename(getBasename(currentFilename));
       setError('');
     }
   }, [open, currentFilename]);
 
-  const getExtension = (filename: string): string => {
-    const match = filename.match(/\.(jsonc?|json5)$/i);
-    return match ? match[0] : '.json';
-  };
-
   const handleConfirm = () => {
-    const trimmed = newFilename.trim();
+    const trimmed = basename.trim();
+    
+    // Validation: basename must be non-empty
     if (!trimmed) {
       setError('Filename cannot be empty');
       return;
     }
 
-    if (trimmed === currentFilename) {
+    // Validation: basename must not contain dots (prevents extension changes)
+    if (trimmed.includes('.')) {
+      setError('Filename cannot contain dots');
+      return;
+    }
+
+    const newFilename = trimmed + extension;
+    
+    if (newFilename === currentFilename) {
       setError('New filename is the same as current filename');
       return;
     }
 
-    const currentExt = getExtension(currentFilename);
-    const newExt = getExtension(trimmed);
-    
-    if (newExt !== currentExt) {
-      setError(`Filename must end with ${currentExt}`);
-      return;
-    }
-
-    onConfirm(trimmed);
+    onConfirm(newFilename);
     onOpenChange(false);
   };
 
@@ -68,24 +83,29 @@ export function RenameFileModal({
 
         <div className="space-y-4">
           <div>
-            <label htmlFor="new-filename" className="text-sm font-medium">
+            <label htmlFor="new-basename" className="text-sm font-medium">
               New filename
             </label>
-            <Input
-              id="new-filename"
-              value={newFilename}
-              onChange={(e) => {
-                setNewFilename(e.target.value);
-                setError('');
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleConfirm();
-                }
-              }}
-              placeholder="profile-name.json"
-              className="mt-1"
-            />
+            <div className="flex items-center gap-0 mt-1">
+              <Input
+                id="new-basename"
+                value={basename}
+                onChange={(e) => {
+                  setBasename(e.target.value);
+                  setError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleConfirm();
+                  }
+                }}
+                placeholder="profile-name"
+                className="rounded-r-none border-r-0"
+              />
+              <span className="inline-flex items-center px-3 h-10 border border-input bg-muted text-muted-foreground text-sm rounded-r-md">
+                {extension}
+              </span>
+            </div>
             {error && (
               <div className="flex items-center gap-2 mt-2 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4" />

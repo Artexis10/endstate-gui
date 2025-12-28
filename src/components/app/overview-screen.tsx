@@ -28,7 +28,9 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
-  Zap
+  Zap,
+  MoreVertical,
+  FolderOpen
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -352,34 +354,6 @@ export function OverviewScreen({
           {descriptions[action]}
         </p>
 
-        {/* Profile selector for Check and Setup cards */}
-        {(action === 'check' || action === 'setup') && hasProfile && !isThisRunning && !isThisComplete && (
-          <div className="flex items-center gap-3 bg-muted/50 rounded-md px-3 py-2">
-            <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <div className="flex items-center gap-1 flex-1 min-w-0">
-              <span className="text-xs text-muted-foreground">Profile:</span>
-              <Select
-                value={selectedProfile}
-                onValueChange={(value) => {
-                  const selected = profiles.find(p => p.name === value);
-                  onProfileChange(value, selected?.path || '');
-                }}
-                disabled={isRunning}
-              >
-                <SelectTrigger className="h-6 border-0 px-1 focus:ring-0 bg-transparent text-sm font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.name} value={p.name}>
-                      {p.displayName ? `${p.displayName} (${p.name})` : p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
 
         {/* Preview/Apply toggle for Setup card */}
         {action === 'setup' && !isThisRunning && !isThisComplete && (
@@ -496,14 +470,51 @@ export function OverviewScreen({
 
         {/* Success state */}
         {isThisComplete && actionStatus === 'success' && (
-          <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
-            <CheckCircle2 className="h-4 w-4 text-success" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-success">Completed successfully</p>
-              {actionProgress?.message && (
-                <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
-              )}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-success">
+                  {action === 'capture' && actionResult?.profile
+                    ? `Saved profile: ${actionResult.profile}`
+                    : 'Completed successfully'}
+                </p>
+                {action === 'capture' && actionResult?.profile && (
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {profiles.find(p => p.displayName === actionResult.profile || p.name === actionResult.profile)?.name || actionResult.profile}
+                  </p>
+                )}
+                {action !== 'capture' && actionProgress?.message && (
+                  <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+                )}
+              </div>
             </div>
+            {/* Capture success actions */}
+            {action === 'capture' && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenProfilesFolder();
+                  }}
+                >
+                  <FolderOpen className="h-3 w-3 mr-1.5" />
+                  Open folder
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setManageProfilesOpen(true);
+                  }}
+                >
+                  Manage profiles
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -676,8 +687,8 @@ export function OverviewScreen({
                 </Select>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-xs"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={(e) => {
                     e.stopPropagation();
                     setManageProfilesOpen(true);
@@ -686,7 +697,7 @@ export function OverviewScreen({
                   title="Manage profiles"
                   aria-label="Manage profiles"
                 >
-                  Manage
+                  <MoreVertical className="h-4 w-4" />
                 </Button>
               </div>
             </div>
