@@ -292,9 +292,9 @@ describe('apply-utils', () => {
       expect(result).toEqual({ app: 'Discord.Discord', action: 'Processing' });
     });
 
-    it('parses [SKIP] with already installed', () => {
+    it('parses [SKIP] with already installed as OK (not Skipped)', () => {
       const result = parseApplyProgressLine('[SKIP] Discord.Discord - already installed');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Skipped' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'OK' });
     });
 
     it('parses [SKIP] with filtered', () => {

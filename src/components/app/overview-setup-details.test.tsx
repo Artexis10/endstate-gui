@@ -128,6 +128,102 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     expect(labels.length).toBeGreaterThan(0);
   });
 
+  it('REGRESSION: apps skipped due to "already installed" show as "Already present" not "SKIPPED"', async () => {
+    const user = userEvent.setup();
+    
+    // Simulate the bug: engine outputs [SKIP] with "already installed" reason
+    // Live activity should show "PRESENT" (not "SKIPPED")
+    // Modal should show under "Already present" tab (not "Skipped")
+    const appEvents: AppEvent[] = [
+      { app: 'Git.Git', action: 'To install', timestamp: Date.now() },
+      { app: 'VSCode', action: 'To install', timestamp: Date.now() },
+      // These were parsed from [SKIP] ... - already installed
+      // After fix, parseApplyProgressLine returns action='OK' not 'Skipped'
+      { app: 'Chrome', action: 'OK', timestamp: Date.now() },
+      { app: 'Firefox', action: 'OK', timestamp: Date.now() },
+      { app: 'Notepad++', action: 'OK', timestamp: Date.now() },
+      // This is a true skip (filtered)
+      { app: 'BlockedApp', action: 'Skipped', timestamp: Date.now() },
+    ];
+
+    const setupResult = {
+      action: 'setup' as const,
+      status: 'success' as const,
+      summary: '2 to install, 3 already present, 1 skipped',
+      profile: 'test-profile',
+      timestamp: new Date().toISOString(),
+      counts: {
+        toInstall: 2,
+        alreadyPresent: 3,
+        skipped: 1,
+      },
+      appEvents,
+      wasPreview: true,
+    };
+
+    render(
+      <OverviewScreen
+        {...defaultProps}
+        runningAction="setup"
+        actionStatus="success"
+        actionResult={setupResult}
+      />
+    );
+
+    // Expand Setup card
+    const setupCard = screen.getByTestId('overview-card-apply');
+    await user.click(setupCard);
+
+    // Click "View details" button
+    await waitFor(() => {
+      expect(screen.getByText('View details')).toBeInTheDocument();
+    });
+    
+    const viewDetailsButton = screen.getByText('View details');
+    await user.click(viewDetailsButton);
+
+    // Modal should open
+    await waitFor(() => {
+      expect(screen.getByText('Setup Details')).toBeInTheDocument();
+    });
+
+    // Should show correct counts in pills
+    expect(screen.getByText(/To install: 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Already present: 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/Skipped: 1/i)).toBeInTheDocument();
+
+    // Click "Already present" pill to filter
+    const alreadyPresentPill = screen.getByText(/Already present: 3/i);
+    await user.click(alreadyPresentPill);
+
+    // Should show 3 apps (Chrome, Firefox, Notepad++) - NOT BlockedApp
+    await waitFor(() => {
+      expect(screen.getByText('Chrome')).toBeInTheDocument();
+      expect(screen.getByText('Firefox')).toBeInTheDocument();
+      expect(screen.getByText('Notepad++')).toBeInTheDocument();
+    });
+
+    // BlockedApp should NOT appear under "Already present"
+    expect(screen.queryByText('BlockedApp')).not.toBeInTheDocument();
+
+    // Apps should show "Already present" label
+    const labels = screen.getAllByText('Already present');
+    expect(labels.length).toBeGreaterThan(0);
+
+    // Click "Skipped" pill to verify BlockedApp is there
+    const skippedPill = screen.getByText(/Skipped: 1/i);
+    await user.click(skippedPill);
+
+    await waitFor(() => {
+      expect(screen.getByText('BlockedApp')).toBeInTheDocument();
+    });
+
+    // Chrome/Firefox/Notepad++ should NOT appear under "Skipped"
+    expect(screen.queryByText('Chrome')).not.toBeInTheDocument();
+    expect(screen.queryByText('Firefox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Notepad++')).not.toBeInTheDocument();
+  });
+
   it('REGRESSION: "To install" pill label is not truncated', async () => {
     const user = userEvent.setup();
     

@@ -368,10 +368,20 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
     return { app: actionMatch[1], action: 'Processing' };
   }
 
-  // [SKIP] App.Id - reason - always "Skipped"
-  const skipMatch = line.match(/\[SKIP\]\s+(\S+)/i);
+  // [SKIP] App.Id - reason
+  // CRITICAL: Check reason to distinguish "already installed" from true skips
+  const skipMatch = line.match(/\[SKIP\]\s+(\S+)(?:\s+-\s+(.+))?/i);
   if (skipMatch) {
-    return { app: skipMatch[1], action: 'Skipped' };
+    const app = skipMatch[1];
+    const reason = skipMatch[2]?.toLowerCase() || '';
+    
+    // If skipped because already installed/present, map to OK (already present)
+    if (reason.includes('already installed') || reason.includes('already present') || reason.includes('no action')) {
+      return { app, action: 'OK' };
+    }
+    
+    // Otherwise it's a true skip (filtered, policy, etc.)
+    return { app, action: 'Skipped' };
   }
 
   // [FAIL] App.Id - error
