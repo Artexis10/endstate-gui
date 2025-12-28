@@ -15,8 +15,93 @@ export type StatusKey =
   | 'cancelled';      // User cancelled
 
 /**
+ * Semantic color tokens for status display.
+ * Maps to Tailwind CSS color classes.
+ */
+export type SemanticColor = 'success' | 'info' | 'warn' | 'error' | 'muted';
+
+/**
+ * UI Status configuration with labels and colors.
+ * Single source of truth for all status display.
+ */
+export interface UiStatusConfig {
+  shortLabel: string;   // For live activity (compact)
+  longLabel: string;    // For modals/summaries
+  color: SemanticColor; // Semantic color token
+}
+
+/**
+ * Complete UI status mapping - SINGLE SOURCE OF TRUTH.
+ * Both Live Activity and Setup Details MUST consume this mapping.
+ */
+export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
+  already_present: {
+    shortLabel: 'PRESENT',
+    longLabel: 'Already present',
+    color: 'success',
+  },
+  to_install: {
+    shortLabel: 'TO INSTALL',
+    longLabel: 'To install',
+    color: 'info',
+  },
+  installing: {
+    shortLabel: 'INSTALLING',
+    longLabel: 'Installing…',
+    color: 'info',
+  },
+  installed: {
+    shortLabel: 'INSTALLED',
+    longLabel: 'Installed',
+    color: 'success',
+  },
+  skipped: {
+    shortLabel: 'SKIPPED',
+    longLabel: 'Skipped',
+    color: 'warn',
+  },
+  failed: {
+    shortLabel: 'FAILED',
+    longLabel: 'Failed',
+    color: 'error',
+  },
+  cancelled: {
+    shortLabel: 'CANCELLED',
+    longLabel: 'Cancelled',
+    color: 'warn',
+  },
+} as const;
+
+/**
+ * Get Tailwind color classes for a semantic color.
+ * Returns { text, bg, border } classes.
+ */
+export function getColorClasses(color: SemanticColor): { text: string; bg: string; border: string } {
+  switch (color) {
+    case 'success':
+      return { text: 'text-success', bg: 'bg-success/10', border: 'border-success/20' };
+    case 'info':
+      return { text: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' };
+    case 'warn':
+      return { text: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20' };
+    case 'error':
+      return { text: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/20' };
+    case 'muted':
+    default:
+      return { text: 'text-muted-foreground', bg: 'bg-muted/10', border: 'border-muted/20' };
+  }
+}
+
+/**
+ * Get UI status config for a StatusKey.
+ */
+export function getUiStatus(statusKey: StatusKey): UiStatusConfig {
+  return UI_STATUS_MAP[statusKey] || UI_STATUS_MAP.skipped;
+}
+
+/**
  * Canonical UI labels per UX_LANGUAGE.md contract.
- * Single source of truth for all user-facing status text.
+ * @deprecated Use UI_STATUS_MAP instead for new code.
  */
 export const STATUS_LABELS = {
   // Preview decision labels
@@ -129,12 +214,20 @@ export function getFilterKey(item: ApplyItem): StatusKey {
 }
 
 /**
+ * Engine execution phase for UI clarity.
+ * Apply runs first, then Verify within the same engine spawn.
+ */
+export type EnginePhase = 'apply' | 'verify';
+
+/**
  * AppEvent represents a live activity entry during streaming.
  */
 export interface AppEvent {
   app: string;
   action: string;
   timestamp?: number;
+  statusKey?: StatusKey;  // Canonical status for consistent display
+  phase?: EnginePhase;    // Which phase this event occurred in
 }
 
 /**
@@ -319,6 +412,30 @@ export function isAllAlreadyPresent(
 }
 
 /**
+ * Result from parsing a streaming log line.
+ */
+export interface ParsedProgressLine {
+  app: string;
+  action: string;
+  statusKey: StatusKey;
+  isPhaseMarker?: boolean;  // True if this line indicates a phase transition
+  phase?: EnginePhase;      // The phase this event belongs to
+}
+
+/**
+ * Detect if a line indicates the start of verification phase.
+ * Returns true if the line signals transition from apply to verify.
+ */
+export function isVerifyPhaseMarker(line: string): boolean {
+  if (!line) return false;
+  const lower = line.toLowerCase();
+  return lower.includes('verifying') || 
+         lower.includes('verification') ||
+         lower.includes('[verify]') ||
+         lower.includes('checking installation');
+}
+
+/**
  * Parse a streaming log line to extract current app and action.
  * Returns null if the line doesn't contain app progress info.
  * 
@@ -336,7 +453,7 @@ export function isAllAlreadyPresent(
  * - Installing Discord.Discord...
  * - Successfully installed Discord.Discord
  */
-export function parseApplyProgressLine(line: string): { app: string; action: string } | null {
+export function parseApplyProgressLine(line: string): { app: string; action: string; statusKey?: StatusKey } | null {
   if (!line || typeof line !== 'string') {
     return null;
   }
@@ -346,26 +463,26 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
   // Keep it truthful: OK means "verified OK" not "skipped" or "installed"
   const okMatch = line.match(/\[OK\]\s+(\S+)/i);
   if (okMatch) {
-    return { app: okMatch[1], action: 'OK' };
+    return { app: okMatch[1], action: 'OK', statusKey: 'already_present' };
   }
 
   // [INSTALL] App.Id (driver: ...) - this is the START of an install, not completion
   // Treat as "Processing" - the actual result comes later
   const installMatch = line.match(/\[INSTALL\]\s+(\S+)/i);
   if (installMatch) {
-    return { app: installMatch[1], action: 'Processing' };
+    return { app: installMatch[1], action: 'Processing', statusKey: 'installing' };
   }
 
   // [PLAN] App.Id - to install (preview)
   const planMatch = line.match(/\[PLAN\]\s+(\S+)/i);
   if (planMatch) {
-    return { app: planMatch[1], action: 'To install' };
+    return { app: planMatch[1], action: 'To install', statusKey: 'to_install' };
   }
 
   // [ACTION] Installing App.Id via winget - this is processing, not completion
   const actionMatch = line.match(/\[ACTION\]\s+(?:Installing|Checking)\s+(\S+)/i);
   if (actionMatch) {
-    return { app: actionMatch[1], action: 'Processing' };
+    return { app: actionMatch[1], action: 'Processing', statusKey: 'installing' };
   }
 
   // [SKIP] App.Id - reason
@@ -377,38 +494,39 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
     
     // If skipped because already installed/present, map to OK (already present)
     if (reason.includes('already installed') || reason.includes('already present') || reason.includes('no action')) {
-      return { app, action: 'OK' };
+      return { app, action: 'OK', statusKey: 'already_present' };
     }
     
     // Otherwise it's a true skip (filtered, policy, etc.)
-    return { app, action: 'Skipped' };
+    return { app, action: 'Skipped', statusKey: 'skipped' };
   }
 
   // [FAIL] App.Id - error
   const failMatch = line.match(/\[FAIL\]\s+(\S+)/i);
   if (failMatch) {
-    return { app: failMatch[1], action: 'Failed' };
+    return { app: failMatch[1], action: 'Failed', statusKey: 'failed' };
   }
 
   // [MISSING] App.Id (driver: ...)
   const missingMatch = line.match(/\[MISSING\]\s+(\S+)/i);
   if (missingMatch) {
-    return { app: missingMatch[1], action: 'Missing' };
+    return { app: missingMatch[1], action: 'Missing', statusKey: 'failed' };
   }
 
   // [VERSION] App.Id - version mismatch
   const versionMatch = line.match(/\[VERSION\]\s+(\S+)/i);
   if (versionMatch) {
-    return { app: versionMatch[1], action: 'Version mismatch' };
+    return { app: versionMatch[1], action: 'Version mismatch', statusKey: 'failed' };
   }
 
   // Winget-style: Found/Installing/Successfully installed App.Name [App.Id]
   const wingetMatch = line.match(/(?:Found|Installing|Successfully installed)\s+[^\[]*\[([^\]]+)\]/i);
   if (wingetMatch) {
     // Only "Successfully installed" is a definitive install - others are processing
-    const action = line.toLowerCase().includes('successfully installed') ? 'Installed' :
-                   line.toLowerCase().includes('installing') ? 'Processing' : 'Processing';
-    return { app: wingetMatch[1], action };
+    if (line.toLowerCase().includes('successfully installed')) {
+      return { app: wingetMatch[1], action: 'Installed', statusKey: 'installed' };
+    }
+    return { app: wingetMatch[1], action: 'Processing', statusKey: 'installing' };
   }
 
   return null;
@@ -455,50 +573,58 @@ export class StreamingLineBuffer {
 }
 
 /**
- * Map engine item reason to a user-friendly action string for live activity.
+ * Map engine item reason to a user-friendly action string and statusKey for live activity.
  * This is the source of truth for how items appear in the live activity list.
  */
-export function reasonToAction(item: ApplyItem): string {
+export function reasonToAction(item: ApplyItem): { action: string; statusKey: StatusKey } {
   const reason = item.reason?.toLowerCase() || '';
   const status = item.status?.toLowerCase() || '';
 
   // Failed states
   if (status === 'failed' || reason === 'install_failed' || reason === 'failed') {
-    return 'Failed';
+    return { action: 'Failed', statusKey: 'failed' };
   }
 
   // User denied/cancelled
   if (reason === 'user_denied') {
-    return 'Cancelled';
+    return { action: 'Cancelled', statusKey: 'cancelled' };
   }
 
   // Installed this run
   if (reason === 'installed') {
-    return 'Installed';
+    return { action: 'Installed', statusKey: 'installed' };
   }
 
   // Already present
   if (reason === 'already_installed') {
-    return 'OK';
+    return { action: 'OK', statusKey: 'already_present' };
   }
 
   // To install (preview) - canonical label per UX_LANGUAGE.md
   if (reason === 'would_install') {
-    return 'To install';
+    return { action: 'To install', statusKey: 'to_install' };
   }
 
   // Skipped/filtered
   if (status === 'skipped' || reason === 'skipped' || reason === 'filtered') {
-    return 'Skipped';
+    return { action: 'Skipped', statusKey: 'skipped' };
   }
 
   // OK status without reason
   if (status === 'ok') {
-    return 'OK';
+    return { action: 'OK', statusKey: 'already_present' };
   }
 
   // Fallback
-  return 'Unknown';
+  return { action: 'Unknown', statusKey: 'skipped' };
+}
+
+/**
+ * Legacy wrapper for reasonToAction that returns just the action string.
+ * @deprecated Use reasonToAction directly and access .action property.
+ */
+export function reasonToActionString(item: ApplyItem): string {
+  return reasonToAction(item).action;
 }
 
 /**
@@ -534,13 +660,14 @@ export function reconcileLiveActivity(
 
   // Then, reconcile with envelope (envelope is source of truth)
   for (const item of envelopeItems) {
-    const action = reasonToAction(item);
+    const { action, statusKey } = reasonToAction(item);
     const existing = resultMap.get(item.id);
     
     // Always update to final status from envelope
     resultMap.set(item.id, {
       app: item.id,
       action,
+      statusKey,
       timestamp: existing?.timestamp ?? Date.now(),
     });
   }

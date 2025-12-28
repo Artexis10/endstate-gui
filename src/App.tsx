@@ -16,7 +16,7 @@ import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
-import { parseApplyProgressLine, StreamingLineBuffer, reconcileLiveActivity, type AppEvent } from './lib/apply-utils';
+import { parseApplyProgressLine, StreamingLineBuffer, reconcileLiveActivity, isVerifyPhaseMarker, type AppEvent, type EnginePhase } from './lib/apply-utils';
 import { saveLastRun, loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, hasRecentScan, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadUIMode, saveUIMode, toggleUIMode, type UIMode } from './lib/ui-mode';
@@ -171,7 +171,7 @@ function AppContent() {
   
   const [overviewRunningAction, setOverviewRunningAction] = useState<OverviewActionType>(null);
   const [overviewActionStatus, setOverviewActionStatus] = useState<OverviewActionStatus>('idle');
-  const [overviewActionProgress, setOverviewActionProgress] = useState<{ message: string; detail?: string } | null>(null);
+  const [overviewActionProgress, setOverviewActionProgress] = useState<{ message: string; detail?: string; phase?: EnginePhase } | null>(null);
   const [overviewActionResult, setOverviewActionResult] = useState<OverviewActionResult | null>(null);
   const [liveAppEvents, setLiveAppEvents] = useState<AppEvent[]>([]);
   const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
@@ -1361,6 +1361,9 @@ function AppContent() {
     const appEventIndex = new Map<string, number>(); // Track last index per app for updates
     // Option A: Separate counters for truthful grouping
     const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 };
+    // Phase tracking: Apply runs first, then Verify within the same engine spawn
+    let currentPhase: EnginePhase = 'apply';
+    let hasInsertedVerifySeparator = false;
     
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
@@ -1371,9 +1374,38 @@ function AppContent() {
           logBufferRef.current?.append(event.data);
           const completeLines = applyLineBufferRef.current?.append(event.data) || [];
           for (const line of completeLines) {
+            // Phase detection: check if we're transitioning to verify phase
+            if (currentPhase === 'apply' && isVerifyPhaseMarker(line)) {
+              currentPhase = 'verify';
+              // Insert visual separator in activity stream
+              if (!hasInsertedVerifySeparator) {
+                hasInsertedVerifySeparator = true;
+                const separatorEvent: AppEvent = { 
+                  app: '── Verification phase ──', 
+                  action: '', 
+                  timestamp: Date.now(),
+                  phase: 'verify'
+                };
+                appEventList.push(separatorEvent);
+                setLiveAppEvents([...appEventList]);
+              }
+              // Update progress message to show verify phase
+              setOverviewActionProgress({ 
+                message: 'Verifying installation…',
+                detail: 'Confirming all apps are correctly installed',
+                phase: 'verify'
+              });
+            }
+            
             const progress = parseApplyProgressLine(line);
             if (progress) {
-              const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
+              const appEvent: AppEvent = { 
+                app: progress.app, 
+                action: progress.action, 
+                timestamp: Date.now(),
+                statusKey: progress.statusKey,
+                phase: currentPhase
+              };
               
               // Append semantics: update existing entry in-place or append new
               const existingIndex = appEventIndex.get(progress.app);
@@ -1420,9 +1452,12 @@ function AppContent() {
               if (counters.failed > 0) parts.push(`${counters.failed} failed`);
               const counterText = parts.join(' · ') || 'Working…';
               
+              // Show phase in progress message
+              const phasePrefix = currentPhase === 'verify' ? 'Verifying' : friendlyAction;
               setOverviewActionProgress({ 
-                message: `${friendlyAction}: ${progress.app}`,
-                detail: counterText
+                message: `${phasePrefix}: ${progress.app}`,
+                detail: counterText,
+                phase: currentPhase
               });
             }
           }

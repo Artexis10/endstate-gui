@@ -3,7 +3,14 @@ import { Button } from '../ui/button';
 import { CheckCircle2, AlertTriangle, Copy, Package, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useState, useMemo, useRef, useCallback } from 'react';
 import type { ApplyItem, ApplyCounts } from '../../types';
-import { categorizeApplyItems, countCategorizedItems } from '../../lib/apply-utils';
+import { 
+  categorizeApplyItems, 
+  countCategorizedItems,
+  reasonToStatusKey,
+  getUiStatus,
+  getColorClasses,
+  type StatusKey,
+} from '../../lib/apply-utils';
 
 interface ApplyResultModalProps {
   open: boolean;
@@ -106,28 +113,25 @@ export function ApplyResultModal({
   };
 
   // Get action label and style for an item based on its reason and phase
-  const getActionBadge = (item: ApplyItem): { label: string; className: string } => {
-    // Map reason to user-friendly action label
-    if (item.reason === 'would_install') {
-      return { label: 'To install', className: 'bg-primary/20 text-primary border-primary/30' };
+  // Uses UI_STATUS_MAP as single source of truth for consistent labels and colors
+  const getActionBadge = (item: ApplyItem): { label: string; className: string; statusKey: StatusKey } => {
+    const statusKey = reasonToStatusKey(item);
+    const uiStatus = getUiStatus(statusKey);
+    const colors = getColorClasses(uiStatus.color);
+    
+    // Use long label for modal display, with special case for "Needs attention"
+    let label = uiStatus.longLabel;
+    if (statusKey === 'failed') {
+      label = 'Needs attention';
+    } else if (statusKey === 'installed') {
+      label = 'Installed this run';
     }
-    if (item.reason === 'installed') {
-      return { label: 'Installed this run', className: 'bg-success/20 text-success border-success/30' };
-    }
-    if (item.reason === 'already_installed' || item.reason === 'already_present') {
-      return { label: 'Already present', className: 'bg-muted/20 text-muted-foreground border-muted/30' };
-    }
-    if (item.status === 'failed' || item.reason === 'failed' || item.reason === 'install_failed') {
-      return { label: 'Needs attention', className: 'bg-destructive/20 text-destructive border-destructive/30' };
-    }
-    if (item.reason === 'user_denied') {
-      return { label: 'Cancelled', className: 'bg-warning/20 text-warning border-warning/30' };
-    }
-    if (item.reason === 'skipped' || item.reason === 'filtered') {
-      return { label: 'Skipped', className: 'bg-muted/20 text-muted-foreground border-muted/30' };
-    }
-    // Fallback
-    return { label: item.reason || 'Unknown', className: 'bg-muted/20 text-muted-foreground border-muted/30' };
+    
+    return { 
+      label, 
+      className: `${colors.bg} ${colors.text} ${colors.border}`,
+      statusKey,
+    };
   };
 
   // Sort items: actionable items first (will be installed, needs attention), then already present

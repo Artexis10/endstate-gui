@@ -15,6 +15,10 @@ export interface RunResult<T> {
   stderr: string;
 }
 
+// Global spawn counter for double-run validation (diagnostic only)
+let globalSpawnCounter = 0;
+const activeSpawns = new Map<string, { runId: string; command: string; startTime: number }>();
+
 export async function runEndstateStreaming<T>(
   settings: AppSettings,
   command: string,
@@ -22,6 +26,20 @@ export async function runEndstateStreaming<T>(
   onEvent: (event: StreamEvent) => void
 ): Promise<RunResult<T>> {
   const fullArgs = [command, '--json', ...args];
+  
+  // Generate unique runId for this spawn
+  const runId = `${command}-${Date.now()}-${++globalSpawnCounter}`;
+  
+  // Debug logging: detect double spawns
+  if (import.meta.env.DEV) {
+    const existingSpawns = Array.from(activeSpawns.values());
+    if (existingSpawns.length > 0) {
+      console.warn(`[SPAWN WARNING] New spawn ${runId} while ${existingSpawns.length} spawn(s) active:`, 
+        existingSpawns.map(s => `${s.runId} (${s.command}, ${Date.now() - s.startTime}ms ago)`));
+    }
+    console.log(`[SPAWN START] runId=${runId}, command=${command}, args=${args.join(' ')}`);
+    activeSpawns.set(runId, { runId, command, startTime: Date.now() });
+  }
 
   let exe: string;
   let execArgs: string[];
@@ -95,6 +113,15 @@ export async function runEndstateStreaming<T>(
     });
   } finally {
     unlisten();
+    // Debug logging: mark spawn complete
+    if (import.meta.env.DEV) {
+      const spawnInfo = activeSpawns.get(runId);
+      if (spawnInfo) {
+        const duration = Date.now() - spawnInfo.startTime;
+        console.log(`[SPAWN END] runId=${runId}, duration=${duration}ms, exitCode=${exitCode}`);
+        activeSpawns.delete(runId);
+      }
+    }
   }
 
   const stdout = stdoutBuffer.trim();

@@ -250,9 +250,9 @@ describe('Apply Flow UX Contracts', () => {
         />
       );
 
-      // Verify error state UI
-      expect(screen.getByText('Setup incomplete')).toBeInTheDocument();
-      expect(screen.getByText(/1 needs attention/)).toBeInTheDocument();
+      // Verify error state UI - "Completed with issues" is the correct title per acceptance criteria
+      expect(screen.getByText('Completed with issues')).toBeInTheDocument();
+      expect(screen.getByText(/1 failed/)).toBeInTheDocument();
       
       // Verify error icon
       const errorIcon = document.querySelector('.text-destructive');
@@ -288,7 +288,7 @@ describe('Apply Flow UX Contracts', () => {
         />
       );
 
-      expect(screen.getByText('Setup incomplete')).toBeInTheDocument();
+      expect(screen.getByText('Completed with issues')).toBeInTheDocument();
       
       // Re-render (simulates StrictMode)
       rerender(
@@ -303,7 +303,7 @@ describe('Apply Flow UX Contracts', () => {
       );
       
       // Error message should appear once
-      const errorTitles = screen.getAllByText('Setup incomplete');
+      const errorTitles = screen.getAllByText('Completed with issues');
       expect(errorTitles).toHaveLength(1);
     });
 

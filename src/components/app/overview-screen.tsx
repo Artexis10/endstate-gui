@@ -53,6 +53,13 @@ import { formatRelativeTime, type LifecycleState, type LifecycleEvent } from '@/
 import type { DiscoveredProfile } from '@/file-discovery';
 import type { UIMode } from '@/lib/ui-mode';
 import { ManageProfilesModal } from './manage-profiles-modal';
+import { 
+  type AppEvent, 
+  type StatusKey,
+  type EnginePhase,
+  getColorClasses,
+  getUiStatus,
+} from '@/lib/apply-utils';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
 type ActionStatus = 'idle' | 'running' | 'success' | 'error';
@@ -61,13 +68,7 @@ type SetupIntent = 'preview' | 'apply';
 interface ActionProgress {
   message: string;
   detail?: string;
-}
-
-// Per-app event for detailed tracking
-interface AppEvent {
-  app: string;
-  action: string;
-  timestamp?: number;
+  phase?: EnginePhase;  // Current engine phase for UI clarity
 }
 
 interface ActionResult {
@@ -419,7 +420,10 @@ export function OverviewScreen({
             <div className="flex items-center gap-3 bg-primary/5 rounded-md px-3 py-3">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{actionProgress.message}</p>
+                <p className="text-sm font-medium truncate">
+                  {/* Phase indicator: show current phase for clarity */}
+                  {actionProgress.phase === 'verify' ? 'Verifying installation…' : actionProgress.message}
+                </p>
                 {actionProgress.detail && (
                   <p className="text-xs text-muted-foreground truncate">{actionProgress.detail}</p>
                 )}
@@ -440,10 +444,11 @@ export function OverviewScreen({
                   <div className="flex items-center gap-2">
                     {liveCounters && (
                       <span className="flex items-center gap-1.5">
-                        {liveCounters.installed > 0 && <span className="text-green-600">✓{liveCounters.installed}</span>}
-                        {liveCounters.alreadyPresent > 0 && <span className="text-muted-foreground">●{liveCounters.alreadyPresent}</span>}
-                        {liveCounters.skipped > 0 && <span className="text-yellow-600">⊘{liveCounters.skipped}</span>}
-                        {liveCounters.failed > 0 && <span className="text-red-600">✗{liveCounters.failed}</span>}
+                        {/* Use semantic colors from UI_STATUS_MAP */}
+                        {liveCounters.installed > 0 && <span className={getColorClasses('success').text}>✓{liveCounters.installed}</span>}
+                        {liveCounters.alreadyPresent > 0 && <span className={getColorClasses('success').text}>●{liveCounters.alreadyPresent}</span>}
+                        {liveCounters.skipped > 0 && <span className={getColorClasses('warn').text}>⊘{liveCounters.skipped}</span>}
+                        {liveCounters.failed > 0 && <span className={getColorClasses('error').text}>✗{liveCounters.failed}</span>}
                       </span>
                     )}
                     {activityExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
@@ -460,28 +465,30 @@ export function OverviewScreen({
                         setIsAtBottom(atBottom);
                       }}
                     >
-                      {liveAppEvents.map((event, idx) => (
-                        <div key={`${event.app}-${event.timestamp}-${idx}`} className="flex items-center gap-2 text-xs pt-1.5">
-                          <span className={`w-16 text-right font-medium ${
-                            event.action === 'Installed' ? 'text-green-600' :
-                            event.action === 'Failed' ? 'text-red-600' :
-                            event.action === 'OK' ? 'text-green-600' :
-                            event.action === 'Skipped' ? 'text-yellow-600' :
-                            event.action === 'Cancelled' ? 'text-yellow-600' :
-                            event.action === 'Processing' ? 'text-blue-600' :
-                            event.action === 'To install' ? 'text-blue-600' :
-                            'text-muted-foreground'
-                          }`}>
-                            {event.action === 'OK' ? 'PRESENT' : 
-                             event.action === 'Skipped' ? 'SKIPPED' : 
-                             event.action === 'Cancelled' ? 'CANCEL' :
-                             event.action === 'Processing' ? 'INSTALLING' : 
-                             event.action === 'To install' ? 'TO INSTALL' :
-                             event.action.toUpperCase().slice(0, 9)}
-                          </span>
-                          <span className="font-mono truncate flex-1">{event.app}</span>
-                        </div>
-                      ))}
+                      {liveAppEvents.map((event, idx) => {
+                        // Use statusKey if available, otherwise derive from action
+                        const statusKey: StatusKey = event.statusKey || (
+                          event.action === 'OK' ? 'already_present' :
+                          event.action === 'Installed' ? 'installed' :
+                          event.action === 'Failed' ? 'failed' :
+                          event.action === 'Skipped' ? 'skipped' :
+                          event.action === 'Cancelled' ? 'cancelled' :
+                          event.action === 'Processing' ? 'installing' :
+                          event.action === 'To install' ? 'to_install' :
+                          'skipped'
+                        );
+                        const uiStatus = getUiStatus(statusKey);
+                        const colors = getColorClasses(uiStatus.color);
+                        
+                        return (
+                          <div key={`${event.app}-${event.timestamp}-${idx}`} className="flex items-center gap-2 text-xs pt-1.5">
+                            <span className={`w-16 text-right font-medium ${colors.text}`}>
+                              {uiStatus.shortLabel}
+                            </span>
+                            <span className="font-mono truncate flex-1">{event.app}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                     {!isAtBottom && (
                       <button
@@ -1103,23 +1110,31 @@ export function OverviewScreen({
                 </p>
                 <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border">
                   <div className="divide-y divide-border">
-                    {sortedEvents.map((event, i) => (
-                      <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
-                        <span className="font-mono truncate flex-1">{event.app}</span>
-                        <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap min-w-fit ${
-                          event.action === 'Installed' ? 'bg-green-500/10 text-green-600' :
-                          event.action === 'Failed' ? 'bg-red-500/10 text-red-600' :
-                          event.action === 'OK' ? 'bg-muted text-muted-foreground' :
-                          event.action === 'Skipped' ? 'bg-yellow-500/10 text-yellow-600' :
-                          event.action === 'To install' || event.action === 'Missing' ? 'bg-blue-500/10 text-blue-600' :
-                          event.action === 'Processing' ? 'bg-blue-500/10 text-blue-600' :
-                          'bg-muted text-muted-foreground'
-                        }`}>
-                          {/* Friendly label for OK, truthful for others */}
-                          {event.action === 'OK' ? 'Already present' : event.action}
-                        </span>
-                      </div>
-                    ))}
+                    {sortedEvents.map((event, i) => {
+                      // Use statusKey if available, otherwise derive from action
+                      const statusKey: StatusKey = event.statusKey || (
+                        event.action === 'OK' ? 'already_present' :
+                        event.action === 'Installed' ? 'installed' :
+                        event.action === 'Failed' ? 'failed' :
+                        event.action === 'Skipped' ? 'skipped' :
+                        event.action === 'Cancelled' ? 'cancelled' :
+                        event.action === 'Processing' ? 'installing' :
+                        event.action === 'To install' || event.action === 'Missing' ? 'to_install' :
+                        'skipped'
+                      );
+                      const uiStatus = getUiStatus(statusKey);
+                      const colors = getColorClasses(uiStatus.color);
+                      
+                      return (
+                        <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
+                          <span className="font-mono truncate flex-1">{event.app}</span>
+                          <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap min-w-fit ${colors.bg} ${colors.text}`}>
+                            {/* Use long label from UI_STATUS_MAP for modal display */}
+                            {uiStatus.longLabel}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

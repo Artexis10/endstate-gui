@@ -290,3 +290,29 @@ Thresholds are increased as coverage improves organically through new tests. Nev
 Tests are the regression net. If a modal can be dismissed incorrectly, a test must catch it. If localStorage can be corrupted, a test must catch it. If navigation can break, a test must catch it.
 
 The test suite is the living specification of UI behavior.
+
+## Streaming CLI Output Contract
+
+### Transient vs Final State
+- **Streaming CLI text MAY be parsed** for transient UI progress only (live activity feed, progress indicators)
+- **Final state MUST be derived exclusively** from the JSON envelope returned at command completion
+- The GUI must never use streaming text to determine success/failure or final app statuses
+
+### Present vs Skipped Semantics
+When parsing streaming output, the GUI must distinguish:
+- **skipped + already_installed reason** → "Already present" (success color, PRESENT label)
+- **skipped + other reasons (filtered, policy, etc.)** → "Skipped" (warning color, SKIPPED label)
+
+This ensures the live activity feed matches the final JSON envelope semantics.
+
+### Phase Clarity (Apply vs Verify)
+The engine performs Apply followed by Verify within a single spawn:
+- The GUI must detect phase transitions via streaming markers
+- Phase indicator must transition from "Applying changes…" to "Verifying installation…"
+- Activity list must NOT reset, scroll jump, or reinitialize between phases
+- A visual separator may be inserted in the activity stream to indicate phase transition
+
+### Double-Run Prevention
+- One engine spawn per user action is enforced via mutex guards
+- Debug logging at spawn boundary validates single-spawn behavior
+- Multiple phases (apply → verify) occur within the same runId
