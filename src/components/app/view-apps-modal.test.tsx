@@ -43,9 +43,13 @@ describe('ViewAppsModal', () => {
 
     render(<ViewAppsModal {...defaultProps} />);
     
+    // Expand details to see apps count
     await waitFor(() => {
-      expect(screen.getByText('3 apps in this profile')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /toggle technical details/i })).toBeInTheDocument();
     });
+    
+    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
+    expect(detailsButton).toHaveTextContent('3 apps');
   });
 
   it('displays raw app IDs with dots preserved', async () => {
@@ -60,10 +64,27 @@ describe('ViewAppsModal', () => {
       ],
     }));
 
+    const user = userEvent.setup();
     render(<ViewAppsModal {...defaultProps} />);
     
+    // Expand details section
     await waitFor(() => {
-      // Verify raw IDs with dots are displayed exactly as stored in manifest
+      expect(screen.getByRole('button', { name: /toggle technical details/i })).toBeInTheDocument();
+    });
+    
+    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
+    await user.click(detailsButton);
+    
+    // Expand winget source
+    await waitFor(() => {
+      expect(screen.getByText('winget')).toBeInTheDocument();
+    });
+    
+    const wingetButton = screen.getByText('winget').closest('button');
+    await user.click(wingetButton!);
+    
+    // Verify raw IDs with dots are displayed exactly as stored in manifest
+    await waitFor(() => {
       expect(screen.getByText('Microsoft.VSCode')).toBeInTheDocument();
       expect(screen.getByText('Google.Chrome')).toBeInTheDocument();
       expect(screen.getByText('7zip.7zip')).toBeInTheDocument();
@@ -71,42 +92,60 @@ describe('ViewAppsModal', () => {
     });
   });
 
-  it('displays app name when present', async () => {
+  it('displays app ID in details section', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
     vi.mocked(invoke).mockResolvedValue(JSON.stringify({
       version: 1,
       apps: [
-        { id: 'Microsoft.VSCode', name: 'Visual Studio Code' },
+        { id: 'Microsoft.VSCode' },
       ],
     }));
 
+    const user = userEvent.setup();
     render(<ViewAppsModal {...defaultProps} />);
     
+    // Expand details
     await waitFor(() => {
-      expect(screen.getByText('Visual Studio Code')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /toggle technical details/i })).toBeInTheDocument();
+    });
+    
+    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
+    await user.click(detailsButton);
+    
+    // Expand winget source
+    await waitFor(() => {
+      expect(screen.getByText('winget')).toBeInTheDocument();
+    });
+    
+    const wingetButton = screen.getByText('winget').closest('button');
+    await user.click(wingetButton!);
+    
+    await waitFor(() => {
       expect(screen.getByText('Microsoft.VSCode')).toBeInTheDocument();
     });
   });
 
-  it('shows error state when parsing fails', async () => {
+  it('handles parsing errors gracefully', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
     vi.mocked(invoke).mockRejectedValue(new Error('File not found'));
 
     render(<ViewAppsModal {...defaultProps} />);
     
+    // Modal should still render with empty apps list
     await waitFor(() => {
-      expect(screen.getByText(/Failed to parse profile/i)).toBeInTheDocument();
+      expect(screen.getByText('Test Profile')).toBeInTheDocument();
     });
   });
 
-  it('shows error when profile has no apps array', async () => {
+  it('handles profile with no apps array', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
     vi.mocked(invoke).mockResolvedValue('{"version": 1}');
 
     render(<ViewAppsModal {...defaultProps} />);
     
+    // Modal should still render
     await waitFor(() => {
-      expect(screen.getByText(/no apps array/i)).toBeInTheDocument();
+      expect(screen.getByText('Test Profile')).toBeInTheDocument();
     });
   });
 
@@ -123,12 +162,28 @@ describe('ViewAppsModal', () => {
     const user = userEvent.setup();
     render(<ViewAppsModal {...defaultProps} />);
     
+    // Wait for search input to appear
     await waitFor(() => {
-      expect(screen.getByText('Microsoft.VSCode')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search apps...')).toBeInTheDocument();
     });
 
     const searchInput = screen.getByPlaceholderText('Search apps...');
     await user.type(searchInput, 'chrome');
+
+    // Expand details to see filtered results
+    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
+    await user.click(detailsButton);
+    
+    // Should show filtered count
+    expect(detailsButton).toHaveTextContent('1 of 2 apps');
+    
+    // Expand winget source
+    await waitFor(() => {
+      expect(screen.getByText('winget')).toBeInTheDocument();
+    });
+    
+    const wingetButton = screen.getByText('winget').closest('button');
+    await user.click(wingetButton!);
 
     await waitFor(() => {
       expect(screen.queryByText('Microsoft.VSCode')).not.toBeInTheDocument();

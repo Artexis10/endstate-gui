@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { CheckCircle2, Copy, Package, ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { Input } from '../ui/input';
+import { CheckCircle2, Copy, Package, ChevronDown, ChevronRight, FileText, Search } from 'lucide-react';
 import { useState } from 'react';
 import type { CapturedApp, CaptureCounts } from '../../types';
 
@@ -13,6 +14,8 @@ interface CaptureResultModalProps {
   outputPath: string;
   rawLogs?: string;
   rawEnvelope?: object;
+  enableSearch?: boolean;
+  customTitle?: string;
 }
 
 export function CaptureResultModal({
@@ -24,14 +27,24 @@ export function CaptureResultModal({
   outputPath,
   rawLogs,
   rawEnvelope,
+  enableSearch = false,
+  customTitle,
 }: CaptureResultModalProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const displayPath = outputPath ? outputPath.split('\\').pop() || outputPath : '';
 
+  // Filter apps by search query
+  const filteredApps = searchQuery.trim()
+    ? appsIncluded.filter(app => 
+        app.id.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : appsIncluded;
+
   // Group apps by source
-  const appsBySource = appsIncluded.reduce((acc, app) => {
+  const appsBySource = filteredApps.reduce((acc, app) => {
     const source = app.source || 'winget';
     if (!acc[source]) acc[source] = [];
     acc[source].push(app);
@@ -82,7 +95,7 @@ export function CaptureResultModal({
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
             <CheckCircle2 className="h-8 w-8 text-success" />
-            <DialogTitle className="text-2xl">Profile created</DialogTitle>
+            <DialogTitle className="text-2xl">{customTitle || 'Profile created'}</DialogTitle>
           </div>
           {outputPath && (
             <DialogDescription className="text-sm pt-2 font-mono text-muted-foreground">
@@ -119,6 +132,17 @@ export function CaptureResultModal({
         {/* Details expander (technical) */}
         {appsIncluded.length > 0 && (
           <div className="border-t border-border pt-4">
+            {enableSearch && (
+              <div className="mb-3 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search apps..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            )}
             <button
               onClick={() => setShowDetails(!showDetails)}
               className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
@@ -126,7 +150,7 @@ export function CaptureResultModal({
               aria-expanded={showDetails}
             >
               {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              Details ({appsIncluded.length} apps)
+              Details ({searchQuery ? `${filteredApps.length} of ${appsIncluded.length}` : appsIncluded.length} apps)
             </button>
             
             {showDetails && (

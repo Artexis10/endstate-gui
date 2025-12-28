@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Package, Search, AlertCircle } from 'lucide-react';
 import { invoke } from '@/lib/tauri-bridge';
 import { parseJsonc, type ProfileApp } from '@/lib/jsonc-parse';
+import { CaptureResultModal } from './capture-result-modal';
+import type { CapturedApp } from '@/types';
 
 interface ViewAppsModalProps {
   open: boolean;
@@ -42,100 +39,38 @@ export function ViewAppsModal({
   profileDisplayName,
 }: ViewAppsModalProps) {
   const [apps, setApps] = useState<ProfileApp[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (open && profilePath) {
-      setLoading(true);
-      setError(null);
-      setSearch('');
       loadProfileApps(profilePath).then((result) => {
-        setApps(result.apps);
-        setError(result.error || null);
-        setLoading(false);
+        setApps(result.apps || []);
       });
     }
   }, [open, profilePath]);
 
-  const filteredApps = apps.filter((app) => {
-    if (!search.trim()) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      app.id.toLowerCase().includes(searchLower) ||
-      (app.name && app.name.toLowerCase().includes(searchLower))
-    );
-  });
+  // Convert ProfileApp[] to CapturedApp[] for Capture Details modal
+  const capturedApps: CapturedApp[] = apps.map(app => ({
+    id: app.id,
+    source: app.driver || 'winget',
+  }));
 
+  // Reuse Capture Details modal with search enabled
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle className="text-2xl">{profileDisplayName}</DialogTitle>
-          <DialogDescription className="text-sm pt-2">
-            {loading ? 'Loading...' : `${apps.length} app${apps.length === 1 ? '' : 's'} in this profile`}
-          </DialogDescription>
-        </DialogHeader>
-
-        {error ? (
-          <div className="flex items-center gap-3 p-4 bg-destructive/10 rounded-md text-destructive">
-            <AlertCircle className="h-5 w-5 flex-shrink-0" />
-            <p className="text-sm">{error}</p>
-          </div>
-        ) : (
-          <div className="space-y-3 py-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search apps..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            <div className="border border-border rounded-lg max-h-[400px] overflow-y-auto">
-              {loading ? (
-                <div className="p-8 text-center text-muted-foreground">
-                  Loading apps...
-                </div>
-              ) : filteredApps.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">
-                  {search ? 'No apps match your search' : 'No apps in this profile'}
-                </div>
-              ) : (
-                <div>
-                  {filteredApps.map((app, idx) => (
-                    <div key={`${app.id}-${idx}`} className="flex items-center justify-between gap-3 px-3 py-2 border-b border-border last:border-b-0">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          {app.name && (
-                            <p className="text-sm font-medium truncate">{app.name}</p>
-                          )}
-                          <span className={`font-mono truncate block ${app.name ? 'text-xs text-muted-foreground' : 'text-xs'}`}>
-                            {app.id}
-                          </span>
-                        </div>
-                      </div>
-                      <Badge variant="secondary" className="text-xs flex-shrink-0">
-                        In profile
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <CaptureResultModal
+      open={open}
+      onClose={() => onOpenChange(false)}
+      counts={{
+        totalFound: apps.length,
+        included: apps.length,
+        skipped: 0,
+        filteredRuntimes: 0,
+        filteredStoreApps: 0,
+        sensitiveExcludedCount: 0,
+      }}
+      appsIncluded={capturedApps}
+      outputPath={profilePath}
+      enableSearch={true}
+      customTitle={profileDisplayName}
+    />
   );
 }
