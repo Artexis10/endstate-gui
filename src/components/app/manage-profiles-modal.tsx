@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Pencil, Trash2, AlertCircle, FolderOpen, RefreshCw } from 'lucide-react';
+import { Pencil, Trash2, AlertCircle, FolderOpen, RefreshCw, Eye } from 'lucide-react';
 import type { DiscoveredProfile } from '@/file-discovery';
+import { ViewAppsModal } from './view-apps-modal';
 
 interface ManageProfilesModalProps {
   open: boolean;
@@ -32,6 +33,7 @@ export function ManageProfilesModal({
 }: ManageProfilesModalProps) {
   const [advancedMode, setAdvancedMode] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [viewAppsProfile, setViewAppsProfile] = useState<DiscoveredProfile | null>(null);
 
   const getDisplayLabel = (profile: DiscoveredProfile): string => {
     return profile.displayName || profile.name;
@@ -142,6 +144,16 @@ export function ManageProfilesModal({
                             variant="ghost"
                             size="sm"
                             className="h-8 px-2"
+                            onClick={() => setViewAppsProfile(profile)}
+                            title="View apps in this profile"
+                          >
+                            <Eye className="h-3 w-3 mr-1" />
+                            View apps
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
                             onClick={() => onRenameDisplay(profile.path, profile.displayName || '')}
                             title="Rename display name"
                           >
@@ -208,6 +220,14 @@ export function ManageProfilesModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* View Apps Modal */}
+      <ViewAppsModal
+        open={viewAppsProfile !== null}
+        onOpenChange={(open) => !open && setViewAppsProfile(null)}
+        profilePath={viewAppsProfile?.path || ''}
+        profileDisplayName={viewAppsProfile ? getDisplayLabel(viewAppsProfile) : ''}
+      />
     </Dialog>
   );
 }

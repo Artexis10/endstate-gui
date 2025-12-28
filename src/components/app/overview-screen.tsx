@@ -29,8 +29,7 @@ import {
   XCircle,
   Eye,
   Zap,
-  MoreVertical,
-  FolderOpen
+  MoreVertical
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -489,32 +488,6 @@ export function OverviewScreen({
                 )}
               </div>
             </div>
-            {/* Capture success actions */}
-            {action === 'capture' && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenProfilesFolder();
-                  }}
-                >
-                  <FolderOpen className="h-3 w-3 mr-1.5" />
-                  Open folder
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setManageProfilesOpen(true);
-                  }}
-                >
-                  Manage profiles
-                </Button>
-              </div>
-            )}
           </div>
         )}
 

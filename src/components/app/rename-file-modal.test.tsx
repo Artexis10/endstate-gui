@@ -9,7 +9,9 @@ import { RenameFileModal } from './rename-file-modal';
  * These tests verify the critical rename semantics:
  * - Extension cannot be edited (shown but fixed)
  * - Basename must be non-empty
- * - Basename must not contain dots
+ * - Basename can contain dots (allowed)
+ * - Windows-invalid characters are rejected
+ * - Windows reserved names are rejected
  * - Supports .json, .jsonc, .json5 extensions
  */
 
@@ -77,14 +79,47 @@ describe('RenameFileModal', () => {
       expect(defaultProps.onConfirm).not.toHaveBeenCalled();
     });
 
-    it('shows error when basename contains dots', () => {
-      render(<RenameFileModal {...defaultProps} />);
+    it('allows dots in basename', () => {
+      const onConfirm = vi.fn();
+      render(<RenameFileModal {...defaultProps} onConfirm={onConfirm} />);
       
       const input = screen.getByRole('textbox');
       fireEvent.change(input, { target: { value: 'my.profile.name' } });
       fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
       
-      expect(screen.getByText('Filename cannot contain dots')).toBeInTheDocument();
+      expect(onConfirm).toHaveBeenCalledWith('my.profile.name.json');
+    });
+
+    it('shows error when basename contains Windows-invalid characters', () => {
+      render(<RenameFileModal {...defaultProps} />);
+      
+      const input = screen.getByRole('textbox');
+      fireEvent.change(input, { target: { value: 'my<profile>name' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+      
+      expect(screen.getByText(/cannot contain/i)).toBeInTheDocument();
+      expect(defaultProps.onConfirm).not.toHaveBeenCalled();
+    });
+
+    it('shows error for Windows reserved names', () => {
+      render(<RenameFileModal {...defaultProps} />);
+      
+      const input = screen.getByRole('textbox');
+      fireEvent.change(input, { target: { value: 'CON' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+      
+      expect(screen.getByText(/reserved by Windows/i)).toBeInTheDocument();
+      expect(defaultProps.onConfirm).not.toHaveBeenCalled();
+    });
+
+    it('shows error when basename ends with dot', () => {
+      render(<RenameFileModal {...defaultProps} />);
+      
+      const input = screen.getByRole('textbox');
+      fireEvent.change(input, { target: { value: 'profile.' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+      
+      expect(screen.getByText(/cannot end with/i)).toBeInTheDocument();
       expect(defaultProps.onConfirm).not.toHaveBeenCalled();
     });
 

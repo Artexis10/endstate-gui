@@ -1,8 +1,36 @@
 import { useState, useEffect } from 'react';
+import { z } from 'zod';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertCircle } from 'lucide-react';
+
+/** Windows reserved device names (case-insensitive) */
+const WINDOWS_RESERVED_NAMES = [
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+];
+
+/** Characters not allowed in Windows filenames */
+const WINDOWS_INVALID_CHARS = /[\\/:*?"<>|]/;
+
+/** Zod schema for Windows-compatible filename basename */
+export const basenameSchema = z.string()
+  .min(1, 'Filename cannot be empty')
+  .max(200, 'Filename is too long (max 200 characters)')
+  .refine(
+    (val) => !WINDOWS_INVALID_CHARS.test(val),
+    'Filename cannot contain: \\ / : * ? " < > |'
+  )
+  .refine(
+    (val) => !val.endsWith(' ') && !val.endsWith('.'),
+    'Filename cannot end with a space or dot'
+  )
+  .refine(
+    (val) => !WINDOWS_RESERVED_NAMES.includes(val.toUpperCase()),
+    'This name is reserved by Windows'
+  );
 
 interface RenameFileModalProps {
   open: boolean;
@@ -48,15 +76,10 @@ export function RenameFileModal({
   const handleConfirm = () => {
     const trimmed = basename.trim();
     
-    // Validation: basename must be non-empty
-    if (!trimmed) {
-      setError('Filename cannot be empty');
-      return;
-    }
-
-    // Validation: basename must not contain dots (prevents extension changes)
-    if (trimmed.includes('.')) {
-      setError('Filename cannot contain dots');
+    // Validate using Zod schema
+    const result = basenameSchema.safeParse(trimmed);
+    if (!result.success) {
+      setError(result.error.issues[0].message);
       return;
     }
 
