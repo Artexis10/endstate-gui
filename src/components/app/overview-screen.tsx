@@ -962,7 +962,7 @@ export function OverviewScreen({
                       role="tab"
                       aria-selected={detailsFilter === 'To install'}
                       onClick={() => setDetailsFilter(detailsFilter === 'To install' ? null : 'To install')}
-                      className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                      className={`px-2 py-1 rounded cursor-pointer transition-opacity whitespace-nowrap flex-shrink-0 ${
                         detailsFilter === 'To install' ? 'ring-2 ring-blue-500' : ''
                       } ${detailsFilter && detailsFilter !== 'To install' ? 'opacity-50' : ''} bg-blue-500/10 text-blue-600`}
                     >
