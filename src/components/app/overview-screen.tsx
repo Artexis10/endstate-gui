@@ -13,7 +13,7 @@
  * In Advanced mode, cards navigate to their respective pages.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ScanSearch, 
@@ -29,7 +29,8 @@ import {
   XCircle,
   Eye,
   Zap,
-  MoreVertical
+  MoreVertical,
+  ArrowDown
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -153,6 +154,8 @@ export function OverviewScreen({
   const [detailsFilter, setDetailsFilter] = useState<string | null>(null);
   const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced');
   const [manageProfilesOpen, setManageProfilesOpen] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const activityScrollRef = useRef<HTMLDivElement>(null);
   const hasProfile = !!selectedProfile && profiles.length > 0;
   
   // Reset activity expanded state when a new run starts
@@ -160,8 +163,16 @@ export function OverviewScreen({
     if (isRunning && runningAction) {
       // Default mode: collapse for calm UI; Advanced mode: expand to show details
       setActivityExpanded(uiMode === 'advanced');
+      setIsAtBottom(true); // Reset scroll position for new run
     }
   }, [isRunning, runningAction, uiMode]);
+  
+  // Auto-scroll to bottom when new events arrive, but only if user is at bottom
+  useEffect(() => {
+    if (isAtBottom && activityScrollRef.current && activityExpanded) {
+      activityScrollRef.current.scrollTop = activityScrollRef.current.scrollHeight;
+    }
+  }, [liveAppEvents, isAtBottom, activityExpanded]);
   
   // Handle card click based on UI mode
   const handleCardClick = (action: ActionType) => {
@@ -439,29 +450,52 @@ export function OverviewScreen({
                   </div>
                 </button>
                 {activityExpanded && (
-                  <div className="px-3 pb-3 space-y-1 border-t border-border/50 max-h-64 overflow-y-auto scrollbar-thin">
-                    {liveAppEvents.slice(-10).map((event) => (
-                      <div key={`${event.app}-${event.timestamp}`} className="flex items-center gap-2 text-xs pt-1.5">
-                        <span className={`w-16 text-right font-medium ${
-                          event.action === 'Installed' ? 'text-green-600' :
-                          event.action === 'Failed' ? 'text-red-600' :
-                          event.action === 'OK' ? 'text-green-600' :
-                          event.action === 'Skipped' ? 'text-yellow-600' :
-                          event.action === 'Cancelled' ? 'text-yellow-600' :
-                          event.action === 'Processing' ? 'text-blue-600' :
-                          event.action === 'To install' ? 'text-blue-600' :
-                          'text-muted-foreground'
-                        }`}>
-                          {event.action === 'OK' ? 'PRESENT' : 
-                           event.action === 'Skipped' ? 'SKIPPED' : 
-                           event.action === 'Cancelled' ? 'CANCEL' :
-                           event.action === 'Processing' ? 'INSTALLING' : 
-                           event.action === 'To install' ? 'TO INSTALL' :
-                           event.action.toUpperCase().slice(0, 9)}
-                        </span>
-                        <span className="font-mono truncate flex-1">{event.app}</span>
-                      </div>
-                    ))}
+                  <div className="relative border-t border-border/50">
+                    <div 
+                      ref={activityScrollRef}
+                      className="px-3 pb-3 space-y-1 max-h-64 overflow-y-auto scrollbar-thin"
+                      onScroll={(e) => {
+                        const target = e.currentTarget;
+                        const atBottom = Math.abs(target.scrollHeight - target.scrollTop - target.clientHeight) < 5;
+                        setIsAtBottom(atBottom);
+                      }}
+                    >
+                      {liveAppEvents.map((event, idx) => (
+                        <div key={`${event.app}-${event.timestamp}-${idx}`} className="flex items-center gap-2 text-xs pt-1.5">
+                          <span className={`w-16 text-right font-medium ${
+                            event.action === 'Installed' ? 'text-green-600' :
+                            event.action === 'Failed' ? 'text-red-600' :
+                            event.action === 'OK' ? 'text-green-600' :
+                            event.action === 'Skipped' ? 'text-yellow-600' :
+                            event.action === 'Cancelled' ? 'text-yellow-600' :
+                            event.action === 'Processing' ? 'text-blue-600' :
+                            event.action === 'To install' ? 'text-blue-600' :
+                            'text-muted-foreground'
+                          }`}>
+                            {event.action === 'OK' ? 'PRESENT' : 
+                             event.action === 'Skipped' ? 'SKIPPED' : 
+                             event.action === 'Cancelled' ? 'CANCEL' :
+                             event.action === 'Processing' ? 'INSTALLING' : 
+                             event.action === 'To install' ? 'TO INSTALL' :
+                             event.action.toUpperCase().slice(0, 9)}
+                          </span>
+                          <span className="font-mono truncate flex-1">{event.app}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {!isAtBottom && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          activityScrollRef.current?.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
+                        }}
+                        className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs bg-primary text-primary-foreground rounded shadow-lg hover:bg-primary/90 transition-colors"
+                        aria-label="Jump to latest"
+                      >
+                        <ArrowDown className="h-3 w-3" />
+                        Latest
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -495,18 +529,37 @@ export function OverviewScreen({
 
         {/* Error state - distinguish partial failures from hard errors */}
         {isThisComplete && actionStatus === 'error' && (
-          <div className="flex items-center gap-3 bg-destructive/10 rounded-md px-3 py-3">
-            <XCircle className="h-4 w-4 text-destructive" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-destructive">
-                {actionResult?.counts?.failed && actionResult.counts.failed > 0
-                  ? `Some apps failed to install (${actionResult.counts.failed} failed)`
-                  : 'Something went wrong'}
-              </p>
-              {actionProgress?.message && (
-                <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
-              )}
-            </div>
+          <div className="space-y-3">
+            {actionResult?.counts?.failed && actionResult.counts.failed > 0 && (actionResult.counts.installed || actionResult.counts.alreadyPresent) ? (
+              // Partial failure: some apps succeeded, some failed
+              <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3">
+                <XCircle className="h-4 w-4 text-warning" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-warning">
+                    Completed with issues
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {actionResult.counts.installed || 0} installed • {actionResult.counts.alreadyPresent || 0} already present • {actionResult.counts.failed} failed
+                    {actionResult.counts.skipped && actionResult.counts.skipped > 0 ? ` • ${actionResult.counts.skipped} skipped` : ''}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              // Fatal error: nothing succeeded or no counts available
+              <div className="flex items-center gap-3 bg-destructive/10 rounded-md px-3 py-3">
+                <XCircle className="h-4 w-4 text-destructive" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-destructive">
+                    {actionResult?.counts?.failed && actionResult.counts.failed > 0
+                      ? `All apps failed to install (${actionResult.counts.failed} failed)`
+                      : 'Something went wrong'}
+                  </p>
+                  {actionProgress?.message && (
+                    <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1083,8 +1136,19 @@ export function OverviewScreen({
           )}
           
           {actionResult?.status === 'error' && (
-            <div className="flex-shrink-0 text-sm text-destructive py-4 text-center">
-              An error occurred during the operation.
+            <div className="flex-shrink-0 text-sm py-4 text-center">
+              {actionResult.counts?.failed && actionResult.counts.failed > 0 && (actionResult.counts.installed || actionResult.counts.alreadyPresent) ? (
+                // Partial failure: show summary, not generic error
+                <div className="text-warning">
+                  <p className="font-medium">Completed with issues</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {actionResult.counts.installed || 0} installed • {actionResult.counts.alreadyPresent || 0} already present • {actionResult.counts.failed} failed
+                  </p>
+                </div>
+              ) : (
+                // Fatal error
+                <p className="text-destructive">An error occurred during the operation.</p>
+              )}
             </div>
           )}
 

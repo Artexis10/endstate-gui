@@ -176,6 +176,7 @@ function AppContent() {
   const [liveAppEvents, setLiveAppEvents] = useState<AppEvent[]>([]);
   const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
   const isRunningRef = useRef(false); // Robust guard against double-run
+  const activeRunIdRef = useRef<string | null>(null); // Track active run ID for double-run prevention
   const [showFolderPathModal, setShowFolderPathModal] = useState(false);
   const [folderPathForModal, setFolderPathForModal] = useState('');
   
@@ -1225,7 +1226,9 @@ function AppContent() {
               // Track per-app events for preview - deduplicated
               const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
               appEventMap.set(progress.app, appEvent);
-              setLiveAppEvents(Array.from(appEventMap.values()).slice(-20));
+              // Bounded buffer: keep up to 2000 events for scrollback
+              const events = Array.from(appEventMap.values());
+              setLiveAppEvents(events.length > 2000 ? events.slice(-2000) : events);
               
               setOverviewActionProgress({ 
                 message: 'Evaluating changes', 
@@ -1396,8 +1399,8 @@ function AppContent() {
                 appEventList.push(appEvent);
               }
               
-              // Update live events for UI (show last 20, append order)
-              setLiveAppEvents(appEventList.slice(-20));
+              // Update live events for UI (bounded buffer: keep up to 2000 events for scrollback)
+              setLiveAppEvents(appEventList.length > 2000 ? appEventList.slice(-2000) : appEventList);
               setLiveCounters({ ...counters });
               
               // Friendly headline mapping (Option A)
@@ -1438,7 +1441,8 @@ function AppContent() {
     // CRITICAL: Reconcile live activity with final envelope
     // This ensures "Working..." entries are updated to their final status (Failed, Installed, etc.)
     const reconciledEvents = reconcileLiveActivity(appEventList, envelopeItems);
-    setLiveAppEvents(reconciledEvents.slice(-20));
+    // Bounded buffer: keep up to 2000 events for scrollback
+    setLiveAppEvents(reconciledEvents.length > 2000 ? reconciledEvents.slice(-2000) : reconciledEvents);
     
     // Update counters from envelope (source of truth)
     const installed = envelopeData?.counts?.installed ?? 0;
@@ -1678,8 +1682,19 @@ function AppContent() {
               uiMode={uiMode}
               onNavigate={navigateWithHistory}
               onCapture={async () => {
-                if (isRunning || isRunningRef.current) return;
+                // Double-run guard with runId
+                const runId = `capture-${Date.now()}`;
+                if (isRunning || isRunningRef.current || activeRunIdRef.current) {
+                  if (import.meta.env.DEV) {
+                    console.warn(`[DOUBLE-RUN BLOCKED] Capture attempt blocked. Active run: ${activeRunIdRef.current}, new runId: ${runId}`);
+                  }
+                  return;
+                }
                 isRunningRef.current = true;
+                activeRunIdRef.current = runId;
+                if (import.meta.env.DEV) {
+                  console.log(`[RUN START] Capture runId=${runId}`);
+                }
                 setOverviewRunningAction('capture');
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Scanning installed applications...' });
@@ -1707,13 +1722,27 @@ function AppContent() {
                     summary: err instanceof Error ? err.message : 'Capture failed' 
                   });
                 } finally {
+                  if (import.meta.env.DEV) {
+                    console.log(`[RUN END] Capture runId=${runId}`);
+                  }
                   isRunningRef.current = false;
+                  activeRunIdRef.current = null;
                 }
               }}
               onSetup={async (intent) => {
-                // Robust double-run guard using ref
-                if (isRunning || isRunningRef.current) return;
+                // Double-run guard with runId
+                const runId = `setup-${intent}-${Date.now()}`;
+                if (isRunning || isRunningRef.current || activeRunIdRef.current) {
+                  if (import.meta.env.DEV) {
+                    console.warn(`[DOUBLE-RUN BLOCKED] Setup ${intent} attempt blocked. Active run: ${activeRunIdRef.current}, new runId: ${runId}`);
+                  }
+                  return;
+                }
                 isRunningRef.current = true;
+                activeRunIdRef.current = runId;
+                if (import.meta.env.DEV) {
+                  console.log(`[RUN START] Setup ${intent} runId=${runId}`);
+                }
                 setLiveAppEvents([]);
                 setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
                 
@@ -1770,13 +1799,27 @@ function AppContent() {
                     summary: err instanceof Error ? err.message : 'Setup failed' 
                   });
                 } finally {
+                  if (import.meta.env.DEV) {
+                    console.log(`[RUN END] Setup ${intent} runId=${runId}`);
+                  }
                   isRunningRef.current = false;
+                  activeRunIdRef.current = null;
                 }
               }}
               onCheck={async () => {
-                // Robust double-run guard using ref
-                if (isRunning || isRunningRef.current) return;
+                // Double-run guard with runId
+                const runId = `check-${Date.now()}`;
+                if (isRunning || isRunningRef.current || activeRunIdRef.current) {
+                  if (import.meta.env.DEV) {
+                    console.warn(`[DOUBLE-RUN BLOCKED] Check attempt blocked. Active run: ${activeRunIdRef.current}, new runId: ${runId}`);
+                  }
+                  return;
+                }
                 isRunningRef.current = true;
+                activeRunIdRef.current = runId;
+                if (import.meta.env.DEV) {
+                  console.log(`[RUN START] Check runId=${runId}`);
+                }
                 
                 setOverviewRunningAction('check');
                 setOverviewActionStatus('running');
@@ -1807,7 +1850,11 @@ function AppContent() {
                     summary: err instanceof Error ? err.message : 'Check failed' 
                   });
                 } finally {
+                  if (import.meta.env.DEV) {
+                    console.log(`[RUN END] Check runId=${runId}`);
+                  }
                   isRunningRef.current = false;
+                  activeRunIdRef.current = null;
                 }
               }}
               onProfileChange={(profile, path) => {
