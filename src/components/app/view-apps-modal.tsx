@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Package, Search, AlertCircle } from 'lucide-react';
 import { invoke } from '@/lib/tauri-bridge';
 import { parseJsonc, type ProfileApp } from '@/lib/jsonc-parse';
@@ -69,10 +70,10 @@ export function ViewAppsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{profileDisplayName}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-2xl">{profileDisplayName}</DialogTitle>
+          <DialogDescription className="text-sm pt-2">
             {loading ? 'Loading...' : `${apps.length} app${apps.length === 1 ? '' : 's'} in this profile`}
           </DialogDescription>
         </DialogHeader>
@@ -83,7 +84,7 @@ export function ViewAppsModal({
             <p className="text-sm">{error}</p>
           </div>
         ) : (
-          <>
+          <div className="space-y-3 py-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -94,7 +95,7 @@ export function ViewAppsModal({
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto border rounded-md min-h-[200px] max-h-[400px]">
+            <div className="border border-border rounded-lg max-h-[400px] overflow-y-auto">
               {loading ? (
                 <div className="p-8 text-center text-muted-foreground">
                   Loading apps...
@@ -104,28 +105,33 @@ export function ViewAppsModal({
                   {search ? 'No apps match your search' : 'No apps in this profile'}
                 </div>
               ) : (
-                <div className="divide-y">
+                <div>
                   {filteredApps.map((app, idx) => (
-                    <div key={`${app.id}-${idx}`} className="flex items-center gap-3 px-3 py-2">
-                      <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        {app.name && (
-                          <p className="text-sm font-medium truncate">{app.name}</p>
-                        )}
-                        <p className={`font-mono truncate ${app.name ? 'text-xs text-muted-foreground' : 'text-sm'}`}>
-                          {app.id}
-                        </p>
+                    <div key={`${app.id}-${idx}`} className="flex items-center justify-between gap-3 px-3 py-2 border-b border-border last:border-b-0">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          {app.name && (
+                            <p className="text-sm font-medium truncate">{app.name}</p>
+                          )}
+                          <span className={`font-mono truncate block ${app.name ? 'text-xs text-muted-foreground' : 'text-xs'}`}>
+                            {app.id}
+                          </span>
+                        </div>
                       </div>
+                      <Badge variant="secondary" className="text-xs flex-shrink-0">
+                        In profile
+                      </Badge>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
 
         <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>

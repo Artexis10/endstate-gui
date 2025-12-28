@@ -588,6 +588,21 @@ export function OverviewScreen({
                   Run again
                 </Button>
               )}
+              {/* Show "Run again" button for setup after completion (non-preview) */}
+              {action === 'setup' && !actionResult?.wasPreview && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDismissResult();
+                    // Small delay to ensure state is reset before triggering
+                    setTimeout(() => onSetup(setupIntent), 50);
+                  }}
+                >
+                  Run again
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"

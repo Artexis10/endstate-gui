@@ -370,12 +370,13 @@ function AppContent() {
               lastSelectedProfilePath: firstProfile.path 
             });
             // Show toast notification for fallback selection
-            showToast(`Profile was removed. Switched to "${firstProfile.displayName || firstProfile.name}".`, 'info');
+            showToast(`Selected profile no longer exists—switched to "${firstProfile.displayName || firstProfile.name}".`, 'info');
           } else {
             // No profiles remain
             setSelectedProfile('');
             setSelectedProfilePath('');
             updateSettings({ lastSelectedProfile: '', lastSelectedProfilePath: '' });
+            showToast('No profiles available. Create a profile by capturing your computer setup.', 'info');
           }
         }
       }

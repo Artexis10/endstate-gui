@@ -48,21 +48,26 @@ describe('ViewAppsModal', () => {
     });
   });
 
-  it('displays app IDs in the list', async () => {
+  it('displays raw app IDs with dots preserved', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
     vi.mocked(invoke).mockResolvedValue(JSON.stringify({
       version: 1,
       apps: [
         { id: 'Microsoft.VSCode' },
         { id: 'Google.Chrome' },
+        { id: '7zip.7zip' },
+        { id: 'Adobe.CreativeCloud' },
       ],
     }));
 
     render(<ViewAppsModal {...defaultProps} />);
     
     await waitFor(() => {
+      // Verify raw IDs with dots are displayed exactly as stored in manifest
       expect(screen.getByText('Microsoft.VSCode')).toBeInTheDocument();
       expect(screen.getByText('Google.Chrome')).toBeInTheDocument();
+      expect(screen.getByText('7zip.7zip')).toBeInTheDocument();
+      expect(screen.getByText('Adobe.CreativeCloud')).toBeInTheDocument();
     });
   });
 
