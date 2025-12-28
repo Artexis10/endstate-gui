@@ -48,7 +48,7 @@ export function RenameFileModal({
     const newExt = getExtension(trimmed);
     
     if (newExt !== currentExt) {
-      setError(`Extension must remain ${currentExt}`);
+      setError(`Filename must end with ${currentExt}`);
       return;
     }
 
@@ -60,9 +60,9 @@ export function RenameFileModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename File</DialogTitle>
+          <DialogTitle>Change filename</DialogTitle>
           <DialogDescription>
-            Rename the manifest file on disk. The metadata file will be renamed automatically.
+            Change the manifest filename on disk. The metadata file will be renamed automatically.
           </DialogDescription>
         </DialogHeader>
 

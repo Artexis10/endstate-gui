@@ -29,8 +29,6 @@ import {
   XCircle,
   Eye,
   Zap,
-  FolderOpen,
-  RefreshCw,
   Pencil,
   MoreVertical,
   Trash2
@@ -120,7 +118,7 @@ interface OverviewScreenProps {
   onProfileChange: (profile: string, path: string) => void;
   onDismissResult: () => void;
   onOpenProfilesFolder: () => void;
-  onRefreshProfiles: () => void;
+  onRefreshProfiles: () => Promise<void>;
   onRenameProfile?: (path: string, currentName: string) => void;
   onDeleteProfile?: (path: string, displayName: string) => void;
   onRenameFile?: (path: string, currentFilename: string) => void;
@@ -158,7 +156,6 @@ export function OverviewScreen({
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [detailsFilter, setDetailsFilter] = useState<string | null>(null);
   const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced');
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [manageProfilesOpen, setManageProfilesOpen] = useState(false);
   const hasProfile = !!selectedProfile && profiles.length > 0;
   
@@ -366,7 +363,7 @@ export function OverviewScreen({
             <div className="flex items-center gap-3 bg-muted/50 rounded-md px-3 py-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground leading-tight">Profile</p>
+                <p className="text-xs text-muted-foreground mb-1">Profile</p>
                 <Select
                   value={selectedProfile}
                   onValueChange={(value) => {
@@ -448,46 +445,6 @@ export function OverviewScreen({
                   </div>
                 </div>
               )}
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground px-3">
-              <span className="flex-1 truncate" title={profilesDirectory}>
-                Profiles folder: {profilesDirectory}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenProfilesFolder();
-                }}
-                disabled={isRunning}
-              >
-                <FolderOpen className="h-3 w-3 mr-1" />
-                Open
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  setIsRefreshing(true);
-                  await onRefreshProfiles();
-                  setIsRefreshing(false);
-                }}
-                disabled={isRunning || isRefreshing}
-                data-testid="refresh-profiles-button"
-                aria-label={isRefreshing ? "Refreshing profile list..." : "Refresh profile list"}
-                title={isRefreshing ? "Refreshing profile list..." : "Refresh profile list"}
-              >
-                <motion.div
-                  animate={{ rotate: isRefreshing ? 360 : 0 }}
-                  transition={{ duration: 1, repeat: isRefreshing ? Infinity : 0, ease: "linear" }}
-                >
-                  <RefreshCw className="h-3 w-3" />
-                </motion.div>
-              </Button>
             </div>
           </div>
         )}
@@ -785,62 +742,20 @@ export function OverviewScreen({
                     ))}
                   </SelectContent>
                 </Select>
-                <div className="relative">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const menu = e.currentTarget.nextElementSibling;
-                      if (menu) {
-                        menu.classList.toggle('hidden');
-                      }
-                    }}
-                    disabled={isRunning}
-                    title="Manage"
-                    aria-label="Manage profile"
-                    aria-haspopup="true"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                  <div className="hidden absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border bg-popover p-1 shadow-md">
-                    <button
-                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const currentProfile = profiles.find(p => p.name === selectedProfile);
-                        onRenameProfile?.(selectedProfilePath || '', currentProfile?.displayName || '');
-                        e.currentTarget.parentElement?.classList.add('hidden');
-                      }}
-                    >
-                      <Pencil className="h-3 w-3" />
-                      Rename (display name)…
-                    </button>
-                    <button
-                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenProfilesFolder();
-                        e.currentTarget.parentElement?.classList.add('hidden');
-                      }}
-                    >
-                      <FolderOpen className="h-3 w-3" />
-                      Open profiles folder
-                    </button>
-                    <button
-                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setManageProfilesOpen(true);
-                        e.currentTarget.parentElement?.classList.add('hidden');
-                      }}
-                    >
-                      <MoreVertical className="h-3 w-3" />
-                      Manage profiles…
-                    </button>
-                  </div>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setManageProfilesOpen(true);
+                  }}
+                  disabled={isRunning}
+                  title="Manage profiles"
+                  aria-label="Manage profiles"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -1270,6 +1185,7 @@ export function OverviewScreen({
         onOpenChange={setManageProfilesOpen}
         profiles={profiles}
         selectedProfile={selectedProfile}
+        profilesDirectory={profilesDirectory}
         onRenameDisplay={(path, currentName) => {
           onRenameProfile?.(path, currentName);
         }}
@@ -1279,6 +1195,8 @@ export function OverviewScreen({
         onDelete={(path, displayName) => {
           onDeleteProfile?.(path, displayName);
         }}
+        onOpenFolder={onOpenProfilesFolder}
+        onRefresh={onRefreshProfiles}
       />
     </div>
   );

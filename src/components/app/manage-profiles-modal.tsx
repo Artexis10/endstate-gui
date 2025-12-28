@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Pencil, Trash2, AlertCircle } from 'lucide-react';
+import { Pencil, Trash2, AlertCircle, FolderOpen, RefreshCw } from 'lucide-react';
 import type { DiscoveredProfile } from '@/file-discovery';
 
 interface ManageProfilesModalProps {
@@ -10,9 +10,12 @@ interface ManageProfilesModalProps {
   onOpenChange: (open: boolean) => void;
   profiles: DiscoveredProfile[];
   selectedProfile: string;
+  profilesDirectory: string;
   onRenameDisplay: (path: string, currentName: string) => void;
   onRenameFile: (path: string, currentName: string) => void;
   onDelete: (path: string, displayName: string) => void;
+  onOpenFolder: () => void;
+  onRefresh: () => Promise<void>;
 }
 
 export function ManageProfilesModal({
@@ -20,11 +23,15 @@ export function ManageProfilesModal({
   onOpenChange,
   profiles,
   selectedProfile,
+  profilesDirectory,
   onRenameDisplay,
   onRenameFile,
   onDelete,
+  onOpenFolder,
+  onRefresh,
 }: ManageProfilesModalProps) {
   const [advancedMode, setAdvancedMode] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const getDisplayLabel = (profile: DiscoveredProfile): string => {
     return profile.displayName || profile.name;
@@ -62,6 +69,36 @@ export function ManageProfilesModal({
             </div>
           </div>
         </DialogHeader>
+
+        <div className="flex items-center gap-2 px-1 py-2 bg-muted/30 rounded-md">
+          <span className="text-xs text-muted-foreground font-medium">Profiles folder:</span>
+          <span className="flex-1 text-xs font-mono truncate" title={profilesDirectory}>
+            {profilesDirectory}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2"
+            onClick={onOpenFolder}
+          >
+            <FolderOpen className="h-3 w-3 mr-1" />
+            Open folder
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2"
+            onClick={async () => {
+              setIsRefreshing(true);
+              await onRefresh();
+              setIsRefreshing(false);
+            }}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
 
         <div className="flex-1 overflow-y-auto border rounded-md">
           <table className="w-full">
@@ -117,10 +154,10 @@ export function ManageProfilesModal({
                               size="sm"
                               className="h-8 px-2"
                               onClick={() => onRenameFile(profile.path, getFilename(profile))}
-                              title="Rename file on disk"
+                              title="Change filename on disk"
                             >
                               <Pencil className="h-3 w-3 mr-1" />
-                              Rename file
+                              Change filename
                             </Button>
                           )}
                           <Button
@@ -160,7 +197,7 @@ export function ManageProfilesModal({
           <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-md text-sm">
             <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
             <div className="text-muted-foreground">
-              <strong>Advanced mode:</strong> Rename file renames the manifest file on disk along with its metadata file.
+              <strong>Advanced mode:</strong> Change filename renames the manifest file on disk along with its metadata file.
             </div>
           </div>
         )}
