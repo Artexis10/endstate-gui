@@ -269,12 +269,12 @@ describe('apply-utils', () => {
   describe('parseApplyProgressLine', () => {
     it('parses [OK] with already installed', () => {
       const result = parseApplyProgressLine('[OK] Discord.Discord (driver: winget) - already installed');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'OK', statusKey: 'already_present' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'OK', statusKey: 'present' });
     });
 
     it('parses [OK] with installed successfully', () => {
       const result = parseApplyProgressLine('[OK] Discord.Discord (driver: winget) - Installed successfully');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'OK', statusKey: 'already_present' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'OK', statusKey: 'present' });
     });
 
     it('parses [INSTALL] line', () => {
@@ -294,7 +294,7 @@ describe('apply-utils', () => {
 
     it('parses [SKIP] with already installed as OK (not Skipped)', () => {
       const result = parseApplyProgressLine('[SKIP] Discord.Discord - already installed');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'OK', statusKey: 'already_present' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'OK', statusKey: 'present' });
     });
 
     it('parses [SKIP] with filtered', () => {
@@ -419,7 +419,7 @@ describe('apply-utils', () => {
       const item: ApplyItem = { id: 'App.Id', driver: 'winget', status: 'skipped', reason: 'already_installed' };
       const result = reasonToAction(item);
       expect(result.action).toBe('OK');
-      expect(result.statusKey).toBe('already_present');
+      expect(result.statusKey).toBe('present');
     });
 
     it('maps would_install to To install with statusKey', () => {

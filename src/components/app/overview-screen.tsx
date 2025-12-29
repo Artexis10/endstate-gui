@@ -489,7 +489,7 @@ export function OverviewScreen({
                       {liveAppEvents.map((event, idx) => {
                         // Use statusKey if available, otherwise derive from action
                         const statusKey: StatusKey = event.statusKey || (
-                          event.action === 'OK' ? 'already_present' :
+                          event.action === 'OK' ? 'present' :
                           event.action === 'Installed' ? 'installed' :
                           event.action === 'Failed' ? 'failed' :
                           event.action === 'Skipped' ? 'skipped' :
@@ -1059,11 +1059,11 @@ export function OverviewScreen({
                   {actionResult.counts.alreadyPresent !== undefined && actionResult.counts.alreadyPresent > 0 && (
                     <button
                       role="tab"
-                      aria-selected={detailsFilter === 'already_present'}
-                      onClick={() => setDetailsFilter(detailsFilter === 'already_present' ? null : 'already_present')}
+                      aria-selected={detailsFilter === 'present'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'present' ? null : 'present')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'already_present' ? 'ring-2 ring-green-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'already_present' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
+                        detailsFilter === 'present' ? 'ring-2 ring-green-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'present' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
                     >
                       Already present: {actionResult.counts.alreadyPresent}
                     </button>
@@ -1115,7 +1115,7 @@ export function OverviewScreen({
             const filteredEvents = detailsFilter
               ? actionResult.appEvents.filter(e => {
                   const statusKey: StatusKey = e.statusKey || (
-                    e.action === 'OK' ? 'already_present' :
+                    e.action === 'OK' ? 'present' :
                     e.action === 'Installed' ? 'installed' :
                     e.action === 'Failed' ? 'failed' :
                     e.action === 'Skipped' ? 'skipped' :
@@ -1147,7 +1147,7 @@ export function OverviewScreen({
                     {sortedEvents.map((event, i) => {
                       // Use statusKey if available, otherwise derive from action
                       const statusKey: StatusKey = event.statusKey || (
-                        event.action === 'OK' ? 'already_present' :
+                        event.action === 'OK' ? 'present' :
                         event.action === 'Installed' ? 'installed' :
                         event.action === 'Failed' ? 'failed' :
                         event.action === 'Skipped' ? 'skipped' :

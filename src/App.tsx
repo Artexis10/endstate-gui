@@ -1540,11 +1540,11 @@ function AppContent() {
             if (existingIndex !== undefined) {
               const existing = appEventList[existingIndex];
               // Update counters on status change
-              const isFinal = ['installed', 'already_present', 'skipped', 'failed'].includes(appEvent.statusKey || '');
+              const isFinal = ['installed', 'present', 'skipped', 'failed'].includes(appEvent.statusKey || '');
               const wasNonFinal = existing.statusKey === 'installing' || existing.statusKey === 'to_install';
               if (isFinal && wasNonFinal) {
                 if (appEvent.statusKey === 'installed') counters.installed++;
-                else if (appEvent.statusKey === 'already_present') counters.alreadyPresent++;
+                else if (appEvent.statusKey === 'present') counters.alreadyPresent++;
                 else if (appEvent.statusKey === 'skipped') counters.skipped++;
                 else if (appEvent.statusKey === 'failed') counters.failed++;
               }

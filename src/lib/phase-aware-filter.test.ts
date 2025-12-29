@@ -18,9 +18,9 @@ describe('Phase-aware status mapping for filters', () => {
     expect(result.color).toBe('detected');
   });
 
-  it('Apply phase: already_present -> "Already present"', () => {
+  it('Apply phase: present -> "Already present"', () => {
     const result = getPhaseAwareStatusForEvent({
-      statusKey: 'already_present',
+      statusKey: 'present',
       phase: 'apply',
     });
     
@@ -60,9 +60,9 @@ describe('Phase-aware status mapping for filters', () => {
     expect(result.color).toBe('warn');
   });
 
-  it('Verify phase: already_present -> "Confirmed"', () => {
+  it('Verify phase: present -> "Confirmed"', () => {
     const result = getPhaseAwareStatusForEvent({
-      statusKey: 'already_present',
+      statusKey: 'present',
       phase: 'verify',
     });
     
@@ -85,7 +85,7 @@ describe('Phase-aware status mapping for filters', () => {
     const event = {
       app: 'Git.Git',
       action: 'OK',
-      statusKey: 'already_present' as StatusKey,
+      statusKey: 'present' as StatusKey,
       phase: 'apply' as UiPhase,
       reason: null,
     };
@@ -127,11 +127,11 @@ describe('Phase-aware status mapping for filters', () => {
     expect(uiStatus.longLabel).toBe('To install');
   });
 
-  it('Filter predicate example: NOT matching "Skipped" for already_present', () => {
+  it('Filter predicate example: NOT matching "Skipped" for present', () => {
     const event = {
       app: 'Chrome',
       action: 'OK',
-      statusKey: 'already_present' as StatusKey,
+      statusKey: 'present' as StatusKey,
       phase: 'apply' as UiPhase,
       reason: 'already_installed',
     };
@@ -178,14 +178,14 @@ describe('Phase-aware status mapping for filters', () => {
     expect(matches).toBe(true);
   });
 
-  it('Filter by canonical key: already_present matches already_present events', () => {
+  it('Filter by canonical key: present matches present events', () => {
     const event = {
       app: 'Chrome',
-      statusKey: 'already_present' as StatusKey,
+      statusKey: 'present' as StatusKey,
       phase: 'apply' as UiPhase,
     };
 
-    const filterKey: StatusKey = 'already_present';
+    const filterKey: StatusKey = 'present';
     const matches = event.statusKey === filterKey;
 
     expect(matches).toBe(true);

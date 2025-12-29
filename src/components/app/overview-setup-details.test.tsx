@@ -59,9 +59,9 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     const appEvents: AppEvent[] = [
       { app: 'Git.Git', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
       { app: 'VSCode', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
-      { app: 'Chrome', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
-      { app: 'Firefox', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
-      { app: 'Notepad++', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Chrome', action: 'OK', statusKey: 'present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Firefox', action: 'OK', statusKey: 'present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Notepad++', action: 'OK', statusKey: 'present', phase: 'apply', timestamp: Date.now() },
     ];
 
     const setupResult = {
@@ -139,9 +139,9 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
       { app: 'VSCode', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
       // These were parsed from [SKIP] ... - already installed
       // After fix, parseApplyProgressLine returns action='OK' not 'Skipped'
-      { app: 'Chrome', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
-      { app: 'Firefox', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
-      { app: 'Notepad++', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Chrome', action: 'OK', statusKey: 'present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Firefox', action: 'OK', statusKey: 'present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Notepad++', action: 'OK', statusKey: 'present', phase: 'apply', timestamp: Date.now() },
       // This is a true skip (filtered)
       { app: 'BlockedApp', action: 'Skipped', statusKey: 'skipped', phase: 'apply', timestamp: Date.now() },
     ];

@@ -8,7 +8,7 @@ import type { EngineItemStatus, ItemEvent, EnginePhase } from './streaming-event
  */
 export type StatusKey = 
   | 'to_install'      // Preview: will be installed
-  | 'already_present' // Already on system
+  | 'present'         // Already on system (label: "Already present")
   | 'detected'        // Capture: app detected on system
   | 'skipped'         // Skipped by filter/policy
   | 'failed'          // Failed (preview or apply)
@@ -37,7 +37,7 @@ export interface UiStatusConfig {
  * Both Live Activity and Setup Details MUST consume this mapping.
  */
 export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
-  already_present: {
+  present: {
     shortLabel: 'PRESENT',
     longLabel: 'Already present',
     color: 'success',
@@ -107,7 +107,7 @@ export interface PhaseAwareStatusConfig {
 export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAwareStatusConfig>>> = {
   capture: {
     detected: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'detected' },
-    already_present: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'detected' },
+    present: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'detected' },
     installed: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'detected' },
     to_install: { shortLabel: 'NOT FOUND', longLabel: 'Not found', color: 'muted' },
     skipped: { shortLabel: 'EXCLUDED', longLabel: 'Excluded', color: 'muted' },
@@ -116,7 +116,7 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
   },
   apply: {
-    already_present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
+    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
     to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'info' },
     installing: { shortLabel: 'INSTALLING', longLabel: 'Installing…', color: 'info' },
     installed: { shortLabel: 'INSTALLED', longLabel: 'Installed', color: 'success' },
@@ -125,7 +125,7 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
   },
   verify: {
-    already_present: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
+    present: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
     installed: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
     to_install: { shortLabel: 'MISSING', longLabel: 'Missing', color: 'error' },
     installing: { shortLabel: 'CHECKING', longLabel: 'Checking…', color: 'info' },
@@ -164,7 +164,7 @@ export interface PhaseAwareStatusArgs {
  * This is the SINGLE SOURCE OF TRUTH for (phase, statusKey, reason) -> UI labels.
  * 
  * Capture phase rules:
- * - already_present -> DETECTED (success) - app found on system
+ * - present -> DETECTED (detected) - app found on system
  * - to_install -> NOT FOUND (muted) - app not on system
  * - skipped + reason=filtered -> EXCLUDED (muted) - filtered by policy
  * - skipped + reason=sensitive -> PROTECTED (warn) - sensitive data excluded
@@ -172,11 +172,11 @@ export interface PhaseAwareStatusArgs {
  * - installing -> SCANNING (info)
  * 
  * Apply phase rules:
- * - already_present -> PRESENT (success)
+ * - present -> PRESENT (success)
  * - skipped + reason=already_installed -> PRESENT (success) - NOT "Skipped"
  * 
  * Verify phase rules:
- * - already_present -> CONFIRMED (success)
+ * - present -> CONFIRMED (success)
  * - to_install -> MISSING (error)
  * 
  * @param args - Status key, phase, and optional reason
@@ -197,7 +197,7 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
       return { shortLabel: 'EXCLUDED', longLabel: 'Excluded', color: 'muted' };
     }
     // present + detected -> DETECTED (detected color)
-    if (statusKey === 'already_present' && reasonLower === 'detected') {
+    if (statusKey === 'present' && reasonLower === 'detected') {
       return { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'detected' };
     }
     // Default capture phase handling
@@ -268,7 +268,7 @@ export function getUiStatus(statusKey: StatusKey): UiStatusConfig {
  * This is the SINGLE SOURCE OF TRUTH for streaming event status mapping.
  * 
  * Engine Status -> UI StatusKey:
- * - present     -> already_present (green)
+ * - present     -> present (green)
  * - to_install  -> to_install (blue)
  * - installing  -> installing (blue)
  * - installed   -> installed (green)
@@ -278,7 +278,7 @@ export function getUiStatus(statusKey: StatusKey): UiStatusConfig {
 export function engineStatusToStatusKey(engineStatus: EngineItemStatus): StatusKey {
   switch (engineStatus) {
     case 'present':
-      return 'already_present';
+      return 'present';
     case 'to_install':
       return 'to_install';
     case 'installing':
@@ -372,7 +372,7 @@ export function reasonToStatusKey(item: ApplyItem): StatusKey {
 
   // Already present
   if (reason === 'already_installed' || reason === 'already_present') {
-    return 'already_present';
+    return 'present';
   }
 
   // Would install (preview)
@@ -387,7 +387,7 @@ export function reasonToStatusKey(item: ApplyItem): StatusKey {
 
   // OK status without reason = already present
   if (status === 'ok') {
-    return 'already_present';
+    return 'present';
   }
 
   // Fallback
@@ -403,7 +403,7 @@ export function getStatusLabel(
 ): string {
   if (phase === 'preview') {
     if (statusKey === 'to_install') return STATUS_LABELS.preview.to_install;
-    if (statusKey === 'already_present') return STATUS_LABELS.preview.already_present;
+    if (statusKey === 'present') return STATUS_LABELS.preview.already_present;
     if (statusKey === 'skipped' || statusKey === 'cancelled') return STATUS_LABELS.preview.skipped;
     if (statusKey === 'failed') return STATUS_LABELS.preview.failed;
     return STATUS_LABELS.preview.skipped;
@@ -417,7 +417,7 @@ export function getStatusLabel(
   
   // Result phase
   if (statusKey === 'installed') return STATUS_LABELS.result.installed;
-  if (statusKey === 'already_present') return STATUS_LABELS.result.already_present;
+  if (statusKey === 'present') return STATUS_LABELS.result.already_present;
   if (statusKey === 'skipped') return STATUS_LABELS.result.skipped;
   if (statusKey === 'failed') return STATUS_LABELS.result.failed;
   if (statusKey === 'cancelled') return STATUS_LABELS.result.cancelled;
@@ -688,7 +688,7 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
   // Keep it truthful: OK means "verified OK" not "skipped" or "installed"
   const okMatch = line.match(/\[OK\]\s+(\S+)/i);
   if (okMatch) {
-    return { app: okMatch[1], action: 'OK', statusKey: 'already_present' };
+    return { app: okMatch[1], action: 'OK', statusKey: 'present' };
   }
 
   // [INSTALL] App.Id (driver: ...) - this is the START of an install, not completion
@@ -719,7 +719,7 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
     
     // If skipped because already installed/present, map to OK (already present)
     if (reason.includes('already installed') || reason.includes('already present') || reason.includes('no action')) {
-      return { app, action: 'OK', statusKey: 'already_present' };
+      return { app, action: 'OK', statusKey: 'present' };
     }
     
     // Otherwise it's a true skip (filtered, policy, etc.)
@@ -822,7 +822,7 @@ export function reasonToAction(item: ApplyItem): { action: string; statusKey: St
 
   // Already present
   if (reason === 'already_installed') {
-    return { action: 'OK', statusKey: 'already_present' };
+    return { action: 'OK', statusKey: 'present' };
   }
 
   // To install (preview) - canonical label per UX_LANGUAGE.md
@@ -837,7 +837,7 @@ export function reasonToAction(item: ApplyItem): { action: string; statusKey: St
 
   // OK status without reason
   if (status === 'ok') {
-    return { action: 'OK', statusKey: 'already_present' };
+    return { action: 'OK', statusKey: 'present' };
   }
 
   // Fallback

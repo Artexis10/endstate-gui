@@ -132,8 +132,8 @@ describe('parseApplyProgressLine - Already Present vs Skipped', () => {
  */
 describe('engineStatusToStatusKey - Streaming Status Mapping', () => {
   describe('Engine status to UI StatusKey mapping', () => {
-    it('maps "present" to "already_present"', () => {
-      expect(engineStatusToStatusKey('present')).toBe('already_present');
+    it('maps "present" to "present"', () => {
+      expect(engineStatusToStatusKey('present')).toBe('present');
     });
 
     it('maps "to_install" to "to_install"', () => {
@@ -162,8 +162,8 @@ describe('engineStatusToStatusKey - Streaming Status Mapping', () => {
   });
 
   describe('UI_STATUS_MAP color consistency', () => {
-    it('present/already_present uses green (success)', () => {
-      expect(UI_STATUS_MAP.already_present.color).toBe('success');
+    it('present uses green (success)', () => {
+      expect(UI_STATUS_MAP.present.color).toBe('success');
     });
 
     it('to_install uses blue (info)', () => {
@@ -188,9 +188,9 @@ describe('engineStatusToStatusKey - Streaming Status Mapping', () => {
   });
 
   describe('UI_STATUS_MAP label consistency', () => {
-    it('already_present has correct labels', () => {
-      expect(UI_STATUS_MAP.already_present.shortLabel).toBe('PRESENT');
-      expect(UI_STATUS_MAP.already_present.longLabel).toBe('Already present');
+    it('present has correct labels', () => {
+      expect(UI_STATUS_MAP.present.shortLabel).toBe('PRESENT');
+      expect(UI_STATUS_MAP.present.longLabel).toBe('Already present');
     });
 
     it('to_install has correct labels', () => {
@@ -258,7 +258,7 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
     expect(appEvent.action).toBe('installed');
   });
 
-  it('maps "present" status to "already_present" statusKey', () => {
+  it('maps "present" status to "present" statusKey', () => {
     const itemEvent: ItemEvent = {
       version: 1,
       event: 'item',
@@ -271,7 +271,7 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
 
     const appEvent = itemEventToAppEvent(itemEvent, 'apply');
 
-    expect(appEvent.statusKey).toBe('already_present');
+    expect(appEvent.statusKey).toBe('present');
   });
 
   it('sets phase to undefined for "plan" phase (not UI-relevant)', () => {
@@ -313,8 +313,8 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
  */
 describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
   describe('Capture phase uses observational language', () => {
-    it('already_present shows as "Detected" (not "Already present")', () => {
-      const status = PHASE_STATUS_MAP.capture.already_present;
+    it('present shows as "Detected" (not "Already present")', () => {
+      const status = PHASE_STATUS_MAP.capture.present;
       expect(status?.shortLabel).toBe('DETECTED');
       expect(status?.longLabel).toBe('Detected');
       expect(status?.color).toBe('detected');
@@ -347,8 +347,8 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
   });
 
   describe('Apply phase uses action language', () => {
-    it('already_present shows as "Already present"', () => {
-      const status = PHASE_STATUS_MAP.apply.already_present;
+    it('present shows as "Already present"', () => {
+      const status = PHASE_STATUS_MAP.apply.present;
       expect(status?.shortLabel).toBe('PRESENT');
       expect(status?.longLabel).toBe('Already present');
       expect(status?.color).toBe('success');
@@ -383,8 +383,8 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
   });
 
   describe('Verify phase uses confirmation language', () => {
-    it('already_present shows as "Confirmed" (not "Already present")', () => {
-      const status = PHASE_STATUS_MAP.verify.already_present;
+    it('present shows as "Confirmed" (not "Already present")', () => {
+      const status = PHASE_STATUS_MAP.verify.present;
       expect(status?.shortLabel).toBe('CONFIRMED');
       expect(status?.longLabel).toBe('Confirmed');
       expect(status?.color).toBe('success');
@@ -420,18 +420,18 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
 
 describe('getPhaseAwareStatus - Phase-Aware Status Resolution', () => {
   it('returns phase-specific config when phase is provided', () => {
-    const captureStatus = getPhaseAwareStatus('already_present', 'capture');
+    const captureStatus = getPhaseAwareStatus('present', 'capture');
     expect(captureStatus.shortLabel).toBe('DETECTED');
 
-    const applyStatus = getPhaseAwareStatus('already_present', 'apply');
+    const applyStatus = getPhaseAwareStatus('present', 'apply');
     expect(applyStatus.shortLabel).toBe('PRESENT');
 
-    const verifyStatus = getPhaseAwareStatus('already_present', 'verify');
+    const verifyStatus = getPhaseAwareStatus('present', 'verify');
     expect(verifyStatus.shortLabel).toBe('CONFIRMED');
   });
 
   it('falls back to UI_STATUS_MAP when phase is undefined', () => {
-    const status = getPhaseAwareStatus('already_present');
+    const status = getPhaseAwareStatus('present');
     expect(status.shortLabel).toBe('PRESENT');
     expect(status.longLabel).toBe('Already present');
   });
@@ -515,9 +515,9 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
       expect(status.color).toBe('muted');
     });
 
-    it('capture + already_present + reason=detected -> DETECTED (detected color)', () => {
+    it('capture + present + reason=detected -> DETECTED (detected color)', () => {
       const status = getPhaseAwareStatusForEvent({
-        statusKey: 'already_present',
+        statusKey: 'present',
         phase: 'capture',
         reason: 'detected',
       });
@@ -526,9 +526,9 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
       expect(status.color).toBe('detected');
     });
 
-    it('capture + already_present -> DETECTED (detected color)', () => {
+    it('capture + present -> DETECTED (detected color)', () => {
       const status = getPhaseAwareStatusForEvent({
-        statusKey: 'already_present',
+        statusKey: 'present',
         phase: 'capture',
       });
       expect(status.shortLabel).toBe('DETECTED');
@@ -595,9 +595,9 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
       expect(status.color).toBe('warn');
     });
 
-    it('apply + already_present -> PRESENT (success)', () => {
+    it('apply + present -> PRESENT (success)', () => {
       const status = getPhaseAwareStatusForEvent({
-        statusKey: 'already_present',
+        statusKey: 'present',
         phase: 'apply',
       });
       expect(status.shortLabel).toBe('PRESENT');
@@ -615,9 +615,9 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
       expect(status.color).toBe('error');
     });
 
-    it('verify + already_present -> CONFIRMED (success)', () => {
+    it('verify + present -> CONFIRMED (success)', () => {
       const status = getPhaseAwareStatusForEvent({
-        statusKey: 'already_present',
+        statusKey: 'present',
         phase: 'verify',
       });
       expect(status.shortLabel).toBe('CONFIRMED');
@@ -647,7 +647,7 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
 
     it('falls back to UI_STATUS_MAP when no phase provided', () => {
       const status = getPhaseAwareStatusForEvent({
-        statusKey: 'already_present',
+        statusKey: 'present',
       });
       expect(status.shortLabel).toBe('PRESENT');
       expect(status.longLabel).toBe('Already present');

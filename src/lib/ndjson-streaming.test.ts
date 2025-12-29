@@ -34,11 +34,11 @@ import {
 
 describe('NDJSON Streaming Consolidation', () => {
   describe('1. Status Mapping - No aliases in UI types', () => {
-    it('StatusKey does NOT include "present" (engine term)', () => {
+    it('StatusKey includes "present" as canonical key', () => {
       // StatusKey should only have UI-canonical values
       const validStatusKeys: StatusKey[] = [
         'to_install',
-        'already_present',
+        'present',
         'skipped',
         'failed',
         'installing',
@@ -47,17 +47,17 @@ describe('NDJSON Streaming Consolidation', () => {
       ];
       
       // Verify these are the only valid StatusKey values
-      expect(validStatusKeys).toContain('already_present');
-      expect(validStatusKeys).not.toContain('present' as StatusKey);
+      expect(validStatusKeys).toContain('present');
+      expect(validStatusKeys).not.toContain('already_present' as StatusKey);
     });
 
-    it('engineStatusToStatusKey maps "present" → "already_present"', () => {
-      expect(engineStatusToStatusKey('present')).toBe('already_present');
+    it('engineStatusToStatusKey maps "present" → "present"', () => {
+      expect(engineStatusToStatusKey('present')).toBe('present');
     });
 
     it('engineStatusToStatusKey maps all engine statuses correctly', () => {
       const mappings: [EngineItemStatus, StatusKey][] = [
-        ['present', 'already_present'],
+        ['present', 'present'],
         ['to_install', 'to_install'],
         ['installing', 'installing'],
         ['installed', 'installed'],
@@ -73,14 +73,14 @@ describe('NDJSON Streaming Consolidation', () => {
     it('UI_STATUS_MAP has correct labels per contract', () => {
       // Required mapping from task:
       // UI Status       | Live Label   | Details Label    | Color
-      // already_present | PRESENT      | Already present  | green
+      // present         | PRESENT      | Already present  | green
       // to_install      | TO INSTALL   | To install       | blue
       // installing      | INSTALLING   | Installing…      | blue
       // installed       | INSTALLED    | Installed        | green
       // skipped         | SKIPPED      | Skipped          | yellow
       // failed          | FAILED       | Failed           | red
 
-      expect(UI_STATUS_MAP.already_present).toEqual({
+      expect(UI_STATUS_MAP.present).toEqual({
         shortLabel: 'PRESENT',
         longLabel: 'Already present',
         color: 'success',
@@ -402,7 +402,7 @@ describe('NDJSON Streaming Consolidation', () => {
     it('All StatusKey values have unique UI representations', () => {
       const statusKeys: StatusKey[] = [
         'to_install',
-        'already_present',
+        'present',
         'skipped',
         'failed',
         'installing',
