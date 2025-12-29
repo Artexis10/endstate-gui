@@ -74,6 +74,76 @@ export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
 } as const;
 
 /**
+ * Phase-aware UI status configuration.
+ * Different phases use different language for the same underlying status.
+ * 
+ * Capture phase: Observational language (Detected, Present, Not found)
+ * Apply phase: Action language (Installing, Installed, Already present, Failed)
+ * Verify phase: Confirmation language (Confirmed, Missing, Version mismatch)
+ */
+export interface PhaseAwareStatusConfig {
+  shortLabel: string;
+  longLabel: string;
+  color: SemanticColor;
+}
+
+/**
+ * Phase-aware status labels - maps (phase, statusKey) to UI labels.
+ * This is the SINGLE SOURCE OF TRUTH for phase-specific UI language.
+ * 
+ * Key semantic rules:
+ * - Capture: "Skipped" with reason "already_installed" → "Detected" (green)
+ * - Capture: Never shows "Skipped" - only "Detected" or "Not found"
+ * - Apply: "present" → "Already present" (green, success - no action needed)
+ * - Verify: "present" → "Confirmed" (green)
+ * - Verify: "to_install" → "Missing" (red - needs attention)
+ */
+export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAwareStatusConfig>>> = {
+  capture: {
+    already_present: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'success' },
+    installed: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'success' },
+    to_install: { shortLabel: 'NOT FOUND', longLabel: 'Not found', color: 'muted' },
+    skipped: { shortLabel: 'EXCLUDED', longLabel: 'Excluded', color: 'muted' },
+    failed: { shortLabel: 'ERROR', longLabel: 'Detection failed', color: 'error' },
+    installing: { shortLabel: 'SCANNING', longLabel: 'Scanning…', color: 'info' },
+    cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
+  },
+  apply: {
+    already_present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
+    to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'info' },
+    installing: { shortLabel: 'INSTALLING', longLabel: 'Installing…', color: 'info' },
+    installed: { shortLabel: 'INSTALLED', longLabel: 'Installed', color: 'success' },
+    skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },
+    failed: { shortLabel: 'FAILED', longLabel: 'Failed', color: 'error' },
+    cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
+  },
+  verify: {
+    already_present: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
+    installed: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
+    to_install: { shortLabel: 'MISSING', longLabel: 'Missing', color: 'error' },
+    installing: { shortLabel: 'CHECKING', longLabel: 'Checking…', color: 'info' },
+    skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },
+    failed: { shortLabel: 'MISMATCH', longLabel: 'Version mismatch', color: 'error' },
+    cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
+  },
+} as const;
+
+/**
+ * Get phase-aware UI status config.
+ * Falls back to default UI_STATUS_MAP if phase-specific config not found.
+ * 
+ * @param statusKey - The canonical status key
+ * @param phase - Optional UI phase for phase-specific labels
+ * @returns UI status configuration with labels and color
+ */
+export function getPhaseAwareStatus(statusKey: StatusKey, phase?: UiPhase): PhaseAwareStatusConfig {
+  if (phase && PHASE_STATUS_MAP[phase]?.[statusKey]) {
+    return PHASE_STATUS_MAP[phase][statusKey]!;
+  }
+  return UI_STATUS_MAP[statusKey] || UI_STATUS_MAP.skipped;
+}
+
+/**
  * Get Tailwind color classes for a semantic color.
  * Returns { text, bg, border } classes.
  */
@@ -274,8 +344,9 @@ export type { EnginePhase } from './streaming-events';
 /**
  * UI-relevant phases for display purposes.
  * 'plan' phase from engine is not displayed in UI.
+ * 'capture' is a UI-only phase for the capture flow.
  */
-export type UiPhase = 'apply' | 'verify';
+export type UiPhase = 'capture' | 'apply' | 'verify';
 
 /**
  * AppEvent represents a live activity entry during streaming.

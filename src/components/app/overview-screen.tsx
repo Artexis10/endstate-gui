@@ -58,7 +58,7 @@ import {
   type StatusKey,
   type UiPhase,
   getColorClasses,
-  getUiStatus,
+  getPhaseAwareStatus,
 } from '@/lib/apply-utils';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
@@ -417,10 +417,19 @@ export function OverviewScreen({
         {/* Running state */}
         {isThisRunning && actionProgress && (
           <div className="space-y-3">
-            <div className="flex items-center gap-3 bg-primary/5 rounded-md px-3 py-3">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            {/* Phase-aware progress indicator: Verify phase has distinct amber styling */}
+            <div className={`flex items-center gap-3 rounded-md px-3 py-3 ${
+              actionProgress.phase === 'verify' 
+                ? 'bg-amber-500/10 border border-amber-500/20' 
+                : 'bg-primary/5'
+            }`}>
+              <Loader2 className={`h-4 w-4 animate-spin ${
+                actionProgress.phase === 'verify' ? 'text-amber-500' : 'text-primary'
+              }`} />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">
+                <p className={`text-sm font-medium truncate ${
+                  actionProgress.phase === 'verify' ? 'text-amber-600 dark:text-amber-400' : ''
+                }`}>
                   {/* Phase indicator: show current phase for clarity */}
                   {actionProgress.phase === 'verify' ? 'Verifying installation…' : actionProgress.message}
                 </p>
@@ -432,7 +441,11 @@ export function OverviewScreen({
             
             {/* Collapsible live activity for Setup card */}
             {action === 'setup' && liveAppEvents.length > 0 && (
-              <div className="rounded-md border border-border/50">
+              <div className={`rounded-md border ${
+                actionProgress.phase === 'verify' 
+                  ? 'border-amber-500/30 bg-amber-500/5' 
+                  : 'border-border/50'
+              }`}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -440,7 +453,15 @@ export function OverviewScreen({
                   }}
                   className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
                 >
-                  <span className="font-medium">Live activity</span>
+                  <span className="font-medium flex items-center gap-2">
+                    Live activity
+                    {/* Phase badge for visual distinction */}
+                    {actionProgress.phase === 'verify' && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                        VERIFY
+                      </span>
+                    )}
+                  </span>
                   <div className="flex items-center gap-2">
                     {liveCounters && (
                       <span className="flex items-center gap-1.5">
@@ -477,7 +498,8 @@ export function OverviewScreen({
                           event.action === 'To install' ? 'to_install' :
                           'skipped'
                         );
-                        const uiStatus = getUiStatus(statusKey);
+                        // Use phase-aware status for correct labels per phase
+                        const uiStatus = getPhaseAwareStatus(statusKey, event.phase);
                         const colors = getColorClasses(uiStatus.color);
                         
                         return (
@@ -494,13 +516,16 @@ export function OverviewScreen({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          // Scroll to bottom and re-enable auto-follow
                           activityScrollRef.current?.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
+                          setIsAtBottom(true);
                         }}
-                        className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs bg-primary text-primary-foreground rounded shadow-lg hover:bg-primary/90 transition-colors"
-                        aria-label="Jump to latest"
+                        className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-colors"
+                        aria-label="Jump to latest and re-enable auto-follow"
+                        data-testid="latest-pill"
                       >
                         <ArrowDown className="h-3 w-3" />
-                        Latest
+                        Latest ↓
                       </button>
                     )}
                   </div>
@@ -1122,14 +1147,15 @@ export function OverviewScreen({
                         event.action === 'To install' || event.action === 'Missing' ? 'to_install' :
                         'skipped'
                       );
-                      const uiStatus = getUiStatus(statusKey);
+                      // Use phase-aware status for correct labels per phase
+                      const uiStatus = getPhaseAwareStatus(statusKey, event.phase);
                       const colors = getColorClasses(uiStatus.color);
                       
                       return (
                         <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
                           <span className="font-mono truncate flex-1">{event.app}</span>
                           <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap min-w-fit ${colors.bg} ${colors.text}`}>
-                            {/* Use long label from UI_STATUS_MAP for modal display */}
+                            {/* Use long label for modal display */}
                             {uiStatus.longLabel}
                           </span>
                         </div>

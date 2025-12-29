@@ -4,6 +4,8 @@ import {
   engineStatusToStatusKey, 
   itemEventToAppEvent,
   UI_STATUS_MAP,
+  PHASE_STATUS_MAP,
+  getPhaseAwareStatus,
 } from './apply-utils';
 import type { ItemEvent } from './streaming-events';
 
@@ -301,5 +303,152 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
     const appEvent = itemEventToAppEvent(itemEvent, 'verify');
 
     expect(appEvent.phase).toBe('verify');
+  });
+});
+
+/**
+ * Tests for phase-aware UI status mapping.
+ * Different phases use different language for the same underlying status.
+ */
+describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
+  describe('Capture phase uses observational language', () => {
+    it('already_present shows as "Detected" (not "Already present")', () => {
+      const status = PHASE_STATUS_MAP.capture.already_present;
+      expect(status?.shortLabel).toBe('DETECTED');
+      expect(status?.longLabel).toBe('Detected');
+      expect(status?.color).toBe('success');
+    });
+
+    it('installed shows as "Detected"', () => {
+      const status = PHASE_STATUS_MAP.capture.installed;
+      expect(status?.shortLabel).toBe('DETECTED');
+      expect(status?.longLabel).toBe('Detected');
+    });
+
+    it('to_install shows as "Not found" (not "To install")', () => {
+      const status = PHASE_STATUS_MAP.capture.to_install;
+      expect(status?.shortLabel).toBe('NOT FOUND');
+      expect(status?.longLabel).toBe('Not found');
+      expect(status?.color).toBe('muted');
+    });
+
+    it('skipped shows as "Excluded" (not "Skipped")', () => {
+      const status = PHASE_STATUS_MAP.capture.skipped;
+      expect(status?.shortLabel).toBe('EXCLUDED');
+      expect(status?.longLabel).toBe('Excluded');
+    });
+
+    it('installing shows as "Scanning"', () => {
+      const status = PHASE_STATUS_MAP.capture.installing;
+      expect(status?.shortLabel).toBe('SCANNING');
+      expect(status?.longLabel).toBe('Scanning…');
+    });
+  });
+
+  describe('Apply phase uses action language', () => {
+    it('already_present shows as "Already present"', () => {
+      const status = PHASE_STATUS_MAP.apply.already_present;
+      expect(status?.shortLabel).toBe('PRESENT');
+      expect(status?.longLabel).toBe('Already present');
+      expect(status?.color).toBe('success');
+    });
+
+    it('to_install shows as "To install"', () => {
+      const status = PHASE_STATUS_MAP.apply.to_install;
+      expect(status?.shortLabel).toBe('TO INSTALL');
+      expect(status?.longLabel).toBe('To install');
+      expect(status?.color).toBe('info');
+    });
+
+    it('installing shows as "Installing"', () => {
+      const status = PHASE_STATUS_MAP.apply.installing;
+      expect(status?.shortLabel).toBe('INSTALLING');
+      expect(status?.longLabel).toBe('Installing…');
+    });
+
+    it('installed shows as "Installed"', () => {
+      const status = PHASE_STATUS_MAP.apply.installed;
+      expect(status?.shortLabel).toBe('INSTALLED');
+      expect(status?.longLabel).toBe('Installed');
+      expect(status?.color).toBe('success');
+    });
+
+    it('failed shows as "Failed"', () => {
+      const status = PHASE_STATUS_MAP.apply.failed;
+      expect(status?.shortLabel).toBe('FAILED');
+      expect(status?.longLabel).toBe('Failed');
+      expect(status?.color).toBe('error');
+    });
+  });
+
+  describe('Verify phase uses confirmation language', () => {
+    it('already_present shows as "Confirmed" (not "Already present")', () => {
+      const status = PHASE_STATUS_MAP.verify.already_present;
+      expect(status?.shortLabel).toBe('CONFIRMED');
+      expect(status?.longLabel).toBe('Confirmed');
+      expect(status?.color).toBe('success');
+    });
+
+    it('installed shows as "Confirmed"', () => {
+      const status = PHASE_STATUS_MAP.verify.installed;
+      expect(status?.shortLabel).toBe('CONFIRMED');
+      expect(status?.longLabel).toBe('Confirmed');
+    });
+
+    it('to_install shows as "Missing" (not "To install")', () => {
+      const status = PHASE_STATUS_MAP.verify.to_install;
+      expect(status?.shortLabel).toBe('MISSING');
+      expect(status?.longLabel).toBe('Missing');
+      expect(status?.color).toBe('error');
+    });
+
+    it('installing shows as "Checking"', () => {
+      const status = PHASE_STATUS_MAP.verify.installing;
+      expect(status?.shortLabel).toBe('CHECKING');
+      expect(status?.longLabel).toBe('Checking…');
+    });
+
+    it('failed shows as "Version mismatch"', () => {
+      const status = PHASE_STATUS_MAP.verify.failed;
+      expect(status?.shortLabel).toBe('MISMATCH');
+      expect(status?.longLabel).toBe('Version mismatch');
+      expect(status?.color).toBe('error');
+    });
+  });
+});
+
+describe('getPhaseAwareStatus - Phase-Aware Status Resolution', () => {
+  it('returns phase-specific config when phase is provided', () => {
+    const captureStatus = getPhaseAwareStatus('already_present', 'capture');
+    expect(captureStatus.shortLabel).toBe('DETECTED');
+
+    const applyStatus = getPhaseAwareStatus('already_present', 'apply');
+    expect(applyStatus.shortLabel).toBe('PRESENT');
+
+    const verifyStatus = getPhaseAwareStatus('already_present', 'verify');
+    expect(verifyStatus.shortLabel).toBe('CONFIRMED');
+  });
+
+  it('falls back to UI_STATUS_MAP when phase is undefined', () => {
+    const status = getPhaseAwareStatus('already_present');
+    expect(status.shortLabel).toBe('PRESENT');
+    expect(status.longLabel).toBe('Already present');
+  });
+
+  it('falls back to UI_STATUS_MAP for unknown status', () => {
+    const status = getPhaseAwareStatus('unknown' as any, 'apply');
+    expect(status.shortLabel).toBe('SKIPPED');
+  });
+
+  it('Verify phase: to_install maps to Missing (red)', () => {
+    const status = getPhaseAwareStatus('to_install', 'verify');
+    expect(status.shortLabel).toBe('MISSING');
+    expect(status.color).toBe('error');
+  });
+
+  it('Capture phase: skipped maps to Excluded (muted)', () => {
+    const status = getPhaseAwareStatus('skipped', 'capture');
+    expect(status.shortLabel).toBe('EXCLUDED');
+    expect(status.color).toBe('muted');
   });
 });
