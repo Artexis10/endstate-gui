@@ -1408,7 +1408,11 @@ function AppContent() {
 
     // Track check live activity via NDJSON events
     const checkAppEvents: AppEvent[] = [];
-    let checkPhase: EnginePhase = 'apply';
+    const counters = { confirmed: 0, missing: 0, skipped: 0 };
+    
+    // Clear previous live events for fresh check run
+    setLiveAppEvents([]);
+    setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
     
     // Use apply --dry-run for checking (same as preview)
     const checkResult = await runEngineStreaming<EndstateApplyData>(
@@ -1424,19 +1428,49 @@ function AppContent() {
       {
         enableNdjsonEvents: true,
         onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
-          if (isPhaseEvent(ndjsonEvent)) {
-            checkPhase = ndjsonEvent.phase;
-          } else if (isItemEvent(ndjsonEvent)) {
-            const appEvent = itemEventToAppEvent(ndjsonEvent, checkPhase);
+          // Phase events are ignored for Check flow - we always use 'verify' phase semantics
+          if (isItemEvent(ndjsonEvent)) {
+            // Force verify phase for UI display since this is a Check operation
+            const appEvent = itemEventToAppEvent(ndjsonEvent, 'verify');
             checkAppEvents.push(appEvent);
+            
+            // Update counters based on verify semantics
+            const statusKey = appEvent.statusKey || 'skipped';
+            if (statusKey === 'present' || statusKey === 'installed') {
+              counters.confirmed++;
+            } else if (statusKey === 'to_install') {
+              counters.missing++;
+            } else if (statusKey === 'skipped') {
+              counters.skipped++;
+            }
+            
+            // Update live events for UI streaming
+            setLiveAppEvents(checkAppEvents.length > 2000 ? checkAppEvents.slice(-2000) : [...checkAppEvents]);
+            // Map verify counters to the existing counter structure
+            setLiveCounters({ 
+              installed: 0, 
+              alreadyPresent: counters.confirmed, 
+              skipped: counters.skipped, 
+              failed: counters.missing 
+            });
+            
             const uiStatus = getPhaseAwareStatusForEvent({
-              statusKey: appEvent.statusKey || 'skipped',
+              statusKey,
               phase: 'verify',
               reason: appEvent.reason,
             });
+            
+            // Build counter text for progress detail
+            const parts: string[] = [];
+            if (counters.confirmed > 0) parts.push(`${counters.confirmed} confirmed`);
+            if (counters.missing > 0) parts.push(`${counters.missing} missing`);
+            if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
+            const counterText = parts.join(' · ') || 'Checking…';
+            
             setOverviewActionProgress({ 
-              message: 'Checking computer...', 
-              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}` 
+              message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`, 
+              detail: counterText,
+              phase: 'verify'
             });
           }
         },

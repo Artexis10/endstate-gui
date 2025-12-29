@@ -1050,8 +1050,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'to_install'}
                       onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity whitespace-nowrap flex-shrink-0 ${
-                        detailsFilter === 'to_install' ? 'ring-2 ring-blue-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} bg-blue-500/10 text-blue-600`}
+                        detailsFilter === 'to_install' ? 'ring-2 ring-primary' : ''
+                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('info').bg} ${getColorClasses('info').text}`}
                     >
                       To install: {actionResult.counts.toInstall}
                     </button>
@@ -1086,8 +1086,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'failed'}
                       onClick={() => setDetailsFilter(detailsFilter === 'failed' ? null : 'failed')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'failed' ? 'ring-2 ring-red-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'failed' ? 'opacity-50' : ''} bg-red-500/10 text-red-600`}
+                        detailsFilter === 'failed' ? 'ring-2 ring-destructive' : ''
+                      } ${detailsFilter && detailsFilter !== 'failed' ? 'opacity-50' : ''} ${getColorClasses('error').bg} ${getColorClasses('error').text}`}
                     >
                       Failed: {actionResult.counts.failed}
                     </button>
