@@ -15,8 +15,9 @@ import { discoverProfiles, DiscoveredProfile } from './file-discovery';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
-import { parseCaptureOutput, type CaptureStats } from './lib/log-parse';
-import { parseApplyProgressLine, StreamingLineBuffer, reconcileLiveActivity, isVerifyPhaseMarker, type AppEvent, type UiPhase } from './lib/apply-utils';
+import { type CaptureStats } from './lib/log-parse';
+import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, type AppEvent, type UiPhase } from './lib/apply-utils';
+import { isItemEvent, isArtifactEvent, isSummaryEvent, isPhaseEvent, type EnginePhase } from './lib/streaming-events';
 import { saveLastRun, loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, hasRecentScan, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadUIMode, saveUIMode, toggleUIMode, type UIMode } from './lib/ui-mode';
@@ -589,6 +590,10 @@ function AppContent() {
 
     updateActivity('Analyzing setup profile...', 'running', 1);
 
+    // Track preview live activity via NDJSON events
+    const previewAppEvents: AppEvent[] = [];
+    let previewPhase: EnginePhase = 'apply';
+
     try {
       // Run apply --dry-run to preview changes
       const applyResult = await runEngineStreaming<EndstateApplyData>(
@@ -596,19 +601,29 @@ function AppContent() {
         'apply',
         ['--profile', selectedProfilePath, '--dry-run'],
         (event: StreamEvent) => {
+          // Collect raw output for Technical Details only
           if (event.type === 'stdout' || event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
-            
-            // Parse real-time progress
-            const completeLines = applyLineBufferRef.current?.append(event.data) || [];
-            for (const line of completeLines) {
-              const progress = parseApplyProgressLine(line);
-              if (progress) {
-                setApplyProgress({ currentApp: progress.app, action: progress.action });
-                updateActivity(`${progress.action}: ${progress.app}`, 'running', 1);
-              }
-            }
           }
+        },
+        {
+          enableNdjsonEvents: true,
+          onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
+            if (isPhaseEvent(ndjsonEvent)) {
+              previewPhase = ndjsonEvent.phase;
+            } else if (isItemEvent(ndjsonEvent)) {
+              const appEvent = itemEventToAppEvent(ndjsonEvent, previewPhase);
+              previewAppEvents.push(appEvent);
+              setLiveAppEvents([...previewAppEvents]);
+              const uiStatus = getPhaseAwareStatusForEvent({
+                statusKey: appEvent.statusKey || 'skipped',
+                phase: 'apply',
+                reason: appEvent.reason,
+              });
+              setApplyProgress({ currentApp: ndjsonEvent.id, action: uiStatus.longLabel });
+              updateActivity(`${uiStatus.longLabel}: ${ndjsonEvent.id}`, 'running', 1);
+            }
+          },
         }
       );
 
@@ -726,6 +741,10 @@ function AppContent() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
+    // Track apply live activity via NDJSON events
+    const applyAppEvents: AppEvent[] = [];
+    let applyPhase: EnginePhase = 'apply';
+
     try {
       // Run actual apply (no --dry-run)
       const applyResult = await runEngineStreaming<EndstateApplyData>(
@@ -733,18 +752,29 @@ function AppContent() {
         'apply',
         ['--profile', selectedProfilePath],
         (event: StreamEvent) => {
+          // Collect raw output for Technical Details only
           if (event.type === 'stdout' || event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
-            
-            const completeLines = applyLineBufferRef.current?.append(event.data) || [];
-            for (const line of completeLines) {
-              const progress = parseApplyProgressLine(line);
-              if (progress) {
-                setApplyProgress({ currentApp: progress.app, action: progress.action });
-                updateActivity(`${progress.action}: ${progress.app}`, 'running', 1);
-              }
-            }
           }
+        },
+        {
+          enableNdjsonEvents: true,
+          onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
+            if (isPhaseEvent(ndjsonEvent)) {
+              applyPhase = ndjsonEvent.phase;
+            } else if (isItemEvent(ndjsonEvent)) {
+              const appEvent = itemEventToAppEvent(ndjsonEvent, applyPhase);
+              applyAppEvents.push(appEvent);
+              setLiveAppEvents([...applyAppEvents]);
+              const uiStatus = getPhaseAwareStatusForEvent({
+                statusKey: appEvent.statusKey || 'skipped',
+                phase: 'apply',
+                reason: appEvent.reason,
+              });
+              setApplyProgress({ currentApp: ndjsonEvent.id, action: uiStatus.longLabel });
+              updateActivity(`${uiStatus.longLabel}: ${ndjsonEvent.id}`, 'running', 1);
+            }
+          },
         }
       );
 
@@ -864,6 +894,10 @@ function AppContent() {
     // Initialize streaming line buffer for robust partial line handling
     applyLineBufferRef.current = new StreamingLineBuffer();
 
+    // Track apply live activity via NDJSON events
+    const setupAppEvents: AppEvent[] = [];
+    let setupPhase: EnginePhase = 'apply';
+
     try {
       const args = ['--profile', selectedProfilePath];
       if (settings.dryRunEnabled) {
@@ -875,19 +909,29 @@ function AppContent() {
         'apply',
         args,
         (event: StreamEvent) => {
+          // Collect raw output for Technical Details only
           if (event.type === 'stdout' || event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
-            
-            // Parse real-time progress using streaming line buffer
-            const completeLines = applyLineBufferRef.current?.append(event.data) || [];
-            for (const line of completeLines) {
-              const progress = parseApplyProgressLine(line);
-              if (progress) {
-                setApplyProgress({ currentApp: progress.app, action: progress.action });
-                updateActivity(`${progress.action}: ${progress.app}`, 'running', 1);
-              }
-            }
           }
+        },
+        {
+          enableNdjsonEvents: true,
+          onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
+            if (isPhaseEvent(ndjsonEvent)) {
+              setupPhase = ndjsonEvent.phase;
+            } else if (isItemEvent(ndjsonEvent)) {
+              const appEvent = itemEventToAppEvent(ndjsonEvent, setupPhase);
+              setupAppEvents.push(appEvent);
+              setLiveAppEvents([...setupAppEvents]);
+              const uiStatus = getPhaseAwareStatusForEvent({
+                statusKey: appEvent.statusKey || 'skipped',
+                phase: 'apply',
+                reason: appEvent.reason,
+              });
+              setApplyProgress({ currentApp: ndjsonEvent.id, action: uiStatus.longLabel });
+              updateActivity(`${uiStatus.longLabel}: ${ndjsonEvent.id}`, 'running', 1);
+            }
+          },
         }
       );
 
@@ -990,24 +1034,66 @@ function AppContent() {
       const filename = `setup_${timestamp}.jsonc`;
       const outputPath = `${dir}\\${filename}`;
 
+      // Track capture live activity via NDJSON events
+      const captureAppEvents: AppEvent[] = [];
+      let capturePhase: EnginePhase = 'capture';
+      
       const captureResult = await runEngineStreaming(
         settings,
         'capture',
         ['--out', outputPath],
         (event: StreamEvent) => {
+          // Collect raw output for Technical Details only
           if (event.type === 'stdout' || event.type === 'stderr') {
             logBufferRef.current?.append(event.data);
-            
-            // Parse live progress from streaming logs
-            const parsed = parseCaptureOutput(runLogs + event.data);
-            if (parsed.lastProcessedApp) {
-              setCaptureProgress(parsed.lastProcessedApp);
-            }
-            // Update stats for processedCount display
-            if (parsed.processedCount > 0) {
-              setCaptureStats(prev => ({ ...prev, processedCount: parsed.processedCount }));
-            }
           }
+        },
+        {
+          enableNdjsonEvents: true,
+          onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
+            // Handle phase events
+            if (isPhaseEvent(ndjsonEvent)) {
+              capturePhase = ndjsonEvent.phase;
+            }
+            // Handle item events - convert to AppEvent for live activity
+            else if (isItemEvent(ndjsonEvent)) {
+              const appEvent = itemEventToAppEvent(ndjsonEvent, capturePhase);
+              captureAppEvents.push(appEvent);
+              // Update live activity display
+              setLiveAppEvents([...captureAppEvents]);
+              // Update progress message with latest app
+              const uiStatus = getPhaseAwareStatusForEvent({ 
+                statusKey: appEvent.statusKey || 'skipped', 
+                phase: 'capture', 
+                reason: appEvent.reason 
+              });
+              setCaptureProgress(`${uiStatus.longLabel}: ${ndjsonEvent.id}`);
+              // Update processedCount from NDJSON events
+              setCaptureStats(prev => ({ ...prev, processedCount: captureAppEvents.length }));
+            }
+            // Handle artifact events (manifest saved)
+            else if (isArtifactEvent(ndjsonEvent)) {
+              const artifactEvent: AppEvent = {
+                app: 'Manifest',
+                action: `Saved to ${ndjsonEvent.path}`,
+                timestamp: Date.now(),
+                statusKey: 'installed',
+                phase: 'capture',
+              };
+              captureAppEvents.push(artifactEvent);
+              setLiveAppEvents([...captureAppEvents]);
+            }
+            // Handle summary events
+            else if (isSummaryEvent(ndjsonEvent)) {
+              setCaptureStats(prev => ({
+                ...prev,
+                succeeded: ndjsonEvent.success,
+                skipped: ndjsonEvent.skipped,
+                failed: ndjsonEvent.failed,
+                processedCount: ndjsonEvent.total,
+              }));
+            }
+          },
         }
       );
 
@@ -1026,35 +1112,35 @@ function AppContent() {
             rawEnvelope: captureResult.envelope || undefined,
           });
         } else {
-          // Fall back to log parsing if envelope doesn't have the new structure
-          const finalStats = parseCaptureOutput(runLogs);
+          // Fallback: use NDJSON event count if envelope structure is incomplete
+          const eventCount = captureAppEvents.length;
           setCaptureData({
             counts: {
-              totalFound: finalStats.succeeded + finalStats.skipped,
-              included: finalStats.succeeded,
-              skipped: finalStats.skipped,
+              totalFound: eventCount,
+              included: eventCount,
+              skipped: 0,
               filteredRuntimes: 0,
               filteredStoreApps: 0,
               sensitiveExcludedCount: 0,
             },
-            appsIncluded: finalStats.apps.filter(a => a.status === 'ok').map(a => ({ id: a.id, source: a.driver })),
-            outputPath: finalStats.outputPath || envelopeData?.outputPath || outputPath,
+            appsIncluded: captureAppEvents.map(e => ({ id: e.app, source: 'unknown' })),
+            outputPath: envelopeData?.outputPath || outputPath,
             rawEnvelope: captureResult.envelope || undefined,
           });
         }
         
-        // Also update legacy captureStats for backward compatibility
-        const finalStats = parseCaptureOutput(runLogs);
-        setCaptureStats(finalStats);
+        // Get counts from envelope data for last run and lifecycle
+        const capturedCount = envelopeData?.counts?.included ?? envelopeData?.appsIncluded?.length ?? 0;
+        const skippedCount = envelopeData?.counts?.skipped ?? 0;
         
         // Save Last Run (per-command)
         const lastRunData: LastRunData = {
           timestamp: new Date().toISOString(),
           command: 'capture',
           outcome: {
-            succeeded: finalStats.succeeded,
-            skipped: finalStats.skipped,
-            failed: finalStats.failed,
+            succeeded: capturedCount,
+            skipped: skippedCount,
+            failed: 0,
           },
         };
         saveLastRun(lastRunData);
@@ -1065,7 +1151,7 @@ function AppContent() {
           timestamp: new Date().toISOString(),
           success: true,
           summary: {
-            total: finalStats.succeeded,
+            total: capturedCount,
           },
         };
         const newLifecycleState = recordLifecycleEvent('capture', captureEvent);
@@ -1120,21 +1206,50 @@ function AppContent() {
     const filename = `setup_${timestamp}.jsonc`;
     const outputPath = `${dir}\\${filename}`;
 
+    // Track capture live activity via NDJSON events
+    const overviewCaptureEvents: AppEvent[] = [];
+    let overviewCapturePhase: EnginePhase = 'capture';
+    
     const captureResult = await runEngineStreaming(
       settings,
       'capture',
       ['--out', outputPath],
       (event: StreamEvent) => {
+        // Collect raw output for Technical Details only
         if (event.type === 'stdout' || event.type === 'stderr') {
           logBufferRef.current?.append(event.data);
-          const parsed = parseCaptureOutput(runLogs + event.data);
-          if (parsed.lastProcessedApp) {
+        }
+      },
+      {
+        enableNdjsonEvents: true,
+        onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
+          if (isPhaseEvent(ndjsonEvent)) {
+            overviewCapturePhase = ndjsonEvent.phase;
+          } else if (isItemEvent(ndjsonEvent)) {
+            const appEvent = itemEventToAppEvent(ndjsonEvent, overviewCapturePhase);
+            overviewCaptureEvents.push(appEvent);
+            setLiveAppEvents([...overviewCaptureEvents]);
+            const uiStatus = getPhaseAwareStatusForEvent({ 
+              statusKey: appEvent.statusKey || 'skipped', 
+              phase: 'capture', 
+              reason: appEvent.reason 
+            });
             setOverviewActionProgress({ 
               message: 'Scanning applications...', 
-              detail: parsed.lastProcessedApp 
+              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}` 
             });
+          } else if (isArtifactEvent(ndjsonEvent)) {
+            const artifactEvent: AppEvent = {
+              app: 'Manifest',
+              action: `Saved to ${ndjsonEvent.path}`,
+              timestamp: Date.now(),
+              statusKey: 'installed',
+              phase: 'capture',
+            };
+            overviewCaptureEvents.push(artifactEvent);
+            setLiveAppEvents([...overviewCaptureEvents]);
           }
-        }
+        },
       }
     );
 
@@ -1147,7 +1262,7 @@ function AppContent() {
       throw new Error(captureResult.envelope?.error?.message || 'Capture failed');
     }
 
-    // Get count from envelope data (preferred) or fall back to log parsing
+    // Get count from envelope data (preferred) or fall back to NDJSON event count
     const envelopeData = captureResult.envelope?.data as EndstateCaptureData | undefined;
     let capturedCount = 0;
     
@@ -1156,9 +1271,8 @@ function AppContent() {
     } else if (envelopeData?.appsIncluded) {
       capturedCount = envelopeData.appsIncluded.length;
     } else {
-      // Fall back to log parsing
-      const finalStats = parseCaptureOutput(runLogs);
-      capturedCount = finalStats.succeeded;
+      // Fallback: use NDJSON event count
+      capturedCount = overviewCaptureEvents.length;
     }
 
     // Update state with results
@@ -1209,39 +1323,46 @@ function AppContent() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
-    // Collect app events during preview - deduplicated by app
-    const appEventMap = new Map<string, AppEvent>();
+    // Track preview live activity via NDJSON events
+    const previewAppEvents: AppEvent[] = [];
+    let previewPhase: EnginePhase = 'apply';
     
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
       'apply',
       ['--profile', selectedProfilePath, '--dry-run'],
       (event: StreamEvent) => {
+        // Collect raw output for Technical Details only
         if (event.type === 'stdout' || event.type === 'stderr') {
           logBufferRef.current?.append(event.data);
-          const completeLines = applyLineBufferRef.current?.append(event.data) || [];
-          for (const line of completeLines) {
-            const progress = parseApplyProgressLine(line);
-            if (progress) {
-              // Track per-app events for preview - deduplicated
-              const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
-              appEventMap.set(progress.app, appEvent);
-              // Bounded buffer: keep up to 2000 events for scrollback
-              const events = Array.from(appEventMap.values());
-              setLiveAppEvents(events.length > 2000 ? events.slice(-2000) : events);
-              
-              setOverviewActionProgress({ 
-                message: 'Evaluating changes', 
-                detail: `Determining install actions… ${progress.app}` 
-              });
-            }
-          }
         }
+      },
+      {
+        enableNdjsonEvents: true,
+        onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
+          if (isPhaseEvent(ndjsonEvent)) {
+            previewPhase = ndjsonEvent.phase;
+          } else if (isItemEvent(ndjsonEvent)) {
+            const appEvent = itemEventToAppEvent(ndjsonEvent, previewPhase);
+            previewAppEvents.push(appEvent);
+            // Bounded buffer: keep up to 2000 events for scrollback
+            setLiveAppEvents(previewAppEvents.length > 2000 ? previewAppEvents.slice(-2000) : [...previewAppEvents]);
+            const uiStatus = getPhaseAwareStatusForEvent({
+              statusKey: appEvent.statusKey || 'skipped',
+              phase: 'apply',
+              reason: appEvent.reason,
+            });
+            setOverviewActionProgress({ 
+              message: 'Evaluating changes', 
+              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}` 
+            });
+          }
+        },
       }
     );
     
-    // Convert map to array for final result
-    const collectedEvents = Array.from(appEventMap.values());
+    // Use collected events from NDJSON streaming
+    const collectedEvents = [...previewAppEvents];
 
     logBufferRef.current?.flush();
     applyLineBufferRef.current?.clear();
@@ -1284,8 +1405,9 @@ function AppContent() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
-    // Collect app events during check
-    const collectedEvents: AppEvent[] = [];
+    // Track check live activity via NDJSON events
+    const checkAppEvents: AppEvent[] = [];
+    let checkPhase: EnginePhase = 'apply';
     
     // Use apply --dry-run for checking (same as preview)
     const checkResult = await runEngineStreaming<EndstateApplyData>(
@@ -1293,25 +1415,35 @@ function AppContent() {
       'apply',
       ['--profile', selectedProfilePath, '--dry-run'],
       (event: StreamEvent) => {
+        // Collect raw output for Technical Details only
         if (event.type === 'stdout' || event.type === 'stderr') {
           logBufferRef.current?.append(event.data);
-          const completeLines = applyLineBufferRef.current?.append(event.data) || [];
-          for (const line of completeLines) {
-            const progress = parseApplyProgressLine(line);
-            if (progress) {
-              // Track per-app events for check
-              const appEvent: AppEvent = { app: progress.app, action: progress.action, timestamp: Date.now() };
-              collectedEvents.push(appEvent);
-              
-              setOverviewActionProgress({ 
-                message: 'Checking computer...', 
-                detail: progress.app 
-              });
-            }
-          }
         }
+      },
+      {
+        enableNdjsonEvents: true,
+        onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
+          if (isPhaseEvent(ndjsonEvent)) {
+            checkPhase = ndjsonEvent.phase;
+          } else if (isItemEvent(ndjsonEvent)) {
+            const appEvent = itemEventToAppEvent(ndjsonEvent, checkPhase);
+            checkAppEvents.push(appEvent);
+            const uiStatus = getPhaseAwareStatusForEvent({
+              statusKey: appEvent.statusKey || 'skipped',
+              phase: 'verify',
+              reason: appEvent.reason,
+            });
+            setOverviewActionProgress({ 
+              message: 'Checking computer...', 
+              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}` 
+            });
+          }
+        },
       }
     );
+    
+    // Use collected events from NDJSON streaming
+    const collectedEvents = [...checkAppEvents];
 
     logBufferRef.current?.flush();
     applyLineBufferRef.current?.clear();
@@ -1356,13 +1488,11 @@ function AppContent() {
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
 
-    // Collect app events during streaming - maintain insertion order for append semantics
-    const appEventList: AppEvent[] = []; // Append order preserved
-    const appEventIndex = new Map<string, number>(); // Track last index per app for updates
-    // Option A: Separate counters for truthful grouping
+    // Track apply live activity via NDJSON events
+    const appEventList: AppEvent[] = [];
+    const appEventIndex = new Map<string, number>();
     const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 };
-    // Phase tracking: Apply runs first, then Verify within the same engine spawn
-    let currentPhase: UiPhase = 'apply';
+    let currentPhase: EnginePhase = 'apply';
     let hasInsertedVerifySeparator = false;
     
     const applyResult = await runEngineStreaming<EndstateApplyData>(
@@ -1370,98 +1500,83 @@ function AppContent() {
       'apply',
       ['--profile', selectedProfilePath],
       (event: StreamEvent) => {
+        // Collect raw output for Technical Details only
         if (event.type === 'stdout' || event.type === 'stderr') {
           logBufferRef.current?.append(event.data);
-          const completeLines = applyLineBufferRef.current?.append(event.data) || [];
-          for (const line of completeLines) {
-            // Phase detection: check if we're transitioning to verify phase
-            if (currentPhase === 'apply' && isVerifyPhaseMarker(line)) {
-              currentPhase = 'verify';
-              // Insert visual separator in activity stream
-              if (!hasInsertedVerifySeparator) {
-                hasInsertedVerifySeparator = true;
-                const separatorEvent: AppEvent = { 
-                  app: '── Verification phase ──', 
-                  action: '', 
-                  timestamp: Date.now(),
-                  phase: 'verify'
-                };
-                appEventList.push(separatorEvent);
-                setLiveAppEvents([...appEventList]);
-              }
-              // Update progress message to show verify phase
+        }
+      },
+      {
+        enableNdjsonEvents: true,
+        onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
+          // Handle phase transitions
+          if (isPhaseEvent(ndjsonEvent)) {
+            const newPhase = ndjsonEvent.phase;
+            // Insert visual separator when transitioning to verify phase
+            if (currentPhase === 'apply' && newPhase === 'verify' && !hasInsertedVerifySeparator) {
+              hasInsertedVerifySeparator = true;
+              const separatorEvent: AppEvent = { 
+                app: '── Verification phase ──', 
+                action: '', 
+                timestamp: Date.now(),
+                phase: 'verify'
+              };
+              appEventList.push(separatorEvent);
+              setLiveAppEvents([...appEventList]);
               setOverviewActionProgress({ 
                 message: 'Verifying installation…',
                 detail: 'Confirming all apps are correctly installed',
                 phase: 'verify'
               });
             }
+            currentPhase = newPhase;
+          } 
+          // Handle item events
+          else if (isItemEvent(ndjsonEvent)) {
+            const appEvent = itemEventToAppEvent(ndjsonEvent, currentPhase);
             
-            const progress = parseApplyProgressLine(line);
-            if (progress) {
-              const appEvent: AppEvent = { 
-                app: progress.app, 
-                action: progress.action, 
-                timestamp: Date.now(),
-                statusKey: progress.statusKey,
-                phase: currentPhase
-              };
-              
-              // Append semantics: update existing entry in-place or append new
-              const existingIndex = appEventIndex.get(progress.app);
-              if (existingIndex !== undefined) {
-                // Update existing entry in-place (maintains position)
-                const existing = appEventList[existingIndex];
-                // Only update counters when action changes to a final state
-                const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK'].includes(progress.action);
-                const wasNonFinal = existing.action === 'Processing' || existing.action === 'To install';
-                
-                if (isFinalAction && wasNonFinal) {
-                  // Option A: Separate counters - OK goes to alreadyPresent, Skipped stays separate
-                  if (progress.action === 'Installed') counters.installed++;
-                  else if (progress.action === 'OK') counters.alreadyPresent++;
-                  else if (progress.action === 'Skipped') counters.skipped++;
-                  else if (progress.action === 'Failed') counters.failed++;
-                }
-                
-                appEventList[existingIndex] = appEvent;
-              } else {
-                // Append new entry (stream order preserved)
-                appEventIndex.set(progress.app, appEventList.length);
-                appEventList.push(appEvent);
+            // Update or append event
+            const existingIndex = appEventIndex.get(ndjsonEvent.id);
+            if (existingIndex !== undefined) {
+              const existing = appEventList[existingIndex];
+              // Update counters on status change
+              const isFinal = ['installed', 'already_present', 'skipped', 'failed'].includes(appEvent.statusKey || '');
+              const wasNonFinal = existing.statusKey === 'installing' || existing.statusKey === 'to_install';
+              if (isFinal && wasNonFinal) {
+                if (appEvent.statusKey === 'installed') counters.installed++;
+                else if (appEvent.statusKey === 'already_present') counters.alreadyPresent++;
+                else if (appEvent.statusKey === 'skipped') counters.skipped++;
+                else if (appEvent.statusKey === 'failed') counters.failed++;
               }
-              
-              // Update live events for UI (bounded buffer: keep up to 2000 events for scrollback)
-              setLiveAppEvents(appEventList.length > 2000 ? appEventList.slice(-2000) : appEventList);
-              setLiveCounters({ ...counters });
-              
-              // Friendly headline mapping (Option A)
-              // CRITICAL: During streaming, show in-progress action, not final disposition
-              // Only show final labels (Skipped/Installed/etc) when the action is actually final
-              const isFinalAction = ['Installed', 'Skipped', 'Failed', 'OK', 'Cancelled'].includes(progress.action);
-              const friendlyAction = progress.action === 'OK' ? 'Already present' :
-                                     progress.action === 'Processing' ? 'Installing' :
-                                     progress.action === 'To install' ? 'Evaluating' :
-                                     isFinalAction ? progress.action :
-                                     'Working on';
-              // Friendly counter text
-              const parts: string[] = [];
-              if (counters.installed > 0) parts.push(`${counters.installed} installed`);
-              if (counters.alreadyPresent > 0) parts.push(`${counters.alreadyPresent} already present`);
-              if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
-              if (counters.failed > 0) parts.push(`${counters.failed} failed`);
-              const counterText = parts.join(' · ') || 'Working…';
-              
-              // Show phase in progress message
-              const phasePrefix = currentPhase === 'verify' ? 'Verifying' : friendlyAction;
-              setOverviewActionProgress({ 
-                message: `${phasePrefix}: ${progress.app}`,
-                detail: counterText,
-                phase: currentPhase
-              });
+              appEventList[existingIndex] = appEvent;
+            } else {
+              appEventIndex.set(ndjsonEvent.id, appEventList.length);
+              appEventList.push(appEvent);
             }
+            
+            // Update live events for UI
+            setLiveAppEvents(appEventList.length > 2000 ? appEventList.slice(-2000) : [...appEventList]);
+            setLiveCounters({ ...counters });
+            
+            // Build progress message
+            const uiStatus = getPhaseAwareStatusForEvent({
+              statusKey: appEvent.statusKey || 'skipped',
+              phase: currentPhase === 'verify' ? 'verify' : 'apply',
+              reason: appEvent.reason,
+            });
+            const parts: string[] = [];
+            if (counters.installed > 0) parts.push(`${counters.installed} installed`);
+            if (counters.alreadyPresent > 0) parts.push(`${counters.alreadyPresent} already present`);
+            if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
+            if (counters.failed > 0) parts.push(`${counters.failed} failed`);
+            const counterText = parts.join(' · ') || 'Working…';
+            
+            setOverviewActionProgress({ 
+              message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
+              detail: counterText,
+              phase: currentPhase === 'verify' ? 'verify' : 'apply'
+            });
           }
-        }
+        },
       }
     );
 

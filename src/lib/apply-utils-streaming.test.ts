@@ -6,6 +6,7 @@ import {
   UI_STATUS_MAP,
   PHASE_STATUS_MAP,
   getPhaseAwareStatus,
+  getPhaseAwareStatusForEvent,
 } from './apply-utils';
 import type { ItemEvent } from './streaming-events';
 
@@ -450,5 +451,252 @@ describe('getPhaseAwareStatus - Phase-Aware Status Resolution', () => {
     const status = getPhaseAwareStatus('skipped', 'capture');
     expect(status.shortLabel).toBe('EXCLUDED');
     expect(status.color).toBe('muted');
+  });
+});
+
+/**
+ * Tests for reason-aware phase status resolution.
+ * getPhaseAwareStatusForEvent discriminates "skipped" subtypes by reason.
+ */
+describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
+  describe('Capture phase: reason-aware discrimination', () => {
+    it('capture + skipped + reason=filtered -> EXCLUDED (muted)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'capture',
+        reason: 'filtered',
+      });
+      expect(status.shortLabel).toBe('EXCLUDED');
+      expect(status.longLabel).toBe('Excluded');
+      expect(status.color).toBe('muted');
+    });
+
+    it('capture + skipped + reason=sensitive -> PROTECTED (warn)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'capture',
+        reason: 'sensitive',
+      });
+      expect(status.shortLabel).toBe('PROTECTED');
+      expect(status.longLabel).toBe('Protected');
+      expect(status.color).toBe('warn');
+    });
+
+    it('capture + skipped + reason=sensitive_excluded -> PROTECTED (warn)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'capture',
+        reason: 'sensitive_excluded',
+      });
+      expect(status.shortLabel).toBe('PROTECTED');
+      expect(status.longLabel).toBe('Protected');
+      expect(status.color).toBe('warn');
+    });
+
+    it('capture + skipped + reason=filtered_runtime -> EXCLUDED (muted)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'capture',
+        reason: 'filtered_runtime',
+      });
+      expect(status.shortLabel).toBe('EXCLUDED');
+      expect(status.longLabel).toBe('Excluded');
+      expect(status.color).toBe('muted');
+    });
+
+    it('capture + skipped + reason=filtered_store -> EXCLUDED (muted)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'capture',
+        reason: 'filtered_store',
+      });
+      expect(status.shortLabel).toBe('EXCLUDED');
+      expect(status.longLabel).toBe('Excluded');
+      expect(status.color).toBe('muted');
+    });
+
+    it('capture + already_present + reason=detected -> DETECTED (success)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'already_present',
+        phase: 'capture',
+        reason: 'detected',
+      });
+      expect(status.shortLabel).toBe('DETECTED');
+      expect(status.longLabel).toBe('Detected');
+      expect(status.color).toBe('success');
+    });
+
+    it('capture + already_present -> DETECTED (success)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'already_present',
+        phase: 'capture',
+      });
+      expect(status.shortLabel).toBe('DETECTED');
+      expect(status.color).toBe('success');
+    });
+
+    it('capture + to_install -> NOT FOUND (muted)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'to_install',
+        phase: 'capture',
+      });
+      expect(status.shortLabel).toBe('NOT FOUND');
+      expect(status.color).toBe('muted');
+    });
+
+    it('capture + failed -> ERROR (error)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'failed',
+        phase: 'capture',
+      });
+      expect(status.shortLabel).toBe('ERROR');
+      expect(status.color).toBe('error');
+    });
+
+    it('capture + installing -> SCANNING (info)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'installing',
+        phase: 'capture',
+      });
+      expect(status.shortLabel).toBe('SCANNING');
+      expect(status.color).toBe('info');
+    });
+  });
+
+  describe('Apply phase: reason-aware discrimination', () => {
+    it('apply + skipped + reason=already_installed -> PRESENT (success), NOT "Skipped"', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'apply',
+        reason: 'already_installed',
+      });
+      expect(status.shortLabel).toBe('PRESENT');
+      expect(status.longLabel).toBe('Already present');
+      expect(status.color).toBe('success');
+    });
+
+    it('apply + skipped + reason=already_present -> PRESENT (success)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'apply',
+        reason: 'already_present',
+      });
+      expect(status.shortLabel).toBe('PRESENT');
+      expect(status.color).toBe('success');
+    });
+
+    it('apply + skipped + reason=filtered -> SKIPPED (warn) - true exclusion', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'apply',
+        reason: 'filtered',
+      });
+      expect(status.shortLabel).toBe('SKIPPED');
+      expect(status.color).toBe('warn');
+    });
+
+    it('apply + already_present -> PRESENT (success)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'already_present',
+        phase: 'apply',
+      });
+      expect(status.shortLabel).toBe('PRESENT');
+      expect(status.color).toBe('success');
+    });
+  });
+
+  describe('Verify phase: reason-aware discrimination', () => {
+    it('verify + to_install -> MISSING (error)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'to_install',
+        phase: 'verify',
+      });
+      expect(status.shortLabel).toBe('MISSING');
+      expect(status.color).toBe('error');
+    });
+
+    it('verify + already_present -> CONFIRMED (success)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'already_present',
+        phase: 'verify',
+      });
+      expect(status.shortLabel).toBe('CONFIRMED');
+      expect(status.color).toBe('success');
+    });
+
+    it('verify + skipped + reason=already_installed -> CONFIRMED (success)', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'verify',
+        reason: 'already_installed',
+      });
+      expect(status.shortLabel).toBe('CONFIRMED');
+      expect(status.color).toBe('success');
+    });
+  });
+
+  describe('Fallback behavior', () => {
+    it('falls back to getPhaseAwareStatus when no reason-specific rule matches', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'installed',
+        phase: 'apply',
+      });
+      expect(status.shortLabel).toBe('INSTALLED');
+      expect(status.color).toBe('success');
+    });
+
+    it('falls back to UI_STATUS_MAP when no phase provided', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'already_present',
+      });
+      expect(status.shortLabel).toBe('PRESENT');
+      expect(status.longLabel).toBe('Already present');
+    });
+
+    it('handles null reason gracefully', () => {
+      const status = getPhaseAwareStatusForEvent({
+        statusKey: 'skipped',
+        phase: 'capture',
+        reason: null,
+      });
+      expect(status.shortLabel).toBe('EXCLUDED');
+    });
+  });
+});
+
+/**
+ * Tests for itemEventToAppEvent reason propagation.
+ */
+describe('itemEventToAppEvent - Reason Propagation', () => {
+  it('propagates reason from ItemEvent to AppEvent', () => {
+    const itemEvent: ItemEvent = {
+      version: 1,
+      event: 'item',
+      id: 'App.Id',
+      driver: 'winget',
+      status: 'skipped',
+      reason: 'filtered',
+      timestamp: '2025-01-01T00:00:00.000Z',
+    };
+
+    const appEvent = itemEventToAppEvent(itemEvent, 'apply');
+
+    expect(appEvent.reason).toBe('filtered');
+  });
+
+  it('propagates null reason correctly', () => {
+    const itemEvent: ItemEvent = {
+      version: 1,
+      event: 'item',
+      id: 'App.Id',
+      driver: 'winget',
+      status: 'present',
+      reason: null,
+      timestamp: '2025-01-01T00:00:00.000Z',
+    };
+
+    const appEvent = itemEventToAppEvent(itemEvent, 'apply');
+
+    expect(appEvent.reason).toBeNull();
   });
 });

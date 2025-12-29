@@ -144,6 +144,90 @@ export function getPhaseAwareStatus(statusKey: StatusKey, phase?: UiPhase): Phas
 }
 
 /**
+ * Arguments for reason-aware phase status resolution.
+ */
+export interface PhaseAwareStatusArgs {
+  statusKey: StatusKey;
+  phase?: UiPhase;
+  reason?: string | null;
+}
+
+/**
+ * Get phase-aware UI status config with reason discrimination.
+ * This is the SINGLE SOURCE OF TRUTH for (phase, statusKey, reason) -> UI labels.
+ * 
+ * Capture phase rules:
+ * - already_present -> DETECTED (success) - app found on system
+ * - to_install -> NOT FOUND (muted) - app not on system
+ * - skipped + reason=filtered -> EXCLUDED (muted) - filtered by policy
+ * - skipped + reason=sensitive -> PROTECTED (warn) - sensitive data excluded
+ * - failed -> ERROR (error)
+ * - installing -> SCANNING (info)
+ * 
+ * Apply phase rules:
+ * - already_present -> PRESENT (success)
+ * - skipped + reason=already_installed -> PRESENT (success) - NOT "Skipped"
+ * 
+ * Verify phase rules:
+ * - already_present -> CONFIRMED (success)
+ * - to_install -> MISSING (error)
+ * 
+ * @param args - Status key, phase, and optional reason
+ * @returns UI status configuration with labels and color
+ */
+export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAwareStatusConfig {
+  const { statusKey, phase, reason } = args;
+  const reasonLower = reason?.toLowerCase() || '';
+
+  // Capture phase: reason-aware discrimination
+  if (phase === 'capture') {
+    // skipped + sensitive_excluded -> PROTECTED (warn)
+    if (statusKey === 'skipped' && (reasonLower === 'sensitive' || reasonLower === 'sensitive_excluded')) {
+      return { shortLabel: 'PROTECTED', longLabel: 'Protected', color: 'warn' };
+    }
+    // skipped + filtered/filtered_runtime/filtered_store -> EXCLUDED (muted)
+    if (statusKey === 'skipped' && (reasonLower === 'filtered' || reasonLower === 'filtered_runtime' || reasonLower === 'filtered_store')) {
+      return { shortLabel: 'EXCLUDED', longLabel: 'Excluded', color: 'muted' };
+    }
+    // present + detected -> DETECTED (success)
+    if (statusKey === 'already_present' && reasonLower === 'detected') {
+      return { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'success' };
+    }
+    // Default capture phase handling
+    if (PHASE_STATUS_MAP.capture[statusKey]) {
+      return PHASE_STATUS_MAP.capture[statusKey]!;
+    }
+  }
+
+  // Apply phase: reason-aware discrimination
+  if (phase === 'apply') {
+    // skipped + already_installed -> PRESENT (success), NOT "Skipped"
+    if (statusKey === 'skipped' && (reasonLower === 'already_installed' || reasonLower === 'already_present')) {
+      return { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' };
+    }
+    // Default apply phase handling
+    if (PHASE_STATUS_MAP.apply[statusKey]) {
+      return PHASE_STATUS_MAP.apply[statusKey]!;
+    }
+  }
+
+  // Verify phase: reason-aware discrimination
+  if (phase === 'verify') {
+    // skipped + already_installed -> CONFIRMED (success)
+    if (statusKey === 'skipped' && (reasonLower === 'already_installed' || reasonLower === 'already_present')) {
+      return { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' };
+    }
+    // Default verify phase handling
+    if (PHASE_STATUS_MAP.verify[statusKey]) {
+      return PHASE_STATUS_MAP.verify[statusKey]!;
+    }
+  }
+
+  // Fall back to phase-aware status without reason, then to default
+  return getPhaseAwareStatus(statusKey, phase);
+}
+
+/**
  * Get Tailwind color classes for a semantic color.
  * Returns { text, bg, border } classes.
  */
@@ -203,15 +287,16 @@ export function engineStatusToStatusKey(engineStatus: EngineItemStatus): StatusK
 
 /**
  * Convert an ItemEvent from streaming to an AppEvent for UI display.
- * Uses EnginePhase which includes 'plan' | 'apply' | 'verify'.
+ * Uses EnginePhase which includes 'plan' | 'apply' | 'verify' | 'capture'.
  * Note: 'plan' phase is not relevant for UI display, so it maps to undefined.
  */
 export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppEvent {
-  // Map streaming phase to UI-relevant phase (apply | verify only)
+  // Map streaming phase to UI-relevant phase (apply | verify | capture)
   // 'plan' phase is not displayed in UI, so it maps to undefined
-  const uiPhase: 'apply' | 'verify' | undefined = 
+  const uiPhase: UiPhase | undefined = 
     phase === 'apply' ? 'apply' : 
     phase === 'verify' ? 'verify' : 
+    phase === 'capture' ? 'capture' :
     undefined;
   
   return {
@@ -220,6 +305,7 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     timestamp: Date.now(),
     statusKey: engineStatusToStatusKey(event.status),
     phase: uiPhase,
+    reason: event.reason,
   };
 }
 
@@ -357,6 +443,7 @@ export interface AppEvent {
   timestamp?: number;
   statusKey?: StatusKey;  // Canonical status for consistent display
   phase?: UiPhase;        // Which phase this event occurred in (UI-relevant only)
+  reason?: string | null; // Engine reason for status discrimination (e.g., 'filtered', 'sensitive', 'already_installed')
 }
 
 /**

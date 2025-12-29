@@ -16,7 +16,7 @@ export const STREAMING_EVENT_VERSION = 1;
 /**
  * Engine execution phases
  */
-export type EnginePhase = 'plan' | 'apply' | 'verify';
+export type EnginePhase = 'plan' | 'apply' | 'verify' | 'capture';
 
 /**
  * Item status values from the engine
@@ -36,6 +36,10 @@ export type EngineItemStatus =
 export type EngineItemReason = 
   | 'already_installed'
   | 'filtered'
+  | 'filtered_runtime'
+  | 'filtered_store'
+  | 'sensitive_excluded'
+  | 'detected'
   | 'install_failed'
   | 'missing'
   | null;
@@ -91,9 +95,19 @@ export interface ErrorEvent extends BaseStreamingEvent {
 }
 
 /**
+ * Artifact event (e.g., manifest saved)
+ */
+export interface ArtifactEvent extends BaseStreamingEvent {
+  event: 'artifact';
+  phase: 'capture';
+  kind: 'manifest';
+  path: string;
+}
+
+/**
  * Union type for all streaming events
  */
-export type StreamingEvent = PhaseEvent | ItemEvent | SummaryEvent | ErrorEvent;
+export type StreamingEvent = PhaseEvent | ItemEvent | SummaryEvent | ErrorEvent | ArtifactEvent;
 
 /**
  * Type guards for event types
@@ -112,6 +126,10 @@ export function isSummaryEvent(event: StreamingEvent): event is SummaryEvent {
 
 export function isErrorEvent(event: StreamingEvent): event is ErrorEvent {
   return event.event === 'error';
+}
+
+export function isArtifactEvent(event: StreamingEvent): event is ArtifactEvent {
+  return event.event === 'artifact';
 }
 
 /**
@@ -144,7 +162,7 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
     }
 
     // Validate event type
-    const validEventTypes = ['phase', 'item', 'summary', 'error'];
+    const validEventTypes = ['phase', 'item', 'summary', 'error', 'artifact'];
     if (!validEventTypes.includes(parsed.event)) {
       return null;
     }

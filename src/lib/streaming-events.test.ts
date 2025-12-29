@@ -9,12 +9,14 @@ import {
   isItemEvent,
   isSummaryEvent,
   isErrorEvent,
+  isArtifactEvent,
   STREAMING_EVENT_VERSION,
   type StreamingEvent,
   type PhaseEvent,
   type ItemEvent,
   type SummaryEvent,
   type ErrorEvent,
+  type ArtifactEvent,
 } from './streaming-events';
 
 describe('streaming-events', () => {
@@ -442,6 +444,132 @@ describe('streaming-events', () => {
 
       expect(isErrorEvent(errorEvent)).toBe(true);
       expect(isErrorEvent(phaseEvent)).toBe(false);
+    });
+
+    it('isArtifactEvent should correctly identify artifact events', () => {
+      const artifactEvent: StreamingEvent = {
+        version: 1,
+        event: 'artifact',
+        phase: 'capture',
+        kind: 'manifest',
+        path: 'C:\\profiles\\test.jsonc',
+        timestamp: '2025-01-01T00:00:00.000Z',
+      };
+      const phaseEvent: StreamingEvent = {
+        version: 1,
+        event: 'phase',
+        phase: 'capture',
+        timestamp: '2025-01-01T00:00:00.000Z',
+      };
+
+      expect(isArtifactEvent(artifactEvent)).toBe(true);
+      expect(isArtifactEvent(phaseEvent)).toBe(false);
+    });
+  });
+
+  describe('Capture phase events', () => {
+    it('should parse capture phase event', () => {
+      const line = '{"version":1,"event":"phase","phase":"capture","timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+      
+      expect(event).not.toBeNull();
+      expect(isPhaseEvent(event!)).toBe(true);
+      expect((event as PhaseEvent).phase).toBe('capture');
+    });
+
+    it('should parse capture item event with detected reason', () => {
+      const line = '{"version":1,"event":"item","id":"Git.Git","driver":"winget","status":"present","reason":"detected","message":"Detected","timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+      
+      expect(event).not.toBeNull();
+      expect(isItemEvent(event!)).toBe(true);
+      const itemEvent = event as ItemEvent;
+      expect(itemEvent.id).toBe('Git.Git');
+      expect(itemEvent.status).toBe('present');
+      expect(itemEvent.reason).toBe('detected');
+    });
+
+    it('should parse capture item event with filtered_runtime reason', () => {
+      const line = '{"version":1,"event":"item","id":"Microsoft.VCRedist.2019.x64","driver":"winget","status":"skipped","reason":"filtered_runtime","message":"Excluded (runtime)","timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+      
+      expect(event).not.toBeNull();
+      const itemEvent = event as ItemEvent;
+      expect(itemEvent.status).toBe('skipped');
+      expect(itemEvent.reason).toBe('filtered_runtime');
+    });
+
+    it('should parse capture item event with filtered_store reason', () => {
+      const line = '{"version":1,"event":"item","id":"9NBLGGH4NNS1","driver":"msstore","status":"skipped","reason":"filtered_store","message":"Excluded (store app)","timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+      
+      expect(event).not.toBeNull();
+      const itemEvent = event as ItemEvent;
+      expect(itemEvent.status).toBe('skipped');
+      expect(itemEvent.reason).toBe('filtered_store');
+    });
+
+    it('should parse capture item event with sensitive_excluded reason', () => {
+      const line = '{"version":1,"event":"item","id":"C:\\\\Users\\\\test\\\\.ssh","driver":"fs","status":"skipped","reason":"sensitive_excluded","message":"Sensitive excluded","timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+      
+      expect(event).not.toBeNull();
+      const itemEvent = event as ItemEvent;
+      expect(itemEvent.status).toBe('skipped');
+      expect(itemEvent.reason).toBe('sensitive_excluded');
+      expect(itemEvent.driver).toBe('fs');
+    });
+
+    it('should parse artifact event for manifest saved', () => {
+      const line = '{"version":1,"event":"artifact","phase":"capture","kind":"manifest","path":"C:\\\\profiles\\\\test.jsonc","timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+      
+      expect(event).not.toBeNull();
+      expect(isArtifactEvent(event!)).toBe(true);
+      const artifactEvent = event as ArtifactEvent;
+      expect(artifactEvent.phase).toBe('capture');
+      expect(artifactEvent.kind).toBe('manifest');
+      expect(artifactEvent.path).toBe('C:\\profiles\\test.jsonc');
+    });
+
+    it('should parse capture summary event', () => {
+      const line = '{"version":1,"event":"summary","phase":"capture","total":15,"success":12,"skipped":3,"failed":0,"timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+      
+      expect(event).not.toBeNull();
+      expect(isSummaryEvent(event!)).toBe(true);
+      const summaryEvent = event as SummaryEvent;
+      expect(summaryEvent.phase).toBe('capture');
+      expect(summaryEvent.total).toBe(15);
+      expect(summaryEvent.success).toBe(12);
+      expect(summaryEvent.skipped).toBe(3);
+      expect(summaryEvent.failed).toBe(0);
+    });
+
+    it('should parse complete capture NDJSON stream', () => {
+      const data = [
+        '{"version":1,"event":"phase","phase":"capture","timestamp":"2025-01-01T00:00:00.000Z"}',
+        '{"version":1,"event":"item","id":"Git.Git","driver":"winget","status":"present","reason":"detected","message":"Detected","timestamp":"2025-01-01T00:00:01.000Z"}',
+        '{"version":1,"event":"item","id":"Microsoft.VCRedist.2019.x64","driver":"winget","status":"skipped","reason":"filtered_runtime","message":"Excluded (runtime)","timestamp":"2025-01-01T00:00:02.000Z"}',
+        '{"version":1,"event":"item","id":"C:\\\\Users\\\\test\\\\.ssh","driver":"fs","status":"skipped","reason":"sensitive_excluded","message":"Sensitive excluded","timestamp":"2025-01-01T00:00:03.000Z"}',
+        '{"version":1,"event":"artifact","phase":"capture","kind":"manifest","path":"C:\\\\profiles\\\\test.jsonc","timestamp":"2025-01-01T00:00:04.000Z"}',
+        '{"version":1,"event":"summary","phase":"capture","total":3,"success":1,"skipped":2,"failed":0,"timestamp":"2025-01-01T00:00:05.000Z"}',
+      ].join('\n');
+
+      const events = parseStreamingEvents(data);
+      
+      expect(events).toHaveLength(6);
+      expect(isPhaseEvent(events[0])).toBe(true);
+      expect((events[0] as PhaseEvent).phase).toBe('capture');
+      expect(isItemEvent(events[1])).toBe(true);
+      expect((events[1] as ItemEvent).reason).toBe('detected');
+      expect(isItemEvent(events[2])).toBe(true);
+      expect((events[2] as ItemEvent).reason).toBe('filtered_runtime');
+      expect(isItemEvent(events[3])).toBe(true);
+      expect((events[3] as ItemEvent).reason).toBe('sensitive_excluded');
+      expect(isArtifactEvent(events[4])).toBe(true);
+      expect(isSummaryEvent(events[5])).toBe(true);
+      expect((events[5] as SummaryEvent).phase).toBe('capture');
     });
   });
 });

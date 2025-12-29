@@ -58,7 +58,7 @@ import {
   type StatusKey,
   type UiPhase,
   getColorClasses,
-  getPhaseAwareStatus,
+  getPhaseAwareStatusForEvent,
 } from '@/lib/apply-utils';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
@@ -498,8 +498,8 @@ export function OverviewScreen({
                           event.action === 'To install' ? 'to_install' :
                           'skipped'
                         );
-                        // Use phase-aware status for correct labels per phase
-                        const uiStatus = getPhaseAwareStatus(statusKey, event.phase);
+                        // Use phase-aware status with reason for correct labels per phase
+                        const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: event.phase, reason: event.reason });
                         const colors = getColorClasses(uiStatus.color);
                         
                         return (
@@ -1147,8 +1147,8 @@ export function OverviewScreen({
                         event.action === 'To install' || event.action === 'Missing' ? 'to_install' :
                         'skipped'
                       );
-                      // Use phase-aware status for correct labels per phase
-                      const uiStatus = getPhaseAwareStatus(statusKey, event.phase);
+                      // Use phase-aware status with reason for correct labels per phase
+                      const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: event.phase, reason: event.reason });
                       const colors = getColorClasses(uiStatus.color);
                       
                       return (

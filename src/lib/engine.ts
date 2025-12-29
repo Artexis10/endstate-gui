@@ -4,7 +4,7 @@
  * In tests, allows injection via window.__ENDSTATE_MOCK_ENGINE__.
  */
 
-import { runEndstateStreaming, StreamEvent, RunResult } from '../streaming-runner';
+import { runEndstateStreaming, StreamEvent, RunResult, StreamingOptions } from '../streaming-runner';
 import { AppSettings } from '../settings';
 
 // Test seam: allow mock injection in tests
@@ -25,7 +25,8 @@ export async function runEngineStreaming<T>(
   settings: AppSettings,
   command: string,
   args: string[],
-  onEvent: (event: StreamEvent) => void
+  onEvent: (event: StreamEvent) => void,
+  options?: StreamingOptions
 ): Promise<RunResult<T>> {
   // Test seam: check for mock
   if (typeof window !== 'undefined' && window.__ENDSTATE_MOCK_ENGINE__) {
@@ -33,10 +34,11 @@ export async function runEngineStreaming<T>(
       settings,
       command,
       args,
-      onEvent
+      onEvent,
+      options
     );
   }
 
   // Production: use real streaming runner
-  return runEndstateStreaming<T>(settings, command, args, onEvent);
+  return runEndstateStreaming<T>(settings, command, args, onEvent, options);
 }
