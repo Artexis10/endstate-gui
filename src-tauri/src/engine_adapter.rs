@@ -246,11 +246,17 @@ pub fn run_engine(
     }
 
     // Spawn the process with piped stdout/stderr
-    let spawn_result = Command::new(exe)
-        .args(args)
+    let mut cmd = Command::new(exe);
+    cmd.args(args)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn();
+        .stderr(Stdio::piped());
+    
+    // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode
+    if exe == "pwsh" || exe == "powershell" {
+        cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
+    }
+    
+    let spawn_result = cmd.spawn();
 
     let mut child = match spawn_result {
         Ok(child) => child,

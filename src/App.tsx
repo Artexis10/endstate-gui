@@ -35,6 +35,7 @@ import { ApplyResultModal } from './components/app/apply-result-modal';
 import { RenameFileModal } from './components/app/rename-file-modal';
 import { ToastProvider, useToast } from './components/ui/toast';
 import type { ApplyCounts, ApplyItem } from './types';
+import { formatCount } from './lib/pluralize';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -1466,9 +1467,9 @@ function AppContent() {
     setLifecycleState(newState);
     
     if (missing > 0) {
-      setOverviewActionProgress({ message: `${missing} missing, ${present} present` });
+      setOverviewActionProgress({ message: `${formatCount(missing, 'app')} missing, ${formatCount(present, 'app')} present` });
     } else {
-      setOverviewActionProgress({ message: `All ${present} apps present` });
+      setOverviewActionProgress({ message: `All ${formatCount(present, 'app')} present` });
     }
     
     return { missing, present, profile: selectedProfile, appEvents: collectedEvents };
@@ -1978,8 +1979,8 @@ function AppContent() {
                   const result = await handleCheckFromOverview();
                   setOverviewActionStatus('success');
                   const summaryText = result.missing > 0 
-                    ? `${result.missing} missing, ${result.present} present`
-                    : `All ${result.present} apps present`;
+                    ? `${formatCount(result.missing, 'app')} missing, ${formatCount(result.present, 'app')} present`
+                    : `All ${formatCount(result.present, 'app')} present`;
                   setOverviewActionResult({ 
                     action: 'check', 
                     status: 'success', 

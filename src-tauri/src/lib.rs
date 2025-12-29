@@ -71,6 +71,7 @@ fn endstate_exec(args: Vec<String>) -> Result<ExecResult, ExecError> {
             .arg("-File")
             .arg(&endstate_path)
             .args(&args)
+            .env("ENDSTATE_ALLOW_DIRECT", "1")
             .output()?
     } else {
         Command::new(&endstate_path)
@@ -795,11 +796,17 @@ async fn run_endstate_streaming(
     use serde_json::json;
 
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let mut child = Command::new(&exe)
-            .args(&args)
+        let mut cmd = Command::new(&exe);
+        cmd.args(&args)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+            .stderr(Stdio::piped());
+        
+        // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode
+        if exe == "pwsh" || exe == "powershell" {
+            cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
+        }
+        
+        let mut child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn process: {}", e))?;
 
         let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
