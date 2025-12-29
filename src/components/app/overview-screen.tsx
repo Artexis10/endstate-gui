@@ -85,6 +85,7 @@ interface ActionResult {
     toInstall?: number;
     missing?: number;
     total?: number;
+    manifestTotal?: number; // Total apps in profile manifest (source of truth)
   };
   profile?: string;
   timestamp?: string;
@@ -487,6 +488,21 @@ export function OverviewScreen({
                       }}
                     >
                       {liveAppEvents.map((event, idx) => {
+                        // Check if this is a phase header row
+                        const isPhaseHeader = event.app === '── APPLY ──' || event.app === '── VERIFY ──';
+                        if (isPhaseHeader) {
+                          const isVerifyHeader = event.app === '── VERIFY ──';
+                          return (
+                            <div key={`phase-header-${idx}`} className={`flex items-center justify-center gap-2 text-xs pt-3 pb-1 ${isVerifyHeader ? 'text-amber-500' : 'text-primary'}`}>
+                              <span className="flex-1 border-t border-current opacity-30" />
+                              <span className="font-semibold text-[10px] tracking-wider">
+                                {isVerifyHeader ? 'VERIFY' : 'APPLY'}
+                              </span>
+                              <span className="flex-1 border-t border-current opacity-30" />
+                            </div>
+                          );
+                        }
+                        
                         // Use statusKey if available, otherwise derive from action
                         const statusKey: StatusKey = event.statusKey || (
                           event.action === 'OK' ? 'present' :
@@ -1098,8 +1114,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'to_install'}
                       onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'to_install' ? 'ring-2 ring-orange-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} bg-orange-500/10 text-orange-600`}
+                        detailsFilter === 'to_install' ? 'ring-2 ring-destructive' : ''
+                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('error').bg} ${getColorClasses('error').text}`}
                     >
                       Missing: {actionResult.counts.missing}
                     </button>
@@ -1111,9 +1127,14 @@ export function OverviewScreen({
           
           {/* App events list - scrollable section with proper constraints */}
           {actionResult?.appEvents && actionResult.appEvents.length > 0 && (() => {
+            // Filter out phase header events from the list
+            const itemEvents = actionResult.appEvents.filter(e => 
+              e.app !== '── APPLY ──' && e.app !== '── VERIFY ──'
+            );
+            
             // Filter events based on selected filter (using canonical statusKey)
             const filteredEvents = detailsFilter
-              ? actionResult.appEvents.filter(e => {
+              ? itemEvents.filter(e => {
                   const statusKey: StatusKey = e.statusKey || (
                     e.action === 'OK' ? 'present' :
                     e.action === 'Installed' ? 'installed' :
@@ -1127,24 +1148,53 @@ export function OverviewScreen({
                   );
                   return statusKey === detailsFilter;
                 })
-              : actionResult.appEvents;
+              : itemEvents;
             
-            // Sort: failed first, then installed, then OK/skipped/others
+            // Sort: failed/missing first, then to_install, then installed, then OK/skipped/others
             const sortedEvents = [
-              ...filteredEvents.filter(e => e.action === 'Failed'),
-              ...filteredEvents.filter(e => e.action === 'Installed'),
-              ...filteredEvents.filter(e => e.action === 'OK'),
-              ...filteredEvents.filter(e => !['Failed', 'Installed', 'OK'].includes(e.action)),
+              ...filteredEvents.filter(e => e.statusKey === 'failed' || e.action === 'Failed'),
+              ...filteredEvents.filter(e => (e.statusKey === 'to_install' && e.phase === 'verify') || e.action === 'Missing'),
+              ...filteredEvents.filter(e => e.statusKey === 'to_install' && e.phase !== 'verify'),
+              ...filteredEvents.filter(e => e.statusKey === 'installed' || e.action === 'Installed'),
+              ...filteredEvents.filter(e => e.statusKey === 'present' || e.action === 'OK'),
+              ...filteredEvents.filter(e => !['failed', 'to_install', 'installed', 'present'].includes(e.statusKey || '') && !['Failed', 'Missing', 'Installed', 'OK'].includes(e.action)),
             ];
+            
+            // Deduplicate sorted events (in case of overlapping filters)
+            const seenApps = new Set<string>();
+            const uniqueSortedEvents = sortedEvents.filter(e => {
+              if (seenApps.has(e.app)) return false;
+              seenApps.add(e.app);
+              return true;
+            });
+            
+            // Calculate totals: manifest total if available, otherwise item count
+            const manifestTotal = actionResult.counts?.manifestTotal || itemEvents.length;
+            const shownCount = uniqueSortedEvents.length;
+            
+            // Determine filter label for clarity
+            const filterLabel = detailsFilter ? (
+              detailsFilter === 'to_install' ? 'Showing: Issues only' :
+              detailsFilter === 'failed' ? 'Showing: Failed only' :
+              detailsFilter === 'installed' ? 'Showing: Installed only' :
+              detailsFilter === 'present' ? 'Showing: Already present only' :
+              detailsFilter === 'skipped' ? 'Showing: Skipped only' :
+              null
+            ) : null;
             
             return (
               <div className="flex-1 min-h-0 flex flex-col">
-                <p className="flex-shrink-0 text-xs text-muted-foreground mb-2">
-                  Apps ({detailsFilter ? `${filteredEvents.length} of ${actionResult.appEvents.length}` : actionResult.appEvents.length})
-                </p>
+                <div className="flex-shrink-0 flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground">
+                    Apps ({shownCount} of {manifestTotal})
+                  </p>
+                  {filterLabel && (
+                    <span className="text-xs text-muted-foreground italic">{filterLabel}</span>
+                  )}
+                </div>
                 <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border">
                   <div className="divide-y divide-border">
-                    {sortedEvents.map((event, i) => {
+                    {uniqueSortedEvents.map((event, i) => {
                       // Use statusKey if available, otherwise derive from action
                       const statusKey: StatusKey = event.statusKey || (
                         event.action === 'OK' ? 'present' :

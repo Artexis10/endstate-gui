@@ -308,11 +308,18 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     phase === 'capture' ? 'capture' :
     undefined;
   
+  // Determine action text with fallback for failed items with no message
+  const statusKey = engineStatusToStatusKey(event.status);
+  let action = event.message || event.status;
+  if (statusKey === 'failed' && (!event.message || !event.message.trim())) {
+    action = 'Install failed (no details provided)';
+  }
+  
   return {
     app: event.id,
-    action: event.message || event.status,
+    action,
     timestamp: Date.now(),
-    statusKey: engineStatusToStatusKey(event.status),
+    statusKey,
     phase: uiPhase,
     reason: event.reason,
   };

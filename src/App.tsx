@@ -1527,8 +1527,10 @@ function AppContent() {
     const appEventList: AppEvent[] = [];
     const appEventIndex = new Map<string, number>();
     const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 };
+    const verifyCounters = { confirmed: 0, missing: 0, total: 0 };
     let currentPhase: EnginePhase = 'apply';
-    let hasInsertedVerifySeparator = false;
+    let hasInsertedApplyHeader = false;
+    let hasInsertedVerifyHeader = false;
     
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
@@ -1546,20 +1548,32 @@ function AppContent() {
           // Handle phase transitions
           if (isPhaseEvent(ndjsonEvent)) {
             const newPhase = ndjsonEvent.phase;
-            // Insert visual separator when transitioning to verify phase
-            if (currentPhase === 'apply' && newPhase === 'verify' && !hasInsertedVerifySeparator) {
-              hasInsertedVerifySeparator = true;
-              const separatorEvent: AppEvent = { 
-                app: '── Verification phase ──', 
+            // Insert APPLY phase header at start
+            if (newPhase === 'apply' && !hasInsertedApplyHeader) {
+              hasInsertedApplyHeader = true;
+              const applyHeaderEvent: AppEvent = { 
+                app: '── APPLY ──', 
+                action: '', 
+                timestamp: Date.now(),
+                phase: 'apply'
+              };
+              appEventList.push(applyHeaderEvent);
+              setLiveAppEvents([...appEventList]);
+            }
+            // Insert VERIFY phase header when transitioning to verify phase
+            if (currentPhase === 'apply' && newPhase === 'verify' && !hasInsertedVerifyHeader) {
+              hasInsertedVerifyHeader = true;
+              const verifyHeaderEvent: AppEvent = { 
+                app: '── VERIFY ──', 
                 action: '', 
                 timestamp: Date.now(),
                 phase: 'verify'
               };
-              appEventList.push(separatorEvent);
+              appEventList.push(verifyHeaderEvent);
               setLiveAppEvents([...appEventList]);
               setOverviewActionProgress({ 
                 message: 'Verifying installation…',
-                detail: 'Confirming all apps are correctly installed',
+                detail: `Verifying… 0/${verifyCounters.total || '?'}`,
                 phase: 'verify'
               });
             }
@@ -1588,28 +1602,51 @@ function AppContent() {
               appEventList.push(appEvent);
             }
             
+            // Track verify phase counters separately
+            if (currentPhase === 'verify') {
+              verifyCounters.total++;
+              if (appEvent.statusKey === 'present' || appEvent.statusKey === 'installed') {
+                verifyCounters.confirmed++;
+              } else if (appEvent.statusKey === 'to_install' || appEvent.statusKey === 'failed') {
+                verifyCounters.missing++;
+              }
+            }
+            
             // Update live events for UI
             setLiveAppEvents(appEventList.length > 2000 ? appEventList.slice(-2000) : [...appEventList]);
             setLiveCounters({ ...counters });
             
-            // Build progress message
+            // Build progress message based on current phase
             const uiStatus = getPhaseAwareStatusForEvent({
               statusKey: appEvent.statusKey || 'skipped',
               phase: currentPhase === 'verify' ? 'verify' : 'apply',
               reason: appEvent.reason,
             });
-            const parts: string[] = [];
-            if (counters.installed > 0) parts.push(`${counters.installed} installed`);
-            if (counters.alreadyPresent > 0) parts.push(`${counters.alreadyPresent} already present`);
-            if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
-            if (counters.failed > 0) parts.push(`${counters.failed} failed`);
-            const counterText = parts.join(' · ') || 'Working…';
             
-            setOverviewActionProgress({ 
-              message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
-              detail: counterText,
-              phase: currentPhase === 'verify' ? 'verify' : 'apply'
-            });
+            if (currentPhase === 'verify') {
+              // Verify phase: show verify progress counter
+              const manifestTotal = counters.installed + counters.alreadyPresent + counters.skipped + counters.failed;
+              const verifyProgress = `Verifying… ${verifyCounters.total}/${manifestTotal || '?'}`;
+              setOverviewActionProgress({ 
+                message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
+                detail: verifyProgress,
+                phase: 'verify'
+              });
+            } else {
+              // Apply phase: show apply counters
+              const parts: string[] = [];
+              if (counters.installed > 0) parts.push(`${counters.installed} installed`);
+              if (counters.alreadyPresent > 0) parts.push(`${counters.alreadyPresent} already present`);
+              if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
+              if (counters.failed > 0) parts.push(`${counters.failed} failed`);
+              const counterText = parts.join(' · ') || 'Working…';
+              
+              setOverviewActionProgress({ 
+                message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
+                detail: counterText,
+                phase: 'apply'
+              });
+            }
           }
         },
       }
