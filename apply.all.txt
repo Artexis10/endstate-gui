@@ -1,0 +1,71 @@
+
+Endstate - 0.0.0-dev+1b0a925
+
+[endstate] Apply: starting with manifest C:\Users\win-laptop\AppData\Local\Endstate\bin\manifests\local\executor.jsonc
+  [SKIP] 7zip.7zip - already installed
+  [SKIP] Adobe.CreativeCloud - already installed
+  [SKIP] Anthropic.Claude - already installed
+  [SKIP] Anysphere.Cursor - already installed
+  [SKIP] Bitwarden.Bitwarden - already installed
+  [SKIP] Brave.Brave - already installed
+  [SKIP] Canonical.Ubuntu.2404 - already installed
+  [SKIP] Codeium.Windsurf - already installed
+  [SKIP] Cryptomator.Cryptomator - already installed
+  [SKIP] CrystalDewWorld.CrystalDiskInfo - already installed
+  [SKIP] CrystalDewWorld.CrystalDiskMark - already installed
+  [SKIP] DBeaver.DBeaver.Community - already installed
+  [SKIP] DenoLand.Deno - already installed
+  [SKIP] Discord.Discord - already installed
+  [SKIP] Docker.DockerDesktop - already installed
+  [SKIP] EclipseAdoptium.Temurin.8.JRE - already installed
+  [SKIP] Elgato.CameraHub - already installed
+  [SKIP] EpicGames.EpicGamesLauncher - already installed
+  [SKIP] GermanCoding.SyncTrayzor - already installed
+  [SKIP] Google.Chrome.EXE - already installed
+  [SKIP] Google.GoogleDrive - already installed
+  [SKIP] Guru3D.Afterburner - already installed
+  [SKIP] Guru3D.RTSS - already installed
+  [SKIP] IrfanSkiljan.IrfanView - already installed
+  [SKIP] JAMSoftware.TreeSize.Free - already installed
+  [SKIP] KDE.digiKam - already installed
+  [SKIP] LIGHTNINGUK.ImgBurn - already installed
+  [SKIP] MariaDB.Server - already installed
+  [SKIP] MediaArea.MediaInfo.GUI - already installed
+  [SKIP] Microsoft.AppInstaller - already installed
+  [SKIP] Microsoft.Edge - already installed
+  [SKIP] Microsoft.GameInput - already installed
+  [SKIP] Microsoft.PowerShell - already installed
+  [SKIP] Microsoft.Teams - already installed
+  [SKIP] Microsoft.VisualStudio.2022.Community - already installed
+  [SKIP] Microsoft.VisualStudio.BuildTools - already installed
+  [SKIP] Microsoft.WindowsTerminal - already installed
+  [SKIP] NordSecurity.NordVPN - already installed
+  [PLAN] Notepad++.Notepad++ - would install (driver: winget)
+  [SKIP] Nvidia.PhysX - already installed
+  [SKIP] Obsidian.Obsidian - already installed
+  [SKIP] OpenJS.NodeJS - already installed
+  [SKIP] PeterPawlowski.foobar2000 - already installed
+  [SKIP] PostgreSQL.PostgreSQL.18 - already installed
+  [SKIP] Python.Launcher - already installed
+  [SKIP] Python.Python.3.14 - already installed
+  [SKIP] Python.PythonInstallManager - already installed
+  [SKIP] RARLab.WinRAR - already installed
+  [SKIP] RevoUninstaller.RevoUninstaller - already installed
+  [SKIP] Rustlang.Rustup - already installed
+  [SKIP] SpecialK.SpecialK - already installed
+  [SKIP] Telegram.TelegramDesktop - already installed
+  [SKIP] Valve.Steam - already installed
+  [SKIP] VideoLAN.VLC - already installed
+  [SKIP] VSCodium.VSCodium - already installed
+  [SKIP] Warp.Warp - already installed
+  [SKIP] WinFsp.WinFsp - already installed
+  [SKIP] XnSoft.XnConvert - already installed
+  [SKIP] yt-dlp.FFmpeg - already installed
+  [SKIP] yt-dlp.yt-dlp - already installed
+  [SKIP] Zoom.Zoom - already installed
+
+[endstate] Apply: Summary
+  Installed: 1
+  Upgraded:  0
+  Skipped:   60
+[endstate] Apply: completed ExitCode=0

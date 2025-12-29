@@ -1059,11 +1059,11 @@ export function OverviewScreen({
                   {actionResult.counts.alreadyPresent !== undefined && actionResult.counts.alreadyPresent > 0 && (
                     <button
                       role="tab"
-                      aria-selected={detailsFilter === 'OK'}
-                      onClick={() => setDetailsFilter(detailsFilter === 'OK' ? null : 'OK')}
+                      aria-selected={detailsFilter === 'Already present'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'Already present' ? null : 'Already present')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'OK' ? 'ring-2 ring-gray-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'OK' ? 'opacity-50' : ''} bg-muted`}
+                        detailsFilter === 'Already present' ? 'ring-2 ring-green-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'Already present' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
                     >
                       Already present: {actionResult.counts.alreadyPresent}
                     </button>
@@ -1114,9 +1114,19 @@ export function OverviewScreen({
             // Filter events based on selected filter
             const filteredEvents = detailsFilter
               ? actionResult.appEvents.filter(e => {
-                  if (detailsFilter === 'OK') return e.action === 'OK';
-                  if (detailsFilter === 'To install') return e.action === 'To install' || e.action === 'Missing';
-                  return e.action === detailsFilter;
+                  // Use phase-aware status mapping to get the actual label
+                  const statusKey: StatusKey = e.statusKey || (
+                    e.action === 'OK' ? 'already_present' :
+                    e.action === 'Installed' ? 'installed' :
+                    e.action === 'Failed' ? 'failed' :
+                    e.action === 'Skipped' ? 'skipped' :
+                    e.action === 'Cancelled' ? 'cancelled' :
+                    e.action === 'Processing' ? 'installing' :
+                    e.action === 'To install' || e.action === 'Missing' ? 'to_install' :
+                    'skipped'
+                  );
+                  const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: e.phase, reason: e.reason });
+                  return uiStatus.longLabel === detailsFilter;
                 })
               : actionResult.appEvents;
             

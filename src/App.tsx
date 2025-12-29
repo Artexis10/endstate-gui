@@ -1863,7 +1863,7 @@ function AppContent() {
                     profile: result.profileName,
                     timestamp: new Date().toISOString(),
                     counts: { total: result.count },
-                    appEvents: result.apps?.map(app => ({ app, action: 'Captured' })),
+                    appEvents: result.apps?.map(app => ({ app, action: 'Captured', statusKey: 'already_present' as const, phase: 'capture' as const })),
                   });
                 } catch (err) {
                   setOverviewActionStatus('error');
