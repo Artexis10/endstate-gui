@@ -56,9 +56,9 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
     
     // Simulate capture result with phase-aware appEvents
     const appEvents: AppEvent[] = [
-      { app: 'Git.Git', action: 'Captured', statusKey: 'already_present', phase: 'capture', timestamp: Date.now() },
-      { app: 'VSCode', action: 'Captured', statusKey: 'already_present', phase: 'capture', timestamp: Date.now() },
-      { app: 'Chrome', action: 'Captured', statusKey: 'already_present', phase: 'capture', timestamp: Date.now() },
+      { app: 'Git.Git', action: 'Captured', statusKey: 'detected', phase: 'capture', timestamp: Date.now() },
+      { app: 'VSCode', action: 'Captured', statusKey: 'detected', phase: 'capture', timestamp: Date.now() },
+      { app: 'Chrome', action: 'Captured', statusKey: 'detected', phase: 'capture', timestamp: Date.now() },
     ];
 
     const captureResult = {
@@ -118,7 +118,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
     const user = userEvent.setup();
     
     const appEvents: AppEvent[] = [
-      { app: 'Git.Git', action: 'Captured', statusKey: 'already_present', phase: 'capture', timestamp: Date.now() },
+      { app: 'Git.Git', action: 'Captured', statusKey: 'detected', phase: 'capture', timestamp: Date.now() },
     ];
 
     const captureResult = {
@@ -160,9 +160,11 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
     const detectedLabel = screen.getByText('Detected');
     expect(detectedLabel).toBeInTheDocument();
 
-    // Check that it has success color classes (green)
+    // Check that it has detected color classes (teal, not green)
     const chipElement = detectedLabel.closest('span');
-    expect(chipElement).toHaveClass('text-success');
-    expect(chipElement).toHaveClass('bg-success/10');
+    expect(chipElement).toHaveClass('bg-teal-500/10');
+    // Verify it's NOT using success/green colors
+    expect(chipElement).not.toHaveClass('text-success');
+    expect(chipElement).not.toHaveClass('bg-success/10');
   });
 });

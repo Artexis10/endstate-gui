@@ -152,7 +152,7 @@ export function OverviewScreen({
   const [expandedCard, setExpandedCard] = useState<ActionType>(null);
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [detailsFilter, setDetailsFilter] = useState<string | null>(null);
+  const [detailsFilter, setDetailsFilter] = useState<StatusKey | 'all' | null>(null);
   const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced');
   const [manageProfilesOpen, setManageProfilesOpen] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -1035,11 +1035,11 @@ export function OverviewScreen({
                   {actionResult.counts.installed !== undefined && actionResult.counts.installed > 0 && (
                     <button
                       role="tab"
-                      aria-selected={detailsFilter === 'Installed'}
-                      onClick={() => setDetailsFilter(detailsFilter === 'Installed' ? null : 'Installed')}
+                      aria-selected={detailsFilter === 'installed'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'installed' ? null : 'installed')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'Installed' ? 'ring-2 ring-green-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'Installed' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
+                        detailsFilter === 'installed' ? 'ring-2 ring-green-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'installed' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
                     >
                       Installed: {actionResult.counts.installed}
                     </button>
@@ -1047,11 +1047,11 @@ export function OverviewScreen({
                   {actionResult.counts.toInstall !== undefined && actionResult.counts.toInstall > 0 && (
                     <button
                       role="tab"
-                      aria-selected={detailsFilter === 'To install'}
-                      onClick={() => setDetailsFilter(detailsFilter === 'To install' ? null : 'To install')}
+                      aria-selected={detailsFilter === 'to_install'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity whitespace-nowrap flex-shrink-0 ${
-                        detailsFilter === 'To install' ? 'ring-2 ring-blue-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'To install' ? 'opacity-50' : ''} bg-blue-500/10 text-blue-600`}
+                        detailsFilter === 'to_install' ? 'ring-2 ring-blue-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} bg-blue-500/10 text-blue-600`}
                     >
                       To install: {actionResult.counts.toInstall}
                     </button>
@@ -1059,11 +1059,11 @@ export function OverviewScreen({
                   {actionResult.counts.alreadyPresent !== undefined && actionResult.counts.alreadyPresent > 0 && (
                     <button
                       role="tab"
-                      aria-selected={detailsFilter === 'Already present'}
-                      onClick={() => setDetailsFilter(detailsFilter === 'Already present' ? null : 'Already present')}
+                      aria-selected={detailsFilter === 'already_present'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'already_present' ? null : 'already_present')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'Already present' ? 'ring-2 ring-green-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'Already present' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
+                        detailsFilter === 'already_present' ? 'ring-2 ring-green-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'already_present' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
                     >
                       Already present: {actionResult.counts.alreadyPresent}
                     </button>
@@ -1071,11 +1071,11 @@ export function OverviewScreen({
                   {actionResult.counts.skipped !== undefined && actionResult.counts.skipped > 0 && (
                     <button
                       role="tab"
-                      aria-selected={detailsFilter === 'Skipped'}
-                      onClick={() => setDetailsFilter(detailsFilter === 'Skipped' ? null : 'Skipped')}
+                      aria-selected={detailsFilter === 'skipped'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'skipped' ? null : 'skipped')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'Skipped' ? 'ring-2 ring-yellow-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'Skipped' ? 'opacity-50' : ''} bg-yellow-500/10 text-yellow-600`}
+                        detailsFilter === 'skipped' ? 'ring-2 ring-yellow-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'skipped' ? 'opacity-50' : ''} bg-yellow-500/10 text-yellow-600`}
                     >
                       Skipped: {actionResult.counts.skipped}
                     </button>
@@ -1083,11 +1083,11 @@ export function OverviewScreen({
                   {actionResult.counts.failed !== undefined && actionResult.counts.failed > 0 && (
                     <button
                       role="tab"
-                      aria-selected={detailsFilter === 'Failed'}
-                      onClick={() => setDetailsFilter(detailsFilter === 'Failed' ? null : 'Failed')}
+                      aria-selected={detailsFilter === 'failed'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'failed' ? null : 'failed')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'Failed' ? 'ring-2 ring-red-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'Failed' ? 'opacity-50' : ''} bg-red-500/10 text-red-600`}
+                        detailsFilter === 'failed' ? 'ring-2 ring-red-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'failed' ? 'opacity-50' : ''} bg-red-500/10 text-red-600`}
                     >
                       Failed: {actionResult.counts.failed}
                     </button>
@@ -1095,11 +1095,11 @@ export function OverviewScreen({
                   {actionResult.counts.missing !== undefined && actionResult.counts.missing > 0 && (
                     <button
                       role="tab"
-                      aria-selected={detailsFilter === 'Missing'}
-                      onClick={() => setDetailsFilter(detailsFilter === 'Missing' ? null : 'Missing')}
+                      aria-selected={detailsFilter === 'to_install'}
+                      onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'Missing' ? 'ring-2 ring-orange-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'Missing' ? 'opacity-50' : ''} bg-orange-500/10 text-orange-600`}
+                        detailsFilter === 'to_install' ? 'ring-2 ring-orange-500' : ''
+                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} bg-orange-500/10 text-orange-600`}
                     >
                       Missing: {actionResult.counts.missing}
                     </button>
@@ -1111,10 +1111,9 @@ export function OverviewScreen({
           
           {/* App events list - scrollable section with proper constraints */}
           {actionResult?.appEvents && actionResult.appEvents.length > 0 && (() => {
-            // Filter events based on selected filter
+            // Filter events based on selected filter (using canonical statusKey)
             const filteredEvents = detailsFilter
               ? actionResult.appEvents.filter(e => {
-                  // Use phase-aware status mapping to get the actual label
                   const statusKey: StatusKey = e.statusKey || (
                     e.action === 'OK' ? 'already_present' :
                     e.action === 'Installed' ? 'installed' :
@@ -1123,10 +1122,10 @@ export function OverviewScreen({
                     e.action === 'Cancelled' ? 'cancelled' :
                     e.action === 'Processing' ? 'installing' :
                     e.action === 'To install' || e.action === 'Missing' ? 'to_install' :
+                    e.action === 'Captured' ? 'detected' :
                     'skipped'
                   );
-                  const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: e.phase, reason: e.reason });
-                  return uiStatus.longLabel === detailsFilter;
+                  return statusKey === detailsFilter;
                 })
               : actionResult.appEvents;
             

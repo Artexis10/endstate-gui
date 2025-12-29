@@ -317,7 +317,7 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
       const status = PHASE_STATUS_MAP.capture.already_present;
       expect(status?.shortLabel).toBe('DETECTED');
       expect(status?.longLabel).toBe('Detected');
-      expect(status?.color).toBe('success');
+      expect(status?.color).toBe('detected');
     });
 
     it('installed shows as "Detected"', () => {
@@ -515,7 +515,7 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
       expect(status.color).toBe('muted');
     });
 
-    it('capture + already_present + reason=detected -> DETECTED (success)', () => {
+    it('capture + already_present + reason=detected -> DETECTED (detected color)', () => {
       const status = getPhaseAwareStatusForEvent({
         statusKey: 'already_present',
         phase: 'capture',
@@ -523,16 +523,16 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
       });
       expect(status.shortLabel).toBe('DETECTED');
       expect(status.longLabel).toBe('Detected');
-      expect(status.color).toBe('success');
+      expect(status.color).toBe('detected');
     });
 
-    it('capture + already_present -> DETECTED (success)', () => {
+    it('capture + already_present -> DETECTED (detected color)', () => {
       const status = getPhaseAwareStatusForEvent({
         statusKey: 'already_present',
         phase: 'capture',
       });
       expect(status.shortLabel).toBe('DETECTED');
-      expect(status.color).toBe('success');
+      expect(status.color).toBe('detected');
     });
 
     it('capture + to_install -> NOT FOUND (muted)', () => {

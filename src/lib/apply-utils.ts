@@ -9,6 +9,7 @@ import type { EngineItemStatus, ItemEvent, EnginePhase } from './streaming-event
 export type StatusKey = 
   | 'to_install'      // Preview: will be installed
   | 'already_present' // Already on system
+  | 'detected'        // Capture: app detected on system
   | 'skipped'         // Skipped by filter/policy
   | 'failed'          // Failed (preview or apply)
   | 'installing'      // Apply activity: in progress
@@ -19,7 +20,7 @@ export type StatusKey =
  * Semantic color tokens for status display.
  * Maps to Tailwind CSS color classes.
  */
-export type SemanticColor = 'success' | 'info' | 'warn' | 'error' | 'muted';
+export type SemanticColor = 'success' | 'info' | 'warn' | 'error' | 'muted' | 'detected';
 
 /**
  * UI Status configuration with labels and colors.
@@ -45,6 +46,11 @@ export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
     shortLabel: 'TO INSTALL',
     longLabel: 'To install',
     color: 'info',
+  },
+  detected: {
+    shortLabel: 'DETECTED',
+    longLabel: 'Detected',
+    color: 'detected',
   },
   installing: {
     shortLabel: 'INSTALLING',
@@ -100,8 +106,9 @@ export interface PhaseAwareStatusConfig {
  */
 export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAwareStatusConfig>>> = {
   capture: {
-    already_present: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'success' },
-    installed: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'success' },
+    detected: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'detected' },
+    already_present: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'detected' },
+    installed: { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'detected' },
     to_install: { shortLabel: 'NOT FOUND', longLabel: 'Not found', color: 'muted' },
     skipped: { shortLabel: 'EXCLUDED', longLabel: 'Excluded', color: 'muted' },
     failed: { shortLabel: 'ERROR', longLabel: 'Detection failed', color: 'error' },
@@ -189,9 +196,9 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
     if (statusKey === 'skipped' && (reasonLower === 'filtered' || reasonLower === 'filtered_runtime' || reasonLower === 'filtered_store')) {
       return { shortLabel: 'EXCLUDED', longLabel: 'Excluded', color: 'muted' };
     }
-    // present + detected -> DETECTED (success)
+    // present + detected -> DETECTED (detected color)
     if (statusKey === 'already_present' && reasonLower === 'detected') {
-      return { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'success' };
+      return { shortLabel: 'DETECTED', longLabel: 'Detected', color: 'detected' };
     }
     // Default capture phase handling
     if (PHASE_STATUS_MAP.capture[statusKey]) {
@@ -237,6 +244,8 @@ export function getColorClasses(color: SemanticColor): { text: string; bg: strin
       return { text: 'text-success', bg: 'bg-success/10', border: 'border-success/20' };
     case 'info':
       return { text: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' };
+    case 'detected':
+      return { text: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/20' };
     case 'warn':
       return { text: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20' };
     case 'error':

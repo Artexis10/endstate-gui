@@ -8,14 +8,14 @@ import { getPhaseAwareStatusForEvent, type StatusKey, type UiPhase } from './app
  * This prevents bugs where pills show counts but filtering shows 0 items.
  */
 describe('Phase-aware status mapping for filters', () => {
-  it('Capture phase: already_present -> "Detected"', () => {
+  it('Capture phase: detected -> "Detected" with distinct color', () => {
     const result = getPhaseAwareStatusForEvent({
-      statusKey: 'already_present',
+      statusKey: 'detected',
       phase: 'capture',
     });
     
     expect(result.longLabel).toBe('Detected');
-    expect(result.color).toBe('success');
+    expect(result.color).toBe('detected');
   });
 
   it('Apply phase: already_present -> "Already present"', () => {
@@ -148,5 +148,46 @@ describe('Phase-aware status mapping for filters', () => {
     // Should NOT match "Skipped" - this is "Already present"
     expect(matches).toBe(false);
     expect(uiStatus.longLabel).toBe('Already present');
+  });
+
+  it('Filter by canonical key: detected matches detected events', () => {
+    const event = {
+      app: 'Git.Git',
+      action: 'Captured',
+      statusKey: 'detected' as StatusKey,
+      phase: 'capture' as UiPhase,
+    };
+
+    // Filter using canonical key (not label)
+    const filterKey: StatusKey = 'detected';
+    const matches = event.statusKey === filterKey;
+
+    expect(matches).toBe(true);
+  });
+
+  it('Filter by canonical key: to_install matches to_install events', () => {
+    const event = {
+      app: 'VSCode',
+      statusKey: 'to_install' as StatusKey,
+      phase: 'apply' as UiPhase,
+    };
+
+    const filterKey: StatusKey = 'to_install';
+    const matches = event.statusKey === filterKey;
+
+    expect(matches).toBe(true);
+  });
+
+  it('Filter by canonical key: already_present matches already_present events', () => {
+    const event = {
+      app: 'Chrome',
+      statusKey: 'already_present' as StatusKey,
+      phase: 'apply' as UiPhase,
+    };
+
+    const filterKey: StatusKey = 'already_present';
+    const matches = event.statusKey === filterKey;
+
+    expect(matches).toBe(true);
   });
 });

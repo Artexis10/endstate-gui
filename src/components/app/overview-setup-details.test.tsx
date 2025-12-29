@@ -57,11 +57,11 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     const user = userEvent.setup();
     
     const appEvents: AppEvent[] = [
-      { app: 'Git.Git', action: 'To install', timestamp: Date.now() },
-      { app: 'VSCode', action: 'To install', timestamp: Date.now() },
-      { app: 'Chrome', action: 'OK', timestamp: Date.now() },
-      { app: 'Firefox', action: 'OK', timestamp: Date.now() },
-      { app: 'Notepad++', action: 'OK', timestamp: Date.now() },
+      { app: 'Git.Git', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
+      { app: 'VSCode', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
+      { app: 'Chrome', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Firefox', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Notepad++', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
     ];
 
     const setupResult = {
@@ -135,15 +135,15 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     // Live activity should show "PRESENT" (not "SKIPPED")
     // Modal should show under "Already present" tab (not "Skipped")
     const appEvents: AppEvent[] = [
-      { app: 'Git.Git', action: 'To install', timestamp: Date.now() },
-      { app: 'VSCode', action: 'To install', timestamp: Date.now() },
+      { app: 'Git.Git', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
+      { app: 'VSCode', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
       // These were parsed from [SKIP] ... - already installed
       // After fix, parseApplyProgressLine returns action='OK' not 'Skipped'
-      { app: 'Chrome', action: 'OK', timestamp: Date.now() },
-      { app: 'Firefox', action: 'OK', timestamp: Date.now() },
-      { app: 'Notepad++', action: 'OK', timestamp: Date.now() },
+      { app: 'Chrome', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Firefox', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
+      { app: 'Notepad++', action: 'OK', statusKey: 'already_present', phase: 'apply', timestamp: Date.now() },
       // This is a true skip (filtered)
-      { app: 'BlockedApp', action: 'Skipped', timestamp: Date.now() },
+      { app: 'BlockedApp', action: 'Skipped', statusKey: 'skipped', phase: 'apply', timestamp: Date.now() },
     ];
 
     const setupResult = {
