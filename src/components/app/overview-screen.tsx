@@ -157,7 +157,10 @@ export function OverviewScreen({
   const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced');
   const [manageProfilesOpen, setManageProfilesOpen] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [lastSeenPhase, setLastSeenPhase] = useState<UiPhase | undefined>(undefined);
+  const [userHasScrolledAway, setUserHasScrolledAway] = useState(false);
   const activityScrollRef = useRef<HTMLDivElement>(null);
+  const liveActivityContainerRef = useRef<HTMLDivElement>(null);
   const hasProfile = !!selectedProfile && profiles.length > 0;
   
   // Reset activity expanded state when a new run starts
@@ -166,6 +169,8 @@ export function OverviewScreen({
       // Default mode: collapse for calm UI; Advanced mode: expand to show details
       setActivityExpanded(uiMode === 'advanced');
       setIsAtBottom(true); // Reset scroll position for new run
+      setUserHasScrolledAway(false); // Reset user scroll tracking for new run
+      setLastSeenPhase(undefined); // Reset phase tracking for new run
     }
   }, [isRunning, runningAction, uiMode]);
   
@@ -175,6 +180,23 @@ export function OverviewScreen({
       activityScrollRef.current.scrollTop = activityScrollRef.current.scrollHeight;
     }
   }, [liveAppEvents, isAtBottom, activityExpanded]);
+  
+  // Auto-scroll Live Activity into view when entering VERIFY phase
+  // Only scroll if: panel is expanded, user hasn't scrolled away, and phase just changed to verify
+  useEffect(() => {
+    const currentPhase = actionProgress?.phase;
+    if (
+      currentPhase === 'verify' &&
+      lastSeenPhase !== 'verify' &&
+      activityExpanded &&
+      !userHasScrolledAway &&
+      liveActivityContainerRef.current
+    ) {
+      // Smooth scroll the Live Activity container into view
+      liveActivityContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    setLastSeenPhase(currentPhase);
+  }, [actionProgress?.phase, lastSeenPhase, activityExpanded, userHasScrolledAway]);
   
   // Handle card click based on UI mode
   const handleCardClick = (action: ActionType) => {
@@ -442,11 +464,13 @@ export function OverviewScreen({
             
             {/* Collapsible live activity for Setup card */}
             {action === 'setup' && liveAppEvents.length > 0 && (
-              <div className={`rounded-md border ${
-                actionProgress.phase === 'verify' 
-                  ? 'border-amber-500/30 bg-amber-500/5' 
-                  : 'border-border/50'
-              }`}>
+              <div 
+                ref={liveActivityContainerRef}
+                className={`rounded-md border ${
+                  actionProgress.phase === 'verify' 
+                    ? 'border-amber-500/30 bg-amber-500/5' 
+                    : 'border-border/50'
+                }`}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -485,6 +509,10 @@ export function OverviewScreen({
                         const target = e.currentTarget;
                         const atBottom = Math.abs(target.scrollHeight - target.scrollTop - target.clientHeight) < 5;
                         setIsAtBottom(atBottom);
+                        // Track if user has scrolled away (not at bottom) to prevent auto-scroll on phase change
+                        if (!atBottom) {
+                          setUserHasScrolledAway(true);
+                        }
                       }}
                     >
                       {liveAppEvents.map((event, idx) => {

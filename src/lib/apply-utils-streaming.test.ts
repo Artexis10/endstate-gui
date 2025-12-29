@@ -413,7 +413,7 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
       const status = PHASE_STATUS_MAP.verify.failed;
       expect(status?.shortLabel).toBe('MISMATCH');
       expect(status?.longLabel).toBe('Version mismatch');
-      expect(status?.color).toBe('error');
+      expect(status?.color).toBe('warn'); // Mismatch uses warning (amber), not error
     });
   });
 });

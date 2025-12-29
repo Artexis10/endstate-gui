@@ -130,7 +130,7 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
     to_install: { shortLabel: 'MISSING', longLabel: 'Missing', color: 'error' },
     installing: { shortLabel: 'CHECKING', longLabel: 'Checking…', color: 'info' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },
-    failed: { shortLabel: 'MISMATCH', longLabel: 'Version mismatch', color: 'error' },
+    failed: { shortLabel: 'MISMATCH', longLabel: 'Version mismatch', color: 'warn' },
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
   },
 } as const;

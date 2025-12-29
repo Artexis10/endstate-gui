@@ -145,10 +145,10 @@ export function ManageProfilesModal({
                             size="sm"
                             className="h-8 px-2"
                             onClick={() => setViewAppsProfile(profile)}
-                            title="View apps in this profile"
+                            title="View profile details"
                           >
                             <Eye className="h-3 w-3 mr-1" />
-                            View apps
+                            Details
                           </Button>
                           <Button
                             variant="ghost"

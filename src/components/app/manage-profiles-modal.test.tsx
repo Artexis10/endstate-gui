@@ -169,12 +169,12 @@ describe('ManageProfilesModal', () => {
     });
   });
 
-  describe('View apps action', () => {
-    it('shows View apps button for each profile', () => {
+  describe('Details action', () => {
+    it('shows Details button for each profile', () => {
       render(<ManageProfilesModal {...defaultProps} />);
       
-      const viewAppsButtons = screen.getAllByRole('button', { name: /View apps/i });
-      expect(viewAppsButtons).toHaveLength(3); // One for each profile
+      const detailsButtons = screen.getAllByRole('button', { name: /Details/i });
+      expect(detailsButtons).toHaveLength(3); // One for each profile
     });
   });
 });
