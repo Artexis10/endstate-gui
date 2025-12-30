@@ -511,19 +511,9 @@ export function OverviewScreen({
                       }}
                     >
                       {liveAppEvents.map((event, idx) => {
-                        // Check if this is a phase header row
-                        const isPhaseHeader = event.app === '── APPLY ──' || event.app === '── VERIFY ──';
-                        if (isPhaseHeader) {
-                          const isVerifyHeader = event.app === '── VERIFY ──';
-                          return (
-                            <div key={`phase-header-${idx}`} className={`flex items-center justify-center gap-2 text-xs pt-3 pb-1 ${isVerifyHeader ? 'text-amber-500' : 'text-primary'}`}>
-                              <span className="flex-1 border-t border-current opacity-30" />
-                              <span className="font-semibold text-[10px] tracking-wider">
-                                {isVerifyHeader ? 'VERIFY' : 'APPLY'}
-                              </span>
-                              <span className="flex-1 border-t border-current opacity-30" />
-                            </div>
-                          );
+                        // Skip phase header events - the phase badge already signals the current phase
+                        if (event.app === '── APPLY ──' || event.app === '── VERIFY ──') {
+                          return null;
                         }
                         
                         // Use statusKey if available, otherwise derive from action
@@ -564,7 +554,7 @@ export function OverviewScreen({
                         data-testid="latest-pill"
                       >
                         <ArrowDown className="h-3 w-3" />
-                        Latest ↓
+                        Latest
                       </button>
                     )}
                   </div>
@@ -1122,8 +1112,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'to_install'}
                       onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'to_install' ? 'ring-2 ring-danger' : ''
-                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('error').bg} ${getColorClasses('error').text}`}
+                        detailsFilter === 'to_install' ? 'ring-2 ring-warning' : ''
+                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
                     >
                       Missing: {actionResult.counts.missing}
                     </button>
@@ -1180,25 +1170,13 @@ export function OverviewScreen({
             const manifestTotal = actionResult.counts?.manifestTotal || itemEvents.length;
             const shownCount = uniqueSortedEvents.length;
             
-            // Determine filter label for clarity
-            const filterLabel = detailsFilter ? (
-              detailsFilter === 'to_install' ? 'Showing: Issues only' :
-              detailsFilter === 'failed' ? 'Showing: Failed only' :
-              detailsFilter === 'installed' ? 'Showing: Installed only' :
-              detailsFilter === 'present' ? 'Showing: Already present only' :
-              detailsFilter === 'skipped' ? 'Showing: Skipped only' :
-              null
-            ) : null;
             
             return (
               <div className="flex-1 min-h-0 flex flex-col">
-                <div className="flex-shrink-0 flex items-center justify-between mb-2">
+                <div className="flex-shrink-0 mb-2">
                   <p className="text-xs text-muted-foreground">
                     Apps ({shownCount} of {manifestTotal})
                   </p>
-                  {filterLabel && (
-                    <span className="text-xs text-muted-foreground italic">{filterLabel}</span>
-                  )}
                 </div>
                 <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border">
                   <div className="divide-y divide-border">
