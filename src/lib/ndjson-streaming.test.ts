@@ -147,7 +147,7 @@ describe('NDJSON Streaming Consolidation', () => {
       expect(validUiPhases).toContain('verify');
     });
 
-    it('itemEventToAppEvent maps plan phase to undefined', () => {
+    it('itemEventToAppEvent maps plan phase to apply (preview behaves like apply)', () => {
       const itemEvent: ItemEvent = {
         version: STREAMING_EVENT_VERSION,
         event: 'item',
@@ -159,7 +159,7 @@ describe('NDJSON Streaming Consolidation', () => {
       };
 
       const appEvent = itemEventToAppEvent(itemEvent, 'plan');
-      expect(appEvent.phase).toBeUndefined();
+      expect(appEvent.phase).toBe('apply');
     });
 
     it('itemEventToAppEvent preserves apply and verify phases', () => {

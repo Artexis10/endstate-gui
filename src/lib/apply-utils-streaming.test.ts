@@ -287,7 +287,8 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
 
     const appEvent = itemEventToAppEvent(itemEvent, 'plan');
 
-    expect(appEvent.phase).toBeUndefined();
+    // plan phase maps to 'apply' for UI purposes (preview behaves like apply)
+    expect(appEvent.phase).toBe('apply');
   });
 
   it('correctly maps verify phase', () => {
@@ -400,7 +401,7 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
       const status = PHASE_STATUS_MAP.verify.to_install;
       expect(status?.shortLabel).toBe('MISSING');
       expect(status?.longLabel).toBe('Missing');
-      expect(status?.color).toBe('warn');
+      expect(status?.color).toBe('error');
     });
 
     it('installing shows as "Checking"', () => {
@@ -441,10 +442,10 @@ describe('getPhaseAwareStatus - Phase-Aware Status Resolution', () => {
     expect(status.shortLabel).toBe('SKIPPED');
   });
 
-  it('Verify phase: to_install maps to Missing (amber)', () => {
+  it('Verify phase: to_install maps to Missing (red)', () => {
     const status = getPhaseAwareStatus('to_install', 'verify');
     expect(status.shortLabel).toBe('MISSING');
-    expect(status.color).toBe('warn');
+    expect(status.color).toBe('error');
   });
 
   it('Capture phase: skipped maps to Excluded (muted)', () => {
@@ -606,13 +607,13 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
   });
 
   describe('Verify phase: reason-aware discrimination', () => {
-    it('verify + to_install -> MISSING (warn)', () => {
+    it('verify + to_install -> MISSING (error/red)', () => {
       const status = getPhaseAwareStatusForEvent({
         statusKey: 'to_install',
         phase: 'verify',
       });
       expect(status.shortLabel).toBe('MISSING');
-      expect(status.color).toBe('warn');
+      expect(status.color).toBe('error');
     });
 
     it('verify + present -> CONFIRMED (success)', () => {

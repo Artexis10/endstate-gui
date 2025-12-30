@@ -307,9 +307,9 @@ describe('apply-utils', () => {
       expect(result).toEqual({ app: 'Discord.Discord', action: 'Failed', statusKey: 'failed' });
     });
 
-    it('parses [MISSING] line', () => {
+    it('parses [MISSING] line as to_install (for verify phase)', () => {
       const result = parseApplyProgressLine('[MISSING] Discord.Discord (driver: winget)');
-      expect(result).toEqual({ app: 'Discord.Discord', action: 'Missing', statusKey: 'failed' });
+      expect(result).toEqual({ app: 'Discord.Discord', action: 'Missing', statusKey: 'to_install' });
     });
 
     it('parses [VERSION] line', () => {
@@ -573,6 +573,48 @@ describe('apply-utils', () => {
       expect(result[0].action).toBe('Failed');
       expect(result[0].action).not.toBe('Processing');
       expect(result[0].action).not.toBe('Working');
+    });
+
+    it('preserves phase from existing live event', () => {
+      const liveEvents: AppEvent[] = [
+        { app: 'App1', action: 'Processing', timestamp: 1000, phase: 'verify' },
+      ];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'App1', driver: 'winget', status: 'ok', reason: 'installed' },
+      ];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].phase).toBe('verify');
+    });
+
+    it('preserves reason from envelope item over existing event', () => {
+      const liveEvents: AppEvent[] = [
+        { app: 'App1', action: 'Processing', timestamp: 1000, reason: 'old_reason' },
+      ];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'App1', driver: 'winget', status: 'skipped', reason: 'already_installed' },
+      ];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].reason).toBe('already_installed');
+    });
+
+    it('falls back to existing reason if envelope has no reason', () => {
+      const liveEvents: AppEvent[] = [
+        { app: 'App1', action: 'Processing', timestamp: 1000, reason: 'existing_reason' },
+      ];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'App1', driver: 'winget', status: 'ok' },
+      ];
+
+      const result = reconcileLiveActivity(liveEvents, envelopeItems);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].reason).toBe('existing_reason');
     });
   });
 

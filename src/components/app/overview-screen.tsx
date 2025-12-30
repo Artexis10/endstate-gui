@@ -1112,8 +1112,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'to_install'}
                       onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'to_install' ? 'ring-2 ring-warning' : ''
-                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
+                        detailsFilter === 'to_install' ? 'ring-2 ring-danger' : ''
+                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('error').bg} ${getColorClasses('error').text}`}
                     >
                       Missing: {actionResult.counts.missing}
                     </button>

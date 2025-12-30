@@ -77,7 +77,7 @@ describe('Phase-aware status mapping for filters', () => {
     });
     
     expect(result.longLabel).toBe('Missing');
-    expect(result.color).toBe('warn');
+    expect(result.color).toBe('error');
   });
 
   it('Filter predicate example: matching "Already present" in apply phase', () => {

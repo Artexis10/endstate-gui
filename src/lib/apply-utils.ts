@@ -127,7 +127,7 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
   verify: {
     present: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
     installed: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
-    to_install: { shortLabel: 'MISSING', longLabel: 'Missing', color: 'warn' },
+    to_install: { shortLabel: 'MISSING', longLabel: 'Missing', color: 'error' },
     installing: { shortLabel: 'CHECKING', longLabel: 'Checking…', color: 'info' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },
     failed: { shortLabel: 'MISMATCH', longLabel: 'Version mismatch', color: 'warn' },
@@ -297,13 +297,14 @@ export function engineStatusToStatusKey(engineStatus: EngineItemStatus): StatusK
 /**
  * Convert an ItemEvent from streaming to an AppEvent for UI display.
  * Uses EnginePhase which includes 'plan' | 'apply' | 'verify' | 'capture'.
- * Note: 'plan' phase is not relevant for UI display, so it maps to undefined.
+ * Note: 'plan' phase maps to 'apply' for UI purposes (preview behaves like apply).
  */
 export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppEvent {
   // Map streaming phase to UI-relevant phase (apply | verify | capture)
-  // 'plan' phase is not displayed in UI, so it maps to undefined
+  // 'plan' phase maps to 'apply' for UI purposes (preview behaves like apply)
   const uiPhase: UiPhase | undefined = 
     phase === 'apply' ? 'apply' : 
+    phase === 'plan' ? 'apply' :
     phase === 'verify' ? 'verify' : 
     phase === 'capture' ? 'capture' :
     undefined;
@@ -739,10 +740,10 @@ export function parseApplyProgressLine(line: string): { app: string; action: str
     return { app: failMatch[1], action: 'Failed', statusKey: 'failed' };
   }
 
-  // [MISSING] App.Id (driver: ...)
+  // [MISSING] App.Id (driver: ...) - maps to to_install for verify phase
   const missingMatch = line.match(/\[MISSING\]\s+(\S+)/i);
   if (missingMatch) {
-    return { app: missingMatch[1], action: 'Missing', statusKey: 'failed' };
+    return { app: missingMatch[1], action: 'Missing', statusKey: 'to_install' };
   }
 
   // [VERSION] App.Id - version mismatch
@@ -890,17 +891,20 @@ export function reconcileLiveActivity(
     resultMap.set(event.app, event);
   }
 
-  // Then, reconcile with envelope (envelope is source of truth)
+  // Then, reconcile with envelope (envelope is source of truth for status)
+  // but preserve phase/reason from existing events to avoid phase-leak
   for (const item of envelopeItems) {
     const { action, statusKey } = reasonToAction(item);
     const existing = resultMap.get(item.id);
     
-    // Always update to final status from envelope
+    // Update to final status from envelope, but preserve phase/reason context
     resultMap.set(item.id, {
       app: item.id,
       action,
       statusKey,
       timestamp: existing?.timestamp ?? Date.now(),
+      phase: existing?.phase,
+      reason: item.reason ?? existing?.reason,
     });
   }
 
