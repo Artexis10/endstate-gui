@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, FolderOpen, RefreshCw, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { Pencil, Trash2, FolderOpen, RefreshCw, Eye } from 'lucide-react';
 import type { DiscoveredProfile } from '@/file-discovery';
 import { ViewAppsModal } from './view-apps-modal';
 
@@ -12,7 +12,6 @@ interface ManageProfilesModalProps {
   selectedProfile: string;
   profilesDirectory: string;
   onRenameDisplay: (path: string, currentName: string) => void;
-  onRenameFile: (path: string, currentName: string) => void;
   onDelete: (path: string, displayName: string) => void;
   onOpenFolder: () => void;
   onRefresh: () => Promise<void>;
@@ -25,14 +24,12 @@ export function ManageProfilesModal({
   selectedProfile,
   profilesDirectory,
   onRenameDisplay,
-  onRenameFile,
   onDelete,
   onOpenFolder,
   onRefresh,
 }: ManageProfilesModalProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewAppsProfile, setViewAppsProfile] = useState<DiscoveredProfile | null>(null);
-  const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   const getDisplayLabel = (profile: DiscoveredProfile): string => {
     return profile.displayName || profile.name;
@@ -145,18 +142,6 @@ export function ManageProfilesModal({
                             <Pencil className="h-3 w-3 mr-1" />
                             Rename
                           </Button>
-                          {showMoreOptions && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-muted-foreground"
-                              onClick={() => onRenameFile(profile.path, getFilename(profile))}
-                              title="Change filename on disk"
-                            >
-                              <Pencil className="h-3 w-3 mr-1" />
-                              Change filename
-                            </Button>
-                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -190,14 +175,7 @@ export function ManageProfilesModal({
           </table>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          <button
-            onClick={() => setShowMoreOptions(!showMoreOptions)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mr-auto"
-          >
-            {showMoreOptions ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            {showMoreOptions ? 'Hide options' : 'More options'}
-          </button>
+        <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Close
           </Button>

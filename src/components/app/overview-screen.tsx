@@ -121,7 +121,6 @@ interface OverviewScreenProps {
   onRefreshProfiles: () => Promise<void>;
   onRenameProfile?: (path: string, currentName: string) => void;
   onDeleteProfile?: (path: string, displayName: string) => void;
-  onRenameFile?: (path: string, currentFilename: string) => void;
   onClearExpandedCard?: () => void;
 }
 
@@ -148,7 +147,6 @@ export function OverviewScreen({
   onRefreshProfiles,
   onRenameProfile,
   onDeleteProfile,
-  onRenameFile,
   onClearExpandedCard,
 }: OverviewScreenProps) {
   const [expandedCard, setExpandedCard] = useState<ActionType>(initialExpandedCard ?? null);
@@ -1130,22 +1128,24 @@ export function OverviewScreen({
               e.app !== '── APPLY ──' && e.app !== '── VERIFY ──'
             );
             
+            // Derive canonical statusKey for each event (same logic as list rendering)
+            const deriveStatusKey = (e: AppEvent): StatusKey => {
+              return e.statusKey || (
+                e.action === 'OK' ? 'present' :
+                e.action === 'Installed' ? 'installed' :
+                e.action === 'Failed' ? 'failed' :
+                e.action === 'Skipped' ? 'skipped' :
+                e.action === 'Cancelled' ? 'cancelled' :
+                e.action === 'Processing' ? 'installing' :
+                e.action === 'To install' || e.action === 'Missing' ? 'to_install' :
+                e.action === 'Captured' ? 'detected' :
+                'skipped'
+              );
+            };
+            
             // Filter events based on selected filter (using canonical statusKey)
             const filteredEvents = detailsFilter
-              ? itemEvents.filter(e => {
-                  const statusKey: StatusKey = e.statusKey || (
-                    e.action === 'OK' ? 'present' :
-                    e.action === 'Installed' ? 'installed' :
-                    e.action === 'Failed' ? 'failed' :
-                    e.action === 'Skipped' ? 'skipped' :
-                    e.action === 'Cancelled' ? 'cancelled' :
-                    e.action === 'Processing' ? 'installing' :
-                    e.action === 'To install' || e.action === 'Missing' ? 'to_install' :
-                    e.action === 'Captured' ? 'detected' :
-                    'skipped'
-                  );
-                  return statusKey === detailsFilter;
-                })
+              ? itemEvents.filter(e => deriveStatusKey(e) === detailsFilter)
               : itemEvents;
             
             // Sort: failed/missing first, then to_install, then installed, then OK/skipped/others
@@ -1166,8 +1166,8 @@ export function OverviewScreen({
               return true;
             });
             
-            // Calculate totals: manifest total if available, otherwise item count
-            const manifestTotal = actionResult.counts?.manifestTotal || itemEvents.length;
+            // Calculate totals: use manifestTotal if available, otherwise show count only
+            const manifestTotal = actionResult.counts?.manifestTotal;
             const shownCount = uniqueSortedEvents.length;
             
             
@@ -1175,23 +1175,16 @@ export function OverviewScreen({
               <div className="flex-1 min-h-0 flex flex-col">
                 <div className="flex-shrink-0 mb-2">
                   <p className="text-xs text-muted-foreground">
-                    Apps ({shownCount} of {manifestTotal})
+                    {manifestTotal !== undefined 
+                      ? `Apps (${shownCount} of ${manifestTotal})`
+                      : `Apps (${shownCount})`}
                   </p>
                 </div>
                 <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border">
                   <div className="divide-y divide-border">
                     {uniqueSortedEvents.map((event, i) => {
-                      // Use statusKey if available, otherwise derive from action
-                      const statusKey: StatusKey = event.statusKey || (
-                        event.action === 'OK' ? 'present' :
-                        event.action === 'Installed' ? 'installed' :
-                        event.action === 'Failed' ? 'failed' :
-                        event.action === 'Skipped' ? 'skipped' :
-                        event.action === 'Cancelled' ? 'cancelled' :
-                        event.action === 'Processing' ? 'installing' :
-                        event.action === 'To install' || event.action === 'Missing' ? 'to_install' :
-                        'skipped'
-                      );
+                      // Use canonical statusKey derivation (same as filter logic)
+                      const statusKey = deriveStatusKey(event);
                       // Use phase-aware status with reason for correct labels per phase
                       const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: event.phase, reason: event.reason });
                       const colors = getColorClasses(uiStatus.color);
@@ -1255,9 +1248,6 @@ export function OverviewScreen({
         profilesDirectory={profilesDirectory}
         onRenameDisplay={(path, currentName) => {
           onRenameProfile?.(path, currentName);
-        }}
-        onRenameFile={(path, currentFilename) => {
-          onRenameFile?.(path, currentFilename);
         }}
         onDelete={(path, displayName) => {
           onDeleteProfile?.(path, displayName);

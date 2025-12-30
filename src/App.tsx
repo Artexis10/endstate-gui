@@ -33,7 +33,7 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
-import { Loader2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
+import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'overview' | 'report' | 'settings';
@@ -117,6 +117,7 @@ function AppContent() {
       toInstall?: number;
       missing?: number;
       total?: number;
+      manifestTotal?: number; // Total apps in profile manifest (source of truth)
     };
     profile?: string;
     timestamp?: string;
@@ -152,6 +153,7 @@ function AppContent() {
   const [profileNameModalPath, setProfileNameModalPath] = useState('');
   const [profileNameModalValue, setProfileNameModalValue] = useState('');
   const [profileNameModalMode, setProfileNameModalMode] = useState<'save' | 'rename'>('save');
+  const [profileNameModalMoreOptions, setProfileNameModalMoreOptions] = useState(false);
   
   // Profile delete confirmation modal state
   const [showDeleteProfileModal, setShowDeleteProfileModal] = useState(false);
@@ -237,6 +239,7 @@ function AppContent() {
     setProfileNameModalPath(profilePath);
     setProfileNameModalValue(existingName);
     setProfileNameModalMode(mode);
+    setProfileNameModalMoreOptions(false);
     setShowProfileNameModal(true);
   };
 
@@ -252,6 +255,7 @@ function AppContent() {
     setShowProfileNameModal(false);
     setProfileNameModalPath('');
     setProfileNameModalValue('');
+    setProfileNameModalMoreOptions(false);
   };
 
   const handleDeleteProfile = async () => {
@@ -928,7 +932,9 @@ function AppContent() {
             if (currentPhase === 'verify') {
               // Verify phase: show verify progress counter
               const manifestTotal = counters.installed + counters.alreadyPresent + counters.skipped + counters.failed;
-              const verifyProgress = `Verifying… ${verifyCounters.total}/${manifestTotal || '?'}`;
+              const verifyProgress = manifestTotal > 0 
+                ? `Verifying… ${verifyCounters.total}/${manifestTotal}`
+                : `Verifying… (${verifyCounters.total} checked)`;
               setOverviewActionProgress({ 
                 message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
                 detail: verifyProgress,
@@ -1272,6 +1278,7 @@ function AppContent() {
                         alreadyPresent: result.alreadyPresent,
                         skipped: result.skipped,
                         failed: result.failed,
+                        manifestTotal: result.installed + result.alreadyPresent + result.skipped + result.failed,
                       },
                       appEvents: result.appEvents,
                     });
@@ -1287,6 +1294,7 @@ function AppContent() {
                       counts: {
                         toInstall: result.installed,
                         alreadyPresent: result.alreadyPresent,
+                        manifestTotal: result.installed + result.alreadyPresent,
                       },
                       appEvents: result.appEvents,
                       wasPreview: true, // Flag for showing "Apply changes" button
@@ -1340,6 +1348,7 @@ function AppContent() {
                     counts: {
                       missing: result.missing,
                       alreadyPresent: result.present,
+                      manifestTotal: result.missing + result.present,
                     },
                     appEvents: result.appEvents,
                   });
@@ -1373,11 +1382,6 @@ function AppContent() {
                 setDeleteProfilePath(path);
                 setDeleteProfileName(displayName);
                 setShowDeleteProfileModal(true);
-              }}
-              onRenameFile={(path, currentFilename) => {
-                setRenameFilePath(path);
-                setRenameFileCurrentName(currentFilename);
-                setShowRenameFileModal(true);
               }}
             />
           </div>
@@ -1761,7 +1765,7 @@ function AppContent() {
                 : 'Give this profile a name (optional).'}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-3">
             <Input 
               value={profileNameModalValue}
               onChange={(e) => setProfileNameModalValue(e.target.value)}
@@ -1775,6 +1779,33 @@ function AppContent() {
                 }
               }}
             />
+            {profileNameModalMode === 'rename' && (
+              <div>
+                <button
+                  onClick={() => setProfileNameModalMoreOptions(!profileNameModalMoreOptions)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {profileNameModalMoreOptions ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  {profileNameModalMoreOptions ? 'Hide details' : 'More options'}
+                </button>
+                {profileNameModalMoreOptions && (() => {
+                  const parts = profileNameModalPath.split(/[\\/]/);
+                  const filename = parts[parts.length - 1] || '';
+                  return (
+                    <div className="mt-2 p-3 bg-muted/30 rounded-md space-y-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Filename: </span>
+                        <span className="font-mono">{filename}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Path: </span>
+                        <span className="font-mono text-[10px] break-all">{profileNameModalPath}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="secondary" onClick={() => setShowProfileNameModal(false)}>
