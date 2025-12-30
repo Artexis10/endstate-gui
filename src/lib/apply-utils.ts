@@ -249,7 +249,7 @@ export function getColorClasses(color: SemanticColor): { text: string; bg: strin
     case 'warn':
       return { text: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20' };
     case 'error':
-      return { text: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/20' };
+      return { text: 'text-danger', bg: 'bg-danger/10', border: 'border-danger/20' };
     case 'muted':
     default:
       return { text: 'text-muted-foreground', bg: 'bg-muted/10', border: 'border-muted/20' };
