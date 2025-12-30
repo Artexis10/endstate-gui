@@ -110,6 +110,7 @@ interface OverviewScreenProps {
   actionResult: ActionResult | null;
   liveAppEvents?: AppEvent[];
   liveCounters?: LiveCounters;
+  initialExpandedCard?: ActionType;
   onNavigate: (page: 'capture' | 'apply' | 'verify' | 'report' | 'settings') => void;
   onCapture: () => void;
   onSetup: (intent: SetupIntent) => void;
@@ -121,6 +122,7 @@ interface OverviewScreenProps {
   onRenameProfile?: (path: string, currentName: string) => void;
   onDeleteProfile?: (path: string, displayName: string) => void;
   onRenameFile?: (path: string, currentFilename: string) => void;
+  onClearExpandedCard?: () => void;
 }
 
 export function OverviewScreen({
@@ -135,6 +137,7 @@ export function OverviewScreen({
   actionResult,
   liveAppEvents = [],
   liveCounters,
+  initialExpandedCard,
   onNavigate,
   onCapture,
   onSetup,
@@ -146,8 +149,18 @@ export function OverviewScreen({
   onRenameProfile,
   onDeleteProfile,
   onRenameFile,
+  onClearExpandedCard,
 }: OverviewScreenProps) {
-  const [expandedCard, setExpandedCard] = useState<ActionType>(null);
+  const [expandedCard, setExpandedCard] = useState<ActionType>(initialExpandedCard ?? null);
+  
+  // Handle external initialExpandedCard changes (e.g., from redirect)
+  useEffect(() => {
+    if (initialExpandedCard) {
+      setExpandedCard(initialExpandedCard);
+      // Clear the external state after applying it
+      onClearExpandedCard?.();
+    }
+  }, [initialExpandedCard, onClearExpandedCard]);
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [detailsFilter, setDetailsFilter] = useState<StatusKey | 'all' | null>(null);

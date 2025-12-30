@@ -7,9 +7,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
-  ScanSearch,
-  PlayCircle,
-  CheckCircle,
   FileText,
   Settings,
   FolderOpen,
@@ -55,38 +52,8 @@ export function CommandPalette({
       category: 'navigate',
     },
     {
-      id: 'nav-capture',
-      label: 'Go to Capture',
-      icon: ScanSearch,
-      action: () => {
-        onNavigate('capture');
-        onOpenChange(false);
-      },
-      category: 'navigate',
-    },
-    {
-      id: 'nav-apply',
-      label: 'Go to Apply',
-      icon: PlayCircle,
-      action: () => {
-        onNavigate('apply');
-        onOpenChange(false);
-      },
-      category: 'navigate',
-    },
-    {
-      id: 'nav-verify',
-      label: 'Go to Verify',
-      icon: CheckCircle,
-      action: () => {
-        onNavigate('verify');
-        onOpenChange(false);
-      },
-      category: 'navigate',
-    },
-    {
       id: 'nav-report',
-      label: 'Go to Report',
+      label: 'Go to Reports',
       icon: FileText,
       action: () => {
         onNavigate('report');

@@ -1,9 +1,6 @@
 import { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ScanSearch, 
-  PlayCircle, 
-  CheckCircle, 
   FileText, 
   Settings, 
   Command,
@@ -55,10 +52,7 @@ export function AppShell({
   
   const navItems = [
     { id: 'overview' as const, label: 'Overview', icon: Home },
-    { id: 'capture' as const, label: 'Capture computer', icon: ScanSearch },
-    { id: 'apply' as const, label: 'Set up computer', icon: PlayCircle },
-    { id: 'verify' as const, label: 'Check computer', icon: CheckCircle },
-    { id: 'report' as const, label: 'Report', icon: FileText },
+    { id: 'report' as const, label: 'Reports', icon: FileText },
     { id: 'settings' as const, label: 'Settings', icon: Settings },
   ];
 

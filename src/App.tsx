@@ -88,6 +88,25 @@ function AppContent() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [currentPage, setCurrentPage] = useState<PageType>('overview');
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
+  // Track which Overview card to auto-expand when redirected from legacy routes
+  const [overviewExpandedCard, setOverviewExpandedCard] = useState<'capture' | 'setup' | 'check' | null>(null);
+  
+  // Redirect legacy pages (capture/apply/verify) to overview with auto-expand
+  const handleNavigate = (page: PageType) => {
+    if (page === 'capture') {
+      setOverviewExpandedCard('capture');
+      setCurrentPage('overview');
+    } else if (page === 'apply') {
+      setOverviewExpandedCard('setup');
+      setCurrentPage('overview');
+    } else if (page === 'verify') {
+      setOverviewExpandedCard('check');
+      setCurrentPage('overview');
+    } else {
+      setOverviewExpandedCard(null);
+      setCurrentPage(page);
+    }
+  };
   const [sidebarVisible, setSidebarVisible] = useState(loadSidebarVisible());
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
@@ -1901,7 +1920,9 @@ function AppContent() {
               actionResult={overviewActionResult}
               liveAppEvents={liveAppEvents}
               liveCounters={liveCounters}
+              initialExpandedCard={overviewExpandedCard}
               onNavigate={navigateWithHistory}
+              onClearExpandedCard={() => setOverviewExpandedCard(null)}
               onCapture={async () => {
                 // Double-run guard with runId
                 const runId = `capture-${Date.now()}`;
@@ -2890,7 +2911,7 @@ function AppContent() {
     <>
       <AppShell
         currentPage={currentPage}
-        onNavigate={setCurrentPage}
+        onNavigate={handleNavigate}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         pageTitle={getPageTitle()}
         navIndicators={navIndicators}
@@ -2905,7 +2926,7 @@ function AppContent() {
       <CommandPalette
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
-        onNavigate={setCurrentPage}
+        onNavigate={handleNavigate}
       />
 
       {/* Folder Path Modal (web fallback) */}
