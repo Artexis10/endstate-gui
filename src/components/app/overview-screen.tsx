@@ -622,10 +622,10 @@ export function OverviewScreen({
               </div>
             ) : (
               // Fatal error: nothing succeeded or no counts available
-              <div className="flex items-center gap-3 bg-destructive/10 rounded-md px-3 py-3">
-                <XCircle className="h-4 w-4 text-destructive" />
+              <div className="flex items-center gap-3 bg-danger/10 rounded-md px-3 py-3">
+                <XCircle className="h-4 w-4 text-danger" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-destructive">
+                  <p className="text-sm font-medium text-danger">
                     {actionResult?.counts?.failed && actionResult.counts.failed > 0
                       ? `All apps failed to install (${actionResult.counts.failed} failed)`
                       : 'Something went wrong'}
@@ -1082,8 +1082,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'installed'}
                       onClick={() => setDetailsFilter(detailsFilter === 'installed' ? null : 'installed')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'installed' ? 'ring-2 ring-green-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'installed' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
+                        detailsFilter === 'installed' ? 'ring-2 ring-success' : ''
+                      } ${detailsFilter && detailsFilter !== 'installed' ? 'opacity-50' : ''} ${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                     >
                       Installed: {actionResult.counts.installed}
                     </button>
@@ -1106,8 +1106,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'present'}
                       onClick={() => setDetailsFilter(detailsFilter === 'present' ? null : 'present')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'present' ? 'ring-2 ring-green-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'present' ? 'opacity-50' : ''} bg-green-500/10 text-green-600`}
+                        detailsFilter === 'present' ? 'ring-2 ring-success' : ''
+                      } ${detailsFilter && detailsFilter !== 'present' ? 'opacity-50' : ''} ${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                     >
                       Already present: {actionResult.counts.alreadyPresent}
                     </button>
@@ -1118,8 +1118,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'skipped'}
                       onClick={() => setDetailsFilter(detailsFilter === 'skipped' ? null : 'skipped')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'skipped' ? 'ring-2 ring-yellow-500' : ''
-                      } ${detailsFilter && detailsFilter !== 'skipped' ? 'opacity-50' : ''} bg-yellow-500/10 text-yellow-600`}
+                        detailsFilter === 'skipped' ? 'ring-2 ring-warning' : ''
+                      } ${detailsFilter && detailsFilter !== 'skipped' ? 'opacity-50' : ''} ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
                     >
                       Skipped: {actionResult.counts.skipped}
                     </button>
@@ -1130,7 +1130,7 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'failed'}
                       onClick={() => setDetailsFilter(detailsFilter === 'failed' ? null : 'failed')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'failed' ? 'ring-2 ring-destructive' : ''
+                        detailsFilter === 'failed' ? 'ring-2 ring-danger' : ''
                       } ${detailsFilter && detailsFilter !== 'failed' ? 'opacity-50' : ''} ${getColorClasses('error').bg} ${getColorClasses('error').text}`}
                     >
                       Failed: {actionResult.counts.failed}
@@ -1142,7 +1142,7 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'to_install'}
                       onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'to_install' ? 'ring-2 ring-destructive' : ''
+                        detailsFilter === 'to_install' ? 'ring-2 ring-danger' : ''
                       } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('error').bg} ${getColorClasses('error').text}`}
                     >
                       Missing: {actionResult.counts.missing}
@@ -1275,7 +1275,7 @@ export function OverviewScreen({
                 </div>
               ) : (
                 // Fatal error
-                <p className="text-destructive">An error occurred during the operation.</p>
+                <p className="text-danger">An error occurred during the operation.</p>
               )}
             </div>
           )}

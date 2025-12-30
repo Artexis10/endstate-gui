@@ -16,7 +16,7 @@ export function StatusPill({ status, label }: StatusPillProps) {
       text: label || 'OK',
     },
     missing: {
-      variant: 'warning' as const,
+      variant: 'danger' as const,
       icon: AlertCircle,
       text: label || 'Missing',
     },

@@ -255,7 +255,7 @@ describe('Apply Flow UX Contracts', () => {
       expect(screen.getByText(/1 failed/)).toBeInTheDocument();
       
       // Verify error icon
-      const errorIcon = document.querySelector('.text-destructive');
+      const errorIcon = document.querySelector('.text-danger');
       expect(errorIcon).toBeInTheDocument();
       
       // Verify close button is enabled (allows retry)

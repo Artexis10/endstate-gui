@@ -241,7 +241,7 @@ export function ApplyResultModal({
             {isApplying ? (
               <Loader2 className="h-8 w-8 text-primary animate-spin" />
             ) : hasFailures ? (
-              <AlertTriangle className="h-8 w-8 text-destructive" />
+              <AlertTriangle className="h-8 w-8 text-danger" />
             ) : hasPendingChanges ? (
               <AlertTriangle className="h-8 w-8 text-warning" />
             ) : (
@@ -317,14 +317,14 @@ export function ApplyResultModal({
               {needsAttention > 0 && (
                 <button
                   onClick={() => toggleFilter('Needs attention')}
-                  className={`flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/20 w-full text-left transition-opacity ${
+                  className={`flex items-center justify-between p-4 rounded-lg bg-danger/10 border border-danger/20 w-full text-left transition-opacity ${
                     activeFilters.size > 0 && !activeFilters.has('Needs attention') ? 'opacity-50' : ''
                   }`}
                   data-testid="filter-needs-attention"
                   aria-pressed={activeFilters.has('Needs attention')}
                 >
                   <span className="text-sm font-medium">Needs attention</span>
-                  <span className="text-2xl font-semibold text-destructive">{needsAttention}</span>
+                  <span className="text-2xl font-semibold text-danger">{needsAttention}</span>
                 </button>
               )}
               
