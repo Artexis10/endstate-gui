@@ -25,7 +25,7 @@ interface Command {
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onNavigate: (page: 'overview' | 'capture' | 'apply' | 'verify' | 'report' | 'settings') => void;
+  onNavigate: (page: 'overview' | 'report' | 'settings') => void;
   onOpenLogsFolder?: () => void;
   onOpenOutputFolder?: () => void;
 }

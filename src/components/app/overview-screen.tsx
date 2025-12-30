@@ -111,7 +111,7 @@ interface OverviewScreenProps {
   liveAppEvents?: AppEvent[];
   liveCounters?: LiveCounters;
   initialExpandedCard?: ActionType;
-  onNavigate: (page: 'capture' | 'apply' | 'verify' | 'report' | 'settings') => void;
+  onNavigate: (page: 'report' | 'settings') => void;
   onCapture: () => void;
   onSetup: (intent: SetupIntent) => void;
   onCheck: () => void;
@@ -1261,22 +1261,6 @@ export function OverviewScreen({
           )}
 
           <DialogFooter className="flex-shrink-0 pt-4 gap-2">
-            {actionResult?.action === 'setup' && (
-              <Button variant="secondary" size="sm" onClick={() => {
-                setDetailsModalOpen(false);
-                onNavigate('apply');
-              }}>
-                View full report
-              </Button>
-            )}
-            {actionResult?.action === 'check' && (
-              <Button variant="secondary" size="sm" onClick={() => {
-                setDetailsModalOpen(false);
-                onNavigate('verify');
-              }}>
-                View full report
-              </Button>
-            )}
             <Button onClick={() => setDetailsModalOpen(false)}>
               Close
             </Button>

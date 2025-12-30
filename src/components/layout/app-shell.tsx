@@ -17,7 +17,7 @@ interface NavIndicator {
   tooltip?: string;
 }
 
-type PageType = 'overview' | 'capture' | 'apply' | 'verify' | 'report' | 'settings';
+type PageType = 'overview' | 'report' | 'settings';
 
 interface AppShellProps {
   children: ReactNode;
@@ -27,7 +27,7 @@ interface AppShellProps {
   pageTitle?: string;
   pageSubtitle?: string;
   actions?: ReactNode;
-  navIndicators?: Partial<Record<'capture' | 'apply' | 'verify' | 'report', NavIndicator>>;
+  navIndicators?: Partial<Record<'report', NavIndicator>>;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
   previousPage?: PageType | null;
