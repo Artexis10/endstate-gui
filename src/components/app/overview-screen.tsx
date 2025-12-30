@@ -9,8 +9,8 @@
  * Non-technical users should be able to complete core tasks
  * without ever needing to navigate away from this screen.
  * 
- * In Default mode, action cards expand in-place to execute actions.
- * In Advanced mode, cards navigate to their respective pages.
+ * Action cards expand in-place to execute actions. Power users can
+ * access detailed activity via per-section "Show activity" disclosure.
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -51,7 +51,6 @@ import {
 } from '@/components/ui/dialog';
 import { formatRelativeTime, type LifecycleState, type LifecycleEvent } from '@/lib/lifecycle-state';
 import type { DiscoveredProfile } from '@/file-discovery';
-import type { UIMode } from '@/lib/ui-mode';
 import { ManageProfilesModal } from './manage-profiles-modal';
 import { 
   type AppEvent, 
@@ -111,7 +110,6 @@ interface OverviewScreenProps {
   actionResult: ActionResult | null;
   liveAppEvents?: AppEvent[];
   liveCounters?: LiveCounters;
-  uiMode: UIMode;
   onNavigate: (page: 'capture' | 'apply' | 'verify' | 'report' | 'settings') => void;
   onCapture: () => void;
   onSetup: (intent: SetupIntent) => void;
@@ -137,7 +135,6 @@ export function OverviewScreen({
   actionResult,
   liveAppEvents = [],
   liveCounters,
-  uiMode,
   onNavigate,
   onCapture,
   onSetup,
@@ -154,7 +151,7 @@ export function OverviewScreen({
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [detailsFilter, setDetailsFilter] = useState<StatusKey | 'all' | null>(null);
-  const [activityExpanded, setActivityExpanded] = useState(uiMode === 'advanced');
+  const [activityExpanded, setActivityExpanded] = useState(false);
   const [manageProfilesOpen, setManageProfilesOpen] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [lastSeenPhase, setLastSeenPhase] = useState<UiPhase | undefined>(undefined);
@@ -166,13 +163,13 @@ export function OverviewScreen({
   // Reset activity expanded state when a new run starts
   useEffect(() => {
     if (isRunning && runningAction) {
-      // Default mode: collapse for calm UI; Advanced mode: expand to show details
-      setActivityExpanded(uiMode === 'advanced');
+      // Always start collapsed for calm UI; users can expand to see details
+      setActivityExpanded(false);
       setIsAtBottom(true); // Reset scroll position for new run
       setUserHasScrolledAway(false); // Reset user scroll tracking for new run
       setLastSeenPhase(undefined); // Reset phase tracking for new run
     }
-  }, [isRunning, runningAction, uiMode]);
+  }, [isRunning, runningAction]);
   
   // Auto-scroll to bottom when new events arrive, but only if user is at bottom
   useEffect(() => {
@@ -198,33 +195,18 @@ export function OverviewScreen({
     setLastSeenPhase(currentPhase);
   }, [actionProgress?.phase, lastSeenPhase, activityExpanded, userHasScrolledAway]);
   
-  // Handle card click based on UI mode
+  // Handle card click - always expand in-place
   const handleCardClick = (action: ActionType) => {
     if (isRunning) return;
     
-    if (uiMode === 'advanced') {
-      // In advanced mode, navigate to the page
-      switch (action) {
-        case 'capture':
-          onNavigate('capture');
-          break;
-        case 'setup':
-          if (hasProfile) onNavigate('apply');
-          break;
-        case 'check':
-          if (hasProfile) onNavigate('verify');
-          break;
+    // Toggle card expansion
+    if (expandedCard === action) {
+      // Only collapse if not running and not showing result
+      if (actionStatus === 'idle') {
+        setExpandedCard(null);
       }
     } else {
-      // In default mode, toggle card expansion
-      if (expandedCard === action) {
-        // Only collapse if not running and not showing result
-        if (actionStatus === 'idle') {
-          setExpandedCard(null);
-        }
-      } else {
-        setExpandedCard(action);
-      }
+      setExpandedCard(action);
     }
   };
 
@@ -850,21 +832,16 @@ export function OverviewScreen({
                     </CardDescription>
                   </div>
                 </div>
-                {uiMode === 'default' && (
-                  <motion.div
-                    animate={{ rotate: expandedCard === 'capture' ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                  </motion.div>
-                )}
-                {uiMode === 'advanced' && (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                )}
+                <motion.div
+                  animate={{ rotate: expandedCard === 'capture' ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                </motion.div>
               </div>
             </CardHeader>
             <AnimatePresence>
-              {expandedCard === 'capture' && uiMode === 'default' && (
+              {expandedCard === 'capture' && (
                 <CardContent className="pt-0 pb-4" data-testid="capture-card-expanded-content">
                   {renderExpandedContent('capture')}
                 </CardContent>
@@ -900,21 +877,16 @@ export function OverviewScreen({
                     </CardDescription>
                   </div>
                 </div>
-                {uiMode === 'default' && (
-                  <motion.div
-                    animate={{ rotate: expandedCard === 'setup' ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                  </motion.div>
-                )}
-                {uiMode === 'advanced' && (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                )}
+                <motion.div
+                  animate={{ rotate: expandedCard === 'setup' ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                </motion.div>
               </div>
             </CardHeader>
             <AnimatePresence>
-              {expandedCard === 'setup' && uiMode === 'default' && (
+              {expandedCard === 'setup' && (
                 <CardContent className="pt-0 pb-4" data-testid="setup-card-expanded-content">
                   {renderExpandedContent('setup')}
                 </CardContent>
@@ -950,21 +922,16 @@ export function OverviewScreen({
                     </CardDescription>
                   </div>
                 </div>
-                {uiMode === 'default' && (
-                  <motion.div
-                    animate={{ rotate: expandedCard === 'check' ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                  </motion.div>
-                )}
-                {uiMode === 'advanced' && (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                )}
+                <motion.div
+                  animate={{ rotate: expandedCard === 'check' ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                </motion.div>
               </div>
             </CardHeader>
             <AnimatePresence>
-              {expandedCard === 'check' && uiMode === 'default' && (
+              {expandedCard === 'check' && (
                 <CardContent className="pt-0 pb-4" data-testid="check-card-expanded-content">
                   {renderExpandedContent('check')}
                 </CardContent>

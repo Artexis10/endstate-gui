@@ -39,7 +39,6 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     actionResult: null,
     liveAppEvents: [],
     liveCounters: undefined,
-    uiMode: 'default' as const,
     onNavigate: vi.fn(),
     onCapture: vi.fn(),
     onSetup: vi.fn(),

@@ -1,51 +1,41 @@
 /**
- * Global UI Mode State for Endstate GUI
+ * Sidebar Visibility Preference for Endstate GUI
  * 
- * Controls the presentation layer between:
- * - "default": Simplified view for non-technical users (sidebar hidden)
- * - "advanced": Full navigation for power users (sidebar visible)
+ * Controls whether the navigation sidebar is shown or hidden.
+ * This is purely a layout preference - no behavioral differences.
+ * 
+ * The app uses progressive disclosure within each section rather than
+ * a global "advanced mode" toggle. Power users access details via
+ * per-section "Show activity", "Details", or "View logs" expansions.
  * 
  * Persisted to localStorage so preference survives app restarts.
- * This is a PRESENTATION change only - no behavioral differences.
  */
 
 import { getItem, setItem } from './storage';
 
-export type UIMode = 'default' | 'advanced';
-
-const STORAGE_KEY = 'endstate-ui-mode';
-
-const DEFAULT_MODE: UIMode = 'default';
+const STORAGE_KEY = 'endstate-sidebar-visible';
 
 /**
- * Load UI mode from localStorage
+ * Load sidebar visibility preference from localStorage
  */
-export function loadUIMode(): UIMode {
+export function loadSidebarVisible(): boolean {
   try {
     const stored = getItem(STORAGE_KEY);
-    if (stored === 'default' || stored === 'advanced') {
-      return stored;
-    }
+    if (stored === 'true') return true;
+    if (stored === 'false') return false;
   } catch (err) {
-    console.warn('Failed to load UI mode:', err);
+    console.warn('Failed to load sidebar preference:', err);
   }
-  return DEFAULT_MODE;
+  return false; // Default: sidebar hidden for clean, focused UI
 }
 
 /**
- * Save UI mode to localStorage
+ * Save sidebar visibility preference to localStorage
  */
-export function saveUIMode(mode: UIMode): void {
+export function saveSidebarVisible(visible: boolean): void {
   try {
-    setItem(STORAGE_KEY, mode);
+    setItem(STORAGE_KEY, visible ? 'true' : 'false');
   } catch (err) {
-    console.warn('Failed to save UI mode:', err);
+    console.warn('Failed to save sidebar preference:', err);
   }
-}
-
-/**
- * Toggle between default and advanced modes
- */
-export function toggleUIMode(currentMode: UIMode): UIMode {
-  return currentMode === 'default' ? 'advanced' : 'default';
 }

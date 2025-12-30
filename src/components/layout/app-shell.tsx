@@ -10,7 +10,6 @@ import {
   Home,
   PanelLeftOpen,
   PanelLeftClose,
-  Sparkles,
   ArrowLeft
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,7 +21,6 @@ interface NavIndicator {
 }
 
 type PageType = 'overview' | 'capture' | 'apply' | 'verify' | 'report' | 'settings';
-type UIMode = 'default' | 'advanced';
 
 interface AppShellProps {
   children: ReactNode;
@@ -33,8 +31,8 @@ interface AppShellProps {
   pageSubtitle?: string;
   actions?: ReactNode;
   navIndicators?: Partial<Record<'capture' | 'apply' | 'verify' | 'report', NavIndicator>>;
-  uiMode: UIMode;
-  onToggleUIMode: () => void;
+  sidebarVisible: boolean;
+  onToggleSidebar: () => void;
   previousPage?: PageType | null;
   onBack?: () => void;
 }
@@ -48,12 +46,12 @@ export function AppShell({
   pageSubtitle,
   actions,
   navIndicators,
-  uiMode,
-  onToggleUIMode,
+  sidebarVisible,
+  onToggleSidebar,
   previousPage,
   onBack,
 }: AppShellProps) {
-  const showSidebar = uiMode === 'advanced';
+  const showSidebar = sidebarVisible;
   
   const navItems = [
     { id: 'overview' as const, label: 'Overview', icon: Home },
@@ -126,14 +124,14 @@ export function AppShell({
               })}
             </nav>
             
-            {/* Mode toggle at bottom of sidebar */}
+            {/* Hide sidebar button at bottom */}
             <div className="p-4 border-t border-border min-w-[256px]">
               <button
-                onClick={onToggleUIMode}
+                onClick={onToggleSidebar}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-muted-foreground hover:bg-accent/10 hover:text-foreground transition-colors"
               >
-                <Sparkles className="h-3 w-3" />
-                <span>Switch to Default mode</span>
+                <PanelLeftClose className="h-3 w-3" />
+                <span>Hide navigation</span>
               </button>
             </div>
           </motion.aside>
@@ -145,7 +143,7 @@ export function AppShell({
         {/* Topbar */}
         <header className="h-16 border-b border-border bg-panel px-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {/* Back button - shown when navigated from Overview in Default mode */}
+            {/* Back button - shown when navigated from Overview */}
             {!showSidebar && previousPage && onBack && (
               <Button
                 variant="ghost"
@@ -158,14 +156,14 @@ export function AppShell({
                 <span className="text-sm">Back</span>
               </Button>
             )}
-            {/* Sidebar toggle for default mode - only show if no back button */}
+            {/* Sidebar toggle - only show if no back button */}
             {!showSidebar && !previousPage && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={onToggleUIMode}
+                onClick={onToggleSidebar}
                 className="gap-2"
-                title="Show navigation (Advanced mode)"
+                title="Show navigation"
               >
                 <PanelLeftOpen className="h-4 w-4" />
               </Button>
@@ -174,9 +172,9 @@ export function AppShell({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={onToggleUIMode}
+                onClick={onToggleSidebar}
                 className="gap-2"
-                title="Hide navigation (Default mode)"
+                title="Hide navigation"
               >
                 <PanelLeftClose className="h-4 w-4" />
               </Button>

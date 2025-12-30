@@ -20,7 +20,7 @@ import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPha
 import { isItemEvent, isArtifactEvent, isSummaryEvent, isPhaseEvent, type EnginePhase } from './lib/streaming-events';
 import { saveLastRun, loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, hasRecentScan, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
-import { loadUIMode, saveUIMode, toggleUIMode, type UIMode } from './lib/ui-mode';
+import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
 import { OverviewScreen } from './components/app/overview-screen';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
@@ -88,7 +88,7 @@ function AppContent() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [currentPage, setCurrentPage] = useState<PageType>('overview');
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
-  const [uiMode, setUIMode] = useState<UIMode>(loadUIMode());
+  const [sidebarVisible, setSidebarVisible] = useState(loadSidebarVisible());
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [profilesDirectory, setProfilesDirectory] = useState('');
@@ -225,11 +225,11 @@ function AppContent() {
     }
   };
   
-  // Handle UI mode toggle with persistence
-  const handleToggleUIMode = () => {
-    const newMode = toggleUIMode(uiMode);
-    setUIMode(newMode);
-    saveUIMode(newMode);
+  // Handle sidebar toggle with persistence
+  const handleToggleSidebar = () => {
+    const newVisible = !sidebarVisible;
+    setSidebarVisible(newVisible);
+    saveSidebarVisible(newVisible);
   };
   
   // Apply modal state - single source of truth for apply flow
@@ -1901,7 +1901,6 @@ function AppContent() {
               actionResult={overviewActionResult}
               liveAppEvents={liveAppEvents}
               liveCounters={liveCounters}
-              uiMode={uiMode}
               onNavigate={navigateWithHistory}
               onCapture={async () => {
                 // Double-run guard with runId
@@ -2835,30 +2834,6 @@ function AppContent() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>User Interface</CardTitle>
-                <CardDescription>Customize your experience</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-sm font-medium">Show technical details</label>
-                    <p className="text-xs text-muted-foreground">
-                      Display technical logs, raw output, and advanced debugging information by default
-                    </p>
-                  </div>
-                  <Switch
-                    checked={uiMode === 'advanced'}
-                    onCheckedChange={(checked) => {
-                      const newMode = checked ? 'advanced' : 'default';
-                      saveUIMode(newMode);
-                      window.location.reload();
-                    }}
-                  />
-                </div>
-              </CardContent>
-            </Card>
           </div>
         );
 
@@ -2919,8 +2894,8 @@ function AppContent() {
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         pageTitle={getPageTitle()}
         navIndicators={navIndicators}
-        uiMode={uiMode}
-        onToggleUIMode={handleToggleUIMode}
+        sidebarVisible={sidebarVisible}
+        onToggleSidebar={handleToggleSidebar}
         previousPage={previousPage}
         onBack={handleBack}
       >
