@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, FolderOpen, RefreshCw, Eye, FileEdit, Play } from 'lucide-react';
+import { Pencil, Trash2, FolderOpen, RefreshCw, Eye, Play } from 'lucide-react';
 import type { DiscoveredProfile } from '@/file-discovery';
 import { ViewAppsModal } from './view-apps-modal';
 import { useMicroFeedback } from '@/lib/micro-feedback';
@@ -14,7 +14,6 @@ interface ManageProfilesModalProps {
   selectedProfile: string;
   profilesDirectory: string;
   onRenameDisplay: (path: string, currentName: string) => void;
-  onRenameFile: (path: string, currentFilename: string) => void;
   onDelete: (path: string, displayName: string) => void;
   onSetActive: (profile: DiscoveredProfile) => void;
   onOpenFolder: () => void;
@@ -28,7 +27,6 @@ export function ManageProfilesModal({
   selectedProfile,
   profilesDirectory,
   onRenameDisplay,
-  onRenameFile,
   onDelete,
   onSetActive,
   onOpenFolder,
@@ -168,16 +166,6 @@ export function ManageProfilesModal({
                           >
                             <Pencil className="h-3 w-3 mr-1" />
                             Rename
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2"
-                            onClick={() => onRenameFile(profile.path, getFilename(profile))}
-                            title="Rename file on disk (advanced)"
-                          >
-                            <FileEdit className="h-3 w-3 mr-1" />
-                            Rename file
                           </Button>
                           <Button
                             variant="ghost"

@@ -27,7 +27,6 @@ describe('ManageProfilesModal', () => {
     selectedProfile: 'profile-1',
     profilesDirectory: 'C:\\profiles',
     onRenameDisplay: vi.fn(),
-    onRenameFile: vi.fn(),
     onDelete: vi.fn(),
     onSetActive: vi.fn(),
     onOpenFolder: vi.fn(),

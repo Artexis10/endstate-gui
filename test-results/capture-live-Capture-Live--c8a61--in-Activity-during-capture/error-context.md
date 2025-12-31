@@ -1,0 +1,72 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - heading "Endstate" [level=1] [ref=e6]
+        - paragraph [ref=e7]: Setup Management
+      - navigation [ref=e8]:
+        - button "Overview" [ref=e9] [cursor=pointer]:
+          - img [ref=e11]
+          - generic [ref=e14]: Overview
+        - button "Reports" [ref=e15] [cursor=pointer]:
+          - img [ref=e16]
+          - generic [ref=e19]: Reports
+        - button "Settings" [ref=e20] [cursor=pointer]:
+          - img [ref=e21]
+          - generic [ref=e24]: Settings
+      - button "Hide navigation" [ref=e26] [cursor=pointer]:
+        - img [ref=e27]
+        - generic [ref=e30]: Hide navigation
+    - generic [ref=e31]:
+      - banner [ref=e32]:
+        - button "Hide navigation" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]
+        - button "Ctrl+K" [ref=e39] [cursor=pointer]:
+          - img [ref=e40]
+          - generic [ref=e42]: Ctrl+K
+      - main [ref=e43]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - heading "Endstate" [level=1] [ref=e49]
+            - paragraph [ref=e50]: Capture, apply, and verify your computer setup
+          - generic [ref=e51]:
+            - generic [ref=e52]:
+              - generic [ref=e54] [cursor=pointer]:
+                - generic [ref=e56]:
+                  - generic [ref=e57]:
+                    - img [ref=e59]
+                    - generic [ref=e66]:
+                      - heading "Capture computer" [level=3] [ref=e67]
+                      - paragraph [ref=e68]: Save your current setup as a reusable profile
+                  - img [ref=e70]
+                - generic [ref=e74]:
+                  - paragraph [ref=e75]: Scan your computer for installed applications and save them as a reusable setup profile.
+                  - generic [ref=e77]:
+                    - button "Start capture" [ref=e78]
+                    - button "Cancel" [ref=e79]
+              - generic [ref=e83]:
+                - generic [ref=e84]:
+                  - img [ref=e86]
+                  - generic [ref=e89]:
+                    - heading "Set up computer" [level=3] [ref=e90]
+                    - paragraph [ref=e91]: Capture a profile first to get started
+                - img [ref=e93]
+            - generic [ref=e95]:
+              - heading "Validation" [level=3] [ref=e96]
+              - generic [ref=e100]:
+                - generic [ref=e101]:
+                  - img [ref=e103]
+                  - generic [ref=e106]:
+                    - heading "Check computer" [level=3] [ref=e107]
+                    - paragraph [ref=e108]: Capture a profile first to get started
+                - img [ref=e110]
+          - generic [ref=e113]:
+            - paragraph [ref=e114]: No setup profiles found. Start by capturing your current computer setup.
+            - button "Capture computer" [ref=e115] [cursor=pointer]:
+              - img [ref=e116]
+              - text: Capture computer
+  - region "Notifications alt+T"
+```

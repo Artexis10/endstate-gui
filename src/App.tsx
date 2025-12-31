@@ -22,12 +22,10 @@ import { OverviewScreen } from './components/app/overview-screen';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
-import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, type RunBundle, type RunSummary } from './lib/run-artifacts';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
-import { RenameFileModal } from './components/app/rename-file-modal';
 import { ToastProvider, useToast } from './components/ui/toast';
 import { formatCount } from './lib/pluralize';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
@@ -171,11 +169,6 @@ function AppContent() {
   const [showDeleteProfileModal, setShowDeleteProfileModal] = useState(false);
   const [deleteProfilePath, setDeleteProfilePath] = useState('');
   const [deleteProfileName, setDeleteProfileName] = useState('');
-  
-  // Profile file rename modal state
-  const [showRenameFileModal, setShowRenameFileModal] = useState(false);
-  const [renameFilePath, setRenameFilePath] = useState('');
-  const [renameFileCurrentName, setRenameFileCurrentName] = useState('');
   
   // Run artifacts state for Report page
   const [runArtifacts, setRunArtifacts] = useState<Array<{ bundle: RunBundle; summary: RunSummary }>>([]);
@@ -334,65 +327,6 @@ function AppContent() {
     setDeleteProfileName('');
   };
 
-  const handleRenameFile = async (newFilename: string) => {
-    if (!renameFilePath || !newFilename) return;
-    
-    // Non-bypassable Zod validation guard
-    const originalExtension: ValidExtension = getExtension(renameFileCurrentName);
-    const validation = validateProfileFilename(newFilename, originalExtension);
-    if (!validation.success) {
-      showToast(validation.error, 'error');
-      return;
-    }
-    
-    try {
-      const { invoke } = await import('./lib/tauri-bridge');
-      const { getMetaPath } = await import('./file-discovery');
-      
-      // Get directory and construct new path
-      const pathParts = renameFilePath.split(/[\\]/);
-      const directory = pathParts.slice(0, -1).join('\\');
-      const newPath = `${directory}\\${newFilename}`;
-      
-      // Check for collision as final guard
-      const exists = await invoke<boolean>('check_file_exists', { path: newPath });
-      if (exists) {
-        showToast('A file with this name already exists', 'error');
-        return;
-      }
-      
-      // Rename the manifest file
-      await invoke('rename_file', { oldPath: renameFilePath, newPath });
-      
-      // Rename the metadata file if it exists
-      const oldMetaPath = getMetaPath(renameFilePath);
-      const newMetaPath = getMetaPath(newPath);
-      const metaExists = await invoke<boolean>('check_file_exists', { path: oldMetaPath });
-      if (metaExists) {
-        await invoke('rename_file', { oldPath: oldMetaPath, newPath: newMetaPath });
-      }
-      
-      // Update selected profile if it was the renamed one
-      if (renameFilePath === selectedProfilePath) {
-        const newName = newFilename.replace(/\.(jsonc?|json5)$/i, '');
-        setSelectedProfile(newName);
-        setSelectedProfilePath(newPath);
-        updateSettings({ lastSelectedProfile: newName, lastSelectedProfilePath: newPath });
-      }
-      
-      // Refresh profiles
-      await refreshProfiles();
-      showToast('File renamed successfully', 'success');
-    } catch (err) {
-      console.error('Failed to rename file:', err);
-      showToast(`Failed to rename file: ${err}`, 'error');
-    }
-    
-    setShowRenameFileModal(false);
-    setRenameFilePath('');
-    setRenameFileCurrentName('');
-  };
-
   const handleSetActiveProfile = (profile: DiscoveredProfile) => {
     setSelectedProfile(profile.name);
     setSelectedProfilePath(profile.path);
@@ -403,11 +337,6 @@ function AppContent() {
     showToast(`"${profile.displayName || profile.name}" is now the active profile`, 'success');
   };
 
-  const openRenameFileModal = (path: string, currentFilename: string) => {
-    setRenameFilePath(path);
-    setRenameFileCurrentName(currentFilename);
-    setShowRenameFileModal(true);
-  };
 
   const promptForProfileName = async (profilePath: string): Promise<void> => {
     // Generate a default name based on timestamp
@@ -1448,9 +1377,6 @@ function AppContent() {
               onRenameProfile={(path, currentName) => {
                 openProfileNameModal(path, currentName, 'rename');
               }}
-              onRenameFile={(path, currentFilename) => {
-                openRenameFileModal(path, currentFilename);
-              }}
               onDeleteProfile={(path, displayName) => {
                 setDeleteProfilePath(path);
                 setDeleteProfileName(displayName);
@@ -2144,15 +2070,6 @@ function AppContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Rename File Modal */}
-      <RenameFileModal
-        open={showRenameFileModal}
-        onOpenChange={setShowRenameFileModal}
-        currentFilename={renameFileCurrentName}
-        currentDirectory={profilesDirectory}
-        onConfirm={handleRenameFile}
-      />
     </>
   );
 }

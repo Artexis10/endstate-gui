@@ -127,7 +127,6 @@ interface OverviewScreenProps {
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
   onRenameProfile?: (path: string, currentName: string) => void;
-  onRenameFile?: (path: string, currentFilename: string) => void;
   onDeleteProfile?: (path: string, displayName: string) => void;
   onSetActiveProfile?: (profile: DiscoveredProfile) => void;
   onClearExpandedCard?: () => void;
@@ -155,7 +154,6 @@ export function OverviewScreen({
   onOpenProfilesFolder,
   onRefreshProfiles,
   onRenameProfile,
-  onRenameFile,
   onDeleteProfile,
   onSetActiveProfile,
   onClearExpandedCard,
@@ -1336,9 +1334,6 @@ export function OverviewScreen({
         profilesDirectory={profilesDirectory}
         onRenameDisplay={(path, currentName) => {
           onRenameProfile?.(path, currentName);
-        }}
-        onRenameFile={(path, currentFilename) => {
-          onRenameFile?.(path, currentFilename);
         }}
         onDelete={(path, displayName) => {
           onDeleteProfile?.(path, displayName);

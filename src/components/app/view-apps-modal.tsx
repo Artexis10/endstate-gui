@@ -100,55 +100,19 @@ export function ViewAppsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] h-[85vh] max-h-[85vh] flex flex-col overflow-hidden">
-        <DialogHeader className="pb-2">
+      <DialogContent className="sm:max-w-[480px] max-h-[80vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0 pb-2">
           <DialogTitle className="text-lg">{profileDisplayName || 'Profile Details'}</DialogTitle>
         </DialogHeader>
 
         {/* Apps count - prominent */}
-        <div className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50">
+        <div className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50 flex-shrink-0">
           <span className="text-sm font-medium">Apps captured</span>
           <span className="text-xl font-semibold">{apps.length}</span>
         </div>
 
-        {/* Search input */}
-        <div className="relative flex-shrink-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search apps..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9"
-          />
-        </div>
-
-        {/* Scrollable content area for list + technical details */}
-        <div className="flex-1 overflow-y-auto min-h-0 space-y-3 -mx-6 px-6">
-          {/* Simple app list */}
-          <div className="border rounded-md">
-            {filteredApps.length === 0 ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                {searchQuery ? 'No apps match your search' : 'No apps in profile'}
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {filteredApps.map((app, idx) => (
-                  <div key={idx} className="flex items-center gap-2 px-3 py-2 text-sm">
-                    <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 min-w-0 flex items-baseline justify-between gap-2">
-                      <span className="truncate">{app.name || app.id}</span>
-                      {app.name && (
-                        <span className="font-mono text-xs text-muted-foreground flex-shrink-0">{app.id}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Technical details accordion */}
-          <div className="border-t pt-3">
+        {/* Technical details - moved up for better discoverability */}
+        <div className="flex-shrink-0 border-b pb-3">
           <button
             onClick={() => setTechnicalExpanded(!technicalExpanded)}
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full"
@@ -192,6 +156,41 @@ export function ViewAppsModal({
               </Button>
             </div>
           )}
+        </div>
+
+        {/* Search input */}
+        <div className="relative flex-shrink-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search apps..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9"
+          />
+        </div>
+
+        {/* Scrollable app list */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="border rounded-md">
+            {filteredApps.length === 0 ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                {searchQuery ? 'No apps match your search' : 'No apps in profile'}
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {filteredApps.map((app, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-2 text-sm">
+                    <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0 flex items-baseline justify-between gap-2">
+                      <span className="truncate">{app.name || app.id}</span>
+                      {app.name && (
+                        <span className="font-mono text-xs text-muted-foreground flex-shrink-0">{app.id}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
