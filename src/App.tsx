@@ -265,13 +265,15 @@ function AppContent() {
   };
 
   const handleSaveProfileName = async () => {
-    if (profileNameModalValue.trim()) {
-      try {
-        await saveProfileMetadata(profileNameModalPath, { displayName: profileNameModalValue.trim() });
-        await refreshProfiles();
-      } catch (err) {
-        console.error('Failed to save profile name:', err);
-      }
+    try {
+      // Empty input clears display name (falls back to filename)
+      const trimmedValue = profileNameModalValue.trim();
+      await saveProfileMetadata(profileNameModalPath, { 
+        displayName: trimmedValue || undefined 
+      });
+      await refreshProfiles();
+    } catch (err) {
+      console.error('Failed to save profile name:', err);
     }
     setShowProfileNameModal(false);
     setProfileNameModalPath('');
@@ -2164,8 +2166,8 @@ function AppContent() {
             <DialogTitle>{profileNameModalMode === 'rename' ? 'Rename profile' : 'Save profile'}</DialogTitle>
             <DialogDescription>
               {profileNameModalMode === 'rename' 
-                ? 'Enter a new name for this profile.'
-                : 'Give this profile a name (optional).'}
+                ? 'Enter a new name for this profile. Leave empty to use filename.'
+                : 'Give this profile a name (optional). Leave empty to use filename.'}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-3">

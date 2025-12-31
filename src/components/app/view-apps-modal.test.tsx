@@ -44,10 +44,9 @@ describe('ViewAppsModal', () => {
 
     render(<ViewAppsModal {...defaultProps} />);
     
-    // App count should be visible directly (apps-first design)
+    // App count should be visible in compact badge
     await waitFor(() => {
-      expect(screen.getByText('3')).toBeInTheDocument();
-      expect(screen.getByText('Apps captured')).toBeInTheDocument();
+      expect(screen.getByText('3 apps')).toBeInTheDocument();
     });
   });
 

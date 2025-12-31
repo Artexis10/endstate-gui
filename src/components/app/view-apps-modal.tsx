@@ -102,17 +102,18 @@ export function ViewAppsModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px] max-h-[80vh] flex flex-col">
         <DialogHeader className="flex-shrink-0 pb-2">
-          <DialogTitle className="text-lg">Profile: {profileDisplayName || 'Untitled'}</DialogTitle>
-          <div className="text-xs text-muted-foreground pt-1">
-            <span className="font-mono">{displayPath}</span>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="text-lg">Profile: {profileDisplayName || 'Untitled'}</DialogTitle>
+              <div className="text-xs text-muted-foreground pt-1">
+                <span className="font-mono">{displayPath}</span>
+              </div>
+            </div>
+            <div className="flex-shrink-0 px-2 py-1 rounded-md bg-muted/50 text-xs font-medium">
+              {apps.length} {apps.length === 1 ? 'app' : 'apps'}
+            </div>
           </div>
         </DialogHeader>
-
-        {/* Apps count - prominent */}
-        <div className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50 flex-shrink-0">
-          <span className="text-sm font-medium">Apps captured</span>
-          <span className="text-xl font-semibold">{apps.length}</span>
-        </div>
 
         {/* Search input */}
         <div className="relative flex-shrink-0">
@@ -135,13 +136,17 @@ export function ViewAppsModal({
             ) : (
               <div className="divide-y divide-border">
                 {filteredApps.map((app, idx) => (
-                  <div key={idx} className="flex items-center gap-2 px-3 py-2 text-sm">
-                    <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 min-w-0 flex items-baseline justify-between gap-2">
-                      <span className="truncate">{app.name || app.id}</span>
-                      {app.name && (
-                        <span className="font-mono text-xs text-muted-foreground flex-shrink-0">{app.id}</span>
-                      )}
+                  <div key={idx} className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm truncate">{app.name || app.id}</div>
+                        {app.name && (
+                          <div className="text-xs text-muted-foreground font-mono truncate" title={app.id}>
+                            {app.id}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
