@@ -5,6 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Copy, Trash2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMicroFeedback } from '@/lib/micro-feedback';
+import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
+import { copyText } from '@/lib/clipboard';
 
 interface LogViewerProps {
   logs: string;
@@ -26,6 +29,7 @@ export function LogViewer({
   const [autoScroll, setAutoScroll] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const logContainerRef = useRef<HTMLPreElement>(null);
+  const copyFeedback = useMicroFeedback();
 
   useEffect(() => {
     if (autoScroll && logContainerRef.current) {
@@ -34,11 +38,11 @@ export function LogViewer({
   }, [logs, autoScroll]);
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(logs);
-    } catch (err) {
-      console.error('Failed to copy logs:', err);
-    }
+    await copyFeedback.triggerAsync(
+      () => copyText(logs),
+      'Copied',
+      'Copy failed'
+    );
   };
 
   const filteredLogs = searchTerm
@@ -62,8 +66,16 @@ export function LogViewer({
                 />
                 Auto-scroll
               </label>
-              <Button variant="ghost" size="icon" onClick={handleCopy} title="Copy all">
+              <Button
+                ref={copyFeedback.buttonRef}
+                variant="ghost"
+                size="icon"
+                onClick={handleCopy}
+                title="Copy all"
+                className="relative"
+              >
                 <Copy className="h-4 w-4" />
+                <InlineFeedbackPopover feedback={copyFeedback.feedback} />
               </Button>
               {onClear && (
                 <Button variant="ghost" size="icon" onClick={onClear} title="Clear">

@@ -11,6 +11,9 @@ import {
   getColorClasses,
   type StatusKey,
 } from '../../lib/apply-utils';
+import { useMicroFeedback } from '@/lib/micro-feedback';
+import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
+import { copyText } from '@/lib/clipboard';
 
 interface ApplyResultModalProps {
   open: boolean;
@@ -38,7 +41,7 @@ export function ApplyResultModal({
   rawEnvelope,
 }: ApplyResultModalProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const copyFeedback = useMicroFeedback(2000);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   
   // Local guard to prevent double-click on Apply button
@@ -103,13 +106,11 @@ export function ApplyResultModal({
       rawLogs || '(not available)',
     ].join('\n');
 
-    try {
-      await navigator.clipboard.writeText(diagnostics);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+    await copyFeedback.triggerAsync(
+      () => copyText(diagnostics),
+      'Copied',
+      'Copy failed'
+    );
   };
 
   // Get action label and style for an item based on its reason and phase
@@ -385,13 +386,15 @@ export function ApplyResultModal({
                   {/* Copy diagnostics */}
                   <div className="flex justify-end pt-2">
                     <Button
+                      ref={copyFeedback.buttonRef}
                       variant="ghost"
                       size="sm"
                       onClick={copyDiagnostics}
-                      className="h-8 gap-2"
+                      className="h-8 gap-2 relative"
                     >
                       <Copy className="h-3 w-3" />
-                      {copied ? 'Copied!' : 'Copy diagnostics'}
+                      Copy diagnostics
+                      <InlineFeedbackPopover feedback={copyFeedback.feedback} />
                     </Button>
                   </div>
                 </div>

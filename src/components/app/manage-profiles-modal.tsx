@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Pencil, Trash2, FolderOpen, RefreshCw, Eye, FileEdit, Play } from 'lucide-react';
 import type { DiscoveredProfile } from '@/file-discovery';
 import { ViewAppsModal } from './view-apps-modal';
+import { useMicroFeedback } from '@/lib/micro-feedback';
+import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
 
 interface ManageProfilesModalProps {
   open: boolean;
@@ -34,6 +36,7 @@ export function ManageProfilesModal({
 }: ManageProfilesModalProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewAppsProfile, setViewAppsProfile] = useState<DiscoveredProfile | null>(null);
+  const refreshFeedback = useMicroFeedback();
 
   const getDisplayLabel = (profile: DiscoveredProfile): string => {
     return profile.displayName || profile.name;
@@ -73,18 +76,26 @@ export function ManageProfilesModal({
             Open folder
           </Button>
           <Button
+            ref={refreshFeedback.buttonRef}
             variant="ghost"
             size="sm"
-            className="h-7 px-2"
+            className="h-7 px-2 relative"
             onClick={async () => {
               setIsRefreshing(true);
-              await onRefresh();
+              await refreshFeedback.triggerAsync(
+                async () => {
+                  await onRefresh();
+                },
+                'Refreshed',
+                'Refresh failed'
+              );
               setIsRefreshing(false);
             }}
             disabled={isRefreshing}
           >
             <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
             Refresh
+            <InlineFeedbackPopover feedback={refreshFeedback.feedback} />
           </Button>
         </div>
 

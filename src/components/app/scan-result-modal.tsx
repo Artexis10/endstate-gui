@@ -10,6 +10,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, AlertCircle, Copy, Package, ChevronDown, ChevronRight } from 'lucide-react';
 import type { VerifyItem } from '../../types';
+import { useMicroFeedback } from '@/lib/micro-feedback';
+import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
+import { copyText } from '@/lib/clipboard';
 
 interface ScanResultModalProps {
   open: boolean;
@@ -61,7 +64,7 @@ export function ScanResultModal({
 }: ScanResultModalProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['missing', 'versionMismatch']));
-  const [copied, setCopied] = useState(false);
+  const copyFeedback = useMicroFeedback(2000);
   const hasIssues = missingCount > 0 || mismatchCount > 0;
   
   const categorized = useMemo(() => categorizeVerifyItems(items), [items]);
@@ -96,13 +99,11 @@ export function ScanResultModal({
       mismatchItems.forEach(a => lines.push(`  - ${a.id}${a.reason ? ` (${a.reason})` : ''}`));
     }
 
-    try {
-      await navigator.clipboard.writeText(lines.join('\n'));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+    await copyFeedback.triggerAsync(
+      () => copyText(lines.join('\n')),
+      'Copied',
+      'Copy failed'
+    );
   };
 
   // Render a categorized section with driver grouping
@@ -213,13 +214,15 @@ export function ScanResultModal({
               </button>
               {showDetails && (
                 <Button
+                  ref={copyFeedback.buttonRef}
                   variant="ghost"
                   size="sm"
                   onClick={copyToClipboard}
-                  className="h-8 gap-2"
+                  className="h-8 gap-2 relative"
                 >
                   <Copy className="h-3 w-3" />
-                  {copied ? 'Copied!' : 'Copy list'}
+                  Copy list
+                  <InlineFeedbackPopover feedback={copyFeedback.feedback} />
                 </Button>
               )}
             </div>

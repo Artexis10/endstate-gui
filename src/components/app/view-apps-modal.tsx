@@ -5,6 +5,9 @@ import { Input } from '@/components/ui/input';
 import { invoke } from '@/lib/tauri-bridge';
 import { parseJsonc, type ProfileApp } from '@/lib/jsonc-parse';
 import { Search, Package, ChevronDown, ChevronRight, Copy, FileText } from 'lucide-react';
+import { useMicroFeedback } from '@/lib/micro-feedback';
+import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
+import { copyText } from '@/lib/clipboard';
 
 interface ViewAppsModalProps {
   open: boolean;
@@ -43,8 +46,8 @@ export function ViewAppsModal({
   const [apps, setApps] = useState<ProfileApp[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [technicalExpanded, setTechnicalExpanded] = useState(false);
-  const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
-  const [copiedPath, setCopiedPath] = useState(false);
+  const diagnosticsFeedback = useMicroFeedback();
+  const pathFeedback = useMicroFeedback();
 
   useEffect(() => {
     if (open && profilePath) {
@@ -54,8 +57,6 @@ export function ViewAppsModal({
       // Reset state when opening
       setSearchQuery('');
       setTechnicalExpanded(false);
-      setCopiedDiagnostics(false);
-      setCopiedPath(false);
     }
   }, [open, profilePath]);
 
@@ -80,23 +81,19 @@ export function ViewAppsModal({
       ...filteredApps.map(a => `  - ${a.id}${a.name ? ` (${a.name})` : ''}`),
     ].join('\n');
 
-    try {
-      await navigator.clipboard.writeText(diagnostics);
-      setCopiedDiagnostics(true);
-      setTimeout(() => setCopiedDiagnostics(false), 1000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+    await diagnosticsFeedback.triggerAsync(
+      () => copyText(diagnostics),
+      'Copied',
+      'Copy failed'
+    );
   };
 
   const copyPath = async () => {
-    try {
-      await navigator.clipboard.writeText(profilePath);
-      setCopiedPath(true);
-      setTimeout(() => setCopiedPath(false), 1000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+    await pathFeedback.triggerAsync(
+      () => copyText(profilePath),
+      'Copied',
+      'Copy failed'
+    );
   };
 
   const displayPath = profilePath ? profilePath.split('\\').pop() || profilePath : '';
@@ -169,23 +166,21 @@ export function ViewAppsModal({
                   <span className="text-muted-foreground">File:</span>
                   <span className="font-mono truncate flex-1">{displayPath}</span>
                   <Button
+                    ref={pathFeedback.buttonRef}
                     variant="ghost"
                     size="sm"
                     className="h-6 px-2 relative"
                     onClick={copyPath}
                   >
                     <Copy className="h-3 w-3" />
-                    {copiedPath && (
-                      <span className="absolute -top-6 right-0 text-xs bg-popover text-popover-foreground px-2 py-1 rounded shadow-md">
-                        Copied
-                      </span>
-                    )}
+                    <InlineFeedbackPopover feedback={pathFeedback.feedback} />
                   </Button>
                 </div>
               </div>
 
               {/* Copy diagnostics */}
               <Button
+                ref={diagnosticsFeedback.buttonRef}
                 variant="ghost"
                 size="sm"
                 onClick={copyDiagnostics}
@@ -193,11 +188,7 @@ export function ViewAppsModal({
               >
                 <Copy className="h-3 w-3" />
                 Copy diagnostics
-                {copiedDiagnostics && (
-                  <span className="absolute -top-6 left-0 text-xs bg-popover text-popover-foreground px-2 py-1 rounded shadow-md whitespace-nowrap">
-                    Copied
-                  </span>
-                )}
+                <InlineFeedbackPopover feedback={diagnosticsFeedback.feedback} />
               </Button>
             </div>
           )}

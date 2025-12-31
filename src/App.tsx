@@ -36,6 +36,9 @@ import { Input } from './components/ui/input';
 import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
 import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FileText } from 'lucide-react';
+import { useMicroFeedback } from './lib/micro-feedback';
+import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
+import { copyText } from './lib/clipboard';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'overview' | 'report' | 'settings';
@@ -176,6 +179,12 @@ function AppContent() {
   
   // Run artifacts state for Report page
   const [runArtifacts, setRunArtifacts] = useState<Array<{ bundle: RunBundle; summary: RunSummary }>>([]);
+  
+  // Micro-feedback hooks for copy actions
+  const diagnosticsCopyFeedback = useMicroFeedback();
+  const folderPathCopyFeedback = useMicroFeedback();
+  const artifactPathCopyFeedback = useMicroFeedback();
+  const artifactDiagnosticsCopyFeedback = useMicroFeedback();
   
   // Dismiss result - only collapse UI, preserve summary for Overview display
   const dismissOverviewResult = () => {
@@ -1131,12 +1140,16 @@ function AppContent() {
     };
   };
 
-  const copyDiagnostics = () => {
+  const copyDiagnostics = async () => {
     const diag = getDiagnostics();
     const text = Object.entries(diag)
       .map(([k, v]) => `${k}: ${v}`)
       .join('\n');
-    navigator.clipboard.writeText(text);
+    await diagnosticsCopyFeedback.triggerAsync(
+      () => copyText(text),
+      'Copied',
+      'Copy failed'
+    );
   };
 
   // Error banner component (non-blocking)
@@ -1188,8 +1201,15 @@ function AppContent() {
                 </div>
               ))}
             </div>
-            <Button size="sm" variant="ghost" className="mt-2 h-7 text-xs" onClick={copyDiagnostics}>
+            <Button
+              ref={diagnosticsCopyFeedback.buttonRef}
+              size="sm"
+              variant="ghost"
+              className="mt-2 h-7 text-xs relative"
+              onClick={copyDiagnostics}
+            >
               <Copy className="h-3 w-3 mr-1" /> Copy Diagnostics
+              <InlineFeedbackPopover feedback={diagnosticsCopyFeedback.feedback} />
             </Button>
           </details>
           
@@ -1715,31 +1735,42 @@ function AppContent() {
                               </Button>
                             ) : (
                               <Button
+                                ref={artifactPathCopyFeedback.buttonRef}
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 text-xs gap-1"
-                                onClick={() => navigator.clipboard.writeText(bundle.directory)}
+                                className="h-7 text-xs gap-1 relative"
+                                onClick={async () => {
+                                  await artifactPathCopyFeedback.triggerAsync(
+                                    () => copyText(bundle.directory),
+                                    'Copied',
+                                    'Copy failed'
+                                  );
+                                }}
                               >
                                 <Copy className="h-3 w-3" />
                                 Copy path
+                                <InlineFeedbackPopover feedback={artifactPathCopyFeedback.feedback} />
                               </Button>
                             )}
                             <Button
+                              ref={artifactDiagnosticsCopyFeedback.buttonRef}
                               variant="ghost"
                               size="sm"
-                              className="h-7 text-xs gap-1"
+                              className="h-7 text-xs gap-1 relative"
                               onClick={async () => {
-                                try {
-                                  const content = await invoke<string>('read_text_file', { path: bundle.diagnosticsPath });
-                                  await navigator.clipboard.writeText(content);
-                                  showToast('Diagnostics copied', 'success');
-                                } catch (err) {
-                                  showToast('Failed to copy diagnostics', 'error');
-                                }
+                                await artifactDiagnosticsCopyFeedback.triggerAsync(
+                                  async () => {
+                                    const content = await invoke<string>('read_text_file', { path: bundle.diagnosticsPath });
+                                    await copyText(content);
+                                  },
+                                  'Copied',
+                                  'Copy failed'
+                                );
                               }}
                             >
                               <FileText className="h-3 w-3" />
                               Copy diagnostics
+                              <InlineFeedbackPopover feedback={artifactDiagnosticsCopyFeedback.feedback} />
                             </Button>
                           </div>
                         </div>
@@ -1944,14 +1975,21 @@ function AppContent() {
                 data-testid="folder-path-input"
               />
               <Button
+                ref={folderPathCopyFeedback.buttonRef}
                 variant="secondary"
                 size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(folderPathForModal);
+                onClick={async () => {
+                  await folderPathCopyFeedback.triggerAsync(
+                    () => copyText(folderPathForModal),
+                    'Copied',
+                    'Copy failed'
+                  );
                 }}
                 aria-label="Copy path"
+                className="relative"
               >
                 <Copy className="h-4 w-4" />
+                <InlineFeedbackPopover feedback={folderPathCopyFeedback.feedback} />
               </Button>
             </div>
           </div>

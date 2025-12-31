@@ -4,6 +4,9 @@ import { Input } from '../ui/input';
 import { CheckCircle2, Copy, Package, ChevronDown, ChevronRight, FileText, Search } from 'lucide-react';
 import { useState } from 'react';
 import type { CapturedApp, CaptureCounts } from '../../types';
+import { useMicroFeedback } from '@/lib/micro-feedback';
+import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
+import { copyText } from '@/lib/clipboard';
 
 interface CaptureResultModalProps {
   open: boolean;
@@ -32,7 +35,8 @@ export function CaptureResultModal({
 }: CaptureResultModalProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
-  const [copied, setCopied] = useState(false);
+  const diagnosticsFeedback = useMicroFeedback(2000);
+  const pathFeedback = useMicroFeedback();
   const [searchQuery, setSearchQuery] = useState('');
   const displayPath = outputPath ? outputPath.split('\\').pop() || outputPath : '';
 
@@ -80,13 +84,11 @@ export function CaptureResultModal({
       rawLogs || '(not available)',
     ].join('\n');
 
-    try {
-      await navigator.clipboard.writeText(diagnostics);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+    await diagnosticsFeedback.triggerAsync(
+      () => copyText(diagnostics),
+      'Copied',
+      'Copy failed'
+    );
   };
 
   return (
@@ -185,13 +187,15 @@ export function CaptureResultModal({
                 {/* Copy diagnostics */}
                 <div className="flex justify-end">
                   <Button
+                    ref={diagnosticsFeedback.buttonRef}
                     variant="ghost"
                     size="sm"
                     onClick={copyDiagnostics}
-                    className="h-8 gap-2"
+                    className="h-8 gap-2 relative"
                   >
                     <Copy className="h-3 w-3" />
-                    {copied ? 'Copied!' : 'Copy diagnostics'}
+                    Copy diagnostics
+                    <InlineFeedbackPopover feedback={diagnosticsFeedback.feedback} />
                   </Button>
                 </div>
               </div>
@@ -207,9 +211,22 @@ export function CaptureResultModal({
           )}
           <div className="flex gap-2 w-full">
             {outputPath && (
-              <Button variant="secondary" size="sm" className="flex-1 gap-2" onClick={() => navigator.clipboard.writeText(outputPath)}>
+              <Button
+                ref={pathFeedback.buttonRef}
+                variant="secondary"
+                size="sm"
+                className="flex-1 gap-2 relative"
+                onClick={async () => {
+                  await pathFeedback.triggerAsync(
+                    () => copyText(outputPath),
+                    'Copied',
+                    'Copy failed'
+                  );
+                }}
+              >
                 <FileText className="h-4 w-4" />
                 Copy path
+                <InlineFeedbackPopover feedback={pathFeedback.feedback} />
               </Button>
             )}
             <Button variant={onGoToApply ? "secondary" : "primary"} onClick={onClose} className="flex-1">
