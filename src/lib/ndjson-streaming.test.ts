@@ -150,6 +150,7 @@ describe('NDJSON Streaming Consolidation', () => {
     it('itemEventToAppEvent maps plan phase to apply (preview behaves like apply)', () => {
       const itemEvent: ItemEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'item',
         id: 'App.Id',
         driver: 'winget',
@@ -165,6 +166,7 @@ describe('NDJSON Streaming Consolidation', () => {
     it('itemEventToAppEvent preserves apply and verify phases', () => {
       const itemEvent: ItemEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'item',
         id: 'App.Id',
         driver: 'winget',
@@ -245,6 +247,7 @@ describe('NDJSON Streaming Consolidation', () => {
       for (let i = 0; i < 2500; i++) {
         const event: ItemEvent = {
           version: STREAMING_EVENT_VERSION,
+          runId: 'test-run-1',
           event: 'item',
           id: `App${i}`,
           driver: 'winget',
@@ -266,6 +269,7 @@ describe('NDJSON Streaming Consolidation', () => {
       for (let i = 0; i < 2500; i++) {
         events.push({
           version: STREAMING_EVENT_VERSION,
+          runId: 'test-run-1',
           event: 'item',
           id: `App${i}`,
           driver: 'winget',
@@ -292,6 +296,7 @@ describe('NDJSON Streaming Consolidation', () => {
       // Start with apply phase
       applyStreamingEvent(state, {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'apply',
         timestamp: new Date().toISOString(),
@@ -301,6 +306,7 @@ describe('NDJSON Streaming Consolidation', () => {
       // Transition to verify phase
       applyStreamingEvent(state, {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'verify',
         timestamp: new Date().toISOString(),
@@ -314,6 +320,7 @@ describe('NDJSON Streaming Consolidation', () => {
       // Apply phase
       applyStreamingEvent(state, {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'apply',
         timestamp: new Date().toISOString(),
@@ -321,6 +328,7 @@ describe('NDJSON Streaming Consolidation', () => {
 
       applyStreamingEvent(state, {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'item',
         id: 'App1',
         driver: 'winget',
@@ -331,6 +339,7 @@ describe('NDJSON Streaming Consolidation', () => {
 
       applyStreamingEvent(state, {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'item',
         id: 'App1',
         driver: 'winget',
@@ -342,6 +351,7 @@ describe('NDJSON Streaming Consolidation', () => {
       // Verify phase
       applyStreamingEvent(state, {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'verify',
         timestamp: new Date().toISOString(),
@@ -349,6 +359,7 @@ describe('NDJSON Streaming Consolidation', () => {
 
       applyStreamingEvent(state, {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'item',
         id: 'App1',
         driver: 'winget',
@@ -370,6 +381,7 @@ describe('NDJSON Streaming Consolidation', () => {
       // Apply phase summary
       applyStreamingEvent(state, {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'summary',
         phase: 'apply',
         total: 10,
@@ -382,6 +394,7 @@ describe('NDJSON Streaming Consolidation', () => {
       // Verify phase summary
       applyStreamingEvent(state, {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'summary',
         phase: 'verify',
         total: 10,

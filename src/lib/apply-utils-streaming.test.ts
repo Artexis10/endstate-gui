@@ -224,6 +224,7 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
   it('converts ItemEvent to AppEvent with correct fields', () => {
     const itemEvent: ItemEvent = {
       version: 1,
+      runId: 'test-run-1',
       event: 'item',
       id: 'Notepad++.Notepad++',
       driver: 'winget',
@@ -245,6 +246,7 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
   it('uses status as action when message is not provided', () => {
     const itemEvent: ItemEvent = {
       version: 1,
+      runId: 'test-run-1',
       event: 'item',
       id: 'App.Id',
       driver: 'winget',
@@ -261,6 +263,7 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
   it('maps "present" status to "present" statusKey', () => {
     const itemEvent: ItemEvent = {
       version: 1,
+      runId: 'test-run-1',
       event: 'item',
       id: 'App.Id',
       driver: 'winget',
@@ -277,6 +280,7 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
   it('sets phase to undefined for "plan" phase (not UI-relevant)', () => {
     const itemEvent: ItemEvent = {
       version: 1,
+      runId: 'test-run-1',
       event: 'item',
       id: 'App.Id',
       driver: 'winget',
@@ -294,6 +298,7 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
   it('correctly maps verify phase', () => {
     const itemEvent: ItemEvent = {
       version: 1,
+      runId: 'test-run-1',
       event: 'item',
       id: 'App.Id',
       driver: 'winget',
@@ -672,6 +677,7 @@ describe('itemEventToAppEvent - Reason Propagation', () => {
   it('propagates reason from ItemEvent to AppEvent', () => {
     const itemEvent: ItemEvent = {
       version: 1,
+      runId: 'test-run-1',
       event: 'item',
       id: 'App.Id',
       driver: 'winget',
@@ -688,6 +694,7 @@ describe('itemEventToAppEvent - Reason Propagation', () => {
   it('propagates null reason correctly', () => {
     const itemEvent: ItemEvent = {
       version: 1,
+      runId: 'test-run-1',
       event: 'item',
       id: 'App.Id',
       driver: 'winget',

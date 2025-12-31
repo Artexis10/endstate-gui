@@ -237,6 +237,7 @@ describe('streaming-events', () => {
       const state = createStreamingState();
       const event: PhaseEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'apply',
         timestamp: '2025-01-01T00:00:00.000Z',
@@ -252,6 +253,7 @@ describe('streaming-events', () => {
       const state = createStreamingState();
       const event: ItemEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'item',
         id: 'Notepad++.Notepad++',
         driver: 'winget',
@@ -272,6 +274,7 @@ describe('streaming-events', () => {
       
       const event1: ItemEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'item',
         id: 'App.Id',
         driver: 'winget',
@@ -282,6 +285,7 @@ describe('streaming-events', () => {
       
       const event2: ItemEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'item',
         id: 'App.Id',
         driver: 'winget',
@@ -301,6 +305,7 @@ describe('streaming-events', () => {
       const state = createStreamingState();
       const event: SummaryEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'summary',
         phase: 'apply',
         total: 10,
@@ -321,6 +326,7 @@ describe('streaming-events', () => {
       const state = createStreamingState();
       const event: ErrorEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'error',
         scope: 'engine',
         message: 'Connection failed',
@@ -339,6 +345,7 @@ describe('streaming-events', () => {
       
       const error1: ErrorEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'error',
         scope: 'item',
         message: 'Error 1',
@@ -348,6 +355,7 @@ describe('streaming-events', () => {
       
       const error2: ErrorEvent = {
         version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
         event: 'error',
         scope: 'item',
         message: 'Error 2',
@@ -366,12 +374,14 @@ describe('streaming-events', () => {
     it('isPhaseEvent should correctly identify phase events', () => {
       const phaseEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'apply',
         timestamp: '2025-01-01T00:00:00.000Z',
       };
       const itemEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'item',
         id: 'App',
         driver: 'winget',
@@ -387,6 +397,7 @@ describe('streaming-events', () => {
     it('isItemEvent should correctly identify item events', () => {
       const itemEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'item',
         id: 'App',
         driver: 'winget',
@@ -396,6 +407,7 @@ describe('streaming-events', () => {
       };
       const phaseEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'apply',
         timestamp: '2025-01-01T00:00:00.000Z',
@@ -408,6 +420,7 @@ describe('streaming-events', () => {
     it('isSummaryEvent should correctly identify summary events', () => {
       const summaryEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'summary',
         phase: 'apply',
         total: 10,
@@ -418,6 +431,7 @@ describe('streaming-events', () => {
       };
       const phaseEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'apply',
         timestamp: '2025-01-01T00:00:00.000Z',
@@ -430,6 +444,7 @@ describe('streaming-events', () => {
     it('isErrorEvent should correctly identify error events', () => {
       const errorEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'error',
         scope: 'engine',
         message: 'Error',
@@ -437,6 +452,7 @@ describe('streaming-events', () => {
       };
       const phaseEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'apply',
         timestamp: '2025-01-01T00:00:00.000Z',
@@ -449,6 +465,7 @@ describe('streaming-events', () => {
     it('isArtifactEvent should correctly identify artifact events', () => {
       const artifactEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'artifact',
         phase: 'capture',
         kind: 'manifest',
@@ -457,6 +474,7 @@ describe('streaming-events', () => {
       };
       const phaseEvent: StreamingEvent = {
         version: 1,
+        runId: 'test-run-1',
         event: 'phase',
         phase: 'capture',
         timestamp: '2025-01-01T00:00:00.000Z',
