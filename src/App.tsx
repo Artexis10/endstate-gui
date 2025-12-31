@@ -287,6 +287,15 @@ function AppContent() {
     setShowProfileNameModal(true);
   };
 
+  // Test-only hook for E2E testing
+  useEffect(() => {
+    if (import.meta.env.MODE === 'test' || import.meta.env.VITE_E2E === '1') {
+      (window as any).__endstate_e2e_openSaveProfileModal = ({ suggestedName }: { suggestedName: string }) => {
+        openProfileNameModal('C:\\test\\profile.jsonc', suggestedName, 'save');
+      };
+    }
+  }, []);
+
   const handleSaveProfileName = async () => {
     try {
       // Empty input clears display name (falls back to filename)

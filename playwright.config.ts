@@ -20,6 +20,8 @@ export default defineConfig({
     env: {
       // Isolate test storage from Tauri dev storage
       VITE_STORAGE_NS: 'test',
+      // Enable test-only hooks
+      VITE_E2E: '1',
     },
   },
 });
