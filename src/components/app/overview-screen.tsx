@@ -66,6 +66,7 @@ import {
   getPhaseAwareStatusForEvent,
   getPhaseColor,
 } from '@/lib/apply-utils';
+import { formatAppIdentity } from '@/lib/app-identity';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
 type ActionStatus = 'idle' | 'running' | 'success' | 'error';
@@ -465,7 +466,10 @@ export function OverviewScreen({
           >
             {/* Phase-aware progress indicator */}
             {(() => {
-              const phaseColor = getPhaseColor(actionProgress.phase);
+              // Derive semantic color from action and intent to avoid flash
+              // Preview (setup + preview intent) = neutral/blue, Apply = green, Capture = blue, Check = amber
+              const isPreview = action === 'setup' && setupIntent === 'preview';
+              const phaseColor = isPreview ? 'info' : getPhaseColor(actionProgress.phase);
               const colorClasses = getColorClasses(phaseColor);
               return (
                 <div className={`flex items-center gap-3 rounded-md px-3 py-3 border ${colorClasses.bg} ${colorClasses.border}`}>
@@ -568,7 +572,7 @@ export function OverviewScreen({
                               <span className={`w-16 text-right font-medium ${colors.text}`}>
                                 {uiStatus.shortLabel}
                               </span>
-                              <span className="font-mono truncate flex-1">{event.app}</span>
+                              <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
                             </div>
                           );
                         })}

@@ -101,7 +101,7 @@ export function ViewAppsModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px] max-h-[80vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0 pb-2">
+        <DialogHeader className="flex-shrink-0 pb-2 pr-8">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <DialogTitle className="text-lg">Profile: {profileDisplayName || 'Untitled'}</DialogTitle>
@@ -109,7 +109,7 @@ export function ViewAppsModal({
                 <span className="font-mono">{displayPath}</span>
               </div>
             </div>
-            <div className="flex-shrink-0 px-2 py-1 rounded-md bg-muted/50 text-xs font-medium mr-8">
+            <div className="flex-shrink-0 px-2 py-1 rounded-md bg-muted/50 text-xs font-medium">
               {apps.length} {apps.length === 1 ? 'app' : 'apps'}
             </div>
           </div>
