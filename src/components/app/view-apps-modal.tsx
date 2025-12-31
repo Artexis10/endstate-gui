@@ -14,7 +14,6 @@ interface ViewAppsModalProps {
   onOpenChange: (open: boolean) => void;
   profilePath: string;
   profileDisplayName: string;
-  onRenameFile?: (path: string, currentFilename: string) => void;
 }
 
 interface ParsedProfile {
@@ -43,7 +42,6 @@ export function ViewAppsModal({
   onOpenChange,
   profilePath,
   profileDisplayName,
-  onRenameFile,
 }: ViewAppsModalProps) {
   const [apps, setApps] = useState<ProfileApp[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,73 +102,16 @@ export function ViewAppsModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px] max-h-[80vh] flex flex-col">
         <DialogHeader className="flex-shrink-0 pb-2">
-          <DialogTitle className="text-lg">{profileDisplayName || 'Profile Details'}</DialogTitle>
+          <DialogTitle className="text-lg">Profile: {profileDisplayName || 'Untitled'}</DialogTitle>
+          <div className="text-xs text-muted-foreground pt-1">
+            <span className="font-mono">{displayPath}</span>
+          </div>
         </DialogHeader>
 
         {/* Apps count - prominent */}
         <div className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50 flex-shrink-0">
           <span className="text-sm font-medium">Apps captured</span>
           <span className="text-xl font-semibold">{apps.length}</span>
-        </div>
-
-        {/* Technical details - moved up for better discoverability */}
-        <div className="flex-shrink-0 border-b pb-3">
-          <button
-            onClick={() => setTechnicalExpanded(!technicalExpanded)}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full"
-          >
-            {technicalExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            Technical details
-          </button>
-
-          {technicalExpanded && (
-            <div className="mt-2 space-y-2">
-              {/* File path */}
-              <div className="p-2 bg-muted/30 rounded text-xs">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-muted-foreground">File:</span>
-                  <span className="font-mono truncate flex-1">{displayPath}</span>
-                  <Button
-                    ref={pathFeedback.buttonRef}
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 relative"
-                    onClick={copyPath}
-                  >
-                    <Copy className="h-3 w-3" />
-                    <InlineFeedbackPopover feedback={pathFeedback.feedback} />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Copy diagnostics */}
-              <Button
-                ref={diagnosticsFeedback.buttonRef}
-                variant="ghost"
-                size="sm"
-                onClick={copyDiagnostics}
-                className="h-7 text-xs gap-1 relative"
-              >
-                <Copy className="h-3 w-3" />
-                Copy diagnostics
-                <InlineFeedbackPopover feedback={diagnosticsFeedback.feedback} />
-              </Button>
-
-              {/* Rename file - only show if handler provided */}
-              {onRenameFile && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onRenameFile(profilePath, displayPath)}
-                  className="h-7 text-xs gap-1"
-                >
-                  <FileText className="h-3 w-3" />
-                  Rename file
-                </Button>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Search input */}
@@ -207,6 +148,53 @@ export function ViewAppsModal({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Technical details - at bottom (advanced) */}
+        <div className="flex-shrink-0 border-t pt-3">
+          <button
+            onClick={() => setTechnicalExpanded(!technicalExpanded)}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full"
+          >
+            {technicalExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            Technical details
+          </button>
+
+          {technicalExpanded && (
+            <div className="mt-2 space-y-2">
+              {/* File path */}
+              <div className="p-2 bg-muted/30 rounded text-xs">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">Path:</span>
+                  <span className="font-mono truncate flex-1">{profilePath}</span>
+                  <Button
+                    ref={pathFeedback.buttonRef}
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 relative"
+                    onClick={copyPath}
+                  >
+                    <Copy className="h-3 w-3" />
+                    <InlineFeedbackPopover feedback={pathFeedback.feedback} />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Copy diagnostics */}
+              <Button
+                ref={diagnosticsFeedback.buttonRef}
+                variant="ghost"
+                size="sm"
+                onClick={copyDiagnostics}
+                className="h-7 text-xs gap-1 relative"
+              >
+                <Copy className="h-3 w-3" />
+                Copy diagnostics
+                <InlineFeedbackPopover feedback={diagnosticsFeedback.feedback} />
+              </Button>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="pt-2 flex-shrink-0">

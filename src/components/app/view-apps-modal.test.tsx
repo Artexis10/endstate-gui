@@ -27,7 +27,8 @@ describe('ViewAppsModal', () => {
 
     render(<ViewAppsModal {...defaultProps} />);
     
-    expect(screen.getByText('Test Profile')).toBeInTheDocument();
+    expect(screen.getByText(/Profile:/)).toBeInTheDocument();
+    expect(screen.getByText(/Test Profile/)).toBeInTheDocument();
   });
 
   it('shows app count prominently', async () => {
@@ -98,7 +99,7 @@ describe('ViewAppsModal', () => {
     
     // Modal should still render with empty apps list
     await waitFor(() => {
-      expect(screen.getByText('Test Profile')).toBeInTheDocument();
+      expect(screen.getByText(/Test Profile/)).toBeInTheDocument();
     });
   });
 
@@ -110,7 +111,7 @@ describe('ViewAppsModal', () => {
     
     // Modal should still render
     await waitFor(() => {
-      expect(screen.getByText('Test Profile')).toBeInTheDocument();
+      expect(screen.getByText(/Test Profile/)).toBeInTheDocument();
     });
   });
 

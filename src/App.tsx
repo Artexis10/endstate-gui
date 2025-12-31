@@ -1552,9 +1552,6 @@ function AppContent() {
               onRenameProfile={(path, currentName) => {
                 openProfileNameModal(path, currentName, 'rename');
               }}
-              onRenameFile={(path, currentFilename) => {
-                openRenameFileModal(path, currentFilename);
-              }}
               onDeleteProfile={(path, displayName) => {
                 setDeleteProfilePath(path);
                 setDeleteProfileName(displayName);
@@ -2206,6 +2203,20 @@ function AppContent() {
                       <div>
                         <span className="text-muted-foreground">Path: </span>
                         <span className="font-mono text-[10px] break-all">{profileNameModalPath}</span>
+                      </div>
+                      <div className="pt-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setShowProfileNameModal(false);
+                            openRenameFileModal(profileNameModalPath, filename);
+                          }}
+                          className="h-7 text-xs gap-1"
+                        >
+                          <FileText className="h-3 w-3" />
+                          Rename file
+                        </Button>
                       </div>
                     </div>
                   );
