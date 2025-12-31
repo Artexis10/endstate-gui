@@ -313,6 +313,48 @@ function AppContent() {
     setProfileNameModalMoreOptions(false);
   };
 
+  const handleCancelProfileName = async () => {
+    // In 'save' mode, canceling should delete the profile file that was just created
+    // This makes profile creation truly opt-in
+    if (profileNameModalMode === 'save' && profileNameModalPath) {
+      try {
+        // Delete the profile file and any metadata
+        await deleteProfileFiles(profileNameModalPath);
+        
+        // Refresh profiles to remove the deleted profile from the list
+        await refreshProfiles();
+        
+        // Clear selection if the deleted profile was selected
+        if (profileNameModalPath === selectedProfilePath) {
+          const dir = await loadProfilesDirectory();
+          if (dir) {
+            const discovered = await discoverProfiles(dir);
+            if (discovered.length > 0) {
+              const firstProfile = discovered[0];
+              setSelectedProfile(firstProfile.name);
+              setSelectedProfilePath(firstProfile.path);
+              updateSettings({ lastSelectedProfile: firstProfile.name, lastSelectedProfilePath: firstProfile.path });
+            } else {
+              setSelectedProfile('');
+              setSelectedProfilePath('');
+              updateSettings({ lastSelectedProfile: '', lastSelectedProfilePath: '' });
+            }
+          }
+        }
+        
+        showToast('Profile creation cancelled', 'info');
+      } catch (err) {
+        console.error('Failed to delete profile on cancel:', err);
+      }
+    }
+    
+    // Close modal and reset state
+    setShowProfileNameModal(false);
+    setProfileNameModalPath('');
+    setProfileNameModalValue('');
+    setProfileNameModalMoreOptions(false);
+  };
+
   const handleDeleteProfile = async () => {
     if (!deleteProfilePath) return;
     
@@ -1709,7 +1751,7 @@ function AppContent() {
           <div className="space-y-6">
             {errorBanner}
             <PageHeader
-              title="Report"
+              title="Reports"
               subtitle="View recent activity and run history"
             />
             
@@ -1981,39 +2023,44 @@ function AppContent() {
               </div>
             )}
             
-            {/* Engine Runs from disk state files */}
+            {/* Engine Runs from disk log files */}
             {engineRuns.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Engine Run History</CardTitle>
-                  <CardDescription className="text-xs">Runs from engine state files (newest first)</CardDescription>
+                  <CardDescription className="text-xs">Runs from engine log files (newest first)</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
                     {engineRuns.slice(0, 10).map((run) => (
-                      <details key={run.state.runId} className="group border border-border rounded-lg">
+                      <details key={run.runId} className="group border border-border rounded-lg">
                         <summary className="flex items-center justify-between p-2 cursor-pointer hover:bg-muted/50">
                           <div className="flex items-center gap-2">
                             <div className={`w-2 h-2 rounded-full ${
-                              (run.state.summary?.failed ?? 0) > 0 ? 'bg-destructive' : 
-                              (run.state.summary?.success ?? 0) > 0 ? 'bg-success' : 'bg-muted-foreground'
+                              run.logExists ? 'bg-success' : 'bg-muted-foreground'
                             }`} />
-                            <span className="text-sm font-medium capitalize">{run.state.command}</span>
-                            {run.state.dryRun && <span className="text-xs text-muted-foreground">(preview)</span>}
+                            <span className="text-sm font-medium capitalize">{run.command}</span>
+                            {run.dryRun && <span className="text-xs text-muted-foreground">(preview)</span>}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{formatRelativeTime(run.state.timestamp)}</span>
+                            <span>{formatRelativeTime(run.timestamp)}</span>
                             <ChevronRight className="h-3 w-3 group-open:rotate-90 transition-transform" />
                           </div>
                         </summary>
                         <div className="px-2 pb-2 pt-1 border-t border-border bg-muted/30">
-                          <div className="text-xs text-muted-foreground mb-2">
-                            {run.state.summary && (
-                              <span>
-                                {run.state.summary.success ?? 0} success, {run.state.summary.skipped ?? 0} skipped, {run.state.summary.failed ?? 0} failed
-                              </span>
-                            )}
-                          </div>
+                          {/* Technical details disclosure */}
+                          <details className="mb-2">
+                            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                              Technical details
+                            </summary>
+                            <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
+                              <div><span className="text-muted-foreground">Run ID:</span> {run.runId}</div>
+                              <div><span className="text-muted-foreground">Log path:</span> {run.logFile}</div>
+                              <div><span className="text-muted-foreground">Log exists:</span> {run.logExists ? 'true' : 'false'}</div>
+                              <div><span className="text-muted-foreground">Events path:</span> {run.eventsFile || 'N/A'}</div>
+                              <div><span className="text-muted-foreground">Events exists:</span> {run.eventsExists ? 'true' : 'false'}</div>
+                            </div>
+                          </details>
                           <div className="flex flex-wrap gap-2">
                             {run.logFile ? (
                               <Button
@@ -2092,7 +2139,7 @@ function AppContent() {
                                       return;
                                     }
                                     const events = parseEventsFile(content);
-                                    setReplayRunId(run.state.runId);
+                                    setReplayRunId(run.runId);
                                     setReplayModalOpen(true);
                                     setReplayInProgress(true);
                                     
@@ -2246,7 +2293,7 @@ function AppContent() {
   const getPageTitle = () => {
     switch (currentPage) {
       case 'overview': return '';
-      case 'report': return 'Report';
+      case 'report': return 'Reports';
       case 'settings': return 'Settings';
       default: return '';
     }
@@ -2319,14 +2366,19 @@ function AppContent() {
       {/* Profile Name Modal */}
       <Dialog open={showProfileNameModal} onOpenChange={(open) => {
         if (!open) {
-          setShowProfileNameModal(false);
+          // Treat closing via X button same as Cancel - delete profile in save mode
+          handleCancelProfileName();
         }
       }}>
         <DialogContent 
           data-testid="profile-name-modal" 
           role="dialog"
           onInteractOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => {
+            e.preventDefault();
+            // Treat Escape same as Cancel - delete profile in save mode
+            handleCancelProfileName();
+          }}
         >
           <DialogHeader>
             <DialogTitle>{profileNameModalMode === 'rename' ? 'Rename profile' : 'Save profile'}</DialogTitle>
@@ -2337,10 +2389,21 @@ function AppContent() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-3">
+            {/* Show filename info in save mode */}
+            {profileNameModalMode === 'save' && profileNameModalPath && (() => {
+              const parts = profileNameModalPath.split(/[\\/]/);
+              const filename = parts[parts.length - 1] || '';
+              return (
+                <div className="p-2 bg-muted/30 rounded text-xs">
+                  <span className="text-muted-foreground">File: </span>
+                  <span className="font-mono">{filename}</span>
+                </div>
+              );
+            })()}
             <Input 
               value={profileNameModalValue}
               onChange={(e) => setProfileNameModalValue(e.target.value)}
-              placeholder="Profile name"
+              placeholder="Profile name (display name)"
               className="w-full"
               data-testid="profile-name-input"
               autoFocus
@@ -2393,7 +2456,7 @@ function AppContent() {
             )}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="secondary" onClick={() => setShowProfileNameModal(false)} data-testid="profile-name-cancel">
+            <Button variant="secondary" onClick={handleCancelProfileName} data-testid="profile-name-cancel">
               Cancel
             </Button>
             <Button onClick={handleSaveProfileName} data-testid="profile-name-save">

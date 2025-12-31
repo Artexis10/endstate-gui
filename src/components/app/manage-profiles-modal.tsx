@@ -99,11 +99,11 @@ export function ManageProfilesModal({
 
         <div className="flex-1 overflow-y-auto border rounded-md">
           <table className="w-full">
-            <thead className="bg-muted/50 sticky top-0">
+            <thead className="bg-background sticky top-0 z-10">
               <tr className="border-b">
-                <th className="text-left p-3 text-sm font-medium">Profile</th>
-                <th className="text-left p-3 text-sm font-medium">Filename</th>
-                <th className="text-right p-3 text-sm font-medium">Actions</th>
+                <th className="text-left p-3 text-sm font-medium bg-background">Profile</th>
+                <th className="text-left p-3 text-sm font-medium bg-background">Filename</th>
+                <th className="text-right p-3 text-sm font-medium bg-background">Actions</th>
               </tr>
             </thead>
             <tbody>
