@@ -89,7 +89,7 @@ describe('NDJSON Streaming Consolidation', () => {
       expect(UI_STATUS_MAP.to_install).toEqual({
         shortLabel: 'TO INSTALL',
         longLabel: 'To install',
-        color: 'info',
+        color: 'action',
       });
 
       expect(UI_STATUS_MAP.installing).toEqual({

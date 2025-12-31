@@ -58,6 +58,7 @@ import {
   type UiPhase,
   getColorClasses,
   getPhaseAwareStatusForEvent,
+  getPhaseColor,
 } from '@/lib/apply-utils';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
@@ -120,7 +121,9 @@ interface OverviewScreenProps {
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
   onRenameProfile?: (path: string, currentName: string) => void;
+  onRenameFile?: (path: string, currentFilename: string) => void;
   onDeleteProfile?: (path: string, displayName: string) => void;
+  onSetActiveProfile?: (profile: DiscoveredProfile) => void;
   onClearExpandedCard?: () => void;
 }
 
@@ -146,7 +149,9 @@ export function OverviewScreen({
   onOpenProfilesFolder,
   onRefreshProfiles,
   onRenameProfile,
+  onRenameFile,
   onDeleteProfile,
+  onSetActiveProfile,
   onClearExpandedCard,
 }: OverviewScreenProps) {
   const [expandedCard, setExpandedCard] = useState<ActionType>(initialExpandedCard ?? null);
@@ -366,6 +371,20 @@ export function OverviewScreen({
       return running ? 'Checking...' : 'Check now';
     };
 
+    // Phase-colored button classes for primary CTA
+    const getPhaseButtonClasses = (act: NonNullable<ActionType>): string => {
+      switch (act) {
+        case 'capture':
+          return 'bg-blue-500 hover:bg-blue-600 text-white ring-1 ring-blue-500/30 hover:ring-blue-500/50';
+        case 'setup':
+          return 'bg-green-600 hover:bg-green-700 text-white ring-1 ring-green-600/30 hover:ring-green-600/50';
+        case 'check':
+          return 'bg-amber-600 hover:bg-amber-700 text-white ring-1 ring-amber-600/30 hover:ring-amber-600/50';
+        default:
+          return '';
+      }
+    };
+
     if (!action) return null;
 
     return (
@@ -433,132 +452,131 @@ export function OverviewScreen({
         {/* Running state */}
         {isThisRunning && actionProgress && (
           <div className="space-y-3">
-            {/* Phase-aware progress indicator: Verify phase has distinct amber styling */}
-            <div className={`flex items-center gap-3 rounded-md px-3 py-3 ${
-              actionProgress.phase === 'verify' 
-                ? 'bg-amber-500/10 border border-amber-500/20' 
-                : 'bg-primary/5'
-            }`}>
-              <Loader2 className={`h-4 w-4 animate-spin ${
-                actionProgress.phase === 'verify' ? 'text-amber-500' : 'text-primary'
-              }`} />
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium truncate ${
-                  actionProgress.phase === 'verify' ? 'text-amber-600 dark:text-amber-400' : ''
-                }`}>
-                  {/* Phase indicator: show current phase for clarity */}
-                  {actionProgress.phase === 'verify' ? 'Verifying installation…' : actionProgress.message}
-                </p>
-                {actionProgress.detail && (
-                  <p className="text-xs text-muted-foreground truncate">{actionProgress.detail}</p>
-                )}
-              </div>
-            </div>
+            {/* Phase-aware progress indicator */}
+            {(() => {
+              const phaseColor = getPhaseColor(actionProgress.phase);
+              const colorClasses = getColorClasses(phaseColor);
+              return (
+                <div className={`flex items-center gap-3 rounded-md px-3 py-3 border ${colorClasses.bg} ${colorClasses.border}`}>
+                  <Loader2 className={`h-4 w-4 animate-spin ${colorClasses.text}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${colorClasses.text}`}>
+                      {/* Phase indicator: show current phase for clarity */}
+                      {actionProgress.phase === 'verify' ? 'Verifying installation…' : actionProgress.message}
+                    </p>
+                    {actionProgress.detail && (
+                      <p className="text-xs text-muted-foreground truncate">{actionProgress.detail}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             
             {/* Collapsible live activity for Setup card */}
-            {action === 'setup' && liveAppEvents.length > 0 && (
-              <div 
-                ref={liveActivityContainerRef}
-                className={`rounded-md border ${
-                  actionProgress.phase === 'verify' 
-                    ? 'border-amber-500/30 bg-amber-500/5' 
-                    : 'border-border/50'
-                }`}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActivityExpanded(!activityExpanded);
-                  }}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
-                >
-                  <span className="font-medium flex items-center gap-2">
-                    Live activity
-                    {/* Phase badge for visual distinction */}
-                    {actionProgress.phase === 'verify' && (
-                      <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
-                        VERIFY
-                      </span>
-                    )}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {liveCounters && (
-                      <span className="flex items-center gap-1.5">
-                        {/* Use semantic colors from UI_STATUS_MAP */}
-                        {liveCounters.installed > 0 && <span className={getColorClasses('success').text}>✓{liveCounters.installed}</span>}
-                        {liveCounters.alreadyPresent > 0 && <span className={getColorClasses('success').text}>●{liveCounters.alreadyPresent}</span>}
-                        {liveCounters.skipped > 0 && <span className={getColorClasses('warn').text}>⊘{liveCounters.skipped}</span>}
-                        {liveCounters.failed > 0 && <span className={getColorClasses('error').text}>✗{liveCounters.failed}</span>}
-                      </span>
-                    )}
-                    {activityExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  </div>
-                </button>
-                {activityExpanded && (
-                  <div className="relative border-t border-border/50">
-                    <div 
-                      ref={activityScrollRef}
-                      className="px-3 pb-3 space-y-1 max-h-64 overflow-y-auto scrollbar-thin"
-                      onScroll={(e) => {
-                        const target = e.currentTarget;
-                        const atBottom = Math.abs(target.scrollHeight - target.scrollTop - target.clientHeight) < 5;
-                        setIsAtBottom(atBottom);
-                        // Track if user has scrolled away (not at bottom) to prevent auto-scroll on phase change
-                        if (!atBottom) {
-                          setUserHasScrolledAway(true);
-                        }
-                      }}
-                    >
-                      {liveAppEvents.map((event, idx) => {
-                        // Skip phase header events - the phase badge already signals the current phase
-                        if (event.app === '── APPLY ──' || event.app === '── VERIFY ──') {
-                          return null;
-                        }
-                        
-                        // Use statusKey if available, otherwise derive from action
-                        const statusKey: StatusKey = event.statusKey || (
-                          event.action === 'OK' ? 'present' :
-                          event.action === 'Installed' ? 'installed' :
-                          event.action === 'Failed' ? 'failed' :
-                          event.action === 'Skipped' ? 'skipped' :
-                          event.action === 'Cancelled' ? 'cancelled' :
-                          event.action === 'Processing' ? 'installing' :
-                          event.action === 'To install' ? 'to_install' :
-                          'skipped'
-                        );
-                        // Use phase-aware status with reason for correct labels per phase
-                        const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: event.phase, reason: event.reason });
-                        const colors = getColorClasses(uiStatus.color);
-                        
-                        return (
-                          <div key={`${event.app}-${event.timestamp}-${idx}`} className="flex items-center gap-2 text-xs pt-1.5">
-                            <span className={`w-16 text-right font-medium ${colors.text}`}>
-                              {uiStatus.shortLabel}
-                            </span>
-                            <span className="font-mono truncate flex-1">{event.app}</span>
-                          </div>
-                        );
-                      })}
+            {action === 'setup' && liveAppEvents.length > 0 && (() => {
+              const phaseColor = getPhaseColor(actionProgress.phase);
+              const colorClasses = getColorClasses(phaseColor);
+              const isVerifyPhase = actionProgress.phase === 'verify';
+              return (
+                <div 
+                  ref={liveActivityContainerRef}
+                  className={`rounded-md border ${isVerifyPhase ? `${colorClasses.border} ${colorClasses.bg}` : 'border-border/50'}`}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActivityExpanded(!activityExpanded);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="font-medium flex items-center gap-2">
+                      Live activity
+                      {/* Phase badge for visual distinction */}
+                      {isVerifyPhase && (
+                        <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${colorClasses.bg} ${colorClasses.text}`}>
+                          VERIFY
+                        </span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {liveCounters && (
+                        <span className="flex items-center gap-1.5">
+                          {/* Use semantic colors from UI_STATUS_MAP */}
+                          {liveCounters.installed > 0 && <span className={getColorClasses('success').text}>✓{liveCounters.installed}</span>}
+                          {liveCounters.alreadyPresent > 0 && <span className={getColorClasses('success').text}>●{liveCounters.alreadyPresent}</span>}
+                          {liveCounters.skipped > 0 && <span className={getColorClasses('warn').text}>⊘{liveCounters.skipped}</span>}
+                          {liveCounters.failed > 0 && <span className={getColorClasses('error').text}>✗{liveCounters.failed}</span>}
+                        </span>
+                      )}
+                      {activityExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                     </div>
-                    {!isAtBottom && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // Scroll to bottom and re-enable auto-follow
-                          activityScrollRef.current?.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
-                          setIsAtBottom(true);
+                  </button>
+                  {activityExpanded && (
+                    <div className="relative border-t border-border/50">
+                      <div 
+                        ref={activityScrollRef}
+                        className="px-3 pb-3 space-y-1 max-h-64 overflow-y-auto scrollbar-thin"
+                        onScroll={(e) => {
+                          const target = e.currentTarget;
+                          const atBottom = Math.abs(target.scrollHeight - target.scrollTop - target.clientHeight) < 5;
+                          setIsAtBottom(atBottom);
+                          // Track if user has scrolled away (not at bottom) to prevent auto-scroll on phase change
+                          if (!atBottom) {
+                            setUserHasScrolledAway(true);
+                          }
                         }}
-                        className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-colors"
-                        aria-label="Jump to latest and re-enable auto-follow"
-                        data-testid="latest-pill"
                       >
-                        <ArrowDown className="h-3 w-3" />
-                        Latest
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                        {liveAppEvents.map((event, idx) => {
+                          // Skip phase header events - the phase badge already signals the current phase
+                          if (event.app === '── APPLY ──' || event.app === '── VERIFY ──') {
+                            return null;
+                          }
+                          
+                          // Use statusKey if available, otherwise derive from action
+                          const statusKey: StatusKey = event.statusKey || (
+                            event.action === 'OK' ? 'present' :
+                            event.action === 'Installed' ? 'installed' :
+                            event.action === 'Failed' ? 'failed' :
+                            event.action === 'Skipped' ? 'skipped' :
+                            event.action === 'Cancelled' ? 'cancelled' :
+                            event.action === 'Processing' ? 'installing' :
+                            event.action === 'To install' ? 'to_install' :
+                            'skipped'
+                          );
+                          // Use phase-aware status with reason for correct labels per phase
+                          const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: event.phase, reason: event.reason });
+                          const colors = getColorClasses(uiStatus.color);
+                          
+                          return (
+                            <div key={`${event.app}-${event.timestamp}-${idx}`} className="flex items-center gap-2 text-xs pt-1.5">
+                              <span className={`w-16 text-right font-medium ${colors.text}`}>
+                                {uiStatus.shortLabel}
+                              </span>
+                              <span className="font-mono truncate flex-1">{event.app}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {!isAtBottom && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Scroll to bottom and re-enable auto-follow
+                            activityScrollRef.current?.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
+                            setIsAtBottom(true);
+                          }}
+                          className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-colors"
+                          aria-label="Jump to latest and re-enable auto-follow"
+                          data-testid="latest-pill"
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                          Latest
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -636,6 +654,7 @@ export function OverviewScreen({
                 }}
                 disabled={isRunning || (action !== 'capture' && !hasProfile)}
                 size="sm"
+                className={getPhaseButtonClasses(action)}
               >
                 {isThisRunning ? (
                   <>
@@ -674,6 +693,7 @@ export function OverviewScreen({
               {action === 'setup' && actionResult?.wasPreview && actionStatus === 'success' && (
                 <Button
                   size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white ring-1 ring-green-600/30 hover:ring-green-600/50"
                   onClick={(e) => {
                     e.stopPropagation();
                     // Reset state and trigger apply
@@ -808,138 +828,145 @@ export function OverviewScreen({
       )}
 
       {/* Primary Actions - Expandable Cards */}
-      <div className="space-y-4">
-        {/* Capture Card */}
-        <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
-          <Card 
-            data-testid="overview-card-capture"
-            className={`cursor-pointer transition-all duration-200 ${
-              expandedCard === 'capture' 
-                ? 'border-blue-500/50 shadow-md' 
-                : 'hover:border-primary/30'
-            } ${isCardDisabled('capture') ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={() => handleCardClick('capture')}
-          >
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-blue-500/10">
-                    <ScanSearch className="h-5 w-5 text-blue-500" />
+      <div className="space-y-6">
+        {/* Primary Portal Cards */}
+        <div className="space-y-4">
+          {/* Capture Card - PRIMARY */}
+          <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
+            <Card 
+              data-testid="overview-card-capture"
+              className={`cursor-pointer transition-all duration-200 border-l-2 ${
+                expandedCard === 'capture' 
+                  ? 'border-l-blue-500 border-blue-500/50 shadow-md' 
+                  : 'border-l-blue-500/50 hover:border-l-blue-500 hover:border-primary/30'
+              } ${isCardDisabled('capture') ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => handleCardClick('capture')}
+            >
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-500/10">
+                      <ScanSearch className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">Capture computer</CardTitle>
+                      <CardDescription className="text-xs mt-0.5">
+                        Save your current setup as a reusable profile
+                      </CardDescription>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-base">Capture computer</CardTitle>
-                    <CardDescription className="text-xs mt-0.5">
-                      Save your current setup as a reusable profile
-                    </CardDescription>
-                  </div>
+                  <motion.div
+                    animate={{ rotate: expandedCard === 'capture' ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  </motion.div>
                 </div>
-                <motion.div
-                  animate={{ rotate: expandedCard === 'capture' ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                </motion.div>
-              </div>
-            </CardHeader>
-            <AnimatePresence>
-              {expandedCard === 'capture' && (
-                <CardContent className="pt-0 pb-4" data-testid="capture-card-expanded-content">
-                  {renderExpandedContent('capture')}
-                </CardContent>
-              )}
-            </AnimatePresence>
-          </Card>
-        </motion.div>
+              </CardHeader>
+              <AnimatePresence>
+                {expandedCard === 'capture' && (
+                  <CardContent className="pt-0 pb-4" data-testid="capture-card-expanded-content">
+                    {renderExpandedContent('capture')}
+                  </CardContent>
+                )}
+              </AnimatePresence>
+            </Card>
+          </motion.div>
 
-        {/* Setup Card */}
-        <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
-          <Card 
-            data-testid="overview-card-apply"
-            className={`cursor-pointer transition-all duration-200 ${
-              expandedCard === 'setup' 
-                ? 'border-green-500/50 shadow-md' 
-                : 'hover:border-primary/30'
-            } ${isCardDisabled('setup') ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={() => handleCardClick('setup')}
-          >
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <PlayCircle className="h-5 w-5 text-green-500" />
+          {/* Setup Card - PRIMARY */}
+          <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
+            <Card 
+              data-testid="overview-card-apply"
+              className={`cursor-pointer transition-all duration-200 border-l-2 ${
+                expandedCard === 'setup' 
+                  ? 'border-l-green-500 border-green-500/50 shadow-md' 
+                  : 'border-l-green-500/50 hover:border-l-green-500 hover:border-primary/30'
+              } ${isCardDisabled('setup') ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => handleCardClick('setup')}
+            >
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-500/10">
+                      <PlayCircle className="h-5 w-5 text-green-500" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">Set up computer</CardTitle>
+                      <CardDescription className="text-xs mt-0.5">
+                        {hasProfile 
+                          ? 'Install apps from your saved profile'
+                          : 'Capture a profile first to get started'
+                        }
+                      </CardDescription>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-base">Set up computer</CardTitle>
-                    <CardDescription className="text-xs mt-0.5">
-                      {hasProfile 
-                        ? 'Install apps from your saved profile'
-                        : 'Capture a profile first to get started'
-                      }
-                    </CardDescription>
-                  </div>
+                  <motion.div
+                    animate={{ rotate: expandedCard === 'setup' ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  </motion.div>
                 </div>
-                <motion.div
-                  animate={{ rotate: expandedCard === 'setup' ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                </motion.div>
-              </div>
-            </CardHeader>
-            <AnimatePresence>
-              {expandedCard === 'setup' && (
-                <CardContent className="pt-0 pb-4" data-testid="setup-card-expanded-content">
-                  {renderExpandedContent('setup')}
-                </CardContent>
-              )}
-            </AnimatePresence>
-          </Card>
-        </motion.div>
+              </CardHeader>
+              <AnimatePresence>
+                {expandedCard === 'setup' && (
+                  <CardContent className="pt-0 pb-4" data-testid="setup-card-expanded-content">
+                    {renderExpandedContent('setup')}
+                  </CardContent>
+                )}
+              </AnimatePresence>
+            </Card>
+          </motion.div>
+        </div>
 
-        {/* Check Card */}
-        <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
-          <Card 
-            data-testid="overview-card-verify"
-            className={`cursor-pointer transition-all duration-200 ${
-              expandedCard === 'check' 
-                ? 'border-amber-500/50 shadow-md' 
-                : 'hover:border-primary/30'
-            } ${isCardDisabled('check') ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={() => handleCardClick('check')}
-          >
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-amber-500/10">
-                    <CheckCircle className="h-5 w-5 text-amber-500" />
+        {/* Secondary Validation Section */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">Validation</h3>
+          {/* Check Card - SECONDARY */}
+          <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
+            <Card 
+              data-testid="overview-card-verify"
+              className={`cursor-pointer transition-all duration-200 border-l-2 ${
+                expandedCard === 'check' 
+                  ? 'border-l-amber-500 border-amber-500/50 shadow-md' 
+                  : 'border-l-amber-500/50 hover:border-l-amber-500 hover:border-primary/30'
+              } ${isCardDisabled('check') ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => handleCardClick('check')}
+            >
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-amber-500/10">
+                      <CheckCircle className="h-5 w-5 text-amber-500" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">Check computer</CardTitle>
+                      <CardDescription className="text-xs mt-0.5">
+                        {hasProfile 
+                          ? 'Verify your setup matches the profile'
+                          : 'Capture a profile first to get started'
+                        }
+                      </CardDescription>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-base">Check computer</CardTitle>
-                    <CardDescription className="text-xs mt-0.5">
-                      {hasProfile 
-                        ? 'Verify your setup matches the profile'
-                        : 'Capture a profile first to get started'
-                      }
-                    </CardDescription>
-                  </div>
+                  <motion.div
+                    animate={{ rotate: expandedCard === 'check' ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  </motion.div>
                 </div>
-                <motion.div
-                  animate={{ rotate: expandedCard === 'check' ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                </motion.div>
-              </div>
-            </CardHeader>
-            <AnimatePresence>
-              {expandedCard === 'check' && (
-                <CardContent className="pt-0 pb-4" data-testid="check-card-expanded-content">
-                  {renderExpandedContent('check')}
-                </CardContent>
-              )}
-            </AnimatePresence>
-          </Card>
-        </motion.div>
+              </CardHeader>
+              <AnimatePresence>
+                {expandedCard === 'check' && (
+                  <CardContent className="pt-0 pb-4" data-testid="check-card-expanded-content">
+                    {renderExpandedContent('check')}
+                  </CardContent>
+                )}
+              </AnimatePresence>
+            </Card>
+          </motion.div>
+        </div>
       </div>
 
       {/* No Profile Prompt */}
@@ -1062,8 +1089,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'to_install'}
                       onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity whitespace-nowrap flex-shrink-0 ${
-                        detailsFilter === 'to_install' ? 'ring-2 ring-primary' : ''
-                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('info').bg} ${getColorClasses('info').text}`}
+                        detailsFilter === 'to_install' ? `ring-2 ${getColorClasses('action').border}` : ''
+                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('action').bg} ${getColorClasses('action').text}`}
                     >
                       To install: {actionResult.counts.toInstall}
                     </button>
@@ -1110,8 +1137,8 @@ export function OverviewScreen({
                       aria-selected={detailsFilter === 'to_install'}
                       onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
                       className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
-                        detailsFilter === 'to_install' ? 'ring-2 ring-danger' : ''
-                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('error').bg} ${getColorClasses('error').text}`}
+                        detailsFilter === 'to_install' ? `ring-2 ${getColorClasses('warn').border}` : ''
+                      } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
                     >
                       Missing: {actionResult.counts.missing}
                     </button>
@@ -1249,8 +1276,14 @@ export function OverviewScreen({
         onRenameDisplay={(path, currentName) => {
           onRenameProfile?.(path, currentName);
         }}
+        onRenameFile={(path, currentFilename) => {
+          onRenameFile?.(path, currentFilename);
+        }}
         onDelete={(path, displayName) => {
           onDeleteProfile?.(path, displayName);
+        }}
+        onSetActive={(profile) => {
+          onSetActiveProfile?.(profile);
         }}
         onOpenFolder={onOpenProfilesFolder}
         onRefresh={onRefreshProfiles}

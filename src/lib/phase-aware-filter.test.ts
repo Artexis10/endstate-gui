@@ -35,7 +35,7 @@ describe('Phase-aware status mapping for filters', () => {
     });
     
     expect(result.longLabel).toBe('To install');
-    expect(result.color).toBe('info');
+    expect(result.color).toBe('action');
   });
 
   it('Apply phase: skipped with reason "already_installed" -> "Already present"', () => {
@@ -77,7 +77,7 @@ describe('Phase-aware status mapping for filters', () => {
     });
     
     expect(result.longLabel).toBe('Missing');
-    expect(result.color).toBe('error');
+    expect(result.color).toBe('warn');
   });
 
   it('Filter predicate example: matching "Already present" in apply phase', () => {

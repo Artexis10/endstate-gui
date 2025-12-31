@@ -19,9 +19,11 @@ import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from '.
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
 import { OverviewScreen } from './components/app/overview-screen';
-import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder } from './lib/tauri-bridge';
+import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
+import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
+import { loadRunSummaries, type RunBundle, type RunSummary } from './lib/run-artifacts';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -33,7 +35,7 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
-import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
+import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FileText } from 'lucide-react';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'overview' | 'report' | 'settings';
@@ -57,9 +59,15 @@ function AppContent() {
   const [overviewExpandedCard, setOverviewExpandedCard] = useState<'capture' | 'setup' | 'check' | null>(null);
   
   // Navigation handler
-  const handleNavigate = (page: PageType) => {
+  const handleNavigate = async (page: PageType) => {
     setOverviewExpandedCard(null);
     setCurrentPage(page);
+    
+    // Load run artifacts when navigating to Report page
+    if (page === 'report' && profilesDirectory) {
+      const artifacts = await loadRunSummaries(profilesDirectory);
+      setRunArtifacts(artifacts);
+    }
   };
   const [sidebarVisible, setSidebarVisible] = useState(loadSidebarVisible());
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -164,6 +172,9 @@ function AppContent() {
   const [showRenameFileModal, setShowRenameFileModal] = useState(false);
   const [renameFilePath, setRenameFilePath] = useState('');
   const [renameFileCurrentName, setRenameFileCurrentName] = useState('');
+  
+  // Run artifacts state for Report page
+  const [runArtifacts, setRunArtifacts] = useState<Array<{ bundle: RunBundle; summary: RunSummary }>>([]);
   
   // Dismiss result - only collapse UI, preserve summary for Overview display
   const dismissOverviewResult = () => {
@@ -316,14 +327,29 @@ function AppContent() {
   const handleRenameFile = async (newFilename: string) => {
     if (!renameFilePath || !newFilename) return;
     
+    // Non-bypassable Zod validation guard
+    const originalExtension: ValidExtension = getExtension(renameFileCurrentName);
+    const validation = validateProfileFilename(newFilename, originalExtension);
+    if (!validation.success) {
+      showToast(validation.error, 'error');
+      return;
+    }
+    
     try {
       const { invoke } = await import('./lib/tauri-bridge');
       const { getMetaPath } = await import('./file-discovery');
       
       // Get directory and construct new path
-      const pathParts = renameFilePath.split(/[\\/]/);
+      const pathParts = renameFilePath.split(/[\\]/);
       const directory = pathParts.slice(0, -1).join('\\');
       const newPath = `${directory}\\${newFilename}`;
+      
+      // Check for collision as final guard
+      const exists = await invoke<boolean>('check_file_exists', { path: newPath });
+      if (exists) {
+        showToast('A file with this name already exists', 'error');
+        return;
+      }
       
       // Rename the manifest file
       await invoke('rename_file', { oldPath: renameFilePath, newPath });
@@ -346,14 +372,31 @@ function AppContent() {
       
       // Refresh profiles
       await refreshProfiles();
+      showToast('File renamed successfully', 'success');
     } catch (err) {
       console.error('Failed to rename file:', err);
-      alert(`Failed to rename file: ${err}`);
+      showToast(`Failed to rename file: ${err}`, 'error');
     }
     
     setShowRenameFileModal(false);
     setRenameFilePath('');
     setRenameFileCurrentName('');
+  };
+
+  const handleSetActiveProfile = (profile: DiscoveredProfile) => {
+    setSelectedProfile(profile.name);
+    setSelectedProfilePath(profile.path);
+    updateSettings({ 
+      lastSelectedProfile: profile.name, 
+      lastSelectedProfilePath: profile.path 
+    });
+    showToast(`"${profile.displayName || profile.name}" is now the active profile`, 'success');
+  };
+
+  const openRenameFileModal = (path: string, currentFilename: string) => {
+    setRenameFilePath(path);
+    setRenameFileCurrentName(currentFilename);
+    setShowRenameFileModal(true);
   };
 
   const promptForProfileName = async (profilePath: string): Promise<void> => {
@@ -1378,11 +1421,15 @@ function AppContent() {
               onRenameProfile={(path, currentName) => {
                 openProfileNameModal(path, currentName, 'rename');
               }}
+              onRenameFile={(path, currentFilename) => {
+                openRenameFileModal(path, currentFilename);
+              }}
               onDeleteProfile={(path, displayName) => {
                 setDeleteProfilePath(path);
                 setDeleteProfileName(displayName);
                 setShowDeleteProfileModal(true);
               }}
+              onSetActiveProfile={handleSetActiveProfile}
             />
           </div>
         );
@@ -1568,6 +1615,13 @@ function AppContent() {
                               </>
                             )}
                           </div>
+                          
+                          {/* Artifact status - show for all runs */}
+                          <div className="col-span-2 pt-2 border-t border-border mt-2">
+                            <span className="text-xs text-muted-foreground italic">
+                              Artifacts not saved (older runs)
+                            </span>
+                          </div>
                         </div>
                       </details>
                     ))}
@@ -1577,6 +1631,95 @@ function AppContent() {
                 )}
               </CardContent>
             </Card>
+            
+            {/* Persisted Run Artifacts */}
+            {runArtifacts.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Run Artifacts</CardTitle>
+                  <CardDescription className="text-xs">Saved diagnostics and logs from recent runs</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {runArtifacts.slice(0, 10).map(({ bundle, summary }) => (
+                      <details key={bundle.runId} className="group border border-border rounded-lg">
+                        <summary className="flex items-center justify-between p-2 cursor-pointer hover:bg-muted/50">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${
+                              summary.outcome === 'success' ? 'bg-success' : 
+                              summary.outcome === 'partial' ? 'bg-warning' : 'bg-destructive'
+                            }`} />
+                            <span className="text-sm font-medium capitalize">{summary.mode}</span>
+                            {summary.profileName && (
+                              <span className="text-xs text-muted-foreground">• {summary.profileName}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatRelativeTime(summary.timestamp)}</span>
+                            <ChevronRight className="h-3 w-3 group-open:rotate-90 transition-transform" />
+                          </div>
+                        </summary>
+                        <div className="px-2 pb-2 pt-1 border-t border-border bg-muted/30">
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {isTauriRuntime() ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                onClick={async () => {
+                                  try {
+                                    await openFolder(bundle.directory);
+                                  } catch (err) {
+                                    console.error('Failed to open folder:', err);
+                                  }
+                                }}
+                              >
+                                <FolderOpen className="h-3 w-3" />
+                                Open folder
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                onClick={() => navigator.clipboard.writeText(bundle.directory)}
+                              >
+                                <Copy className="h-3 w-3" />
+                                Copy path
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              onClick={async () => {
+                                try {
+                                  const content = await invoke<string>('read_text_file', { path: bundle.diagnosticsPath });
+                                  await navigator.clipboard.writeText(content);
+                                  showToast('Diagnostics copied', 'success');
+                                } catch (err) {
+                                  showToast('Failed to copy diagnostics', 'error');
+                                }
+                              }}
+                            >
+                              <FileText className="h-3 w-3" />
+                              Copy diagnostics
+                            </Button>
+                          </div>
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
+            {/* Web mode notice */}
+            {!isTauriRuntime() && (
+              <div className="text-xs text-muted-foreground text-center py-2">
+                Artifacts not saved in web mode
+              </div>
+            )}
             
             {/* Backend Report Data (if available) */}
             {state.report?.data?.reports && state.report.data.reports.length > 0 && (
@@ -1827,7 +1970,7 @@ function AppContent() {
               Are you sure you want to delete <strong>{deleteProfileName}</strong>?
               {deleteProfilePath === selectedProfilePath && (
                 <span className="block mt-2 text-warning">
-                  You cannot delete the currently selected profile. Please select a different profile first.
+                  You cannot delete the active profile. Please select a different profile first.
                 </span>
               )}
             </DialogDescription>
@@ -1850,6 +1993,7 @@ function AppContent() {
         open={showRenameFileModal}
         onOpenChange={setShowRenameFileModal}
         currentFilename={renameFileCurrentName}
+        currentDirectory={profilesDirectory}
         onConfirm={handleRenameFile}
       />
     </>

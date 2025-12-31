@@ -4,75 +4,101 @@
 
 @layer base {
   :root {
-    --background: 220 13% 10%;
+    --background: 220 13% 8%;
     --foreground: 210 40% 98%;
     --panel: 220 13% 12%;
-    
+    --card: 220 13% 15%;
+
     --muted: 217 10% 25%;
     --muted-foreground: 215 20% 65%;
-    
+
     --popover: 220 13% 12%;
     --popover-foreground: 210 40% 98%;
-    
+
     --border: 217 10% 20%;
     --input: 217 10% 20%;
-    --ring: 346 77% 60%;
-    
-    --primary: 346 77% 60%;
+
+    /* Substrate / Endstate primary */
+   --primary: 25 95% 55%;          /* mineral blue */
     --primary-foreground: 210 40% 98%;
-    
+    --ring: 217 91% 65%;
+
+    /* Accent should be softer / different from primary */
+   --accent: 45 93% 47%;           /* cyan-leaning highlight */
+    --accent-foreground: 210 40% 98%;
+
     --secondary: 217 19% 27%;
     --secondary-foreground: 210 40% 98%;
-    
-    --accent: 346 77% 60%;
-    --accent-foreground: 210 40% 98%;
-    
+
     --success: 142 71% 45%;
     --success-foreground: 144 61% 20%;
-    
+
     --warning: 38 92% 50%;
     --warning-foreground: 48 96% 89%;
-    
+
     --danger: 0 84% 60%;
     --danger-foreground: 210 40% 98%;
-    
+
     --radius: 0.5rem;
+
+    /* Phase colors - stable identity mapping */
+    --phase-capture: 217 91% 60%;     /* Blue */
+    --phase-setup: 142 71% 45%;       /* Green (matches success) */
+    --phase-verify: 38 92% 50%;       /* Amber (matches warning) */
+
+    /* Action required - stronger than info, not error */
+    --action-required: 217 91% 60%;   /* Vivid blue for to_install/missing */
+
+/* Primary = signal slate */
+--primary: 215 28% 42%;
+--primary-foreground: 210 40% 98%;
+--ring: 215 35% 50%;
+
+/* Accent = secondary slate */
+--accent: 210 18% 40%;
+--accent-foreground: 210 40% 98%;
+
+
+
+
+
   }
-  
+
   .light {
     --background: 0 0% 100%;
     --foreground: 222 47% 11%;
     --panel: 210 40% 98%;
-    
+
     --muted: 210 40% 96%;
     --muted-foreground: 215 16% 47%;
-    
+
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    
+
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 346 77% 60%;
-    
-    --primary: 346 77% 60%;
-    --primary-foreground: 210 40% 98%;
-    
+
+    --primary: 217 91% 52%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 217 91% 52%;
+
+    --accent: 198 88% 40%;
+    --accent-foreground: 0 0% 100%;
+
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;
-    
-    --accent: 346 77% 60%;
-    --accent-foreground: 210 40% 98%;
-    
-    --success: 142 71% 45%;
+
+    --success: 142 71% 40%;
     --success-foreground: 144 61% 20%;
-    
-    --warning: 38 92% 50%;
+
+    --warning: 38 92% 45%;
     --warning-foreground: 48 96% 89%;
-    
-    --danger: 0 84% 60%;
-    --danger-foreground: 210 40% 98%;
+
+    --danger: 0 84% 55%;
+    --danger-foreground: 0 0% 100%;
   }
 }
+
 
 @layer base {
   * {

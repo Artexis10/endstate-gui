@@ -166,8 +166,8 @@ describe('engineStatusToStatusKey - Streaming Status Mapping', () => {
       expect(UI_STATUS_MAP.present.color).toBe('success');
     });
 
-    it('to_install uses blue (info)', () => {
-      expect(UI_STATUS_MAP.to_install.color).toBe('info');
+    it('to_install uses action color (vivid blue)', () => {
+      expect(UI_STATUS_MAP.to_install.color).toBe('action');
     });
 
     it('installing uses blue (info)', () => {
@@ -359,7 +359,7 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
       const status = PHASE_STATUS_MAP.apply.to_install;
       expect(status?.shortLabel).toBe('TO INSTALL');
       expect(status?.longLabel).toBe('To install');
-      expect(status?.color).toBe('info');
+      expect(status?.color).toBe('action');
     });
 
     it('installing shows as "Installing"', () => {
@@ -401,7 +401,7 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
       const status = PHASE_STATUS_MAP.verify.to_install;
       expect(status?.shortLabel).toBe('MISSING');
       expect(status?.longLabel).toBe('Missing');
-      expect(status?.color).toBe('error');
+      expect(status?.color).toBe('warn');
     });
 
     it('installing shows as "Checking"', () => {
@@ -442,10 +442,10 @@ describe('getPhaseAwareStatus - Phase-Aware Status Resolution', () => {
     expect(status.shortLabel).toBe('SKIPPED');
   });
 
-  it('Verify phase: to_install maps to Missing (red)', () => {
+  it('Verify phase: to_install maps to Missing (warn/amber)', () => {
     const status = getPhaseAwareStatus('to_install', 'verify');
     expect(status.shortLabel).toBe('MISSING');
-    expect(status.color).toBe('error');
+    expect(status.color).toBe('warn');
   });
 
   it('Capture phase: skipped maps to Excluded (muted)', () => {
@@ -607,13 +607,13 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
   });
 
   describe('Verify phase: reason-aware discrimination', () => {
-    it('verify + to_install -> MISSING (error/red)', () => {
+    it('verify + to_install -> MISSING (warn/amber)', () => {
       const status = getPhaseAwareStatusForEvent({
         statusKey: 'to_install',
         phase: 'verify',
       });
       expect(status.shortLabel).toBe('MISSING');
-      expect(status.color).toBe('error');
+      expect(status.color).toBe('warn');
     });
 
     it('verify + present -> CONFIRMED (success)', () => {

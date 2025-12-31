@@ -30,7 +30,7 @@ describe('ViewAppsModal', () => {
     expect(screen.getByText('Test Profile')).toBeInTheDocument();
   });
 
-  it('shows app count from parsed manifest', async () => {
+  it('shows app count prominently', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
     vi.mocked(invoke).mockResolvedValue(JSON.stringify({
       version: 1,
@@ -43,16 +43,14 @@ describe('ViewAppsModal', () => {
 
     render(<ViewAppsModal {...defaultProps} />);
     
-    // Expand details to see apps count
+    // App count should be visible directly (apps-first design)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /toggle technical details/i })).toBeInTheDocument();
+      expect(screen.getByText('3')).toBeInTheDocument();
+      expect(screen.getByText('Apps captured')).toBeInTheDocument();
     });
-    
-    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
-    expect(detailsButton).toHaveTextContent('3 apps');
   });
 
-  it('displays raw app IDs with dots preserved', async () => {
+  it('displays raw app IDs with dots preserved in main list', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
     vi.mocked(invoke).mockResolvedValue(JSON.stringify({
       version: 1,
@@ -64,26 +62,9 @@ describe('ViewAppsModal', () => {
       ],
     }));
 
-    const user = userEvent.setup();
     render(<ViewAppsModal {...defaultProps} />);
     
-    // Expand details section
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /toggle technical details/i })).toBeInTheDocument();
-    });
-    
-    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
-    await user.click(detailsButton);
-    
-    // Expand winget source
-    await waitFor(() => {
-      expect(screen.getByText('winget')).toBeInTheDocument();
-    });
-    
-    const wingetButton = screen.getByText('winget').closest('button');
-    await user.click(wingetButton!);
-    
-    // Verify raw IDs with dots are displayed exactly as stored in manifest
+    // Apps should be visible directly in the main list (apps-first design)
     await waitFor(() => {
       expect(screen.getByText('Microsoft.VSCode')).toBeInTheDocument();
       expect(screen.getByText('Google.Chrome')).toBeInTheDocument();
@@ -92,7 +73,7 @@ describe('ViewAppsModal', () => {
     });
   });
 
-  it('displays app ID in details section', async () => {
+  it('displays app ID in main list', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
     vi.mocked(invoke).mockResolvedValue(JSON.stringify({
       version: 1,
@@ -101,25 +82,9 @@ describe('ViewAppsModal', () => {
       ],
     }));
 
-    const user = userEvent.setup();
     render(<ViewAppsModal {...defaultProps} />);
     
-    // Expand details
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /toggle technical details/i })).toBeInTheDocument();
-    });
-    
-    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
-    await user.click(detailsButton);
-    
-    // Expand winget source
-    await waitFor(() => {
-      expect(screen.getByText('winget')).toBeInTheDocument();
-    });
-    
-    const wingetButton = screen.getByText('winget').closest('button');
-    await user.click(wingetButton!);
-    
+    // App should be visible directly
     await waitFor(() => {
       expect(screen.getByText('Microsoft.VSCode')).toBeInTheDocument();
     });
@@ -162,32 +127,34 @@ describe('ViewAppsModal', () => {
     const user = userEvent.setup();
     render(<ViewAppsModal {...defaultProps} />);
     
-    // Wait for search input to appear
+    // Wait for apps to load and search input to appear
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Search apps...')).toBeInTheDocument();
+      expect(screen.getByText('Microsoft.VSCode')).toBeInTheDocument();
     });
 
     const searchInput = screen.getByPlaceholderText('Search apps...');
     await user.type(searchInput, 'chrome');
 
-    // Expand details to see filtered results
-    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
-    await user.click(detailsButton);
-    
-    // Should show filtered count
-    expect(detailsButton).toHaveTextContent('1 of 2 apps');
-    
-    // Expand winget source
-    await waitFor(() => {
-      expect(screen.getByText('winget')).toBeInTheDocument();
-    });
-    
-    const wingetButton = screen.getByText('winget').closest('button');
-    await user.click(wingetButton!);
-
+    // After filtering, only Chrome should be visible
     await waitFor(() => {
       expect(screen.queryByText('Microsoft.VSCode')).not.toBeInTheDocument();
       expect(screen.getByText('Google.Chrome')).toBeInTheDocument();
+    });
+  });
+
+  it('shows Technical details accordion', async () => {
+    const { invoke } = await import('@/lib/tauri-bridge');
+    vi.mocked(invoke).mockResolvedValue(JSON.stringify({
+      version: 1,
+      apps: [{ id: 'App.One' }],
+    }));
+
+    render(<ViewAppsModal {...defaultProps} />);
+    
+    // Technical details toggle should be present
+    await waitFor(() => {
+      expect(screen.getByText('Technical details')).toBeInTheDocument();
     });
   });
 });

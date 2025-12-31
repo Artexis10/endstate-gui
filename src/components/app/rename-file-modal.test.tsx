@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '../../test/test-utils';
+import { render, screen, fireEvent, waitFor } from '../../test/test-utils';
 import '@testing-library/jest-dom/vitest';
 import { RenameFileModal } from './rename-file-modal';
+
+// Mock the tauri-bridge for collision checking
+vi.mock('@/lib/tauri-bridge', () => ({
+  invoke: vi.fn().mockResolvedValue(false), // Default: no collision
+}));
 
 /**
  * RenameFileModal UX Contract Tests
@@ -20,6 +25,7 @@ describe('RenameFileModal', () => {
     open: true,
     onOpenChange: vi.fn(),
     currentFilename: 'my-profile.json',
+    currentDirectory: 'C:\\profiles',
     onConfirm: vi.fn(),
   };
 
@@ -55,7 +61,7 @@ describe('RenameFileModal', () => {
       expect(input).toHaveValue('profile');
     });
 
-    it('preserves original extension in confirmed filename', () => {
+    it('preserves original extension in confirmed filename', async () => {
       const onConfirm = vi.fn();
       render(<RenameFileModal {...defaultProps} currentFilename="old.jsonc" onConfirm={onConfirm} />);
       
@@ -63,7 +69,9 @@ describe('RenameFileModal', () => {
       fireEvent.change(input, { target: { value: 'new-name' } });
       fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
       
-      expect(onConfirm).toHaveBeenCalledWith('new-name.jsonc');
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith('new-name.jsonc');
+      });
     });
   });
 
@@ -79,7 +87,7 @@ describe('RenameFileModal', () => {
       expect(defaultProps.onConfirm).not.toHaveBeenCalled();
     });
 
-    it('allows dots in basename', () => {
+    it('allows dots in basename', async () => {
       const onConfirm = vi.fn();
       render(<RenameFileModal {...defaultProps} onConfirm={onConfirm} />);
       
@@ -87,17 +95,20 @@ describe('RenameFileModal', () => {
       fireEvent.change(input, { target: { value: 'my.profile.name' } });
       fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
       
-      expect(onConfirm).toHaveBeenCalledWith('my.profile.name.json');
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith('my.profile.name.json');
+      });
     });
 
-    it('shows error when basename contains Windows-invalid characters', () => {
+    it('shows error when basename contains invalid characters', () => {
       render(<RenameFileModal {...defaultProps} />);
       
       const input = screen.getByRole('textbox');
       fireEvent.change(input, { target: { value: 'my<profile>name' } });
       fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
       
-      expect(screen.getByText(/cannot contain/i)).toBeInTheDocument();
+      // New validation uses stricter allowed chars rule
+      expect(screen.getByText(/can only contain/i)).toBeInTheDocument();
       expect(defaultProps.onConfirm).not.toHaveBeenCalled();
     });
 
@@ -133,7 +144,7 @@ describe('RenameFileModal', () => {
       expect(defaultProps.onConfirm).not.toHaveBeenCalled();
     });
 
-    it('trims whitespace from basename', () => {
+    it('trims whitespace from basename', async () => {
       const onConfirm = vi.fn();
       render(<RenameFileModal {...defaultProps} onConfirm={onConfirm} />);
       
@@ -141,7 +152,10 @@ describe('RenameFileModal', () => {
       fireEvent.change(input, { target: { value: '  trimmed-name  ' } });
       fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
       
-      expect(onConfirm).toHaveBeenCalledWith('trimmed-name.json');
+      // Wait for async collision check to complete
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith('trimmed-name.json');
+      });
     });
   });
 
@@ -162,7 +176,7 @@ describe('RenameFileModal', () => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
-    it('closes modal after successful rename', () => {
+    it('closes modal after successful rename', async () => {
       const onOpenChange = vi.fn();
       const onConfirm = vi.fn();
       render(<RenameFileModal {...defaultProps} onOpenChange={onOpenChange} onConfirm={onConfirm} />);
@@ -171,8 +185,11 @@ describe('RenameFileModal', () => {
       fireEvent.change(input, { target: { value: 'new-name' } });
       fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
       
-      expect(onConfirm).toHaveBeenCalled();
-      expect(onOpenChange).toHaveBeenCalledWith(false);
+      // Wait for async collision check to complete
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalled();
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
     });
   });
 });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, FolderOpen, RefreshCw, Eye } from 'lucide-react';
+import { Pencil, Trash2, FolderOpen, RefreshCw, Eye, FileEdit, Play } from 'lucide-react';
 import type { DiscoveredProfile } from '@/file-discovery';
 import { ViewAppsModal } from './view-apps-modal';
 
@@ -12,7 +12,9 @@ interface ManageProfilesModalProps {
   selectedProfile: string;
   profilesDirectory: string;
   onRenameDisplay: (path: string, currentName: string) => void;
+  onRenameFile: (path: string, currentFilename: string) => void;
   onDelete: (path: string, displayName: string) => void;
+  onSetActive: (profile: DiscoveredProfile) => void;
   onOpenFolder: () => void;
   onRefresh: () => Promise<void>;
 }
@@ -24,7 +26,9 @@ export function ManageProfilesModal({
   selectedProfile,
   profilesDirectory,
   onRenameDisplay,
+  onRenameFile,
   onDelete,
+  onSetActive,
   onOpenFolder,
   onRefresh,
 }: ManageProfilesModalProps) {
@@ -50,7 +54,7 @@ export function ManageProfilesModal({
         <DialogHeader>
           <DialogTitle>Manage Profiles</DialogTitle>
           <DialogDescription>
-            Rename or delete profiles. You cannot delete the selected profile.
+            Rename or delete profiles. You cannot delete the active profile.
           </DialogDescription>
         </DialogHeader>
 
@@ -110,7 +114,7 @@ export function ManageProfilesModal({
                           <span className="font-medium">{getDisplayLabel(profile)}</span>
                           {selected && (
                             <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                              Selected
+                              Active
                             </span>
                           )}
                         </div>
@@ -122,6 +126,18 @@ export function ManageProfilesModal({
                       </td>
                       <td className="p-3">
                         <div className="flex items-center justify-end gap-1">
+                          {!selected && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2"
+                              onClick={() => onSetActive(profile)}
+                              title="Set as active profile"
+                            >
+                              <Play className="h-3 w-3 mr-1" />
+                              Set active
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -141,6 +157,16 @@ export function ManageProfilesModal({
                           >
                             <Pencil className="h-3 w-3 mr-1" />
                             Rename
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={() => onRenameFile(profile.path, getFilename(profile))}
+                            title="Rename file on disk (advanced)"
+                          >
+                            <FileEdit className="h-3 w-3 mr-1" />
+                            Rename file
                           </Button>
                           <Button
                             variant="ghost"

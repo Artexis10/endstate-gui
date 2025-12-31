@@ -88,8 +88,8 @@ export function AppShell({
                     className={cn(
                       'w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors relative',
                       isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'
+                        ? 'bg-primary/10 text-primary border-l-2 border-primary'
+                        : 'text-muted-foreground hover:bg-accent/10 hover:text-foreground border-l-2 border-transparent'
                     )}
                     title={indicator?.tooltip}
                   >

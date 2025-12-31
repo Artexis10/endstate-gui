@@ -1,70 +1,32 @@
 import { useState, useEffect } from 'react';
-import { z } from 'zod';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { AlertCircle } from 'lucide-react';
-
-/** Windows reserved device names (case-insensitive) */
-const WINDOWS_RESERVED_NAMES = [
-  'CON', 'PRN', 'AUX', 'NUL',
-  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
-];
-
-/** Characters not allowed in Windows filenames */
-const WINDOWS_INVALID_CHARS = /[\\/:*?"<>|]/;
-
-/** Zod schema for Windows-compatible filename basename */
-export const basenameSchema = z.string()
-  .min(1, 'Filename cannot be empty')
-  .max(200, 'Filename is too long (max 200 characters)')
-  .refine(
-    (val) => !WINDOWS_INVALID_CHARS.test(val),
-    'Filename cannot contain: \\ / : * ? " < > |'
-  )
-  .refine(
-    (val) => !val.endsWith(' ') && !val.endsWith('.'),
-    'Filename cannot end with a space or dot'
-  )
-  .refine(
-    (val) => !WINDOWS_RESERVED_NAMES.includes(val.toUpperCase()),
-    'This name is reserved by Windows'
-  );
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { profileBasenameSchema, getExtension, getBasename, type ValidExtension } from '@/lib/filename-validation';
+import { invoke } from '@/lib/tauri-bridge';
 
 interface RenameFileModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentFilename: string;
+  currentDirectory: string;
   onConfirm: (newFilename: string) => void;
-}
-
-/**
- * Extract extension from filename (.json, .jsonc, .json5)
- */
-function getExtension(filename: string): string {
-  const match = filename.match(/\.(jsonc|json5|json)$/i);
-  return match ? match[0] : '.json';
-}
-
-/**
- * Extract basename (filename without extension)
- */
-function getBasename(filename: string): string {
-  return filename.replace(/\.(jsonc|json5|json)$/i, '');
 }
 
 export function RenameFileModal({
   open,
   onOpenChange,
   currentFilename,
+  currentDirectory,
   onConfirm,
 }: RenameFileModalProps) {
   const [basename, setBasename] = useState('');
   const [error, setError] = useState('');
+  const [isChecking, setIsChecking] = useState(false);
   
   // Extract extension once - it's fixed and cannot be changed
-  const extension = getExtension(currentFilename);
+  const extension: ValidExtension = getExtension(currentFilename);
 
   useEffect(() => {
     if (open) {
@@ -73,11 +35,11 @@ export function RenameFileModal({
     }
   }, [open, currentFilename]);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const trimmed = basename.trim();
     
-    // Validate using Zod schema
-    const result = basenameSchema.safeParse(trimmed);
+    // Validate using shared Zod schema
+    const result = profileBasenameSchema.safeParse(trimmed);
     if (!result.success) {
       setError(result.error.issues[0].message);
       return;
@@ -89,6 +51,22 @@ export function RenameFileModal({
       setError('New filename is the same as current filename');
       return;
     }
+
+    // Check for collision
+    setIsChecking(true);
+    try {
+      const newPath = `${currentDirectory}\\${newFilename}`;
+      const exists = await invoke<boolean>('check_file_exists', { path: newPath });
+      if (exists) {
+        setError('A file with this name already exists');
+        setIsChecking(false);
+        return;
+      }
+    } catch (err) {
+      // In web mode, skip collision check and proceed
+      console.debug('Collision check skipped (web mode):', err);
+    }
+    setIsChecking(false);
 
     onConfirm(newFilename);
     onOpenChange(false);
@@ -143,11 +121,11 @@ export function RenameFileModal({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isChecking}>
             Cancel
           </Button>
-          <Button onClick={handleConfirm}>
-            Rename
+          <Button onClick={handleConfirm} disabled={isChecking}>
+            {isChecking ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Checking...</> : 'Rename'}
           </Button>
         </DialogFooter>
       </DialogContent>

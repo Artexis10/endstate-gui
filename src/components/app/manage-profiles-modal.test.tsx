@@ -29,6 +29,7 @@ describe('ManageProfilesModal', () => {
     onRenameDisplay: vi.fn(),
     onRenameFile: vi.fn(),
     onDelete: vi.fn(),
+    onSetActive: vi.fn(),
     onOpenFolder: vi.fn(),
     onRefresh: vi.fn().mockResolvedValue(undefined),
   };
@@ -107,10 +108,10 @@ describe('ManageProfilesModal', () => {
       expect(screen.getByText('profile-3')).toBeInTheDocument();
     });
 
-    it('shows "Selected" badge for current profile', () => {
+    it('shows "Active" badge for current profile', () => {
       render(<ManageProfilesModal {...defaultProps} selectedProfile="profile-1" />);
       
-      expect(screen.getByText('Selected')).toBeInTheDocument();
+      expect(screen.getByText('Active')).toBeInTheDocument();
     });
 
     it('shows filename in secondary column', () => {

@@ -20,7 +20,7 @@ export type StatusKey =
  * Semantic color tokens for status display.
  * Maps to Tailwind CSS color classes.
  */
-export type SemanticColor = 'success' | 'info' | 'warn' | 'error' | 'muted' | 'detected';
+export type SemanticColor = 'success' | 'info' | 'warn' | 'error' | 'muted' | 'detected' | 'action';
 
 /**
  * UI Status configuration with labels and colors.
@@ -45,7 +45,7 @@ export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
   to_install: {
     shortLabel: 'TO INSTALL',
     longLabel: 'To install',
-    color: 'info',
+    color: 'action',
   },
   detected: {
     shortLabel: 'DETECTED',
@@ -117,7 +117,7 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
   },
   apply: {
     present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
-    to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'info' },
+    to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
     installing: { shortLabel: 'INSTALLING', longLabel: 'Installing…', color: 'info' },
     installed: { shortLabel: 'INSTALLED', longLabel: 'Installed', color: 'success' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },
@@ -127,7 +127,7 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
   verify: {
     present: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
     installed: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
-    to_install: { shortLabel: 'MISSING', longLabel: 'Missing', color: 'error' },
+    to_install: { shortLabel: 'MISSING', longLabel: 'Missing', color: 'warn' },
     installing: { shortLabel: 'CHECKING', longLabel: 'Checking…', color: 'info' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },
     failed: { shortLabel: 'MISMATCH', longLabel: 'Version mismatch', color: 'warn' },
@@ -244,6 +244,9 @@ export function getColorClasses(color: SemanticColor): { text: string; bg: strin
       return { text: 'text-success', bg: 'bg-success/10', border: 'border-success/20' };
     case 'info':
       return { text: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' };
+    case 'action':
+      // Action required: vivid blue, stronger border for emphasis
+      return { text: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/40' };
     case 'detected':
       return { text: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/20' };
     case 'warn':
@@ -261,6 +264,26 @@ export function getColorClasses(color: SemanticColor): { text: string; bg: strin
  */
 export function getUiStatus(statusKey: StatusKey): UiStatusConfig {
   return UI_STATUS_MAP[statusKey] || UI_STATUS_MAP.skipped;
+}
+
+/**
+ * Get semantic color for a given phase.
+ * Used for phase-aware UI elements like spinners and progress indicators.
+ * 
+ * @param phase - The UI phase
+ * @returns Semantic color token
+ */
+export function getPhaseColor(phase?: UiPhase): SemanticColor {
+  switch (phase) {
+    case 'capture':
+      return 'info'; // Blue
+    case 'apply':
+      return 'success'; // Green
+    case 'verify':
+      return 'warn'; // Amber
+    default:
+      return 'info'; // Default to info (neutral)
+  }
 }
 
 /**
