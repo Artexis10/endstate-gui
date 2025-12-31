@@ -49,6 +49,7 @@ export type EngineItemReason =
  */
 export interface BaseStreamingEvent {
   version: number;
+  runId: string;
   timestamp: string;
 }
 
@@ -155,10 +156,10 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
       return null;
     }
 
-    // Validate version compatibility
+    // Validate version compatibility - reject unsupported versions
     if (parsed.version !== STREAMING_EVENT_VERSION) {
-      console.warn(`[StreamingEvents] Unknown event version: ${parsed.version}`);
-      // Still try to parse - forward compatibility
+      console.warn(`[StreamingEvents] Unsupported event version ${parsed.version}, expected ${STREAMING_EVENT_VERSION} - skipping event`);
+      return null;
     }
 
     // Validate event type
