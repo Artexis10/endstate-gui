@@ -15,6 +15,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  getExpandCollapseVariants,
+  getFadeSlideVariants,
+  getFadeVariants,
+  getLayoutTransition,
+} from '@/lib/motion';
 import { 
   ScanSearch, 
   PlayCircle, 
@@ -333,19 +339,11 @@ export function OverviewScreen({
     new Date(b!.timestamp).getTime() - new Date(a!.timestamp).getTime()
   ).slice(0, 3);
 
-  // Card expansion animation variants
-  // Simplified animation - use opacity only, let layout handle height
-  const contentVariants = {
-    hidden: { opacity: 0 },
-    visible: { 
-      opacity: 1,
-      transition: { duration: 0.15, ease: [0.4, 0, 0.2, 1] as const }
-    },
-    exit: { 
-      opacity: 0,
-      transition: { duration: 0.1, ease: [0.4, 0, 1, 1] as const }
-    },
-  };
+  // Motion variants - computed fresh to respect current reduced-motion preference
+  const expandCollapseVariants = getExpandCollapseVariants();
+  const fadeSlideVariants = getFadeSlideVariants('up');
+  const fadeVariants = getFadeVariants();
+  const layoutTransition = getLayoutTransition();
 
   // Render expanded content for a card
   const renderExpandedContent = (action: ActionType) => {
@@ -388,13 +386,7 @@ export function OverviewScreen({
     if (!action) return null;
 
     return (
-      <motion.div
-        variants={contentVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        className="border-t border-border mt-3 pt-4 space-y-3 pb-4"
-      >
+      <div className="border-t border-border mt-3 pt-4 space-y-3 pb-4">
         {/* Description */}
         <p className="text-sm text-muted-foreground">
           {descriptions[action]}
@@ -449,9 +441,17 @@ export function OverviewScreen({
           </div>
         )}
 
-        {/* Running state */}
+        {/* Running state - animated swap with result */}
+        <AnimatePresence mode="wait">
         {isThisRunning && actionProgress && (
-          <div className="space-y-3">
+          <motion.div
+            key="running"
+            variants={fadeSlideVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="space-y-3"
+          >
             {/* Phase-aware progress indicator */}
             {(() => {
               const phaseColor = getPhaseColor(actionProgress.phase);
@@ -472,14 +472,20 @@ export function OverviewScreen({
               );
             })()}
             
-            {/* Collapsible live activity for Setup card */}
+            {/* Collapsible live activity for Setup card - animated container */}
+            <AnimatePresence>
             {action === 'setup' && liveAppEvents.length > 0 && (() => {
               const phaseColor = getPhaseColor(actionProgress.phase);
               const colorClasses = getColorClasses(phaseColor);
               const isVerifyPhase = actionProgress.phase === 'verify';
               return (
-                <div 
+                <motion.div 
+                  key="live-activity"
                   ref={liveActivityContainerRef}
+                  variants={fadeVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
                   className={`rounded-md border ${isVerifyPhase ? `${colorClasses.border} ${colorClasses.bg}` : 'border-border/50'}`}>
                   <button
                     onClick={(e) => {
@@ -574,15 +580,25 @@ export function OverviewScreen({
                       )}
                     </div>
                   )}
-                </div>
+                </motion.div>
               );
             })()}
-          </div>
+            </AnimatePresence>
+          </motion.div>
         )}
+        </AnimatePresence>
 
-        {/* Success state */}
+        {/* Success state - animated swap with running */}
+        <AnimatePresence mode="wait">
         {isThisComplete && actionStatus === 'success' && (
-          <div className="space-y-3">
+          <motion.div
+            key="success"
+            variants={fadeSlideVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="space-y-3"
+          >
             <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
               <CheckCircle2 className="h-4 w-4 text-success" />
               <div className="flex-1">
@@ -601,12 +617,19 @@ export function OverviewScreen({
                 )}
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Error state - distinguish partial failures from hard errors */}
         {isThisComplete && actionStatus === 'error' && (
-          <div className="space-y-3">
+          <motion.div
+            key="error"
+            variants={fadeSlideVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="space-y-3"
+          >
             {actionResult?.counts?.failed && actionResult.counts.failed > 0 && (actionResult.counts.installed || actionResult.counts.alreadyPresent) ? (
               // Partial failure: some apps succeeded, some failed
               <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3">
@@ -637,8 +660,9 @@ export function OverviewScreen({
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Visual separator before action row */}
         <div className="border-t border-border/50 pt-3 mt-1" />
@@ -750,7 +774,7 @@ export function OverviewScreen({
             </>
           )}
         </div>
-      </motion.div>
+      </div>
     );
   };
 
@@ -832,7 +856,7 @@ export function OverviewScreen({
         {/* Primary Portal Cards */}
         <div className="space-y-4">
           {/* Capture Card - PRIMARY */}
-          <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
+          <motion.div layout transition={layoutTransition}>
             <Card 
               data-testid="overview-card-capture"
               className={`cursor-pointer transition-all duration-200 border-l-2 ${
@@ -863,18 +887,26 @@ export function OverviewScreen({
                   </motion.div>
                 </div>
               </CardHeader>
-              <AnimatePresence>
+              <AnimatePresence initial={false}>
                 {expandedCard === 'capture' && (
-                  <CardContent className="pt-0 pb-4" data-testid="capture-card-expanded-content">
-                    {renderExpandedContent('capture')}
-                  </CardContent>
+                  <motion.div
+                    key="capture-content"
+                    variants={expandCollapseVariants}
+                    initial="collapsed"
+                    animate="expanded"
+                    exit="collapsed"
+                  >
+                    <CardContent className="pt-0 pb-4" data-testid="capture-card-expanded-content">
+                      {renderExpandedContent('capture')}
+                    </CardContent>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </Card>
           </motion.div>
 
           {/* Setup Card - PRIMARY */}
-          <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
+          <motion.div layout transition={layoutTransition}>
             <Card 
               data-testid="overview-card-apply"
               className={`cursor-pointer transition-all duration-200 border-l-2 ${
@@ -908,11 +940,19 @@ export function OverviewScreen({
                   </motion.div>
                 </div>
               </CardHeader>
-              <AnimatePresence>
+              <AnimatePresence initial={false}>
                 {expandedCard === 'setup' && (
-                  <CardContent className="pt-0 pb-4" data-testid="setup-card-expanded-content">
-                    {renderExpandedContent('setup')}
-                  </CardContent>
+                  <motion.div
+                    key="setup-content"
+                    variants={expandCollapseVariants}
+                    initial="collapsed"
+                    animate="expanded"
+                    exit="collapsed"
+                  >
+                    <CardContent className="pt-0 pb-4" data-testid="setup-card-expanded-content">
+                      {renderExpandedContent('setup')}
+                    </CardContent>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </Card>
@@ -923,7 +963,7 @@ export function OverviewScreen({
         <div className="space-y-2">
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">Validation</h3>
           {/* Check Card - SECONDARY */}
-          <motion.div layout transition={{ duration: 0.2, ease: 'easeInOut' }}>
+          <motion.div layout transition={layoutTransition}>
             <Card 
               data-testid="overview-card-verify"
               className={`cursor-pointer transition-all duration-200 border-l-2 ${
@@ -957,11 +997,19 @@ export function OverviewScreen({
                   </motion.div>
                 </div>
               </CardHeader>
-              <AnimatePresence>
+              <AnimatePresence initial={false}>
                 {expandedCard === 'check' && (
-                  <CardContent className="pt-0 pb-4" data-testid="check-card-expanded-content">
-                    {renderExpandedContent('check')}
-                  </CardContent>
+                  <motion.div
+                    key="check-content"
+                    variants={expandCollapseVariants}
+                    initial="collapsed"
+                    animate="expanded"
+                    exit="collapsed"
+                  >
+                    <CardContent className="pt-0 pb-4" data-testid="check-card-expanded-content">
+                      {renderExpandedContent('check')}
+                    </CardContent>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </Card>
