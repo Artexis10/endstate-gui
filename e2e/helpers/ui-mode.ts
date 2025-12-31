@@ -42,6 +42,9 @@ export function forceAdvancedMode(page: Page): Promise<void> {
   return page.addInitScript(() => {
     localStorage.setItem('test:endstate-ui-mode', 'advanced');
     localStorage.setItem('endstate-ui-mode', 'advanced');
+    // Also ensure sidebar is visible
+    localStorage.setItem('test:endstate-sidebar-visible', 'true');
+    localStorage.setItem('endstate-sidebar-visible', 'true');
   });
 }
 
