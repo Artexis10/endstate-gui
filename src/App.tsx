@@ -24,6 +24,7 @@ import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
+import { listEngineStates, readFileContents, getEngineRoot, type EngineRun } from './lib/engine-state';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -70,6 +71,13 @@ function AppContent() {
     if (page === 'report' && profilesDirectory) {
       const artifacts = await loadRunSummaries(profilesDirectory);
       setRunArtifacts(artifacts);
+      
+      // Also load engine runs from disk
+      const engineRoot = getEngineRoot(settings);
+      if (engineRoot) {
+        const runs = await listEngineStates(engineRoot);
+        setEngineRuns(runs);
+      }
     }
   };
   const [sidebarVisible, setSidebarVisible] = useState(loadSidebarVisible());
@@ -180,11 +188,16 @@ function AppContent() {
   // Run artifacts state for Report page
   const [runArtifacts, setRunArtifacts] = useState<Array<{ bundle: RunBundle; summary: RunSummary }>>([]);
   
+  // Engine runs state for disk-backed Reports
+  const [engineRuns, setEngineRuns] = useState<EngineRun[]>([]);
+  
   // Micro-feedback hooks for copy actions
   const diagnosticsCopyFeedback = useMicroFeedback();
   const folderPathCopyFeedback = useMicroFeedback();
   const artifactPathCopyFeedback = useMicroFeedback();
   const artifactDiagnosticsCopyFeedback = useMicroFeedback();
+  const engineLogCopyFeedback = useMicroFeedback();
+  const engineEventsCopyFeedback = useMicroFeedback();
   
   // Dismiss result - only collapse UI, preserve summary for Overview display
   const dismissOverviewResult = () => {
@@ -1949,28 +1962,97 @@ function AppContent() {
               </div>
             )}
             
-            {/* Backend Report Data (if available) */}
-            {state.report?.data?.reports && state.report.data.reports.length > 0 && (
+            {/* Engine Runs from disk state files */}
+            {engineRuns.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Engine Reports</CardTitle>
-                  <CardDescription className="text-xs">Data from endstate engine</CardDescription>
+                  <CardTitle className="text-base">Engine Run History</CardTitle>
+                  <CardDescription className="text-xs">Runs from engine state files (newest first)</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {state.report.data.reports.slice(0, 5).map((report) => (
-                      <div key={report.runId} className="flex items-center justify-between text-sm p-2 rounded bg-muted/30">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium capitalize">{report.command}</span>
-                          {report.dryRun && <span className="text-xs text-muted-foreground">(preview)</span>}
-                          {report.manifest?.name && (
-                            <span className="text-muted-foreground">• {report.manifest.name}</span>
-                          )}
+                    {engineRuns.slice(0, 10).map((run) => (
+                      <details key={run.state.runId} className="group border border-border rounded-lg">
+                        <summary className="flex items-center justify-between p-2 cursor-pointer hover:bg-muted/50">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${
+                              (run.state.summary?.failed ?? 0) > 0 ? 'bg-destructive' : 
+                              (run.state.summary?.success ?? 0) > 0 ? 'bg-success' : 'bg-muted-foreground'
+                            }`} />
+                            <span className="text-sm font-medium capitalize">{run.state.command}</span>
+                            {run.state.dryRun && <span className="text-xs text-muted-foreground">(preview)</span>}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatRelativeTime(run.state.timestamp)}</span>
+                            <ChevronRight className="h-3 w-3 group-open:rotate-90 transition-transform" />
+                          </div>
+                        </summary>
+                        <div className="px-2 pb-2 pt-1 border-t border-border bg-muted/30">
+                          <div className="text-xs text-muted-foreground mb-2">
+                            {run.state.summary && (
+                              <span>
+                                {run.state.summary.success ?? 0} success, {run.state.summary.skipped ?? 0} skipped, {run.state.summary.failed ?? 0} failed
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {run.logFile ? (
+                              <Button
+                                ref={engineLogCopyFeedback.buttonRef}
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1 relative"
+                                onClick={async () => {
+                                  await engineLogCopyFeedback.triggerAsync(
+                                    async () => {
+                                      const content = await readFileContents(run.logFile!);
+                                      if (content) {
+                                        await copyText(content);
+                                      } else {
+                                        throw new Error('Failed to read log file');
+                                      }
+                                    },
+                                    'Copied',
+                                    'Copy failed'
+                                  );
+                                }}
+                              >
+                                <FileText className="h-3 w-3" />
+                                View log
+                                <InlineFeedbackPopover feedback={engineLogCopyFeedback.feedback} />
+                              </Button>
+                            ) : null}
+                            {run.eventsFile ? (
+                              <Button
+                                ref={engineEventsCopyFeedback.buttonRef}
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1 relative"
+                                onClick={async () => {
+                                  await engineEventsCopyFeedback.triggerAsync(
+                                    async () => {
+                                      const content = await readFileContents(run.eventsFile!);
+                                      if (content) {
+                                        await copyText(content);
+                                      } else {
+                                        throw new Error('Failed to read events file');
+                                      }
+                                    },
+                                    'Copied',
+                                    'Copy failed'
+                                  );
+                                }}
+                              >
+                                <FileText className="h-3 w-3" />
+                                View events
+                                <InlineFeedbackPopover feedback={engineEventsCopyFeedback.feedback} />
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground py-1 px-2">No events captured for this run</span>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(report.timestamp).toLocaleDateString()}
-                        </span>
-                      </div>
+                      </details>
                     ))}
                   </div>
                 </CardContent>
