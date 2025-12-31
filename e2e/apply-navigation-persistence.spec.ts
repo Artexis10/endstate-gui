@@ -225,35 +225,24 @@ test.describe('Apply Navigation Persistence', () => {
     // The run should be listed (look for apply/setup indicator)
     const runEntry = page.locator('details').filter({ hasText: /apply|setup/i }).first();
     
-    // If there's a run entry, it should NOT show "Artifacts not saved (older runs)" 
-    // for the current/just-finished run
-    // The message should either be absent or show "In progress" if still finalizing
-    const artifactMessage = page.locator('text=Artifacts not saved (older runs)');
+    // Step 4: Verify NO misleading "Artifacts not saved (older runs)" message
+    const misleadingMessage = page.locator('text=Artifacts not saved (older runs)');
+    await expect(misleadingMessage).not.toBeVisible();
     
-    // For a just-completed run, we should NOT see the "older runs" message
-    // (it may show "In progress" briefly or no message at all for current run)
-    // Wait a moment for state to settle
-    await page.waitForTimeout(500);
-    
-    // Check if the misleading message is NOT prominently displayed for the current run
-    // The test passes if either:
-    // 1. No "Artifacts not saved (older runs)" message is visible, OR
-    // 2. If visible, it's not associated with the just-completed run
-    const hasOlderRunsMessage = await artifactMessage.isVisible().catch(() => false);
-    
-    // If the message exists, verify it's not for the current run by checking
-    // that we also see proper run indicators
-    if (hasOlderRunsMessage) {
-      // Expand the first run entry to check its content
-      if (await runEntry.isVisible()) {
-        await runEntry.click();
-        // The current run should show success indicators, not the misleading message
-        const runDetails = runEntry.locator('..');
-        const hasSuccessIndicator = await runDetails.locator('text=Success').isVisible().catch(() => false) ||
-                                    await runDetails.locator('text=Installed').isVisible().catch(() => false);
-        // If we have success indicators, the run completed properly
-        expect(hasSuccessIndicator || !hasOlderRunsMessage).toBe(true);
-      }
+    // Step 5: Expand the run entry to check its content
+    if (await runEntry.isVisible()) {
+      await runEntry.click();
+      
+      // The completed run should show success indicators
+      const runDetails = runEntry.locator('..');
+      await expect(runDetails.locator('text=Success')).toBeVisible({ timeout: 3000 });
+      
+      // For completed runs, we expect either:
+      // - "View logs" button if artifacts exist, OR
+      // - No misleading message if artifacts don't exist
+      // Since this is a mock without actual artifact persistence, we verify no misleading message
+      const olderRunsMsg = runDetails.locator('text=Artifacts not saved (older runs)');
+      await expect(olderRunsMsg).not.toBeVisible();
     }
   });
 

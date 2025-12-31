@@ -1471,6 +1471,7 @@ function AppContent() {
           profile?: string;
           status: 'success' | 'partial' | 'failed';
           summary: { installed?: number; alreadyPresent?: number; failed?: number; captured?: number };
+          artifactBundle?: RunBundle;
         }> = [];
         
         // Add from lifecycle state
@@ -1553,6 +1554,20 @@ function AppContent() {
         
         // Sort by timestamp descending
         recentRuns.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        
+        // Map artifacts to recent runs by matching timestamps
+        // runArtifacts use ISO timestamps, recentRuns also use ISO timestamps
+        for (const run of recentRuns) {
+          const runTime = new Date(run.timestamp).getTime();
+          // Find artifact within 5 second window (accounts for slight timing differences)
+          const matchingArtifact = runArtifacts.find(({ summary }) => {
+            const artifactTime = new Date(summary.timestamp).getTime();
+            return Math.abs(runTime - artifactTime) < 5000 && summary.mode === run.mode;
+          });
+          if (matchingArtifact) {
+            run.artifactBundle = matchingArtifact.bundle;
+          }
+        }
         
         return (
           <div className="space-y-6">
@@ -1670,13 +1685,53 @@ function AppContent() {
                             )}
                           </div>
                           
-                          {/* Artifact status - show appropriate message based on run state */}
+                          {/* Artifact status and actions - show appropriate message/actions based on run state */}
                           <div className="col-span-2 pt-2 border-t border-border mt-2">
-                            <span className="text-xs text-muted-foreground italic">
-                              {activeRunId && run.id.includes(activeRunId.split('-')[0]) 
-                                ? 'In progress (not finalized)'
-                                : 'Artifacts not saved (older runs)'}
-                            </span>
+                            {activeRunId && overviewRunningAction === run.mode ? (
+                              <span className="text-xs text-muted-foreground italic">
+                                Run in progress (artifacts not finalized yet)
+                              </span>
+                            ) : run.artifactBundle ? (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1"
+                                  onClick={async () => {
+                                    try {
+                                      const logContent = await invoke<string>('read_text_file', { path: run.artifactBundle!.logPath });
+                                      // Show logs in a modal or navigate to a details view
+                                      // For now, copy to clipboard as a quick solution
+                                      await copyText(logContent);
+                                      showToast('Logs copied to clipboard', 'success');
+                                    } catch (err) {
+                                      console.error('Failed to read logs:', err);
+                                      showToast('Failed to read logs', 'error');
+                                    }
+                                  }}
+                                >
+                                  <FileText className="h-3 w-3" />
+                                  View logs
+                                </Button>
+                                {isTauriRuntime() && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1"
+                                    onClick={async () => {
+                                      try {
+                                        await openFolder(run.artifactBundle!.directory);
+                                      } catch (err) {
+                                        console.error('Failed to open folder:', err);
+                                      }
+                                    }}
+                                  >
+                                    <FolderOpen className="h-3 w-3" />
+                                    Open folder
+                                  </Button>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </details>
