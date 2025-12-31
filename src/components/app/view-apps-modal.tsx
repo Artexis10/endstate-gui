@@ -69,15 +69,6 @@ export function ViewAppsModal({
       })
     : apps;
 
-  // Group apps by source/driver
-  const appsBySource = filteredApps.reduce((acc, app) => {
-    const source = app.driver || 'winget';
-    if (!acc[source]) acc[source] = [];
-    acc[source].push(app);
-    return acc;
-  }, {} as Record<string, ProfileApp[]>);
-
-
   const copyDiagnostics = async () => {
     const diagnostics = [
       '=== Profile Diagnostics ===',
@@ -85,11 +76,8 @@ export function ViewAppsModal({
       `Path: ${profilePath}`,
       `Apps: ${apps.length}`,
       '',
-      '--- Apps by Source ---',
-      ...Object.entries(appsBySource).flatMap(([source, sourceApps]) => [
-        `${source} (${sourceApps.length}):`,
-        ...sourceApps.map(a => `  - ${a.id}`),
-      ]),
+      '--- Apps List ---',
+      ...filteredApps.map(a => `  - ${a.id}${a.name ? ` (${a.name})` : ''}`),
     ].join('\n');
 
     try {
@@ -115,7 +103,7 @@ export function ViewAppsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] max-h-[85vh] flex flex-col overflow-hidden">
+      <DialogContent className="sm:max-w-[480px] h-[85vh] max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader className="pb-2">
           <DialogTitle className="text-lg">{profileDisplayName || 'Profile Details'}</DialogTitle>
         </DialogHeader>
@@ -138,7 +126,7 @@ export function ViewAppsModal({
         </div>
 
         {/* Scrollable content area for list + technical details */}
-        <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-3 -mx-6 px-6">
           {/* Simple app list */}
           <div className="border rounded-md">
             {filteredApps.length === 0 ? (
@@ -150,14 +138,10 @@ export function ViewAppsModal({
                 {filteredApps.map((app, idx) => (
                   <div key={idx} className="flex items-center gap-2 px-3 py-2 text-sm">
                     <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 min-w-0 flex items-center gap-2">
-                      {app.name ? (
-                        <>
-                          <span className="truncate">{app.name}</span>
-                          <span className="font-mono text-xs text-muted-foreground truncate">{app.id}</span>
-                        </>
-                      ) : (
-                        <span className="font-mono text-xs truncate">{app.id}</span>
+                    <div className="flex-1 min-w-0 flex items-baseline justify-between gap-2">
+                      <span className="truncate">{app.name || app.id}</span>
+                      {app.name && (
+                        <span className="font-mono text-xs text-muted-foreground flex-shrink-0">{app.id}</span>
                       )}
                     </div>
                   </div>
@@ -208,7 +192,12 @@ export function ViewAppsModal({
                 className="h-7 text-xs gap-1 relative"
               >
                 <Copy className="h-3 w-3" />
-                {copiedDiagnostics ? 'Copied!' : 'Copy diagnostics'}
+                Copy diagnostics
+                {copiedDiagnostics && (
+                  <span className="absolute -top-6 left-0 text-xs bg-popover text-popover-foreground px-2 py-1 rounded shadow-md whitespace-nowrap">
+                    Copied
+                  </span>
+                )}
               </Button>
             </div>
           )}
