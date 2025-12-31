@@ -153,6 +153,7 @@ function AppContent() {
   const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
   const isRunningRef = useRef(false); // Robust guard against double-run
   const activeRunIdRef = useRef<string | null>(null); // Track active run ID for double-run prevention
+  const [activeRunId, setActiveRunId] = useState<string | null>(null); // App-level active run ID for UI awareness
   const [showFolderPathModal, setShowFolderPathModal] = useState(false);
   const [folderPathForModal, setFolderPathForModal] = useState('');
   
@@ -1242,6 +1243,7 @@ function AppContent() {
                 }
                 isRunningRef.current = true;
                 activeRunIdRef.current = runId;
+                setActiveRunId(runId);
                 if (import.meta.env.DEV) {
                   console.log(`[RUN START] Capture runId=${runId}`);
                 }
@@ -1277,6 +1279,7 @@ function AppContent() {
                   }
                   isRunningRef.current = false;
                   activeRunIdRef.current = null;
+                  setActiveRunId(null);
                 }
               }}
               onSetup={async (intent) => {
@@ -1290,6 +1293,7 @@ function AppContent() {
                 }
                 isRunningRef.current = true;
                 activeRunIdRef.current = runId;
+                setActiveRunId(runId);
                 if (import.meta.env.DEV) {
                   console.log(`[RUN START] Setup ${intent} runId=${runId}`);
                 }
@@ -1356,6 +1360,7 @@ function AppContent() {
                   }
                   isRunningRef.current = false;
                   activeRunIdRef.current = null;
+                  setActiveRunId(null);
                 }
               }}
               onCheck={async () => {
@@ -1369,6 +1374,7 @@ function AppContent() {
                 }
                 isRunningRef.current = true;
                 activeRunIdRef.current = runId;
+                setActiveRunId(runId);
                 if (import.meta.env.DEV) {
                   console.log(`[RUN START] Check runId=${runId}`);
                 }
@@ -1408,6 +1414,7 @@ function AppContent() {
                   }
                   isRunningRef.current = false;
                   activeRunIdRef.current = null;
+                  setActiveRunId(null);
                 }
               }}
               onProfileChange={(profile, path) => {
@@ -1535,6 +1542,33 @@ function AppContent() {
               subtitle="View recent activity and run history"
             />
             
+            {/* Active run banner */}
+            {activeRunId && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardContent className="py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <div>
+                      <p className="text-sm font-medium">Run in progress</p>
+                      <p className="text-xs text-muted-foreground">
+                        {overviewRunningAction === 'capture' ? 'Capturing applications...' :
+                         overviewRunningAction === 'setup' ? 'Setting up applications...' :
+                         overviewRunningAction === 'check' ? 'Checking computer...' :
+                         'Running...'}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleNavigate('overview')}
+                  >
+                    View details
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+            
             {/* Recent Runs */}
             <Card>
               <CardHeader>
@@ -1616,10 +1650,12 @@ function AppContent() {
                             )}
                           </div>
                           
-                          {/* Artifact status - show for all runs */}
+                          {/* Artifact status - show appropriate message based on run state */}
                           <div className="col-span-2 pt-2 border-t border-border mt-2">
                             <span className="text-xs text-muted-foreground italic">
-                              Artifacts not saved (older runs)
+                              {activeRunId && run.id.includes(activeRunId.split('-')[0]) 
+                                ? 'In progress (not finalized)'
+                                : 'Artifacts not saved (older runs)'}
                             </span>
                           </div>
                         </div>
@@ -1759,6 +1795,34 @@ function AppContent() {
               title="Settings"
               subtitle="Configure endstate engine and preferences"
             />
+            
+            {/* Active run banner */}
+            {activeRunId && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardContent className="py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <div>
+                      <p className="text-sm font-medium">Run in progress</p>
+                      <p className="text-xs text-muted-foreground">
+                        {overviewRunningAction === 'capture' ? 'Capturing applications...' :
+                         overviewRunningAction === 'setup' ? 'Setting up applications...' :
+                         overviewRunningAction === 'check' ? 'Checking computer...' :
+                         'Running...'}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleNavigate('overview')}
+                  >
+                    View details
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+            
             <Card>
               <CardHeader>
                 <CardTitle>Engine Configuration</CardTitle>

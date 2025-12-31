@@ -160,7 +160,12 @@ export function OverviewScreen({
   onSetActiveProfile,
   onClearExpandedCard,
 }: OverviewScreenProps) {
-  const [expandedCard, setExpandedCard] = useState<ActionType>(initialExpandedCard ?? null);
+  // Initialize expandedCard: prioritize active running action, then initialExpandedCard, then null
+  // This ensures returning to Overview during an active run shows the correct expanded card
+  const [expandedCard, setExpandedCard] = useState<ActionType>(() => {
+    if (isRunning && runningAction) return runningAction;
+    return initialExpandedCard ?? null;
+  });
   
   // Handle external initialExpandedCard changes (e.g., from redirect)
   useEffect(() => {
@@ -170,6 +175,14 @@ export function OverviewScreen({
       onClearExpandedCard?.();
     }
   }, [initialExpandedCard, onClearExpandedCard]);
+  
+  // Sync expandedCard when returning to Overview during an active run
+  // This handles the case where user navigates away and back while a run is in progress
+  useEffect(() => {
+    if (isRunning && runningAction && expandedCard !== runningAction) {
+      setExpandedCard(runningAction);
+    }
+  }, [isRunning, runningAction]);
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [detailsFilter, setDetailsFilter] = useState<StatusKey | 'all' | null>(null);
