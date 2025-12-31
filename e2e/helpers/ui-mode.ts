@@ -88,7 +88,7 @@ export async function goToCapturePage(page: Page): Promise<void> {
   } else {
     await overviewCard.click();
   }
-  await expect(page.locator('h1:has-text("Capture computer")')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('button:has-text("Capture computer")')).toBeVisible({ timeout: 5000 });
 }
 
 /**
