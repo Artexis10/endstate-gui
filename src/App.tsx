@@ -13,7 +13,7 @@ import { discoverProfiles, DiscoveredProfile } from './file-discovery';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
-import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, getColorClasses, type AppEvent, type UiPhase, type StatusKey } from './lib/apply-utils';
+import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, type AppEvent, type UiPhase } from './lib/apply-utils';
 import { isItemEvent, isArtifactEvent, isPhaseEvent, type EnginePhase } from './lib/streaming-events';
 import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
@@ -24,9 +24,6 @@ import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
-import { listEngineStates, readFileContents, getEngineRoot, type EngineRun } from './lib/engine-state';
-import { parseEventsFile, replayEvents, replayEventsAnimated } from './lib/event-replay';
-import { formatAppIdentity } from './lib/app-identity';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -38,7 +35,7 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
-import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FileText, Check, Play } from 'lucide-react';
+import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FileText } from 'lucide-react';
 import { useMicroFeedback } from './lib/micro-feedback';
 import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
 import { copyText } from './lib/clipboard';
@@ -73,13 +70,6 @@ function AppContent() {
     if (page === 'report' && profilesDirectory) {
       const artifacts = await loadRunSummaries(profilesDirectory);
       setRunArtifacts(artifacts);
-      
-      // Also load engine runs from disk
-      const engineRoot = getEngineRoot(settings);
-      if (engineRoot) {
-        const runs = await listEngineStates(engineRoot);
-        setEngineRuns(runs);
-      }
     }
   };
   const [sidebarVisible, setSidebarVisible] = useState(loadSidebarVisible());
@@ -190,24 +180,12 @@ function AppContent() {
   // Run artifacts state for Report page
   const [runArtifacts, setRunArtifacts] = useState<Array<{ bundle: RunBundle; summary: RunSummary }>>([]);
   
-  // Engine runs state for disk-backed Reports
-  const [engineRuns, setEngineRuns] = useState<EngineRun[]>([]);
-  
-  // Event replay state
-  const [replayModalOpen, setReplayModalOpen] = useState(false);
-  const [replayedEvents, setReplayedEvents] = useState<AppEvent[]>([]);
-  const [replayRunId, setReplayRunId] = useState<string>('');
-  const [replayCounters, setReplayCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
-  const [replayAnimated, setReplayAnimated] = useState(false);
-  const [replayInProgress, setReplayInProgress] = useState(false);
-  
   // Micro-feedback hooks for copy actions
   const diagnosticsCopyFeedback = useMicroFeedback();
   const folderPathCopyFeedback = useMicroFeedback();
   const artifactPathCopyFeedback = useMicroFeedback();
   const artifactDiagnosticsCopyFeedback = useMicroFeedback();
-  const engineLogCopyFeedback = useMicroFeedback();
-  const engineEventsCopyFeedback = useMicroFeedback();
+  const artifactLogCopyFeedback = useMicroFeedback();
   
   // Dismiss result - only collapse UI, preserve summary for Overview display
   const dismissOverviewResult = () => {
@@ -738,6 +716,10 @@ function AppContent() {
         outcome: isSuccess ? 'success' : 'failed',
         counts: { captured: capturedCount },
         durationMs,
+        artifactPaths: {
+          logFile: runBundle.logPath,
+          eventsFile: runBundle.eventsPath,
+        },
       });
     }
 
@@ -873,6 +855,10 @@ function AppContent() {
         outcome: 'success',
         counts: { installed, alreadyPresent },
         durationMs,
+        artifactPaths: {
+          logFile: runBundle.logPath,
+          eventsFile: runBundle.eventsPath,
+        },
       });
     }
     
@@ -1222,6 +1208,10 @@ function AppContent() {
         outcome: isSuccess ? (failed > 0 ? 'partial' : 'success') : 'failed',
         counts: { installed, alreadyPresent, skipped, failed },
         durationMs,
+        artifactPaths: {
+          logFile: runBundle.logPath,
+          eventsFile: runBundle.eventsPath,
+        },
       });
     }
     
@@ -1951,8 +1941,41 @@ function AppContent() {
                           </div>
                         </summary>
                         <div className="px-2 pb-2 pt-1 border-t border-border bg-muted/30">
+                          {/* Technical details disclosure */}
+                          <details className="mb-2">
+                            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                              Technical details
+                            </summary>
+                            <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
+                              <div><span className="text-muted-foreground">Run ID:</span> {summary.runId}</div>
+                              <div><span className="text-muted-foreground">Log path:</span> {summary.artifactPaths?.logFile || bundle.logPath}</div>
+                              <div><span className="text-muted-foreground">Events path:</span> {summary.artifactPaths?.eventsFile || 'N/A'}</div>
+                            </div>
+                          </details>
                           <div className="flex flex-wrap gap-2 mt-1">
-                            {isTauriRuntime() ? (
+                            {/* View log button - uses persisted artifact path */}
+                            <Button
+                              ref={artifactLogCopyFeedback.buttonRef}
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1 relative"
+                              onClick={async () => {
+                                await artifactLogCopyFeedback.triggerAsync(
+                                  async () => {
+                                    const logPath = summary.artifactPaths?.logFile || bundle.logPath;
+                                    const content = await invoke<string>('read_text_file', { path: logPath });
+                                    await copyText(content);
+                                  },
+                                  'Copied',
+                                  'Copy failed'
+                                );
+                              }}
+                            >
+                              <FileText className="h-3 w-3" />
+                              View log
+                              <InlineFeedbackPopover feedback={artifactLogCopyFeedback.feedback} />
+                            </Button>
+                            {isTauriRuntime() && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -1968,7 +1991,8 @@ function AppContent() {
                                 <FolderOpen className="h-3 w-3" />
                                 Open folder
                               </Button>
-                            ) : (
+                            )}
+                            {!isTauriRuntime() && (
                               <Button
                                 ref={artifactPathCopyFeedback.buttonRef}
                                 variant="ghost"
@@ -2021,163 +2045,6 @@ function AppContent() {
               <div className="text-xs text-muted-foreground text-center py-2">
                 Artifacts not saved in web mode
               </div>
-            )}
-            
-            {/* Engine Runs from disk log files */}
-            {engineRuns.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Engine Run History</CardTitle>
-                  <CardDescription className="text-xs">Runs from engine log files (newest first)</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {engineRuns.slice(0, 10).map((run) => (
-                      <details key={run.runId} className="group border border-border rounded-lg">
-                        <summary className="flex items-center justify-between p-2 cursor-pointer hover:bg-muted/50">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${
-                              run.logExists ? 'bg-success' : 'bg-muted-foreground'
-                            }`} />
-                            <span className="text-sm font-medium capitalize">{run.command}</span>
-                            {run.dryRun && <span className="text-xs text-muted-foreground">(preview)</span>}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{formatRelativeTime(run.timestamp)}</span>
-                            <ChevronRight className="h-3 w-3 group-open:rotate-90 transition-transform" />
-                          </div>
-                        </summary>
-                        <div className="px-2 pb-2 pt-1 border-t border-border bg-muted/30">
-                          {/* Technical details disclosure */}
-                          <details className="mb-2">
-                            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                              Technical details
-                            </summary>
-                            <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
-                              <div><span className="text-muted-foreground">Run ID:</span> {run.runId}</div>
-                              <div><span className="text-muted-foreground">Log path:</span> {run.logFile}</div>
-                              <div><span className="text-muted-foreground">Log exists:</span> {run.logExists ? 'true' : 'false'}</div>
-                              <div><span className="text-muted-foreground">Events path:</span> {run.eventsFile || 'N/A'}</div>
-                              <div><span className="text-muted-foreground">Events exists:</span> {run.eventsExists ? 'true' : 'false'}</div>
-                            </div>
-                          </details>
-                          <div className="flex flex-wrap gap-2">
-                            {run.logFile ? (
-                              <Button
-                                ref={engineLogCopyFeedback.buttonRef}
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs gap-1 relative"
-                                onClick={async () => {
-                                  await engineLogCopyFeedback.triggerAsync(
-                                    async () => {
-                                      const content = await readFileContents(run.logFile!);
-                                      if (content) {
-                                        await copyText(content);
-                                      } else {
-                                        throw new Error('Failed to read log file');
-                                      }
-                                    },
-                                    'Copied',
-                                    'Copy failed'
-                                  );
-                                }}
-                              >
-                                {engineLogCopyFeedback.feedback.visible && engineLogCopyFeedback.feedback.intent === 'success' ? (
-                                  <Check className="h-3 w-3" />
-                                ) : (
-                                  <FileText className="h-3 w-3" />
-                                )}
-                                View log
-                                <InlineFeedbackPopover feedback={engineLogCopyFeedback.feedback} />
-                              </Button>
-                            ) : (
-                              <span className="text-xs text-muted-foreground py-1 px-2">No log captured for this run</span>
-                            )}
-                            {run.eventsFile ? (
-                              <Button
-                                ref={engineEventsCopyFeedback.buttonRef}
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs gap-1 relative"
-                                onClick={async () => {
-                                  await engineEventsCopyFeedback.triggerAsync(
-                                    async () => {
-                                      const content = await readFileContents(run.eventsFile!);
-                                      if (content) {
-                                        await copyText(content);
-                                      } else {
-                                        throw new Error('Failed to read events file');
-                                      }
-                                    },
-                                    'Copied',
-                                    'Copy failed'
-                                  );
-                                }}
-                              >
-                                {engineEventsCopyFeedback.feedback.visible && engineEventsCopyFeedback.feedback.intent === 'success' ? (
-                                  <Check className="h-3 w-3" />
-                                ) : (
-                                  <FileText className="h-3 w-3" />
-                                )}
-                                View events
-                                <InlineFeedbackPopover feedback={engineEventsCopyFeedback.feedback} />
-                              </Button>
-                            ) : (
-                              <span className="text-xs text-muted-foreground py-1 px-2">No events captured for this run</span>
-                            )}
-                            {run.eventsFile && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs gap-1"
-                                onClick={async () => {
-                                  try {
-                                    const content = await readFileContents(run.eventsFile!);
-                                    if (!content) {
-                                      showToast('Events file not available', 'error');
-                                      return;
-                                    }
-                                    const events = parseEventsFile(content);
-                                    setReplayRunId(run.runId);
-                                    setReplayModalOpen(true);
-                                    setReplayInProgress(true);
-                                    
-                                    if (replayAnimated) {
-                                      setReplayedEvents([]);
-                                      setReplayCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
-                                      await replayEventsAnimated(
-                                        events,
-                                        ({ appEvents, counters }) => {
-                                          setReplayedEvents(appEvents);
-                                          setReplayCounters(counters);
-                                        },
-                                        true
-                                      );
-                                    } else {
-                                      const { appEvents, counters } = replayEvents(events);
-                                      setReplayedEvents(appEvents);
-                                      setReplayCounters(counters);
-                                    }
-                                    setReplayInProgress(false);
-                                  } catch (err) {
-                                    console.error('Failed to replay events:', err);
-                                    showToast('Failed to load events', 'error');
-                                    setReplayInProgress(false);
-                                  }
-                                }}
-                              >
-                                <Play className="h-3 w-3" />
-                                Replay
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </details>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
             )}
           </div>
         );
@@ -2501,109 +2368,6 @@ function AppContent() {
         currentDirectory={profilesDirectory}
         onConfirm={handleRenameFile}
       />
-
-      {/* Event Replay Modal */}
-      <Dialog open={replayModalOpen} onOpenChange={setReplayModalOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle>Run Details</DialogTitle>
-            <DialogDescription>
-              Replayed activity from run: {replayRunId}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {/* Speed control */}
-          <div className="flex-shrink-0 flex items-center gap-2 text-sm pb-2">
-            <span className="text-muted-foreground text-xs">Speed:</span>
-            <div className="flex items-center gap-1 p-0.5 bg-muted/50 rounded">
-              <button
-                onClick={() => setReplayAnimated(false)}
-                className={`px-2 py-1 rounded text-xs transition-colors ${
-                  !replayAnimated
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                disabled={replayInProgress}
-              >
-                Instant
-              </button>
-              <button
-                onClick={() => setReplayAnimated(true)}
-                className={`px-2 py-1 rounded text-xs transition-colors ${
-                  replayAnimated
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                disabled={replayInProgress}
-              >
-                Animated
-              </button>
-            </div>
-          </div>
-          
-          {/* Counters summary */}
-          <div className="flex-shrink-0 flex items-center gap-3 text-sm border-b pb-3">
-            {replayCounters.installed > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="text-success font-medium">{replayCounters.installed}</span>
-                <span className="text-muted-foreground">installed</span>
-              </div>
-            )}
-            {replayCounters.alreadyPresent > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="text-success font-medium">{replayCounters.alreadyPresent}</span>
-                <span className="text-muted-foreground">already present</span>
-              </div>
-            )}
-            {replayCounters.skipped > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="text-warning font-medium">{replayCounters.skipped}</span>
-                <span className="text-muted-foreground">skipped</span>
-              </div>
-            )}
-            {replayCounters.failed > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="text-danger font-medium">{replayCounters.failed}</span>
-                <span className="text-muted-foreground">failed</span>
-              </div>
-            )}
-          </div>
-
-          {/* Scrollable event list */}
-          <div className="flex-1 overflow-y-auto min-h-0 border rounded-md">
-            {replayedEvents.length === 0 ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                Events file not available
-              </div>
-            ) : (
-              <div className="p-3 space-y-1">
-                {replayedEvents.map((event, idx) => {
-                  const statusKey: StatusKey = event.statusKey || 'skipped';
-                  const uiStatus = getPhaseAwareStatusForEvent({ 
-                    statusKey, 
-                    phase: event.phase, 
-                    reason: event.reason 
-                  });
-                  const colors = getColorClasses(uiStatus.color);
-                  
-                  return (
-                    <div key={`${event.app}-${event.timestamp}-${idx}`} className="flex items-center gap-2 text-xs">
-                      <span className={`w-20 text-right font-medium ${colors.text}`}>
-                        {uiStatus.shortLabel}
-                      </span>
-                      <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="flex-shrink-0">
-            <Button onClick={() => setReplayModalOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

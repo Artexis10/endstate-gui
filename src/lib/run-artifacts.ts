@@ -34,6 +34,12 @@ export const RunSummarySchema = z.object({
     present: z.number().optional(),
   }).optional(),
   durationMs: z.number().optional(),
+  // Artifact paths from GUI's run bundle (source of truth for Reports)
+  artifactPaths: z.object({
+    logFile: z.string().optional(),
+    eventsFile: z.string().optional(),
+    stateFile: z.string().optional(),
+  }).optional(),
 });
 
 export type RunSummary = z.infer<typeof RunSummarySchema>;
