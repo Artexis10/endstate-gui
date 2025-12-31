@@ -1430,7 +1430,8 @@ function AppContent() {
                 setOverviewActionStatus('running');
                 const isApply = intent === 'apply';
                 setOverviewActionProgress({ 
-                  message: isApply ? 'Installing applications...' : 'Evaluating changes' 
+                  message: isApply ? 'Installing applications...' : 'Evaluating changes',
+                  phase: isApply ? 'apply' : 'preview'
                 });
                 try {
                   if (isApply) {

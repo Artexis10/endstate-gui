@@ -109,7 +109,7 @@ export function ViewAppsModal({
                 <span className="font-mono">{displayPath}</span>
               </div>
             </div>
-            <div className="flex-shrink-0 px-2 py-1 rounded-md bg-muted/50 text-xs font-medium">
+            <div className="flex-shrink-0 px-2 py-1 rounded-md bg-muted/50 text-xs font-medium mr-8">
               {apps.length} {apps.length === 1 ? 'app' : 'apps'}
             </div>
           </div>

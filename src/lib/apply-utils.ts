@@ -115,6 +115,15 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
     installing: { shortLabel: 'SCANNING', longLabel: 'Scanning…', color: 'info' },
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
   },
+  preview: {
+    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'info' },
+    to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'info' },
+    installing: { shortLabel: 'EVALUATING', longLabel: 'Evaluating…', color: 'info' },
+    installed: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'info' },
+    skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'muted' },
+    failed: { shortLabel: 'FAILED', longLabel: 'Failed', color: 'error' },
+    cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
+  },
   apply: {
     present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
     to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
@@ -277,6 +286,8 @@ export function getPhaseColor(phase?: UiPhase): SemanticColor {
   switch (phase) {
     case 'capture':
       return 'info'; // Blue
+    case 'preview':
+      return 'info'; // Blue/neutral for preview
     case 'apply':
       return 'success'; // Green
     case 'verify':
@@ -468,11 +479,12 @@ export function getFilterKey(item: ApplyItem): StatusKey {
 export type { EnginePhase } from './streaming-events';
 
 /**
- * UI-relevant phases for display purposes.
+ * UI phases for display.
  * 'plan' phase from engine is not displayed in UI.
  * 'capture' is a UI-only phase for the capture flow.
+ * 'preview' is for apply --dry-run operations (neutral styling).
  */
-export type UiPhase = 'capture' | 'apply' | 'verify';
+export type UiPhase = 'capture' | 'apply' | 'verify' | 'preview';
 
 /**
  * AppEvent represents a live activity entry during streaming.
