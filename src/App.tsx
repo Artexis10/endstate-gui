@@ -2308,8 +2308,17 @@ function AppContent() {
       </Dialog>
 
       {/* Profile Name Modal */}
-      <Dialog open={showProfileNameModal} onOpenChange={setShowProfileNameModal}>
-        <DialogContent data-testid="profile-name-modal" role="dialog">
+      <Dialog open={showProfileNameModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowProfileNameModal(false);
+        }
+      }}>
+        <DialogContent 
+          data-testid="profile-name-modal" 
+          role="dialog"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{profileNameModalMode === 'rename' ? 'Rename profile' : 'Save profile'}</DialogTitle>
             <DialogDescription>
@@ -2375,10 +2384,10 @@ function AppContent() {
             )}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="secondary" onClick={() => setShowProfileNameModal(false)}>
+            <Button variant="secondary" onClick={() => setShowProfileNameModal(false)} data-testid="profile-name-cancel">
               Cancel
             </Button>
-            <Button onClick={handleSaveProfileName}>
+            <Button onClick={handleSaveProfileName} data-testid="profile-name-save">
               {profileNameModalMode === 'rename' ? 'Rename' : 'Save profile'}
             </Button>
           </DialogFooter>
