@@ -43,8 +43,8 @@ export function ViewAppsModal({
   const [apps, setApps] = useState<ProfileApp[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [technicalExpanded, setTechnicalExpanded] = useState(false);
-  const [sourceExpanded, setSourceExpanded] = useState<Set<string>>(new Set());
-  const [copied, setCopied] = useState(false);
+  const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
+  const [copiedPath, setCopiedPath] = useState(false);
 
   useEffect(() => {
     if (open && profilePath) {
@@ -54,13 +54,19 @@ export function ViewAppsModal({
       // Reset state when opening
       setSearchQuery('');
       setTechnicalExpanded(false);
-      setSourceExpanded(new Set());
+      setCopiedDiagnostics(false);
+      setCopiedPath(false);
     }
   }, [open, profilePath]);
 
-  // Filter apps by search query
+  // Filter apps by search query (search both id and name if available)
   const filteredApps = searchQuery.trim()
-    ? apps.filter(app => app.id.toLowerCase().includes(searchQuery.toLowerCase()))
+    ? apps.filter(app => {
+        const query = searchQuery.toLowerCase();
+        const matchesId = app.id.toLowerCase().includes(query);
+        const matchesName = app.name?.toLowerCase().includes(query);
+        return matchesId || matchesName;
+      })
     : apps;
 
   // Group apps by source/driver
@@ -71,15 +77,6 @@ export function ViewAppsModal({
     return acc;
   }, {} as Record<string, ProfileApp[]>);
 
-  const toggleSource = (source: string) => {
-    const next = new Set(sourceExpanded);
-    if (next.has(source)) {
-      next.delete(source);
-    } else {
-      next.add(source);
-    }
-    setSourceExpanded(next);
-  };
 
   const copyDiagnostics = async () => {
     const diagnostics = [
@@ -97,8 +94,18 @@ export function ViewAppsModal({
 
     try {
       await navigator.clipboard.writeText(diagnostics);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedDiagnostics(true);
+      setTimeout(() => setCopiedDiagnostics(false), 1000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const copyPath = async () => {
+    try {
+      await navigator.clipboard.writeText(profilePath);
+      setCopiedPath(true);
+      setTimeout(() => setCopiedPath(false), 1000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }
@@ -108,7 +115,7 @@ export function ViewAppsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-[480px] max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader className="pb-2">
           <DialogTitle className="text-lg">{profileDisplayName || 'Profile Details'}</DialogTitle>
         </DialogHeader>
@@ -120,7 +127,7 @@ export function ViewAppsModal({
         </div>
 
         {/* Search input */}
-        <div className="relative">
+        <div className="relative flex-shrink-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search apps..."
@@ -130,27 +137,37 @@ export function ViewAppsModal({
           />
         </div>
 
-        {/* Simple app list */}
-        <div className="flex-1 overflow-y-auto border rounded-md min-h-[120px] max-h-[240px]">
-          {filteredApps.length === 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">
-              {searchQuery ? 'No apps match your search' : 'No apps in profile'}
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {filteredApps.map((app, idx) => (
-                <div key={idx} className="flex items-center gap-2 px-3 py-1.5 text-sm">
-                  <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span className="font-mono text-xs truncate flex-1">{app.id}</span>
-                  <span className="text-xs text-muted-foreground">{app.driver || 'winget'}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Scrollable content area for list + technical details */}
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
+          {/* Simple app list */}
+          <div className="border rounded-md">
+            {filteredApps.length === 0 ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                {searchQuery ? 'No apps match your search' : 'No apps in profile'}
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {filteredApps.map((app, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-2 text-sm">
+                    <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      {app.name ? (
+                        <>
+                          <span className="truncate">{app.name}</span>
+                          <span className="font-mono text-xs text-muted-foreground truncate">{app.id}</span>
+                        </>
+                      ) : (
+                        <span className="font-mono text-xs truncate">{app.id}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-        {/* Technical details accordion */}
-        <div className="border-t pt-3">
+          {/* Technical details accordion */}
+          <div className="border-t pt-3">
           <button
             onClick={() => setTechnicalExpanded(!technicalExpanded)}
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full"
@@ -170,59 +187,35 @@ export function ViewAppsModal({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2"
-                    onClick={() => navigator.clipboard.writeText(profilePath)}
+                    className="h-6 px-2 relative"
+                    onClick={copyPath}
                   >
                     <Copy className="h-3 w-3" />
+                    {copiedPath && (
+                      <span className="absolute -top-6 right-0 text-xs bg-popover text-popover-foreground px-2 py-1 rounded shadow-md">
+                        Copied
+                      </span>
+                    )}
                   </Button>
                 </div>
               </div>
-
-              {/* Source breakdown */}
-              {Object.keys(appsBySource).length > 0 && (
-                <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground">Source breakdown:</span>
-                  {Object.entries(appsBySource).map(([source, sourceApps]) => (
-                    <div key={source} className="border rounded">
-                      <button
-                        onClick={() => toggleSource(source)}
-                        className="flex items-center justify-between w-full p-2 text-xs hover:bg-muted/50"
-                      >
-                        <div className="flex items-center gap-2">
-                          {sourceExpanded.has(source) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                          <span className="font-medium capitalize">{source}</span>
-                        </div>
-                        <span className="text-muted-foreground">{sourceApps.length}</span>
-                      </button>
-                      {sourceExpanded.has(source) && (
-                        <div className="border-t max-h-24 overflow-y-auto">
-                          {sourceApps.map((app, idx) => (
-                            <div key={idx} className="px-3 py-1 text-xs font-mono border-b last:border-b-0">
-                              {app.id}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
 
               {/* Copy diagnostics */}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={copyDiagnostics}
-                className="h-7 text-xs gap-1"
+                className="h-7 text-xs gap-1 relative"
               >
                 <Copy className="h-3 w-3" />
-                {copied ? 'Copied!' : 'Copy diagnostics'}
+                {copiedDiagnostics ? 'Copied!' : 'Copy diagnostics'}
               </Button>
             </div>
           )}
+          </div>
         </div>
 
-        <DialogFooter className="pt-2">
+        <DialogFooter className="pt-2 flex-shrink-0">
           <Button onClick={() => onOpenChange(false)}>
             Close
           </Button>
