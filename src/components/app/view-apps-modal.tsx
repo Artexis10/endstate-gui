@@ -14,6 +14,7 @@ interface ViewAppsModalProps {
   onOpenChange: (open: boolean) => void;
   profilePath: string;
   profileDisplayName: string;
+  onRenameFile?: (path: string, currentFilename: string) => void;
 }
 
 interface ParsedProfile {
@@ -42,6 +43,7 @@ export function ViewAppsModal({
   onOpenChange,
   profilePath,
   profileDisplayName,
+  onRenameFile,
 }: ViewAppsModalProps) {
   const [apps, setApps] = useState<ProfileApp[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -154,6 +156,19 @@ export function ViewAppsModal({
                 Copy diagnostics
                 <InlineFeedbackPopover feedback={diagnosticsFeedback.feedback} />
               </Button>
+
+              {/* Rename file - only show if handler provided */}
+              {onRenameFile && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onRenameFile(profilePath, displayPath)}
+                  className="h-7 text-xs gap-1"
+                >
+                  <FileText className="h-3 w-3" />
+                  Rename file
+                </Button>
+              )}
             </div>
           )}
         </div>

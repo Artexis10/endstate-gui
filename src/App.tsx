@@ -22,10 +22,12 @@ import { OverviewScreen } from './components/app/overview-screen';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
-import { loadRunSummaries, type RunBundle, type RunSummary } from './lib/run-artifacts';
+import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
+import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
+import { RenameFileModal } from './components/app/rename-file-modal';
 import { ToastProvider, useToast } from './components/ui/toast';
 import { formatCount } from './lib/pluralize';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
@@ -169,6 +171,11 @@ function AppContent() {
   const [showDeleteProfileModal, setShowDeleteProfileModal] = useState(false);
   const [deleteProfilePath, setDeleteProfilePath] = useState('');
   const [deleteProfileName, setDeleteProfileName] = useState('');
+  
+  // Profile file rename modal state
+  const [showRenameFileModal, setShowRenameFileModal] = useState(false);
+  const [renameFilePath, setRenameFilePath] = useState('');
+  const [renameFileCurrentName, setRenameFileCurrentName] = useState('');
   
   // Run artifacts state for Report page
   const [runArtifacts, setRunArtifacts] = useState<Array<{ bundle: RunBundle; summary: RunSummary }>>([]);
@@ -337,6 +344,69 @@ function AppContent() {
     showToast(`"${profile.displayName || profile.name}" is now the active profile`, 'success');
   };
 
+  const openRenameFileModal = (path: string, currentFilename: string) => {
+    setRenameFilePath(path);
+    setRenameFileCurrentName(currentFilename);
+    setShowRenameFileModal(true);
+  };
+
+  const handleRenameFile = async (newFilename: string) => {
+    if (!renameFilePath || !newFilename) return;
+    
+    // Non-bypassable Zod validation guard
+    const originalExtension: ValidExtension = getExtension(renameFileCurrentName);
+    const validation = validateProfileFilename(newFilename, originalExtension);
+    if (!validation.success) {
+      showToast(validation.error, 'error');
+      return;
+    }
+    
+    try {
+      // Dynamically import to avoid circular dependency
+      const { getMetaPath } = await import('./file-discovery');
+      
+      // Get directory and construct new path
+      const pathParts = renameFilePath.split(/[\\]/);
+      const directory = pathParts.slice(0, -1).join('\\');
+      const newPath = `${directory}\\${newFilename}`;
+      
+      // Check if target file already exists
+      const exists = await invoke<boolean>('check_file_exists', { path: newPath });
+      if (exists) {
+        showToast('A file with this name already exists', 'error');
+        return;
+      }
+      
+      // Rename the manifest file
+      await invoke('rename_file', { oldPath: renameFilePath, newPath });
+      
+      // Rename the metadata file if it exists
+      const oldMetaPath = getMetaPath(renameFilePath);
+      const newMetaPath = getMetaPath(newPath);
+      const metaExists = await invoke<boolean>('check_file_exists', { path: oldMetaPath });
+      if (metaExists) {
+        await invoke('rename_file', { oldPath: oldMetaPath, newPath: newMetaPath });
+      }
+      
+      // Update selected profile if it was the renamed one
+      if (renameFilePath === selectedProfilePath) {
+        const newName = newFilename.replace(/\.(jsonc?|json5)$/i, '');
+        setSelectedProfile(newName);
+        setSelectedProfilePath(newPath);
+        updateSettings({ lastSelectedProfile: newName, lastSelectedProfilePath: newPath });
+      }
+      
+      await refreshProfiles();
+      showToast('File renamed successfully', 'success');
+    } catch (err) {
+      console.error('Failed to rename file:', err);
+      showToast(`Failed to rename file: ${err}`, 'error');
+    }
+    
+    setShowRenameFileModal(false);
+    setRenameFilePath('');
+    setRenameFileCurrentName('');
+  };
 
   const promptForProfileName = async (profilePath: string): Promise<void> => {
     // Generate a default name based on timestamp
@@ -495,6 +565,11 @@ function AppContent() {
     const filename = `setup_${timestamp}.jsonc`;
     const outputPath = `${dir}\\${filename}`;
 
+    // Create run artifact bundle
+    const runId = generateRunId();
+    const runBundle = await createRunBundle(dir, runId);
+    const runStartTime = Date.now();
+
     // Track capture live activity via NDJSON events
     const overviewCaptureEvents: AppEvent[] = [];
     let overviewCapturePhase: EnginePhase = 'capture';
@@ -564,6 +639,32 @@ function AppContent() {
       capturedCount = overviewCaptureEvents.length;
     }
 
+    // Persist run artifacts (logs, diagnostics, summary)
+    if (runBundle) {
+      const durationMs = Date.now() - runStartTime;
+      const logContent = captureResult.stdout + '\n\n=== STDERR ===\n\n' + captureResult.stderr;
+      await writeLog(runBundle, logContent);
+      
+      const diagnostics = generateDiagnosticsText({
+        command: 'capture',
+        mode: 'capture',
+        outputPath,
+        counts: { captured: capturedCount },
+        apps: envelopeData?.appsIncluded?.map(a => a.id),
+      });
+      await writeDiagnostics(runBundle, diagnostics);
+      
+      await writeSummary(runBundle, {
+        runId,
+        command: 'capture',
+        mode: 'capture',
+        timestamp: new Date().toISOString(),
+        outcome: isSuccess ? 'success' : 'failed',
+        counts: { captured: capturedCount },
+        durationMs,
+      });
+    }
+
     // Update state with results
     const captureEvent: LifecycleEvent = {
       timestamp: new Date().toISOString(),
@@ -611,6 +712,15 @@ function AppContent() {
       setLogTruncated(truncated);
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
+
+    // Create run artifact bundle
+    const dir = await loadProfilesDirectory();
+    if (!dir) {
+      throw new Error('Failed to determine profiles directory');
+    }
+    const runId = generateRunId();
+    const runBundle = await createRunBundle(dir, runId);
+    const runStartTime = Date.now();
 
     // Track preview live activity via NDJSON events
     const previewAppEvents: AppEvent[] = [];
@@ -661,6 +771,34 @@ function AppContent() {
     const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
     const installed = envelopeData?.counts?.installed ?? 0;
     const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? 0;
+    
+    // Persist run artifacts (logs, diagnostics, summary)
+    if (runBundle) {
+      const durationMs = Date.now() - runStartTime;
+      const logContent = applyResult.stdout + '\n\n=== STDERR ===\n\n' + applyResult.stderr;
+      await writeLog(runBundle, logContent);
+      
+      const diagnostics = generateDiagnosticsText({
+        command: 'apply',
+        mode: 'preview',
+        profileName: selectedProfile,
+        profilePath: selectedProfilePath,
+        counts: { installed, alreadyPresent },
+      });
+      await writeDiagnostics(runBundle, diagnostics);
+      
+      await writeSummary(runBundle, {
+        runId,
+        command: 'apply',
+        mode: 'preview',
+        timestamp: new Date().toISOString(),
+        profileName: selectedProfile,
+        profilePath: selectedProfilePath,
+        outcome: 'success',
+        counts: { installed, alreadyPresent },
+        durationMs,
+      });
+    }
     
     // Record lifecycle event
     const previewEvent: LifecycleEvent = {
@@ -810,6 +948,15 @@ function AppContent() {
       setLogTruncated(truncated);
     });
     applyLineBufferRef.current = new StreamingLineBuffer();
+
+    // Create run artifact bundle
+    const dir = await loadProfilesDirectory();
+    if (!dir) {
+      throw new Error('Failed to determine profiles directory');
+    }
+    const runId = generateRunId();
+    const runBundle = await createRunBundle(dir, runId);
+    const runStartTime = Date.now();
 
     // Track apply live activity via NDJSON events
     const appEventList: AppEvent[] = [];
@@ -972,6 +1119,34 @@ function AppContent() {
     // Only throw for hard errors, not partial failures
     if (!isSuccess && !isPartialFailure) {
       throw new Error(applyResult.envelope?.error?.message || 'Apply failed');
+    }
+    
+    // Persist run artifacts (logs, diagnostics, summary)
+    if (runBundle) {
+      const durationMs = Date.now() - runStartTime;
+      const logContent = applyResult.stdout + '\n\n=== STDERR ===\n\n' + applyResult.stderr;
+      await writeLog(runBundle, logContent);
+      
+      const diagnostics = generateDiagnosticsText({
+        command: 'apply',
+        mode: 'apply',
+        profileName: selectedProfile,
+        profilePath: selectedProfilePath,
+        counts: { installed, alreadyPresent, skipped, failed },
+      });
+      await writeDiagnostics(runBundle, diagnostics);
+      
+      await writeSummary(runBundle, {
+        runId,
+        command: 'apply',
+        mode: 'apply',
+        timestamp: new Date().toISOString(),
+        profileName: selectedProfile,
+        profilePath: selectedProfilePath,
+        outcome: isSuccess ? (failed > 0 ? 'partial' : 'success') : 'failed',
+        counts: { installed, alreadyPresent, skipped, failed },
+        durationMs,
+      });
     }
     
     // Record lifecycle event
@@ -1377,6 +1552,9 @@ function AppContent() {
               onRenameProfile={(path, currentName) => {
                 openProfileNameModal(path, currentName, 'rename');
               }}
+              onRenameFile={(path, currentFilename) => {
+                openRenameFileModal(path, currentFilename);
+              }}
               onDeleteProfile={(path, displayName) => {
                 setDeleteProfilePath(path);
                 setDeleteProfileName(displayName);
@@ -1615,7 +1793,7 @@ function AppContent() {
                           <div className="col-span-2 pt-2 border-t border-border mt-2">
                             {activeRunId && overviewRunningAction === run.mode ? (
                               <span className="text-xs text-muted-foreground italic">
-                                Run in progress (artifacts not finalized yet)
+                                Run in progress
                               </span>
                             ) : run.artifactBundle ? (
                               <div className="flex items-center gap-2">
@@ -1626,8 +1804,6 @@ function AppContent() {
                                   onClick={async () => {
                                     try {
                                       const logContent = await invoke<string>('read_text_file', { path: run.artifactBundle!.logPath });
-                                      // Show logs in a modal or navigate to a details view
-                                      // For now, copy to clipboard as a quick solution
                                       await copyText(logContent);
                                       showToast('Logs copied to clipboard', 'success');
                                     } catch (err) {
@@ -1657,7 +1833,11 @@ function AppContent() {
                                   </Button>
                                 )}
                               </div>
-                            ) : null}
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">
+                                No logs captured for this run
+                              </span>
+                            )}
                           </div>
                         </div>
                       </details>
@@ -2070,6 +2250,15 @@ function AppContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Rename File Modal */}
+      <RenameFileModal
+        open={showRenameFileModal}
+        onOpenChange={setShowRenameFileModal}
+        currentFilename={renameFileCurrentName}
+        currentDirectory={profilesDirectory}
+        onConfirm={handleRenameFile}
+      />
     </>
   );
 }

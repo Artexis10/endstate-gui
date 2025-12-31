@@ -14,6 +14,7 @@ interface ManageProfilesModalProps {
   selectedProfile: string;
   profilesDirectory: string;
   onRenameDisplay: (path: string, currentName: string) => void;
+  onRenameFile?: (path: string, currentFilename: string) => void;
   onDelete: (path: string, displayName: string) => void;
   onSetActive: (profile: DiscoveredProfile) => void;
   onOpenFolder: () => void;
@@ -27,6 +28,7 @@ export function ManageProfilesModal({
   selectedProfile,
   profilesDirectory,
   onRenameDisplay,
+  onRenameFile,
   onDelete,
   onSetActive,
   onOpenFolder,
@@ -213,6 +215,7 @@ export function ManageProfilesModal({
         onOpenChange={(open) => !open && setViewAppsProfile(null)}
         profilePath={viewAppsProfile?.path || ''}
         profileDisplayName={viewAppsProfile ? getDisplayLabel(viewAppsProfile) : ''}
+        onRenameFile={onRenameFile}
       />
     </Dialog>
   );

@@ -225,11 +225,7 @@ test.describe('Apply Navigation Persistence', () => {
     // The run should be listed (look for apply/setup indicator)
     const runEntry = page.locator('details').filter({ hasText: /apply|setup/i }).first();
     
-    // Step 4: Verify NO misleading "Artifacts not saved (older runs)" message
-    const misleadingMessage = page.locator('text=Artifacts not saved (older runs)');
-    await expect(misleadingMessage).not.toBeVisible();
-    
-    // Step 5: Expand the run entry to check its content
+    // Step 4: Expand the run entry to check its content
     if (await runEntry.isVisible()) {
       await runEntry.click();
       
@@ -239,10 +235,13 @@ test.describe('Apply Navigation Persistence', () => {
       
       // For completed runs, we expect either:
       // - "View logs" button if artifacts exist, OR
-      // - No misleading message if artifacts don't exist
-      // Since this is a mock without actual artifact persistence, we verify no misleading message
-      const olderRunsMsg = runDetails.locator('text=Artifacts not saved (older runs)');
-      await expect(olderRunsMsg).not.toBeVisible();
+      // - "No logs captured for this run" if artifacts don't exist
+      // Since this is a mock without actual artifact persistence, we verify the truthful empty state
+      const hasViewLogs = await runDetails.locator('button:has-text("View logs")').isVisible();
+      const hasNoLogsMessage = await runDetails.locator('text=No logs captured for this run').isVisible();
+      
+      // At least one should be true (either logs exist or truthful empty state shown)
+      expect(hasViewLogs || hasNoLogsMessage).toBe(true);
     }
   });
 
