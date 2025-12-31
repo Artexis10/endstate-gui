@@ -111,8 +111,10 @@ export interface EndstateApplyData {
     status: string;
     message: string;
   }>;
+  runId?: string;
   stateFile?: string;
   logFile?: string;
+  eventsFile?: string;
 }
 
 export interface CapturedApp {
