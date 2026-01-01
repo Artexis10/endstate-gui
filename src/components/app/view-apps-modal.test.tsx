@@ -219,4 +219,32 @@ describe('ViewAppsModal', () => {
       expect(screen.getByText('some-internal-id')).toBeInTheDocument();
     });
   });
+
+  it('hides profile filename when showDetails is OFF', async () => {
+    const { invoke } = await import('@/lib/tauri-bridge');
+    const { useShowDetails } = await import('@/lib/use-show-details');
+    vi.mocked(invoke).mockResolvedValue('{"version": 1, "apps": []}');
+    vi.mocked(useShowDetails).mockReturnValue(false);
+
+    render(<ViewAppsModal {...defaultProps} />);
+    
+    // Profile name should be visible
+    expect(screen.getByText(/Test Profile/)).toBeInTheDocument();
+    // Filename should NOT be visible when showDetails is OFF
+    expect(screen.queryByText('test.json')).not.toBeInTheDocument();
+  });
+
+  it('shows profile filename when showDetails is ON', async () => {
+    const { invoke } = await import('@/lib/tauri-bridge');
+    const { useShowDetails } = await import('@/lib/use-show-details');
+    vi.mocked(invoke).mockResolvedValue('{"version": 1, "apps": []}');
+    vi.mocked(useShowDetails).mockReturnValue(true);
+
+    render(<ViewAppsModal {...defaultProps} />);
+    
+    // Profile name should be visible
+    expect(screen.getByText(/Test Profile/)).toBeInTheDocument();
+    // Filename should be visible when showDetails is ON
+    expect(screen.getByText('test.json')).toBeInTheDocument();
+  });
 });

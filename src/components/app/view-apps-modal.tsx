@@ -9,6 +9,7 @@ import { useMicroFeedback } from '@/lib/micro-feedback';
 import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
 import { copyText } from '@/lib/clipboard';
 import { DetailsDisclosure } from '@/components/ui/details-disclosure';
+import { useShowDetails } from '@/lib/use-show-details';
 
 interface ViewAppsModalProps {
   open: boolean;
@@ -48,6 +49,7 @@ export function ViewAppsModal({
   const [searchQuery, setSearchQuery] = useState('');
   const diagnosticsFeedback = useMicroFeedback();
   const pathFeedback = useMicroFeedback();
+  const showDetails = useShowDetails();
 
   useEffect(() => {
     if (open && profilePath) {
@@ -110,9 +112,11 @@ export function ViewAppsModal({
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <DialogTitle className="text-lg">Profile: {profileDisplayName || 'Untitled'}</DialogTitle>
-              <div className="text-xs text-muted-foreground pt-1">
-                <span className="font-mono">{displayPath}</span>
-              </div>
+              {showDetails && (
+                <div className="text-xs text-muted-foreground pt-1">
+                  <span className="font-mono">{displayPath}</span>
+                </div>
+              )}
             </div>
             <div className="flex-shrink-0 px-2 py-1 rounded-md bg-muted/50 text-xs font-medium">
               {apps.length} {apps.length === 1 ? 'app' : 'apps'}
