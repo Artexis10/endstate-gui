@@ -32,16 +32,27 @@ export function useToast() {
 
 /**
  * Toast provider component - renders the Toaster from sonner
- * Contract E: Dark theme aligned, no light backgrounds
+ * Uses CSS variables for theme consistency across light/dark modes
  */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
       <Toaster 
-        position="bottom-right" 
-        theme="dark"
-        closeButton={false}
+        position="bottom-right"
+        closeButton={true}
+        toastOptions={{
+          classNames: {
+            toast: 'bg-card text-card-foreground border-border',
+            title: 'text-foreground',
+            description: 'text-muted-foreground',
+            closeButton: 'bg-muted hover:bg-muted-foreground/20 text-muted-foreground border-border',
+            success: 'bg-success/10 text-success border-success/20',
+            error: 'bg-danger/10 text-danger border-danger/20',
+            warning: 'bg-warning/10 text-warning border-warning/20',
+            info: 'bg-card text-card-foreground border-border',
+          },
+        }}
       />
     </>
   );

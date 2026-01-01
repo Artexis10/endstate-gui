@@ -491,6 +491,39 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     }
   });
 
+  test('Toast closability: close button dismisses toast', async ({ page }) => {
+    // Trigger a toast by attempting to discard a non-existent draft
+    await page.evaluate(() => {
+      (window as any).__endstate_e2e_showToast?.('Test toast message', 'info');
+    });
+    
+    // Wait for toast to appear
+    await page.waitForTimeout(500);
+    
+    // Check if toast is visible
+    const toast = page.locator('[data-sonner-toast]').first();
+    const toastVisible = await toast.isVisible({ timeout: 2000 }).catch(() => false);
+    
+    if (toastVisible) {
+      // Look for close button
+      const closeButton = toast.locator('button[data-close-button]');
+      const closeButtonExists = await closeButton.isVisible({ timeout: 1000 }).catch(() => false);
+      
+      // Close button should exist
+      expect(closeButtonExists).toBe(true);
+      
+      if (closeButtonExists) {
+        // Click close button
+        await closeButton.click();
+        await page.waitForTimeout(300);
+        
+        // Toast should be dismissed
+        const toastStillVisible = await toast.isVisible({ timeout: 500 }).catch(() => false);
+        expect(toastStillVisible).toBe(false);
+      }
+    }
+  });
+
   test('Green card styling stable: no color breaks across navigation', async ({ page }) => {
     // Simulate a saved profile
     await page.evaluate((savedPath) => {

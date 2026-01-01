@@ -681,6 +681,49 @@ export function OverviewScreen({
                   </Button>
                 )}
               </div>
+            ) : action === 'capture' && lastSavedProfile && !pendingCaptureDraftPath ? (
+              // Capture card: show green "Profile saved" success card after save
+              <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="saved-profile-card">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-success" data-testid="saved-profile-title">
+                    Profile saved
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {lastSavedProfile.name}
+                  </p>
+                </div>
+                {showDetails && (() => {
+                  const savedProfile = profiles.find(p => 
+                    p.displayName === lastSavedProfile.name || p.name === lastSavedProfile.name
+                  );
+                  return savedProfile ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setViewProfilePath(savedProfile.path);
+                        setViewProfileName(savedProfile.displayName || savedProfile.name);
+                      }}
+                    >
+                      Details
+                    </Button>
+                  ) : null;
+                })()}
+                {onDismissSaved && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDismissSaved();
+                    }}
+                  >
+                    Dismiss
+                  </Button>
+                )}
+              </div>
             ) : (
               // Non-capture success = green success state
               <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
@@ -875,64 +918,6 @@ export function OverviewScreen({
         </p>
       </div>
 
-      {/* Saved profile banner - shown after successful save, persists across navigation */}
-      <AnimatePresence mode="wait">
-      {lastSavedProfile && !pendingCaptureDraftPath && (
-        <motion.div
-          key="saved-banner"
-          variants={fadeSlideVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-        >
-          <Card className="border-success/20 bg-success/5" data-testid="saved-profile-card">
-            <CardContent className="py-3">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-4 w-4 text-success" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-success" data-testid="saved-profile-title">
-                    Profile saved
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {lastSavedProfile.name}
-                  </p>
-                </div>
-                {showDetails && (() => {
-                  const savedProfile = profiles.find(p => 
-                    p.displayName === lastSavedProfile.name || p.name === lastSavedProfile.name
-                  );
-                  return savedProfile ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setViewProfilePath(savedProfile.path);
-                        setViewProfileName(savedProfile.displayName || savedProfile.name);
-                      }}
-                    >
-                      Details
-                    </Button>
-                  ) : null;
-                })()}
-                {onDismissSaved && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDismissSaved();
-                    }}
-                  >
-                    Dismiss
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-      </AnimatePresence>
 
       {/* Current Profile Card (if any) */}
       {hasProfile && (

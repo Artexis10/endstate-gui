@@ -310,8 +310,10 @@ function AppContent() {
       (window as any).__endstate_e2e_openSaveProfileModal = ({ pendingPath, suggestedName }: { pendingPath: string; suggestedName: string }) => {
         openProfileNameModal(pendingPath, suggestedName, 'save', suggestedName);
       };
+      (window as any).__endstate_e2e_showToast = showToast;
       return () => {
         delete (window as any).__endstate_e2e_openSaveProfileModal;
+        delete (window as any).__endstate_e2e_showToast;
       };
     }
   }, []);
