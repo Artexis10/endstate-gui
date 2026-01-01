@@ -53,7 +53,7 @@ describe('Capture Flow UX Contracts', () => {
       );
 
       // Modal should not be visible during capture
-      expect(screen.queryByText('Profile created')).not.toBeInTheDocument();
+      expect(screen.queryByText('Capture finished')).not.toBeInTheDocument();
     });
   });
 
@@ -190,7 +190,7 @@ describe('Capture Flow UX Contracts', () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('shows stable output path without duplication', () => {
+    it('shows stable draft message without duplication', () => {
       const apps: CapturedApp[] = [
         { id: 'App1', source: 'winget' },
       ];
@@ -214,7 +214,8 @@ describe('Capture Flow UX Contracts', () => {
         />
       );
 
-      expect(screen.getByText(/test-profile\.jsonc/)).toBeInTheDocument();
+      // Modal now shows draft state message instead of path in header
+      expect(screen.getByText(/not saved yet/i)).toBeInTheDocument();
       
       // Re-render (simulates StrictMode)
       rerender(
@@ -227,9 +228,9 @@ describe('Capture Flow UX Contracts', () => {
         />
       );
       
-      // Path should appear once
-      const pathElements = screen.getAllByText(/test-profile\.jsonc/);
-      expect(pathElements).toHaveLength(1);
+      // Draft message should appear once
+      const draftElements = screen.getAllByText(/not saved yet/i);
+      expect(draftElements).toHaveLength(1);
     });
   });
 
@@ -259,7 +260,7 @@ describe('Capture Flow UX Contracts', () => {
       );
 
       // Verify success state
-      expect(screen.getByText('Profile created')).toBeInTheDocument();
+      expect(screen.getByText('Capture finished')).toBeInTheDocument();
       
       // Verify technical details are collapsed
       const detailsButton = screen.getByRole('button', { name: /details \(/i });
@@ -498,7 +499,7 @@ describe('Capture Flow UX Contracts', () => {
         />
       );
 
-      expect(screen.queryByText('Profile created')).not.toBeInTheDocument();
+      expect(screen.queryByText('Capture finished')).not.toBeInTheDocument();
       
       // 2. Success state - modal opens
       rerender(
@@ -511,7 +512,7 @@ describe('Capture Flow UX Contracts', () => {
         />
       );
 
-      expect(screen.getByText('Profile created')).toBeInTheDocument();
+      expect(screen.getByText('Capture finished')).toBeInTheDocument();
       expect(screen.getByText('2')).toBeInTheDocument();
       
       // Technical details collapsed by default

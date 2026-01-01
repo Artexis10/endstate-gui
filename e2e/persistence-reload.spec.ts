@@ -163,7 +163,7 @@ test.describe('Persistence Boundaries on Reload', () => {
     // Verify app ignores polluted transient state
     
     // Modals should NOT be open
-    await expect(page.locator('text=Profile created')).not.toBeVisible();
+    await expect(page.locator('text=Capture finished')).not.toBeVisible();
     await expect(page.locator('text=Here\'s what will change')).not.toBeVisible();
     
     // App should start on Overview page (not Capture or Apply)

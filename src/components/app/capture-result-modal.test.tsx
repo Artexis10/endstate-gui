@@ -138,10 +138,13 @@ describe('CaptureResultModal', () => {
       expect(screen.getByText(/apps captured/i)).toBeInTheDocument();
     });
 
-    it('displays output path filename', () => {
+    it('displays draft state message instead of saved path', () => {
       renderWithProviders(<CaptureResultModal {...defaultProps} />);
 
-      expect(screen.getByText(/setup_2024-12-24\.jsonc/i)).toBeInTheDocument();
+      // Modal now shows draft state message, not the saved path
+      expect(screen.getByText(/not saved yet/i)).toBeInTheDocument();
+      // Copy path button is still available
+      expect(screen.getByRole('button', { name: /copy path/i })).toBeInTheDocument();
     });
 
     it('shows details count in toggle button', () => {

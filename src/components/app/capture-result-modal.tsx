@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { CheckCircle2, Copy, Package, ChevronDown, ChevronRight, FileText, Search } from 'lucide-react';
+import { AlertCircle, Copy, Package, ChevronDown, ChevronRight, FileText, Search } from 'lucide-react';
 import { useState } from 'react';
 import { DetailsDisclosure } from '../ui/details-disclosure';
 import type { CapturedApp, CaptureCounts } from '../../types';
@@ -38,7 +38,6 @@ export function CaptureResultModal({
   const diagnosticsFeedback = useMicroFeedback(2000);
   const pathFeedback = useMicroFeedback();
   const [searchQuery, setSearchQuery] = useState('');
-  const displayPath = outputPath ? outputPath.split('\\').pop() || outputPath : '';
 
   // Filter apps by search query
   const filteredApps = searchQuery.trim()
@@ -96,14 +95,12 @@ export function CaptureResultModal({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
-            <CheckCircle2 className="h-8 w-8 text-success" />
-            <DialogTitle className="text-2xl">{customTitle || 'Profile created'}</DialogTitle>
+            <AlertCircle className="h-8 w-8 text-warning" />
+            <DialogTitle className="text-2xl">{customTitle || 'Capture finished'}</DialogTitle>
           </div>
-          {outputPath && (
-            <DialogDescription className="text-sm pt-2 font-mono text-muted-foreground">
-              Saved to: {displayPath}
-            </DialogDescription>
-          )}
+          <DialogDescription className="text-sm pt-2 text-muted-foreground">
+            Not saved yet — review and save to create a profile
+          </DialogDescription>
         </DialogHeader>
 
         {/* Non-technical summary */}

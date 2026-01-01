@@ -614,24 +614,33 @@ export function OverviewScreen({
             exit="exit"
             className="space-y-3"
           >
-            <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-success">
-                  {action === 'capture'
-                    ? 'Capture complete'
-                    : 'Completed successfully'}
-                </p>
-                {action === 'capture' && (
-                  <p className="text-xs text-muted-foreground">
-                    Profile ready to save
+            {action === 'capture' ? (
+              // Capture success = draft state (amber/neutral, not green)
+              <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20">
+                <FileText className="h-4 w-4 text-warning" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-warning">
+                    Capture finished
                   </p>
-                )}
-                {action !== 'capture' && actionProgress?.message && (
-                  <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
-                )}
+                  <p className="text-xs text-muted-foreground">
+                    Not saved yet — review and save to create a profile
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              // Non-capture success = green success state
+              <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-success">
+                    Completed successfully
+                  </p>
+                  {actionProgress?.message && (
+                    <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+                  )}
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 

@@ -2248,14 +2248,14 @@ function AppContent() {
             <Card>
               <CardHeader>
                 <CardTitle>Advanced</CardTitle>
-                <CardDescription>Power user options</CardDescription>
+                <CardDescription>Additional options</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-sm font-medium">Show details</label>
                     <p className="text-xs text-muted-foreground">
-                      Show file paths and diagnostic info
+                      Show IDs, paths, and diagnostic information
                     </p>
                   </div>
                   <Button

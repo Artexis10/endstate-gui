@@ -103,7 +103,7 @@ test.describe.skip('Capture Live Progress', () => {
     await expect(page.locator('text=processed')).toBeVisible({ timeout: 2000 });
     
     // Assert capture completes with modal
-    await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('text=Capture finished')).toBeVisible({ timeout: 6000 });
   });
 
   test('Capture modal shows correct app count and list from envelope', async ({ page }) => {
@@ -114,7 +114,7 @@ test.describe.skip('Capture Live Progress', () => {
     await page.click('main >> button:has-text("Capture computer")');
     
     // Wait for capture to complete and modal to appear
-    await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('text=Capture finished')).toBeVisible({ timeout: 6000 });
     
     // CRITICAL ASSERTIONS - These would fail with the old "0 apps" bug:
     
@@ -146,7 +146,7 @@ test.describe.skip('Capture Live Progress', () => {
     await expect(page.locator('[data-testid="activity-card"]')).toBeVisible({ timeout: 3000 });
     
     // Wait for capture to complete
-    await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('text=Capture finished')).toBeVisible({ timeout: 6000 });
     
     // Close the modal
     await page.click('button:has-text("Close")');
@@ -165,7 +165,7 @@ test.describe.skip('Capture Live Progress', () => {
     
     // Run capture again with setting enabled
     await page.click('main >> button:has-text("Capture computer")');
-    await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('text=Capture finished')).toBeVisible({ timeout: 6000 });
     await page.click('button:has-text("Close")');
     await page.waitForTimeout(200);
     
