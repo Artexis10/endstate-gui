@@ -134,6 +134,7 @@ interface OverviewScreenProps {
   onSetActiveProfile?: (profile: DiscoveredProfile) => void;
   onClearExpandedCard?: () => void;
   onSaveProfile?: () => void;
+  onDiscardDraft?: () => void;
   pendingCaptureDraftPath?: string | null;
   lastSavedProfile?: { name: string; timestamp: Date } | null;
   onDismissSaved?: () => void;
@@ -165,6 +166,7 @@ export function OverviewScreen({
   onSetActiveProfile,
   onClearExpandedCard,
   onSaveProfile,
+  onDiscardDraft,
   pendingCaptureDraftPath,
   lastSavedProfile,
   onDismissSaved,
@@ -629,7 +631,7 @@ export function OverviewScreen({
           >
             {action === 'capture' && pendingCaptureDraftPath ? (
               // Capture success = draft state (amber/neutral, not green) - only show if draft exists
-              <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20">
+              <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20" data-testid="capture-draft-card">
                 <FileText className="h-4 w-4 text-warning" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-warning">
@@ -652,6 +654,19 @@ export function OverviewScreen({
                     Details
                   </Button>
                 )}
+                {onDiscardDraft && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDiscardDraft();
+                    }}
+                    data-testid="discard-draft-button"
+                  >
+                    Discard draft
+                  </Button>
+                )}
                 {onSaveProfile && (
                   <Button
                     size="sm"
@@ -660,6 +675,7 @@ export function OverviewScreen({
                       e.stopPropagation();
                       onSaveProfile();
                     }}
+                    data-testid="save-profile-button"
                   >
                     Save profile
                   </Button>
@@ -869,12 +885,12 @@ export function OverviewScreen({
           animate="animate"
           exit="exit"
         >
-          <Card className="border-success/20 bg-success/5">
+          <Card className="border-success/20 bg-success/5" data-testid="saved-profile-card">
             <CardContent className="py-3">
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="h-4 w-4 text-success" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-success">
+                  <p className="text-sm font-medium text-success" data-testid="saved-profile-title">
                     Profile saved
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -965,6 +981,7 @@ export function OverviewScreen({
                   disabled={isRunning}
                   title="Manage profiles"
                   aria-label="Manage profiles"
+                  data-testid="manage-profiles-button"
                 >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
@@ -1444,6 +1461,7 @@ export function OverviewScreen({
         profiles={profiles}
         selectedProfile={selectedProfile}
         profilesDirectory={profilesDirectory}
+        pendingCaptureDraftPath={pendingCaptureDraftPath}
         onRenameDisplay={(path, currentName) => {
           onRenameProfile?.(path, currentName);
         }}

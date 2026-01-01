@@ -319,7 +319,20 @@ function AppContent() {
   const handleSaveProfileName = async () => {
     if (isSavingProfile) return; // Prevent double-submit
     
-    setIsSavingProfile(true);
+    // Preflight: check if we're saving a draft and the file is missing
+    if (profileNameModalMode === 'save' && pendingCaptureDraftPath) {
+      const wasStale = await clearStaleDraft();
+      if (wasStale) {
+        setShowProfileNameModal(false);
+        setProfileNameModalPath('');
+        setProfileNameModalValue('');
+        setProfileNameModalMoreOptions(false);
+        setPendingSuggestedName('');
+        showToast('Draft no longer exists. Run capture again.', 'warning');
+        return;
+      }
+    }
+    
     try {
       const trimmedValue = profileNameModalValue.trim();
       
@@ -504,6 +517,68 @@ function AppContent() {
     setProfileNameModalValue('');
     setProfileNameModalMoreOptions(false);
     setPendingSuggestedName('');
+  };
+
+  const clearStaleDraft = async (): Promise<boolean> => {
+    if (!pendingCaptureDraftPath) return false;
+    
+    try {
+      const exists = await invoke<boolean>('check_file_exists', { path: pendingCaptureDraftPath });
+      if (!exists) {
+        // File is missing - clear stale state
+        setPendingCaptureDraftPath(null);
+        if (overviewActionResult?.action === 'capture') {
+          setOverviewActionResult(null);
+          setOverviewActionStatus('idle');
+        }
+        return true; // Indicates stale state was cleared
+      }
+      return false; // File exists, no stale state
+    } catch (err) {
+      console.error('Failed to check draft file existence:', err);
+      return false;
+    }
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!pendingCaptureDraftPath) return;
+    
+    // Check if file exists first
+    const wasStale = await clearStaleDraft();
+    if (wasStale) {
+      showToast('Draft already gone', 'info');
+      await refreshProfiles();
+      return;
+    }
+    
+    try {
+      // Delete the draft file
+      await invoke('delete_file', { path: pendingCaptureDraftPath });
+      
+      // Clear draft state
+      setPendingCaptureDraftPath(null);
+      
+      // Clear the capture result card
+      if (overviewActionResult?.action === 'capture') {
+        setOverviewActionResult(null);
+        setOverviewActionStatus('idle');
+      }
+      
+      // Refresh profiles to update the list
+      await refreshProfiles();
+      
+      showToast('Draft discarded', 'info');
+    } catch (err) {
+      console.error('Failed to discard draft:', err);
+      // Even if delete fails, clear the state (idempotent)
+      setPendingCaptureDraftPath(null);
+      if (overviewActionResult?.action === 'capture') {
+        setOverviewActionResult(null);
+        setOverviewActionStatus('idle');
+      }
+      showToast('Draft already gone', 'info');
+      await refreshProfiles();
+    }
   };
 
   const handleDeleteProfile = async () => {
@@ -1829,6 +1904,7 @@ function AppContent() {
                   promptForProfileName(pendingCaptureDraftPath);
                 }
               }}
+              onDiscardDraft={handleDiscardDraft}
               pendingCaptureDraftPath={pendingCaptureDraftPath}
               lastSavedProfile={lastSavedProfile}
               onDismissSaved={() => setLastSavedProfile(null)}

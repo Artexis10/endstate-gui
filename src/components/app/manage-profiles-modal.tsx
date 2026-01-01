@@ -14,6 +14,7 @@ interface ManageProfilesModalProps {
   profiles: DiscoveredProfile[];
   selectedProfile: string;
   profilesDirectory: string;
+  pendingCaptureDraftPath?: string | null;
   onRenameDisplay: (path: string, currentName: string) => void;
   onDelete: (path: string, displayName: string) => void;
   onSetActive: (profile: DiscoveredProfile) => void;
@@ -27,6 +28,7 @@ export function ManageProfilesModal({
   profiles,
   selectedProfile,
   profilesDirectory,
+  pendingCaptureDraftPath,
   onRenameDisplay,
   onDelete,
   onSetActive,
@@ -49,6 +51,10 @@ export function ManageProfilesModal({
 
   const isSelected = (profile: DiscoveredProfile): boolean => {
     return profile.name === selectedProfile;
+  };
+
+  const isPendingDraft = (profile: DiscoveredProfile): boolean => {
+    return !!pendingCaptureDraftPath && profile.path === pendingCaptureDraftPath;
   };
 
   return (
@@ -179,19 +185,21 @@ export function ManageProfilesModal({
                             variant="ghost"
                             size="sm"
                             className={`h-8 px-2 ${
-                              selected
+                              selected || isPendingDraft(profile)
                                 ? 'text-muted-foreground cursor-not-allowed'
                                 : 'text-destructive hover:text-destructive hover:bg-destructive/10'
                             }`}
                             onClick={() => {
-                              if (!selected) {
+                              if (!selected && !isPendingDraft(profile)) {
                                 onDelete(profile.path, getDisplayLabel(profile));
                               }
                             }}
-                            disabled={selected}
+                            disabled={selected || isPendingDraft(profile)}
                             title={
                               selected
                                 ? 'Select a different profile to delete this one'
+                                : isPendingDraft(profile)
+                                ? 'Cannot delete unsaved draft. Save or discard the draft first.'
                                 : 'Delete profile'
                             }
                           >
