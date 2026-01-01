@@ -726,61 +726,6 @@ export function OverviewScreen({
         )}
         </AnimatePresence>
 
-        {/* Saved profile state - green card shown after successful save */}
-        <AnimatePresence mode="wait">
-        {lastSavedProfile && !pendingCaptureDraftPath && (
-          <motion.div
-            key="saved"
-            variants={fadeSlideVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
-            <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-success">
-                  Profile saved
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {lastSavedProfile.name}
-                </p>
-              </div>
-              {showDetails && (() => {
-                const savedProfile = profiles.find(p => 
-                  p.displayName === lastSavedProfile.name || p.name === lastSavedProfile.name
-                );
-                return savedProfile ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setViewProfilePath(savedProfile.path);
-                      setViewProfileName(savedProfile.displayName || savedProfile.name);
-                    }}
-                  >
-                    Details
-                  </Button>
-                ) : null;
-              })()}
-              {onDismissSaved && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDismissSaved();
-                  }}
-                >
-                  Dismiss
-                </Button>
-              )}
-            </div>
-          </motion.div>
-        )}
-        </AnimatePresence>
-
         {/* Visual separator before action row */}
         <div className="border-t border-border/50 pt-3 mt-1" />
 
@@ -913,6 +858,65 @@ export function OverviewScreen({
           Capture, apply, and verify your computer setup
         </p>
       </div>
+
+      {/* Saved profile banner - shown after successful save, persists across navigation */}
+      <AnimatePresence mode="wait">
+      {lastSavedProfile && !pendingCaptureDraftPath && (
+        <motion.div
+          key="saved-banner"
+          variants={fadeSlideVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+        >
+          <Card className="border-success/20 bg-success/5">
+            <CardContent className="py-3">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-success">
+                    Profile saved
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {lastSavedProfile.name}
+                  </p>
+                </div>
+                {showDetails && (() => {
+                  const savedProfile = profiles.find(p => 
+                    p.displayName === lastSavedProfile.name || p.name === lastSavedProfile.name
+                  );
+                  return savedProfile ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setViewProfilePath(savedProfile.path);
+                        setViewProfileName(savedProfile.displayName || savedProfile.name);
+                      }}
+                    >
+                      Details
+                    </Button>
+                  ) : null;
+                })()}
+                {onDismissSaved && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDismissSaved();
+                    }}
+                  >
+                    Dismiss
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+      </AnimatePresence>
 
       {/* Current Profile Card (if any) */}
       {hasProfile && (

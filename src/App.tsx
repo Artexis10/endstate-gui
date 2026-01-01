@@ -432,8 +432,30 @@ function AppContent() {
     } catch (err) {
       console.error('Failed to save profile name:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      showToast(`Failed to save profile: ${errorMessage}`, 'error');
-      // Do NOT close modal or clear pendingCaptureDraftPath on error - user can retry
+      
+      // If source file doesn't exist, clear stale draft state and provide recovery path
+      if (errorMessage.includes('Source file no longer exists') || errorMessage.includes('does not exist')) {
+        // Clear stale pending draft state
+        if (profileNameModalMode === 'save' && pendingCaptureDraftPath) {
+          setPendingCaptureDraftPath(null);
+          // Clear the capture result card
+          if (overviewActionResult?.action === 'capture') {
+            setOverviewActionResult(null);
+            setOverviewActionStatus('idle');
+          }
+        }
+        // Close modal since there's nothing to save
+        setShowProfileNameModal(false);
+        setProfileNameModalPath('');
+        setProfileNameModalValue('');
+        setProfileNameModalMoreOptions(false);
+        setPendingSuggestedName('');
+        
+        showToast('Draft file no longer exists. Run capture again to create a new profile.', 'error');
+      } else {
+        showToast(`Failed to save profile: ${errorMessage}`, 'error');
+        // Do NOT close modal or clear pendingCaptureDraftPath on other errors - user can retry
+      }
     } finally {
       setIsSavingProfile(false);
     }
@@ -490,6 +512,15 @@ function AppContent() {
     // Safety check: prevent deleting the currently selected profile
     if (deleteProfilePath === selectedProfilePath) {
       console.error('Cannot delete the currently selected profile');
+      setShowDeleteProfileModal(false);
+      setDeleteProfilePath('');
+      setDeleteProfileName('');
+      return;
+    }
+    
+    // Safety check: prevent deleting the pending draft
+    if (pendingCaptureDraftPath && deleteProfilePath === pendingCaptureDraftPath) {
+      showToast('Cannot delete unsaved draft. Save or cancel the draft first.', 'error');
       setShowDeleteProfileModal(false);
       setDeleteProfilePath('');
       setDeleteProfileName('');
