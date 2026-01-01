@@ -7,6 +7,20 @@ import type { LifecycleState } from '@/lib/lifecycle-state';
 import type { DiscoveredProfile } from '@/file-discovery';
 import type { AppEvent } from '@/lib/apply-utils';
 
+// Mock settings to enable showDetails
+vi.mock('@/settings', () => ({
+  loadSettings: () => ({
+    engineMode: 'bundled',
+    engineScriptPath: '',
+    customProfilesDirectory: '',
+    lastSelectedProfile: '',
+    lastSelectedProfilePath: '',
+    dryRunEnabled: true,
+    showDetails: true,
+  }),
+  saveSettings: vi.fn(),
+}));
+
 /**
  * REGRESSION TEST: Capture Details modal bugs
  * 

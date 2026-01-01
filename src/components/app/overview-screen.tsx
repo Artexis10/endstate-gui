@@ -58,6 +58,7 @@ import {
 import { formatRelativeTime, type LifecycleState, type LifecycleEvent } from '@/lib/lifecycle-state';
 import type { DiscoveredProfile } from '@/file-discovery';
 import { ManageProfilesModal } from './manage-profiles-modal';
+import { ViewAppsModal } from './view-apps-modal';
 import { 
   type AppEvent, 
   type StatusKey,
@@ -67,6 +68,7 @@ import {
   getPhaseColor,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
+import { useShowDetails } from '@/lib/use-show-details';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
 type ActionStatus = 'idle' | 'running' | 'success' | 'error';
@@ -195,12 +197,15 @@ export function OverviewScreen({
   const [detailsFilter, setDetailsFilter] = useState<StatusKey | 'all' | null>(null);
   const [activityExpanded, setActivityExpanded] = useState(false);
   const [manageProfilesOpen, setManageProfilesOpen] = useState(false);
+  const [viewProfilePath, setViewProfilePath] = useState<string | null>(null);
+  const [viewProfileName, setViewProfileName] = useState<string>('');
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [lastSeenPhase, setLastSeenPhase] = useState<UiPhase | undefined>(undefined);
   const [userHasScrolledAway, setUserHasScrolledAway] = useState(false);
   const activityScrollRef = useRef<HTMLDivElement>(null);
   const liveActivityContainerRef = useRef<HTMLDivElement>(null);
   const hasProfile = !!selectedProfile && profiles.length > 0;
+  const showDetails = useShowDetails();
   
   // Reset activity expanded state when a new run starts
   useEffect(() => {
@@ -634,6 +639,19 @@ export function OverviewScreen({
                     Not saved yet — save to create a profile
                   </p>
                 </div>
+                {showDetails && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewProfilePath(pendingCaptureDraftPath);
+                      setViewProfileName('Draft');
+                    }}
+                  >
+                    Details
+                  </Button>
+                )}
                 {onSaveProfile && (
                   <Button
                     size="sm"
@@ -728,6 +746,24 @@ export function OverviewScreen({
                   {lastSavedProfile.name}
                 </p>
               </div>
+              {showDetails && (() => {
+                const savedProfile = profiles.find(p => 
+                  p.displayName === lastSavedProfile.name || p.name === lastSavedProfile.name
+                );
+                return savedProfile ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewProfilePath(savedProfile.path);
+                      setViewProfileName(savedProfile.displayName || savedProfile.name);
+                    }}
+                  >
+                    Details
+                  </Button>
+                ) : null;
+              })()}
               {onDismissSaved && (
                 <Button
                   variant="ghost"
@@ -842,16 +878,18 @@ export function OverviewScreen({
                   Run again
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDetailsModalOpen(true);
-                }}
-              >
-                View details
-              </Button>
+              {showDetails && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsModalOpen(true);
+                  }}
+                >
+                  View details
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -1413,6 +1451,14 @@ export function OverviewScreen({
         }}
         onOpenFolder={onOpenProfilesFolder}
         onRefresh={onRefreshProfiles}
+      />
+
+      {/* View Apps Modal - for draft/saved profile details */}
+      <ViewAppsModal
+        open={viewProfilePath !== null}
+        onOpenChange={(open) => !open && setViewProfilePath(null)}
+        profilePath={viewProfilePath || ''}
+        profileDisplayName={viewProfileName}
       />
     </div>
   );

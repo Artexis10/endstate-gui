@@ -356,6 +356,11 @@ function AppContent() {
           
           // Rename the file if path changed
           if (newPath !== profileNameModalPath) {
+            // Preflight check: verify source file exists before attempting rename
+            const sourceExists = await invoke<boolean>('check_file_exists', { path: profileNameModalPath });
+            if (!sourceExists) {
+              throw new Error(`Source file no longer exists: ${profileNameModalPath}. The draft may have been deleted or moved.`);
+            }
             await invoke('rename_file', { oldPath: profileNameModalPath, newPath });
             
             // Update selected profile if it was the renamed one
