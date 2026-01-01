@@ -32,12 +32,17 @@ export function useToast() {
 
 /**
  * Toast provider component - renders the Toaster from sonner
+ * Contract E: Dark theme aligned, no light backgrounds
  */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      <Toaster position="bottom-right" />
+      <Toaster 
+        position="bottom-right" 
+        theme="dark"
+        closeButton={false}
+      />
     </>
   );
 }
