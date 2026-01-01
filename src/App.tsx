@@ -161,6 +161,9 @@ function AppContent() {
   const [showFolderPathModal, setShowFolderPathModal] = useState(false);
   const [folderPathForModal, setFolderPathForModal] = useState('');
   
+  // Pending capture draft state - separate from selectedProfile
+  const [pendingCaptureDraftPath, setPendingCaptureDraftPath] = useState<string | null>(null);
+  
   // Profile naming modal state
   const [showProfileNameModal, setShowProfileNameModal] = useState(false);
   const [profileNameModalPath, setProfileNameModalPath] = useState(''); // Path to pending profile file
@@ -371,6 +374,28 @@ function AppContent() {
       }
       
       await refreshProfiles();
+      
+      // If this was a save from capture draft, clear the pending draft and select the new profile
+      if (profileNameModalMode === 'save' && pendingCaptureDraftPath) {
+        // Find the saved profile (may have been renamed)
+        const dir = await loadProfilesDirectory();
+        if (dir) {
+          const discovered = await discoverProfiles(dir);
+          // Find the profile that matches the saved path (or renamed path)
+          const savedProfile = discovered.find(p => 
+            p.path === profileNameModalPath || 
+            (trimmedValue && p.displayName === trimmedValue)
+          ) || discovered.sort((a, b) => b.path.localeCompare(a.path))[0];
+          
+          if (savedProfile) {
+            setSelectedProfile(savedProfile.name);
+            setSelectedProfilePath(savedProfile.path);
+            updateSettings({ lastSelectedProfile: savedProfile.name, lastSelectedProfilePath: savedProfile.path });
+          }
+        }
+        setPendingCaptureDraftPath(null);
+      }
+      
       showToast('Profile saved', 'success');
     } catch (err) {
       console.error('Failed to save profile name:', err);
@@ -416,6 +441,11 @@ function AppContent() {
       } catch (err) {
         console.error('Failed to delete profile on cancel:', err);
       }
+    }
+    
+    // Clear pending capture draft state on cancel
+    if (profileNameModalMode === 'save') {
+      setPendingCaptureDraftPath(null);
     }
     
     // Close modal and reset state
@@ -834,11 +864,10 @@ function AppContent() {
     const discovered = await discoverProfiles(dir);
     if (discovered.length > 0) {
       const newest = discovered.sort((a, b) => b.path.localeCompare(a.path))[0];
-      setSelectedProfile(newest.name);
-      setSelectedProfilePath(newest.path);
-      updateSettings({ lastSelectedProfile: newest.name, lastSelectedProfilePath: newest.path });
+      // Store the pending draft path separately - do NOT modify selectedProfile yet
+      setPendingCaptureDraftPath(newest.path);
       
-      // Prompt for optional display name
+      // Prompt for optional display name using the draft path
       await promptForProfileName(newest.path);
     }
     
@@ -1735,9 +1764,9 @@ function AppContent() {
               }}
               onSetActiveProfile={handleSetActiveProfile}
               onSaveProfile={() => {
-                // Re-open the save modal for the currently selected profile
-                if (selectedProfilePath) {
-                  promptForProfileName(selectedProfilePath);
+                // Open the save modal for the pending capture draft (not selectedProfile)
+                if (pendingCaptureDraftPath) {
+                  promptForProfileName(pendingCaptureDraftPath);
                 }
               }}
             />
@@ -1980,34 +2009,36 @@ function AppContent() {
                                     </div>
                                   </details>
                                 )}
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 text-xs gap-1"
-                                    onClick={() => openLogViewer(run.artifactPaths!.logFile!, `${run.mode.charAt(0).toUpperCase() + run.mode.slice(1)} Log`)}
-                                  >
-                                    <FileText className="h-3 w-3" />
-                                    View log
-                                  </Button>
-                                  {isTauriRuntime() && run.artifactPaths.bundleDir && settings.showDetails && (
+                                {settings.showDetails && (
+                                  <div className="flex items-center gap-2">
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       className="h-7 text-xs gap-1"
-                                      onClick={async () => {
-                                        try {
-                                          await openFolder(run.artifactPaths!.bundleDir!);
-                                        } catch (err) {
-                                          console.error('Failed to open folder:', err);
-                                        }
-                                      }}
+                                      onClick={() => openLogViewer(run.artifactPaths!.logFile!, `${run.mode.charAt(0).toUpperCase() + run.mode.slice(1)} Log`)}
                                     >
-                                      <FolderOpen className="h-3 w-3" />
-                                      Open folder
+                                      <FileText className="h-3 w-3" />
+                                      View log
                                     </Button>
-                                  )}
-                                </div>
+                                    {isTauriRuntime() && run.artifactPaths.bundleDir && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 text-xs gap-1"
+                                        onClick={async () => {
+                                          try {
+                                            await openFolder(run.artifactPaths!.bundleDir!);
+                                          } catch (err) {
+                                            console.error('Failed to open folder:', err);
+                                          }
+                                        }}
+                                      >
+                                        <FolderOpen className="h-3 w-3" />
+                                        Open folder
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
                               </>
                             ) : (
                               <span className="text-xs text-muted-foreground italic">
@@ -2067,19 +2098,21 @@ function AppContent() {
                             </details>
                           )}
                           <div className="flex flex-wrap gap-2 mt-1">
-                            {/* View log button - opens log viewer modal */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs gap-1"
-                              onClick={() => {
-                                const logPath = summary.artifactPaths?.logFile || bundle.logPath;
-                                openLogViewer(logPath, `${summary.mode.charAt(0).toUpperCase() + summary.mode.slice(1)} Log`);
-                              }}
-                            >
-                              <FileText className="h-3 w-3" />
-                              View log
-                            </Button>
+                            {/* View log button - opens log viewer modal - gated behind showDetails */}
+                            {settings.showDetails && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                onClick={() => {
+                                  const logPath = summary.artifactPaths?.logFile || bundle.logPath;
+                                  openLogViewer(logPath, `${summary.mode.charAt(0).toUpperCase() + summary.mode.slice(1)} Log`);
+                                }}
+                              >
+                                <FileText className="h-3 w-3" />
+                                View log
+                              </Button>
+                            )}
                             {isTauriRuntime() && settings.showDetails && (
                               <Button
                                 variant="ghost"
@@ -2386,8 +2419,8 @@ function AppContent() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-3">
-            {/* Show filename info in save mode */}
-            {profileNameModalMode === 'save' && profileNameModalPath && (() => {
+            {/* Show filename info in save mode - only when showDetails is ON */}
+            {profileNameModalMode === 'save' && profileNameModalPath && settings.showDetails && (() => {
               const parts = profileNameModalPath.split(/[\\/]/);
               const filename = parts[parts.length - 1] || '';
               return (
