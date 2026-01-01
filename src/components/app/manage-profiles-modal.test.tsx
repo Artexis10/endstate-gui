@@ -119,12 +119,23 @@ describe('ManageProfilesModal', () => {
       expect(screen.getByText('Active')).toBeInTheDocument();
     });
 
-    it('shows filename in secondary column', () => {
+    it('shows filename in secondary column when showDetails is ON', () => {
+      vi.mocked(useShowDetails).mockReturnValue(true);
       render(<ManageProfilesModal {...defaultProps} />);
       
       expect(screen.getByText('profile-1.json')).toBeInTheDocument();
       expect(screen.getByText('profile-2.jsonc')).toBeInTheDocument();
       expect(screen.getByText('profile-3.json5')).toBeInTheDocument();
+    });
+
+    it('hides filename column when showDetails is OFF', () => {
+      vi.mocked(useShowDetails).mockReturnValue(false);
+      render(<ManageProfilesModal {...defaultProps} />);
+      
+      expect(screen.queryByText('profile-1.json')).not.toBeInTheDocument();
+      expect(screen.queryByText('profile-2.jsonc')).not.toBeInTheDocument();
+      expect(screen.queryByText('profile-3.json5')).not.toBeInTheDocument();
+      expect(screen.queryByText('Filename')).not.toBeInTheDocument();
     });
   });
 

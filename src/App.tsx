@@ -394,6 +394,11 @@ function AppContent() {
           }
         }
         setPendingCaptureDraftPath(null);
+        // Clear the capture result to remove "Capture finished - Not saved yet" card
+        if (overviewActionResult?.action === 'capture') {
+          setOverviewActionResult(null);
+          setOverviewActionStatus('idle');
+        }
       }
       
       showToast('Profile saved', 'success');
@@ -443,10 +448,7 @@ function AppContent() {
       }
     }
     
-    // Clear pending capture draft state on cancel
-    if (profileNameModalMode === 'save') {
-      setPendingCaptureDraftPath(null);
-    }
+    // Do NOT clear pendingCaptureDraftPath on cancel - draft persists until save or explicit dismiss
     
     // Close modal and reset state
     setShowProfileNameModal(false);

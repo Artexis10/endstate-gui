@@ -106,14 +106,16 @@ export function ManageProfilesModal({
             <thead className="bg-background sticky top-0 z-10">
               <tr className="border-b">
                 <th className="text-left p-3 text-sm font-medium bg-background">Profile</th>
-                <th className="text-left p-3 text-sm font-medium bg-background">Filename</th>
+                {showDetails && (
+                  <th className="text-left p-3 text-sm font-medium bg-background">Filename</th>
+                )}
                 <th className="text-right p-3 text-sm font-medium bg-background">Actions</th>
               </tr>
             </thead>
             <tbody>
               {profiles.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={showDetails ? 3 : 2} className="p-8 text-center text-muted-foreground">
                     No profiles found
                   </td>
                 </tr>
@@ -132,11 +134,13 @@ export function ManageProfilesModal({
                           )}
                         </div>
                       </td>
-                      <td className="p-3">
-                        <span className="text-sm text-muted-foreground font-mono">
-                          {getFilename(profile)}
-                        </span>
-                      </td>
+                      {showDetails && (
+                        <td className="p-3">
+                          <span className="text-sm text-muted-foreground font-mono">
+                            {getFilename(profile)}
+                          </span>
+                        </td>
+                      )}
                       <td className="p-3">
                         <div className="flex items-center justify-end gap-1">
                           {!selected && (
