@@ -61,7 +61,9 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
     onRefreshProfiles: vi.fn(),
     onRenameProfile: vi.fn(),
     onDeleteProfile: vi.fn(),
-    onRenameFile: vi.fn(),
+    onSaveProfile: vi.fn(),
+    onDiscardDraft: vi.fn(),
+    pendingCaptureDraftPath: null,
   };
 
   it('REGRESSION: Capture Details shows "Detected" not "Skipped" for captured apps', async () => {
@@ -95,11 +97,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
       />
     );
 
-    // Expand Capture card
-    const captureCard = screen.getByTestId('overview-card-capture');
-    await user.click(captureCard);
-
-    // Click "View details" button
+    // View details button should be visible immediately in the success strip
     await waitFor(() => {
       expect(screen.getByText('View details')).toBeInTheDocument();
     });
@@ -155,9 +153,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
       />
     );
 
-    const captureCard = screen.getByTestId('overview-card-capture');
-    await user.click(captureCard);
-
+    // View details button should be visible immediately in the success strip
     await waitFor(() => {
       expect(screen.getByText('View details')).toBeInTheDocument();
     });

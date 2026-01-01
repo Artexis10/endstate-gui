@@ -165,9 +165,6 @@ function AppContent() {
   // Pending capture draft state - separate from selectedProfile
   const [pendingCaptureDraftPath, setPendingCaptureDraftPath] = useState<string | null>(null);
   
-  // Saved profile state - shown after successful save
-  const [lastSavedProfile, setLastSavedProfile] = useState<{ name: string; timestamp: Date } | null>(null);
-  
   // Save in progress flag to prevent double-submit
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   
@@ -428,20 +425,11 @@ function AppContent() {
             setSelectedProfile(savedProfile.name);
             setSelectedProfilePath(savedProfile.path);
             updateSettings({ lastSelectedProfile: savedProfile.name, lastSelectedProfilePath: savedProfile.path });
-            
-            // Set saved profile state for green card
-            setLastSavedProfile({
-              name: savedProfile.displayName || savedProfile.name,
-              timestamp: new Date()
-            });
           }
         }
         setPendingCaptureDraftPath(null);
-        // Clear the capture result to remove "Capture finished - Not saved yet" card
-        if (overviewActionResult?.action === 'capture') {
-          setOverviewActionResult(null);
-          setOverviewActionStatus('idle');
-        }
+        // Keep the capture result card visible - it shows "Completed successfully + X apps captured"
+        // Do NOT clear it - the capture success is independent of the save event
       }
       
       // Show transitory success state in modal
@@ -453,7 +441,7 @@ function AppContent() {
       setSavedProfileDisplayName(displayName);
       setProfileNameModalSuccess(true);
       
-      // Auto-close modal after success animation (750ms total)
+      // Auto-close modal after success animation (1500ms total - 2x slower for calm feel)
       setTimeout(() => {
         setShowProfileNameModal(false);
         setProfileNameModalPath('');
@@ -462,7 +450,7 @@ function AppContent() {
         setPendingSuggestedName('');
         setProfileNameModalSuccess(false);
         setSavedProfileDisplayName('');
-      }, 750);
+      }, 1500);
     } catch (err) {
       console.error('Failed to save profile name:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -472,11 +460,7 @@ function AppContent() {
         // Clear stale pending draft state
         if (profileNameModalMode === 'save' && pendingCaptureDraftPath) {
           setPendingCaptureDraftPath(null);
-          // Clear the capture result card
-          if (overviewActionResult?.action === 'capture') {
-            setOverviewActionResult(null);
-            setOverviewActionStatus('idle');
-          }
+          // Keep the capture result card visible
         }
         // Close modal since there's nothing to save
         setShowProfileNameModal(false);
@@ -1700,7 +1684,6 @@ function AppContent() {
                 if (import.meta.env.DEV) {
                   console.log(`[RUN START] Capture runId=${runId}`);
                 }
-                setLastSavedProfile(null); // Clear saved state when starting new capture
                 setOverviewRunningAction('capture');
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Scanning installed applications...' });
@@ -1897,8 +1880,6 @@ function AppContent() {
               }}
               onDiscardDraft={handleDiscardDraft}
               pendingCaptureDraftPath={pendingCaptureDraftPath}
-              lastSavedProfile={lastSavedProfile}
-              onDismissSaved={() => setLastSavedProfile(null)}
             />
           </div>
         );
@@ -2547,17 +2528,17 @@ function AppContent() {
           }}
         >
           {profileNameModalSuccess ? (
-            // Transitory success state
+            // Transitory success state - calm, intentional animation (2x slower)
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
+              transition={{ duration: 0.6, ease: 'easeOut' }}
               className="py-12 flex flex-col items-center justify-center gap-4"
             >
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                transition={{ delay: 0.1, duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+                transition={{ delay: 0.2, duration: 0.8, ease: [0.34, 1.56, 0.64, 1] }}
                 className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center"
               >
                 <CheckCircle2 className="w-10 h-10 text-success" />
@@ -2565,7 +2546,7 @@ function AppContent() {
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2, duration: 0.3 }}
+                transition={{ delay: 0.4, duration: 0.6 }}
                 className="text-center space-y-1"
               >
                 <p className="text-lg font-semibold text-success">Profile saved</p>

@@ -135,8 +135,6 @@ interface OverviewScreenProps {
   onSaveProfile?: () => void;
   onDiscardDraft?: () => void;
   pendingCaptureDraftPath?: string | null;
-  lastSavedProfile?: { name: string; timestamp: Date } | null;
-  onDismissSaved?: () => void;
 }
 
 export function OverviewScreen({
@@ -167,8 +165,6 @@ export function OverviewScreen({
   onSaveProfile,
   onDiscardDraft,
   pendingCaptureDraftPath,
-  lastSavedProfile,
-  onDismissSaved,
 }: OverviewScreenProps) {
   // Initialize expandedCard: prioritize active running action, then initialExpandedCard, then null
   // This ensures returning to Overview during an active run shows the correct expanded card
@@ -958,9 +954,41 @@ export function OverviewScreen({
                 </div>
               </CardHeader>
               
-              {/* Unified status strip: draft OR saved (Contract D - always visible) */}
+              {/* Unified status strip: success OR draft (always visible) */}
               <AnimatePresence mode="wait">
-                {pendingCaptureDraftPath ? (
+                {actionStatus === 'success' && actionResult?.action === 'capture' ? (
+                  <motion.div
+                    key="capture-success"
+                    variants={fadeSlideVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                  >
+                    <CardContent className="pt-0 pb-3">
+                      <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="capture-success-card">
+                        <CheckCircle2 className="h-4 w-4 text-success" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-success">
+                            Completed successfully
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {actionProgress?.message || actionResult.summary}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDetailsModalOpen(true);
+                          }}
+                        >
+                          View details
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </motion.div>
+                ) : pendingCaptureDraftPath ? (
                   <motion.div
                     key="draft-status"
                     variants={fadeSlideVariants}
@@ -1003,40 +1031,6 @@ export function OverviewScreen({
                             data-testid="save-profile-button"
                           >
                             Save profile
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </motion.div>
-                ) : lastSavedProfile ? (
-                  <motion.div
-                    key="saved-status"
-                    variants={fadeSlideVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                  >
-                    <CardContent className="pt-0 pb-3">
-                      <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="saved-profile-card">
-                        <CheckCircle2 className="h-4 w-4 text-success" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-success" data-testid="saved-profile-title">
-                            Profile saved
-                          </p>
-                          <p className="text-xs text-muted-foreground" data-testid="saved-profile-name">
-                            {lastSavedProfile.name}
-                          </p>
-                        </div>
-                        {onDismissSaved && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDismissSaved();
-                            }}
-                          >
-                            Dismiss
                           </Button>
                         )}
                       </div>

@@ -208,11 +208,13 @@ describe('Discard Draft UX Contracts', () => {
     });
   });
 
-  describe('Contract 4: Green saved card appears after save', () => {
-    it('shows green saved card when lastSavedProfile exists and no pending draft', () => {
-      const lastSavedProfile = {
-        name: 'My New Profile',
-        timestamp: new Date(),
+  describe('Contract 4: Capture success card persists after save', () => {
+    it('shows capture success card after capture completes', () => {
+      const captureResult = {
+        action: 'capture' as const,
+        status: 'success' as const,
+        summary: '63 apps captured',
+        counts: { total: 63 },
       };
 
       renderWithProviders(
@@ -223,9 +225,9 @@ describe('Discard Draft UX Contracts', () => {
           profilesDirectory="C:\\profiles"
           isRunning={false}
           runningAction={null}
-          actionStatus="idle"
+          actionStatus="success"
           actionProgress={null}
-          actionResult={null}
+          actionResult={captureResult}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -237,19 +239,19 @@ describe('Discard Draft UX Contracts', () => {
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
           pendingCaptureDraftPath={null}
-          lastSavedProfile={lastSavedProfile}
         />
       );
 
-      // Verify green saved card is shown WITHOUT expanding (Contract D)
-      expect(screen.getByText('Profile saved')).toBeInTheDocument();
-      expect(screen.getByText('My New Profile')).toBeInTheDocument();
+      // Verify capture success card shows "Completed successfully"
+      expect(screen.getByText('Completed successfully')).toBeInTheDocument();
     });
 
-    it('does not show green saved card when pending draft exists', () => {
-      const lastSavedProfile = {
-        name: 'My New Profile',
-        timestamp: new Date(),
+    it('capture success card persists even with pending draft', () => {
+      const captureResult = {
+        action: 'capture' as const,
+        status: 'success' as const,
+        summary: '63 apps captured',
+        counts: { total: 63 },
       };
       const pendingDraftPath = 'C:\\profiles\\draft_2024-01-01.jsonc';
 
@@ -261,9 +263,9 @@ describe('Discard Draft UX Contracts', () => {
           profilesDirectory="C:\\profiles"
           isRunning={false}
           runningAction={null}
-          actionStatus="idle"
+          actionStatus="success"
           actionProgress={null}
-          actionResult={null}
+          actionResult={captureResult}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -275,18 +277,20 @@ describe('Discard Draft UX Contracts', () => {
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
           pendingCaptureDraftPath={pendingDraftPath}
-          lastSavedProfile={lastSavedProfile}
         />
       );
 
-      // Verify green saved card is NOT shown when draft exists
-      expect(screen.queryByText('Profile saved')).not.toBeInTheDocument();
+      // Verify both capture success card and draft card are shown
+      expect(screen.getByText('Completed successfully')).toBeInTheDocument();
+      expect(screen.getByText(/apps captured/i)).toBeInTheDocument();
     });
 
-    it('green saved card persists across navigation (render condition test)', () => {
-      const lastSavedProfile = {
-        name: 'My New Profile',
-        timestamp: new Date(),
+    it('capture success card persists across navigation', () => {
+      const captureResult = {
+        action: 'capture' as const,
+        status: 'success' as const,
+        summary: '63 apps captured',
+        counts: { total: 63 },
       };
 
       const { rerender } = renderWithProviders(
@@ -297,9 +301,9 @@ describe('Discard Draft UX Contracts', () => {
           profilesDirectory="C:\\profiles"
           isRunning={false}
           runningAction={null}
-          actionStatus="idle"
+          actionStatus="success"
           actionProgress={null}
-          actionResult={null}
+          actionResult={captureResult}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -311,12 +315,11 @@ describe('Discard Draft UX Contracts', () => {
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
           pendingCaptureDraftPath={null}
-          lastSavedProfile={lastSavedProfile}
         />
       );
 
-      // Verify green saved card is shown initially WITHOUT expanding (Contract D)
-      expect(screen.getByText('Profile saved')).toBeInTheDocument();
+      // Verify capture success card is shown initially
+      expect(screen.getByText('Completed successfully')).toBeInTheDocument();
 
       // Simulate navigation by re-rendering (component remount)
       rerender(
@@ -327,9 +330,9 @@ describe('Discard Draft UX Contracts', () => {
           profilesDirectory="C:\\profiles"
           isRunning={false}
           runningAction={null}
-          actionStatus="idle"
+          actionStatus="success"
           actionProgress={null}
-          actionResult={null}
+          actionResult={captureResult}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -341,13 +344,11 @@ describe('Discard Draft UX Contracts', () => {
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
           pendingCaptureDraftPath={null}
-          lastSavedProfile={lastSavedProfile}
         />
       );
 
-      // Verify green saved card still shows after re-render WITHOUT expanding (Contract D)
-      expect(screen.getByText('Profile saved')).toBeInTheDocument();
-      expect(screen.getByText('My New Profile')).toBeInTheDocument();
+      // Verify capture success card still shows after re-render
+      expect(screen.getByText('Completed successfully')).toBeInTheDocument();
     });
   });
 });
