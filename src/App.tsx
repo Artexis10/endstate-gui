@@ -165,6 +165,13 @@ function AppContent() {
   // Pending capture draft state - separate from selectedProfile
   const [pendingCaptureDraftPath, setPendingCaptureDraftPath] = useState<string | null>(null);
   
+  // Persistent capture summary - survives beyond ephemeral actionResult
+  const [lastCaptureSummary, setLastCaptureSummary] = useState<{
+    appCount: number;
+    finishedAt: string;
+    runId?: string;
+  } | null>(null);
+  
   // Save in progress flag to prevent double-submit
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   
@@ -1667,6 +1674,7 @@ function AppContent() {
               liveAppEvents={liveAppEvents}
               liveCounters={liveCounters}
               initialExpandedCard={overviewExpandedCard}
+              lastCaptureSummary={lastCaptureSummary}
               onNavigate={navigateWithHistory}
               onClearExpandedCard={() => setOverviewExpandedCard(null)}
               onCapture={async () => {
@@ -1687,6 +1695,9 @@ function AppContent() {
                 setOverviewRunningAction('capture');
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Scanning installed applications...' });
+                
+                // Clear previous capture summary when starting new capture
+                setLastCaptureSummary(null);
                 try {
                   const result = await handleCaptureFromOverview();
                   setOverviewActionStatus('success');
@@ -1694,6 +1705,14 @@ function AppContent() {
                     ? 'No apps detected' 
                     : `${result.count} apps captured`;
                   setOverviewActionProgress({ message: countText });
+                  
+                  // Set persistent capture summary (survives beyond ephemeral actionResult)
+                  setLastCaptureSummary({
+                    appCount: result.count,
+                    finishedAt: new Date().toISOString(),
+                    runId: runId,
+                  });
+                  
                   setOverviewActionResult({ 
                     action: 'capture', 
                     status: 'success', 

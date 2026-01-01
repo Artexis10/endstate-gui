@@ -94,6 +94,10 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
         runningAction="capture"
         actionStatus="success"
         actionResult={captureResult}
+        lastCaptureSummary={{
+          appCount: 3,
+          finishedAt: new Date().toISOString(),
+        }}
       />
     );
 
@@ -150,6 +154,10 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
         runningAction="capture"
         actionStatus="success"
         actionResult={captureResult}
+        lastCaptureSummary={{
+          appCount: 1,
+          finishedAt: new Date().toISOString(),
+        }}
       />
     );
 

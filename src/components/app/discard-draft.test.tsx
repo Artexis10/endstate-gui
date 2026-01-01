@@ -228,6 +228,10 @@ describe('Discard Draft UX Contracts', () => {
           actionStatus="success"
           actionProgress={null}
           actionResult={captureResult}
+          lastCaptureSummary={{
+            appCount: 63,
+            finishedAt: new Date().toISOString(),
+          }}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -297,6 +301,11 @@ describe('Discard Draft UX Contracts', () => {
         counts: { total: 63 },
       };
 
+      const lastCaptureSummary = {
+        appCount: 63,
+        finishedAt: new Date().toISOString(),
+      };
+
       const { rerender } = renderWithProviders(
         <OverviewScreen
           lifecycleState={mockLifecycleState}
@@ -308,6 +317,7 @@ describe('Discard Draft UX Contracts', () => {
           actionStatus="success"
           actionProgress={null}
           actionResult={captureResult}
+          lastCaptureSummary={lastCaptureSummary}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -326,6 +336,7 @@ describe('Discard Draft UX Contracts', () => {
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
 
       // Simulate navigation by re-rendering (component remount)
+      // Key point: lastCaptureSummary persists, even if actionResult is cleared
       rerender(
         <OverviewScreen
           lifecycleState={mockLifecycleState}
@@ -334,9 +345,10 @@ describe('Discard Draft UX Contracts', () => {
           profilesDirectory="C:\\profiles"
           isRunning={false}
           runningAction={null}
-          actionStatus="success"
+          actionStatus="idle"
           actionProgress={null}
-          actionResult={captureResult}
+          actionResult={null}
+          lastCaptureSummary={lastCaptureSummary}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -352,6 +364,7 @@ describe('Discard Draft UX Contracts', () => {
       );
 
       // Verify capture success card still shows after re-render
+      // This proves lastCaptureSummary is persistent, not ephemeral like actionResult
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
     });
   });

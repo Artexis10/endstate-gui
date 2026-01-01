@@ -120,6 +120,11 @@ interface OverviewScreenProps {
   liveAppEvents?: AppEvent[];
   liveCounters?: LiveCounters;
   initialExpandedCard?: ActionType;
+  lastCaptureSummary?: {
+    appCount: number;
+    finishedAt: string;
+    runId?: string;
+  } | null;
   onNavigate: (page: 'report' | 'settings') => void;
   onCapture: () => void;
   onSetup: (intent: SetupIntent) => void;
@@ -150,6 +155,7 @@ export function OverviewScreen({
   liveAppEvents = [],
   liveCounters,
   initialExpandedCard,
+  lastCaptureSummary,
   onNavigate,
   onCapture,
   onSetup,
@@ -1004,7 +1010,7 @@ export function OverviewScreen({
                       </div>
                     </CardContent>
                   </motion.div>
-                ) : actionStatus === 'success' && actionResult?.action === 'capture' ? (
+                ) : lastCaptureSummary ? (
                   <motion.div
                     key="capture-success"
                     variants={fadeSlideVariants}
@@ -1020,7 +1026,9 @@ export function OverviewScreen({
                             Completed successfully
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {actionProgress?.message || actionResult.summary}
+                            {lastCaptureSummary.appCount === 0 
+                              ? 'No apps detected' 
+                              : `${lastCaptureSummary.appCount} apps captured`}
                           </p>
                         </div>
                         <Button
