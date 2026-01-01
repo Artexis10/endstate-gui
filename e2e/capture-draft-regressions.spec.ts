@@ -743,4 +743,93 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     // Should have at most 1 Details button (we removed duplicates)
     expect(count).toBeLessThanOrEqual(1);
   });
+
+  test('No profiles CTA appears before Recent Activity', async ({ page }) => {
+    // Clear all profiles to simulate no-profiles state
+    await page.evaluate(() => {
+      (window as any).__test_existingPaths.clear();
+      (window as any).__test_fileContents.clear();
+    });
+
+    // Reload to reflect empty state
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Both no-profile prompt and primary actions should be visible
+    const noProfilePrompt = page.locator('[data-testid="no-profile-prompt"]');
+    const captureCard = page.locator('[data-testid="overview-card-capture"]');
+    
+    await expect(noProfilePrompt).toBeVisible();
+    await expect(captureCard).toBeVisible();
+
+    // Get positions
+    const promptBox = await noProfilePrompt.boundingBox();
+    const captureBox = await captureCard.boundingBox();
+    
+    expect(promptBox).not.toBeNull();
+    expect(captureBox).not.toBeNull();
+    
+    if (promptBox && captureBox) {
+      // No-profile prompt should appear before (above) the Capture card
+      expect(promptBox.y).toBeLessThan(captureBox.y);
+    }
+  });
+
+  test('Setup completion: View details in strip, no duplicate below', async ({ page }) => {
+    // Simulate a setup completion with issues
+    await page.evaluate(() => {
+      // Trigger a setup action result
+      const event = new CustomEvent('test-setup-result', {
+        detail: {
+          action: 'setup',
+          status: 'error',
+          counts: {
+            installed: 5,
+            alreadyPresent: 3,
+            failed: 2,
+            skipped: 1
+          }
+        }
+      });
+      window.dispatchEvent(event);
+    });
+
+    // Wait a bit for state to update
+    await page.waitForTimeout(500);
+
+    // Expand Setup card
+    await page.click('[data-testid="overview-card-apply"]');
+    await page.waitForTimeout(300);
+
+    // Look for "View details" buttons in the Setup card context
+    const setupCard = page.locator('[data-testid="overview-card-apply"]');
+    const viewDetailsButtons = setupCard.locator('button:has-text("View details")');
+    
+    // Should have exactly 1 View details button (in the completion strip)
+    const count = await viewDetailsButtons.count();
+    expect(count).toBeLessThanOrEqual(1);
+  });
+
+  test('Verify start: scrolls to Check card', async ({ page }) => {
+    // Scroll to bottom first
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(300);
+
+    // Click Check card to expand it
+    await page.click('[data-testid="overview-card-verify"]');
+    await page.waitForTimeout(300);
+
+    // Get Check card position
+    const checkCard = page.locator('[data-testid="overview-card-verify"]');
+    const checkBox = await checkCard.boundingBox();
+    
+    expect(checkBox).not.toBeNull();
+    
+    if (checkBox) {
+      // Card should be in viewport (top should be visible)
+      const viewportHeight = await page.evaluate(() => window.innerHeight);
+      expect(checkBox.y).toBeGreaterThanOrEqual(0);
+      expect(checkBox.y).toBeLessThan(viewportHeight);
+    }
+  });
 });

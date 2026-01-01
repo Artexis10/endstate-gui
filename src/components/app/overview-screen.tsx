@@ -68,7 +68,6 @@ import {
   getPhaseColor,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
-import { useShowDetails } from '@/lib/use-show-details';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
 type ActionStatus = 'idle' | 'running' | 'success' | 'error';
@@ -206,8 +205,10 @@ export function OverviewScreen({
   const [userHasScrolledAway, setUserHasScrolledAway] = useState(false);
   const activityScrollRef = useRef<HTMLDivElement>(null);
   const liveActivityContainerRef = useRef<HTMLDivElement>(null);
+  const captureCardRef = useRef<HTMLDivElement>(null);
+  const setupCardRef = useRef<HTMLDivElement>(null);
+  const checkCardRef = useRef<HTMLDivElement>(null);
   const hasProfile = !!selectedProfile && profiles.length > 0;
-  const showDetails = useShowDetails();
   
   // Reset activity expanded state when a new run starts
   useEffect(() => {
@@ -261,16 +262,24 @@ export function OverviewScreen({
 
   // Execute action from expanded card
   const handleExecuteAction = (action: ActionType) => {
-    switch (action) {
-      case 'capture':
-        onCapture();
-        break;
-      case 'setup':
-        onSetup(setupIntent);
-        break;
-      case 'check':
-        onCheck();
-        break;
+    if (!action) return;
+    
+    // Scroll to the relevant card when action starts
+    const scrollToCard = (ref: React.RefObject<HTMLDivElement>) => {
+      if (ref.current && typeof ref.current.scrollIntoView === 'function') {
+        ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+    
+    if (action === 'capture') {
+      scrollToCard(captureCardRef);
+      onCapture();
+    } else if (action === 'setup') {
+      scrollToCard(setupCardRef);
+      onSetup(setupIntent);
+    } else if (action === 'check') {
+      scrollToCard(checkCardRef);
+      onCheck();
     }
   };
 
@@ -629,20 +638,28 @@ export function OverviewScreen({
             exit="exit"
             className="space-y-3"
           >
-            {action !== 'capture' ? (
-              // Non-capture success = green success state
-              <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
-                <CheckCircle2 className="h-4 w-4 text-success" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-success">
-                    Completed successfully
-                  </p>
-                  {actionProgress?.message && (
-                    <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
-                  )}
-                </div>
+            {/* Success completion strip for all actions */}
+            <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-success">
+                  Completed successfully
+                </p>
+                {actionProgress?.message && (
+                  <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+                )}
               </div>
-            ) : null}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDetailsModalOpen(true);
+                }}
+              >
+                View details
+              </Button>
+            </div>
           </motion.div>
         )}
 
@@ -669,6 +686,16 @@ export function OverviewScreen({
                     {actionResult.counts.skipped && actionResult.counts.skipped > 0 ? ` • ${actionResult.counts.skipped} skipped` : ''}
                   </p>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsModalOpen(true);
+                  }}
+                >
+                  View details
+                </Button>
               </div>
             ) : (
               // Fatal error: nothing succeeded or no counts available
@@ -684,6 +711,16 @@ export function OverviewScreen({
                     <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
                   )}
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsModalOpen(true);
+                  }}
+                >
+                  View details
+                </Button>
               </div>
             )}
           </motion.div>
@@ -787,18 +824,6 @@ export function OverviewScreen({
                   Run again
                 </Button>
               )}
-              {showDetails && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDetailsModalOpen(true);
-                  }}
-                >
-                  View details
-                </Button>
-              )}
             </>
           )}
         </div>
@@ -881,12 +906,27 @@ export function OverviewScreen({
         </Card>
       )}
 
+      {/* No Profile Prompt - appears BEFORE Primary Actions */}
+      {!hasProfile && profiles.length === 0 && (
+        <Card className="border-dashed" data-testid="no-profile-prompt">
+          <CardContent className="py-6 text-center" data-testid="no-profile-card-content">
+            <p className="text-sm text-muted-foreground mb-4">
+              No setup profiles found. Start by capturing your current computer setup.
+            </p>
+            <Button onClick={onCapture} disabled={isRunning}>
+              <ScanSearch className="h-4 w-4 mr-2" />
+              Capture computer
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Primary Actions - Expandable Cards */}
       <div className="space-y-6">
         {/* Primary Portal Cards */}
         <div className="space-y-4">
           {/* Capture Card - PRIMARY */}
-          <motion.div layout transition={layoutTransition}>
+          <motion.div layout transition={layoutTransition} ref={captureCardRef}>
             <Card 
               data-testid="overview-card-capture"
               className={`cursor-pointer transition-all duration-200 border-l-2 ${
@@ -1024,7 +1064,7 @@ export function OverviewScreen({
           </motion.div>
 
           {/* Setup Card - PRIMARY */}
-          <motion.div layout transition={layoutTransition}>
+          <motion.div layout transition={layoutTransition} ref={setupCardRef}>
             <Card 
               data-testid="overview-card-apply"
               className={`cursor-pointer transition-all duration-200 border-l-2 ${
@@ -1081,7 +1121,7 @@ export function OverviewScreen({
         <div className="space-y-2">
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">Validation</h3>
           {/* Check Card - SECONDARY */}
-          <motion.div layout transition={layoutTransition}>
+          <motion.div layout transition={layoutTransition} ref={checkCardRef}>
             <Card 
               data-testid="overview-card-verify"
               className={`cursor-pointer transition-all duration-200 border-l-2 ${
@@ -1134,21 +1174,6 @@ export function OverviewScreen({
           </motion.div>
         </div>
       </div>
-
-      {/* No Profile Prompt */}
-      {!hasProfile && profiles.length === 0 && (
-        <Card className="border-dashed">
-          <CardContent className="py-6 text-center" data-testid="no-profile-card-content">
-            <p className="text-sm text-muted-foreground mb-4">
-              No setup profiles found. Start by capturing your current computer setup.
-            </p>
-            <Button onClick={onCapture} disabled={isRunning}>
-              <ScanSearch className="h-4 w-4 mr-2" />
-              Capture computer
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Recent Activity */}
       {recentActivity.length > 0 && (
