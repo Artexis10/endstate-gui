@@ -131,6 +131,7 @@ interface OverviewScreenProps {
   onDeleteProfile?: (path: string, displayName: string) => void;
   onSetActiveProfile?: (profile: DiscoveredProfile) => void;
   onClearExpandedCard?: () => void;
+  onSaveProfile?: () => void;
 }
 
 export function OverviewScreen({
@@ -158,6 +159,7 @@ export function OverviewScreen({
   onDeleteProfile,
   onSetActiveProfile,
   onClearExpandedCard,
+  onSaveProfile,
 }: OverviewScreenProps) {
   // Initialize expandedCard: prioritize active running action, then initialExpandedCard, then null
   // This ensures returning to Overview during an active run shows the correct expanded card
@@ -623,9 +625,21 @@ export function OverviewScreen({
                     Capture finished
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Not saved yet — review and save to create a profile
+                    Not saved yet — save to create a profile
                   </p>
                 </div>
+                {onSaveProfile && (
+                  <Button
+                    size="sm"
+                    className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSaveProfile();
+                    }}
+                  >
+                    Save profile
+                  </Button>
+                )}
               </div>
             ) : (
               // Non-capture success = green success state

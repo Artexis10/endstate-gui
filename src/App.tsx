@@ -1734,6 +1734,12 @@ function AppContent() {
                 setShowDeleteProfileModal(true);
               }}
               onSetActiveProfile={handleSetActiveProfile}
+              onSaveProfile={() => {
+                // Re-open the save modal for the currently selected profile
+                if (selectedProfilePath) {
+                  promptForProfileName(selectedProfilePath);
+                }
+              }}
             />
           </div>
         );
@@ -1984,7 +1990,7 @@ function AppContent() {
                                     <FileText className="h-3 w-3" />
                                     View log
                                   </Button>
-                                  {isTauriRuntime() && run.artifactPaths.bundleDir && (
+                                  {isTauriRuntime() && run.artifactPaths.bundleDir && settings.showDetails && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -2074,7 +2080,7 @@ function AppContent() {
                               <FileText className="h-3 w-3" />
                               View log
                             </Button>
-                            {isTauriRuntime() && (
+                            {isTauriRuntime() && settings.showDetails && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -2091,7 +2097,7 @@ function AppContent() {
                                 Open folder
                               </Button>
                             )}
-                            {!isTauriRuntime() && (
+                            {!isTauriRuntime() && settings.showDetails && (
                               <Button
                                 ref={artifactPathCopyFeedback.buttonRef}
                                 variant="ghost"
@@ -2394,7 +2400,7 @@ function AppContent() {
             <Input 
               value={profileNameModalValue}
               onChange={(e) => setProfileNameModalValue(e.target.value)}
-              placeholder="Profile name (display name)"
+              placeholder="Profile name"
               className="w-full"
               data-testid="profile-name-input"
               autoFocus
@@ -2404,14 +2410,14 @@ function AppContent() {
                 }
               }}
             />
-            {profileNameModalMode === 'rename' && (
+            {profileNameModalMode === 'rename' && settings.showDetails && (
               <div>
                 <button
                   onClick={() => setProfileNameModalMoreOptions(!profileNameModalMoreOptions)}
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {profileNameModalMoreOptions ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  {profileNameModalMoreOptions ? 'Hide details' : 'More options'}
+                  {profileNameModalMoreOptions ? 'Hide' : 'Details'}
                 </button>
                 {profileNameModalMoreOptions && (() => {
                   const parts = profileNameModalPath.split(/[\\/]/);

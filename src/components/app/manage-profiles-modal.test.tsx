@@ -3,6 +3,12 @@ import { render, screen, fireEvent } from '../../test/test-utils';
 import '@testing-library/jest-dom/vitest';
 import { ManageProfilesModal } from './manage-profiles-modal';
 import type { DiscoveredProfile } from '@/file-discovery';
+import { useShowDetails } from '@/lib/use-show-details';
+
+// Mock the useShowDetails hook
+vi.mock('@/lib/use-show-details', () => ({
+  useShowDetails: vi.fn(() => false), // Default to false
+}));
 
 /**
  * ManageProfilesModal UX Contract Tests
@@ -122,8 +128,12 @@ describe('ManageProfilesModal', () => {
     });
   });
 
-  describe('Header actions', () => {
-    it('displays profiles directory path', () => {
+  describe('Header actions (showDetails ON)', () => {
+    beforeEach(() => {
+      vi.mocked(useShowDetails).mockReturnValue(true);
+    });
+
+    it('displays profiles directory path when showDetails is ON', () => {
       render(<ManageProfilesModal {...defaultProps} />);
       
       // The path is displayed - check for the label
@@ -144,6 +154,21 @@ describe('ManageProfilesModal', () => {
       fireEvent.click(screen.getByRole('button', { name: /Refresh/i }));
       
       expect(defaultProps.onRefresh).toHaveBeenCalled();
+    });
+  });
+
+  describe('Header actions (showDetails OFF)', () => {
+    beforeEach(() => {
+      vi.mocked(useShowDetails).mockReturnValue(false);
+    });
+
+    it('hides profiles folder bar when showDetails is OFF', () => {
+      render(<ManageProfilesModal {...defaultProps} />);
+      
+      // The folder bar should not be rendered
+      expect(screen.queryByText('Profiles folder:')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Open folder/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Refresh/i })).not.toBeInTheDocument();
     });
   });
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useShowDetails } from '@/lib/use-show-details';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Pencil, Trash2, FolderOpen, RefreshCw, Eye, Play } from 'lucide-react';
@@ -35,6 +36,7 @@ export function ManageProfilesModal({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewAppsProfile, setViewAppsProfile] = useState<DiscoveredProfile | null>(null);
   const refreshFeedback = useMicroFeedback();
+  const showDetails = useShowDetails();
 
   const getDisplayLabel = (profile: DiscoveredProfile): string => {
     return profile.displayName || profile.name;
@@ -59,43 +61,45 @@ export function ManageProfilesModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 px-1 py-2 bg-muted/30 rounded-md">
-          <span className="text-xs text-muted-foreground font-medium">Profiles folder:</span>
-          <span className="flex-1 text-xs font-mono truncate" title={profilesDirectory}>
-            {profilesDirectory}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2"
-            onClick={onOpenFolder}
-          >
-            <FolderOpen className="h-3 w-3 mr-1" />
-            Open folder
-          </Button>
-          <Button
-            ref={refreshFeedback.buttonRef}
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 relative"
-            onClick={async () => {
-              setIsRefreshing(true);
-              await refreshFeedback.triggerAsync(
-                async () => {
-                  await onRefresh();
-                },
-                'Refreshed',
-                'Refresh failed'
-              );
-              setIsRefreshing(false);
-            }}
-            disabled={isRefreshing}
-          >
-            <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refresh
-            <InlineFeedbackPopover feedback={refreshFeedback.feedback} />
-          </Button>
-        </div>
+        {showDetails && (
+          <div className="flex items-center gap-2 px-1 py-2 bg-muted/30 rounded-md">
+            <span className="text-xs text-muted-foreground font-medium">Profiles folder:</span>
+            <span className="flex-1 text-xs font-mono truncate" title={profilesDirectory}>
+              {profilesDirectory}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={onOpenFolder}
+            >
+              <FolderOpen className="h-3 w-3 mr-1" />
+              Open folder
+            </Button>
+            <Button
+              ref={refreshFeedback.buttonRef}
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 relative"
+              onClick={async () => {
+                setIsRefreshing(true);
+                await refreshFeedback.triggerAsync(
+                  async () => {
+                    await onRefresh();
+                  },
+                  'Refreshed',
+                  'Refresh failed'
+                );
+                setIsRefreshing(false);
+              }}
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+              <InlineFeedbackPopover feedback={refreshFeedback.feedback} />
+            </Button>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto border rounded-md">
           <table className="w-full">
