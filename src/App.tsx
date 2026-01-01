@@ -162,10 +162,12 @@ function AppContent() {
   
   // Profile naming modal state
   const [showProfileNameModal, setShowProfileNameModal] = useState(false);
-  const [profileNameModalPath, setProfileNameModalPath] = useState('');
-  const [profileNameModalValue, setProfileNameModalValue] = useState('');
+  const [profileNameModalPath, setProfileNameModalPath] = useState(''); // Path to pending profile file
+  const [profileNameModalValue, setProfileNameModalValue] = useState(''); // User-typed display name
   const [profileNameModalMode, setProfileNameModalMode] = useState<'save' | 'rename'>('save');
   const [profileNameModalMoreOptions, setProfileNameModalMoreOptions] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_pendingSuggestedName, setPendingSuggestedName] = useState(''); // Suggested filename for new profile (reserved for future use)
   
   // Profile delete confirmation modal state
   const [showDeleteProfileModal, setShowDeleteProfileModal] = useState(false);
@@ -257,38 +259,102 @@ function AppContent() {
     }
   };
 
-  const openProfileNameModal = (profilePath: string, existingName: string = '', mode: 'save' | 'rename' = 'save') => {
+  const openProfileNameModal = (profilePath: string, existingName: string = '', mode: 'save' | 'rename' = 'save', suggestedName: string = '') => {
     setProfileNameModalPath(profilePath);
     setProfileNameModalValue(existingName);
     setProfileNameModalMode(mode);
     setProfileNameModalMoreOptions(false);
+    setPendingSuggestedName(suggestedName);
     setShowProfileNameModal(true);
   };
 
   // Test-only hook for E2E testing
+  // Exposed in dev mode or when VITE_E2E is set (harmless in production since it's tree-shaken)
   useEffect(() => {
-    if (import.meta.env.MODE === 'test' || import.meta.env.VITE_E2E === '1') {
-      (window as any).__endstate_e2e_openSaveProfileModal = ({ suggestedName }: { suggestedName: string }) => {
-        openProfileNameModal('C:\\test\\profile.jsonc', suggestedName, 'save');
+    if (import.meta.env.DEV || import.meta.env.VITE_E2E === '1') {
+      (window as any).__endstate_e2e_openSaveProfileModal = ({ pendingPath, suggestedName }: { pendingPath: string; suggestedName: string }) => {
+        openProfileNameModal(pendingPath, suggestedName, 'save', suggestedName);
+      };
+      return () => {
+        delete (window as any).__endstate_e2e_openSaveProfileModal;
       };
     }
   }, []);
 
   const handleSaveProfileName = async () => {
     try {
-      // Empty input clears display name (falls back to filename)
       const trimmedValue = profileNameModalValue.trim();
-      await saveProfileMetadata(profileNameModalPath, { 
-        displayName: trimmedValue || undefined 
-      });
+      
+      if (profileNameModalMode === 'save' && profileNameModalPath) {
+        // In save mode, rename the pending profile file to match the typed name
+        // and save the display name as metadata
+        if (trimmedValue) {
+          // Sanitize the name for use as filename
+          const sanitized = trimmedValue
+            .replace(/[<>:"/\\|?*]/g, '_') // Replace invalid chars
+            .replace(/\s+/g, '_') // Replace spaces with underscores
+            .slice(0, 100); // Limit length
+          
+          // Get directory and extension from current path
+          const pathParts = profileNameModalPath.split(/[\\/]/);
+          const directory = pathParts.slice(0, -1).join('\\');
+          const currentFilename = pathParts[pathParts.length - 1];
+          const extension = currentFilename.match(/\.(jsonc?|json5)$/i)?.[0] || '.jsonc';
+          
+          // Generate new filename with collision avoidance
+          let newFilename = `${sanitized}${extension}`;
+          let newPath = `${directory}\\${newFilename}`;
+          
+          // Check for collision and add suffix if needed
+          let suffix = 1;
+          while (newPath !== profileNameModalPath) {
+            const exists = await invoke<boolean>('check_file_exists', { path: newPath });
+            if (!exists) break;
+            newFilename = `${sanitized}_${suffix}${extension}`;
+            newPath = `${directory}\\${newFilename}`;
+            suffix++;
+            if (suffix > 100) break; // Safety limit
+          }
+          
+          // Rename the file if path changed
+          if (newPath !== profileNameModalPath) {
+            await invoke('rename_file', { oldPath: profileNameModalPath, newPath });
+            
+            // Update selected profile if it was the renamed one
+            if (profileNameModalPath === selectedProfilePath) {
+              const newName = newFilename.replace(/\.(jsonc?|json5)$/i, '');
+              setSelectedProfile(newName);
+              setSelectedProfilePath(newPath);
+              updateSettings({ lastSelectedProfile: newName, lastSelectedProfilePath: newPath });
+            }
+            
+            // Save display name as metadata on the new path
+            await saveProfileMetadata(newPath, { displayName: trimmedValue });
+          } else {
+            // No rename needed, just save metadata
+            await saveProfileMetadata(profileNameModalPath, { displayName: trimmedValue });
+          }
+        } else {
+          // No name provided, keep filename as-is, no metadata needed
+        }
+      } else {
+        // Rename mode: just update display name metadata
+        await saveProfileMetadata(profileNameModalPath, { 
+          displayName: trimmedValue || undefined 
+        });
+      }
+      
       await refreshProfiles();
+      showToast('Profile saved', 'success');
     } catch (err) {
       console.error('Failed to save profile name:', err);
+      showToast('Failed to save profile', 'error');
     }
     setShowProfileNameModal(false);
     setProfileNameModalPath('');
     setProfileNameModalValue('');
     setProfileNameModalMoreOptions(false);
+    setPendingSuggestedName('');
   };
 
   const handleCancelProfileName = async () => {
@@ -331,6 +397,7 @@ function AppContent() {
     setProfileNameModalPath('');
     setProfileNameModalValue('');
     setProfileNameModalMoreOptions(false);
+    setPendingSuggestedName('');
   };
 
   const handleDeleteProfile = async () => {
@@ -728,6 +795,11 @@ function AppContent() {
       timestamp: new Date().toISOString(),
       success: true,
       summary: { total: capturedCount },
+      artifactPaths: runBundle ? {
+        logFile: runBundle.logPath,
+        eventsFile: runBundle.eventsPath,
+        bundleDir: runBundle.directory,
+      } : undefined,
     };
     const newLifecycleState = recordLifecycleEvent('capture', captureEvent);
     setLifecycleState(newLifecycleState);
@@ -869,6 +941,11 @@ function AppContent() {
       profilePath: selectedProfilePath,
       success: true,
       summary: { installed, alreadyPresent },
+      artifactPaths: runBundle ? {
+        logFile: runBundle.logPath,
+        eventsFile: runBundle.eventsPath,
+        bundleDir: runBundle.directory,
+      } : undefined,
     };
     const newState = recordLifecycleEvent('preview', previewEvent);
     setLifecycleState(newState);
@@ -978,6 +1055,7 @@ function AppContent() {
     const present = envelopeData?.counts?.alreadyInstalled ?? 0;
     
     // Record lifecycle event as verify
+    // Note: verify/check doesn't create a run bundle currently
     const verifyEvent: LifecycleEvent = {
       timestamp: new Date().toISOString(),
       profile: selectedProfile,
@@ -1222,6 +1300,11 @@ function AppContent() {
       profilePath: selectedProfilePath,
       success: isSuccess,
       summary: { installed, alreadyPresent, failed },
+      artifactPaths: runBundle ? {
+        logFile: runBundle.logPath,
+        eventsFile: runBundle.eventsPath,
+        bundleDir: runBundle.directory,
+      } : undefined,
     };
     const newState = recordLifecycleEvent('apply', applyEvent);
     setLifecycleState(newState);
@@ -1631,6 +1714,7 @@ function AppContent() {
 
       case 'report':
         // Build recent runs from lifecycle state and last run data
+        // Use artifactPaths from lifecycle events directly (source of truth)
         const recentRuns: Array<{
           id: string;
           timestamp: string;
@@ -1639,10 +1723,10 @@ function AppContent() {
           profile?: string;
           status: 'success' | 'partial' | 'failed';
           summary: { installed?: number; alreadyPresent?: number; failed?: number; captured?: number };
-          artifactBundle?: RunBundle;
+          artifactPaths?: { logFile?: string; eventsFile?: string; bundleDir?: string };
         }> = [];
         
-        // Add from lifecycle state
+        // Add from lifecycle state - include artifactPaths directly
         if (lifecycleState.lastApply) {
           recentRuns.push({
             id: `apply-${lifecycleState.lastApply.timestamp}`,
@@ -1658,6 +1742,7 @@ function AppContent() {
               alreadyPresent: lifecycleState.lastApply.summary?.alreadyPresent,
               failed: lifecycleState.lastApply.summary?.failed,
             },
+            artifactPaths: lifecycleState.lastApply.artifactPaths,
           });
         }
         
@@ -1674,6 +1759,7 @@ function AppContent() {
               alreadyPresent: lifecycleState.lastPreview.summary?.alreadyPresent,
               failed: lifecycleState.lastPreview.summary?.failed,
             },
+            artifactPaths: lifecycleState.lastPreview.artifactPaths,
           });
         }
         
@@ -1687,10 +1773,11 @@ function AppContent() {
             summary: {
               captured: lifecycleState.lastCapture.summary?.total,
             },
+            artifactPaths: lifecycleState.lastCapture.artifactPaths,
           });
         }
         
-        // Add from lastRunCapture/lastRunApply if not already in lifecycle
+        // Add from lastRunCapture/lastRunApply if not already in lifecycle (legacy, no artifact paths)
         if (lastRunCapture && !lifecycleState.lastCapture) {
           recentRuns.push({
             id: `capture-legacy-${lastRunCapture.timestamp}`,
@@ -1722,20 +1809,6 @@ function AppContent() {
         
         // Sort by timestamp descending
         recentRuns.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        
-        // Map artifacts to recent runs by matching timestamps
-        // runArtifacts use ISO timestamps, recentRuns also use ISO timestamps
-        for (const run of recentRuns) {
-          const runTime = new Date(run.timestamp).getTime();
-          // Find artifact within 5 second window (accounts for slight timing differences)
-          const matchingArtifact = runArtifacts.find(({ summary }) => {
-            const artifactTime = new Date(summary.timestamp).getTime();
-            return Math.abs(runTime - artifactTime) < 5000 && summary.mode === run.mode;
-          });
-          if (matchingArtifact) {
-            run.artifactBundle = matchingArtifact.bundle;
-          }
-        }
         
         return (
           <div className="space-y-6">
@@ -1859,44 +1932,58 @@ function AppContent() {
                               <span className="text-xs text-muted-foreground italic">
                                 Run in progress
                               </span>
-                            ) : run.artifactBundle ? (
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 text-xs gap-1"
-                                  onClick={async () => {
-                                    try {
-                                      const logContent = await invoke<string>('read_text_file', { path: run.artifactBundle!.logPath });
-                                      await copyText(logContent);
-                                      showToast('Logs copied to clipboard', 'success');
-                                    } catch (err) {
-                                      console.error('Failed to read logs:', err);
-                                      showToast('Failed to read logs', 'error');
-                                    }
-                                  }}
-                                >
-                                  <FileText className="h-3 w-3" />
-                                  View logs
-                                </Button>
-                                {isTauriRuntime() && (
+                            ) : run.artifactPaths?.logFile ? (
+                              <>
+                                {/* Technical details disclosure */}
+                                <details className="mb-2">
+                                  <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                                    Technical details
+                                  </summary>
+                                  <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
+                                    <div><span className="text-muted-foreground">Log path:</span> {run.artifactPaths.logFile}</div>
+                                    {run.artifactPaths.eventsFile && (
+                                      <div><span className="text-muted-foreground">Events path:</span> {run.artifactPaths.eventsFile}</div>
+                                    )}
+                                  </div>
+                                </details>
+                                <div className="flex items-center gap-2">
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     className="h-7 text-xs gap-1"
                                     onClick={async () => {
                                       try {
-                                        await openFolder(run.artifactBundle!.directory);
+                                        const logContent = await invoke<string>('read_text_file', { path: run.artifactPaths!.logFile! });
+                                        await copyText(logContent);
+                                        showToast('Logs copied to clipboard', 'success');
                                       } catch (err) {
-                                        console.error('Failed to open folder:', err);
+                                        console.error('Failed to read logs:', err);
+                                        showToast('Failed to read logs', 'error');
                                       }
                                     }}
                                   >
-                                    <FolderOpen className="h-3 w-3" />
-                                    Open folder
+                                    <FileText className="h-3 w-3" />
+                                    View logs
                                   </Button>
-                                )}
-                              </div>
+                                  {isTauriRuntime() && run.artifactPaths.bundleDir && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs gap-1"
+                                      onClick={async () => {
+                                        try {
+                                          await openFolder(run.artifactPaths!.bundleDir!);
+                                        } catch (err) {
+                                          console.error('Failed to open folder:', err);
+                                        }
+                                      }}
+                                    >
+                                      <FolderOpen className="h-3 w-3" />
+                                      Open folder
+                                    </Button>
+                                  )}
+                                </div>
+                              </>
                             ) : (
                               <span className="text-xs text-muted-foreground italic">
                                 No logs captured for this run

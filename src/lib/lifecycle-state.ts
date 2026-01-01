@@ -25,6 +25,12 @@ export interface LifecycleEvent {
     failed?: number;
     missing?: number;
   };
+  /** Artifact paths from the run bundle (for Reports log visibility) */
+  artifactPaths?: {
+    logFile?: string;
+    eventsFile?: string;
+    bundleDir?: string;
+  };
 }
 
 export interface LifecycleState {
