@@ -618,13 +618,13 @@ export function OverviewScreen({
               <CheckCircle2 className="h-4 w-4 text-success" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-success">
-                  {action === 'capture' && actionResult?.profile
-                    ? `Saved profile: ${actionResult.profile}`
+                  {action === 'capture'
+                    ? 'Capture complete'
                     : 'Completed successfully'}
                 </p>
-                {action === 'capture' && actionResult?.profile && (
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {profiles.find(p => p.displayName === actionResult.profile || p.name === actionResult.profile)?.name || actionResult.profile}
+                {action === 'capture' && (
+                  <p className="text-xs text-muted-foreground">
+                    Profile ready to save
                   </p>
                 )}
                 {action !== 'capture' && actionProgress?.message && (

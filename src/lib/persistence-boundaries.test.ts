@@ -47,6 +47,7 @@ describe('Persistence Boundaries', () => {
         lastSelectedProfile: 'my-profile',
         lastSelectedProfilePath: 'C:\\custom\\profiles\\my-profile.jsonc',
         dryRunEnabled: false,
+        showTechnicalDetails: false,
       };
 
       seedLocalStorage({
@@ -65,6 +66,7 @@ describe('Persistence Boundaries', () => {
         lastSelectedProfile: 'work-setup',
         lastSelectedProfilePath: '/home/user/profiles/work-setup.jsonc',
         dryRunEnabled: true,
+        showTechnicalDetails: false,
       };
 
       saveSettings(settings);
@@ -93,6 +95,7 @@ describe('Persistence Boundaries', () => {
         lastSelectedProfile: '',
         lastSelectedProfilePath: '',
         dryRunEnabled: true,
+        showTechnicalDetails: false,
       };
 
       saveSettings(initial);
@@ -437,6 +440,7 @@ describe('Persistence Boundaries', () => {
         lastSelectedProfile: 'test',
         lastSelectedProfilePath: 'C:\\profiles\\test.jsonc',
         dryRunEnabled: true,
+        showTechnicalDetails: false,
       };
       saveSettings(settings);
 

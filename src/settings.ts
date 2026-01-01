@@ -7,6 +7,7 @@ export interface AppSettings {
   lastSelectedProfile: string;
   lastSelectedProfilePath: string;
   dryRunEnabled: boolean;
+  showTechnicalDetails: boolean;
 }
 
 const SETTINGS_KEY = 'endstate-gui-settings';
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   lastSelectedProfile: '',
   lastSelectedProfilePath: '',
   dryRunEnabled: true,
+  showTechnicalDetails: false,
 };
 
 export function loadSettings(): AppSettings {

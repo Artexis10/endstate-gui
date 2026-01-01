@@ -28,6 +28,7 @@ import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
 import { RenameFileModal } from './components/app/rename-file-modal';
+import { LogViewerModal } from './components/app/log-viewer-modal';
 import { ToastProvider, useToast } from './components/ui/toast';
 import { formatCount } from './lib/pluralize';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
@@ -182,12 +183,37 @@ function AppContent() {
   // Run artifacts state for Report page
   const [runArtifacts, setRunArtifacts] = useState<Array<{ bundle: RunBundle; summary: RunSummary }>>([]);
   
+  // Log viewer modal state
+  const [showLogViewerModal, setShowLogViewerModal] = useState(false);
+  const [logViewerContent, setLogViewerContent] = useState('');
+  const [logViewerTitle, setLogViewerTitle] = useState('Log Viewer');
+  const [logViewerLoading, setLogViewerLoading] = useState(false);
+  const [logViewerError, setLogViewerError] = useState<string | null>(null);
+  
+  // Helper to open log viewer modal
+  const openLogViewer = async (logPath: string, title: string = 'Log Viewer') => {
+    setLogViewerTitle(title);
+    setLogViewerContent('');
+    setLogViewerError(null);
+    setLogViewerLoading(true);
+    setShowLogViewerModal(true);
+    
+    try {
+      const content = await invoke<string>('read_text_file', { path: logPath });
+      setLogViewerContent(content);
+    } catch (err) {
+      console.error('Failed to read log file:', err);
+      setLogViewerError('Failed to read log file');
+    } finally {
+      setLogViewerLoading(false);
+    }
+  };
+  
   // Micro-feedback hooks for copy actions
   const diagnosticsCopyFeedback = useMicroFeedback();
   const folderPathCopyFeedback = useMicroFeedback();
   const artifactPathCopyFeedback = useMicroFeedback();
   const artifactDiagnosticsCopyFeedback = useMicroFeedback();
-  const artifactLogCopyFeedback = useMicroFeedback();
   
   // Dismiss result - only collapse UI, preserve summary for Overview display
   const dismissOverviewResult = () => {
@@ -1934,36 +1960,29 @@ function AppContent() {
                               </span>
                             ) : run.artifactPaths?.logFile ? (
                               <>
-                                {/* Technical details disclosure */}
-                                <details className="mb-2">
-                                  <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                                    Technical details
-                                  </summary>
-                                  <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
-                                    <div><span className="text-muted-foreground">Log path:</span> {run.artifactPaths.logFile}</div>
-                                    {run.artifactPaths.eventsFile && (
-                                      <div><span className="text-muted-foreground">Events path:</span> {run.artifactPaths.eventsFile}</div>
-                                    )}
-                                  </div>
-                                </details>
+                                {/* Technical details disclosure - only shown when setting enabled */}
+                                {settings.showTechnicalDetails && (
+                                  <details className="mb-2">
+                                    <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                                      Technical details
+                                    </summary>
+                                    <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
+                                      <div><span className="text-muted-foreground">Log path:</span> {run.artifactPaths.logFile}</div>
+                                      {run.artifactPaths.eventsFile && (
+                                        <div><span className="text-muted-foreground">Events path:</span> {run.artifactPaths.eventsFile}</div>
+                                      )}
+                                    </div>
+                                  </details>
+                                )}
                                 <div className="flex items-center gap-2">
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     className="h-7 text-xs gap-1"
-                                    onClick={async () => {
-                                      try {
-                                        const logContent = await invoke<string>('read_text_file', { path: run.artifactPaths!.logFile! });
-                                        await copyText(logContent);
-                                        showToast('Logs copied to clipboard', 'success');
-                                      } catch (err) {
-                                        console.error('Failed to read logs:', err);
-                                        showToast('Failed to read logs', 'error');
-                                      }
-                                    }}
+                                    onClick={() => openLogViewer(run.artifactPaths!.logFile!, `${run.mode.charAt(0).toUpperCase() + run.mode.slice(1)} Log`)}
                                   >
                                     <FileText className="h-3 w-3" />
-                                    View logs
+                                    View log
                                   </Button>
                                   {isTauriRuntime() && run.artifactPaths.bundleDir && (
                                     <Button
@@ -2028,39 +2047,32 @@ function AppContent() {
                           </div>
                         </summary>
                         <div className="px-2 pb-2 pt-1 border-t border-border bg-muted/30">
-                          {/* Technical details disclosure */}
-                          <details className="mb-2">
-                            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                              Technical details
-                            </summary>
-                            <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
-                              <div><span className="text-muted-foreground">Run ID:</span> {summary.runId}</div>
-                              <div><span className="text-muted-foreground">Log path:</span> {summary.artifactPaths?.logFile || bundle.logPath}</div>
-                              <div><span className="text-muted-foreground">Events path:</span> {summary.artifactPaths?.eventsFile || 'N/A'}</div>
-                            </div>
-                          </details>
+                          {/* Technical details disclosure - only shown when setting enabled */}
+                          {settings.showTechnicalDetails && (
+                            <details className="mb-2">
+                              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                                Technical details
+                              </summary>
+                              <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
+                                <div><span className="text-muted-foreground">Run ID:</span> {summary.runId}</div>
+                                <div><span className="text-muted-foreground">Log path:</span> {summary.artifactPaths?.logFile || bundle.logPath}</div>
+                                <div><span className="text-muted-foreground">Events path:</span> {summary.artifactPaths?.eventsFile || 'N/A'}</div>
+                              </div>
+                            </details>
+                          )}
                           <div className="flex flex-wrap gap-2 mt-1">
-                            {/* View log button - uses persisted artifact path */}
+                            {/* View log button - opens log viewer modal */}
                             <Button
-                              ref={artifactLogCopyFeedback.buttonRef}
                               variant="ghost"
                               size="sm"
-                              className="h-7 text-xs gap-1 relative"
-                              onClick={async () => {
-                                await artifactLogCopyFeedback.triggerAsync(
-                                  async () => {
-                                    const logPath = summary.artifactPaths?.logFile || bundle.logPath;
-                                    const content = await invoke<string>('read_text_file', { path: logPath });
-                                    await copyText(content);
-                                  },
-                                  'Copied',
-                                  'Copy failed'
-                                );
+                              className="h-7 text-xs gap-1"
+                              onClick={() => {
+                                const logPath = summary.artifactPaths?.logFile || bundle.logPath;
+                                openLogViewer(logPath, `${summary.mode.charAt(0).toUpperCase() + summary.mode.slice(1)} Log`);
                               }}
                             >
                               <FileText className="h-3 w-3" />
                               View log
-                              <InlineFeedbackPopover feedback={artifactLogCopyFeedback.feedback} />
                             </Button>
                             {isTauriRuntime() && (
                               <Button
@@ -2227,6 +2239,31 @@ function AppContent() {
                   </Button>
                   <Button variant="ghost" onClick={resetSettings}>
                     Reset to Defaults
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Advanced Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Advanced</CardTitle>
+                <CardDescription>Power user options</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium">Show technical details</label>
+                    <p className="text-xs text-muted-foreground">
+                      Display file paths and run IDs in Reports
+                    </p>
+                  </div>
+                  <Button
+                    variant={settings.showTechnicalDetails ? 'primary' : 'secondary'}
+                    size="sm"
+                    onClick={() => updateSettings({ showTechnicalDetails: !settings.showTechnicalDetails })}
+                  >
+                    {settings.showTechnicalDetails ? 'On' : 'Off'}
                   </Button>
                 </div>
               </CardContent>
@@ -2454,6 +2491,16 @@ function AppContent() {
         currentFilename={renameFileCurrentName}
         currentDirectory={profilesDirectory}
         onConfirm={handleRenameFile}
+      />
+
+      {/* Log Viewer Modal */}
+      <LogViewerModal
+        open={showLogViewerModal}
+        onOpenChange={setShowLogViewerModal}
+        logContent={logViewerContent}
+        title={logViewerTitle}
+        isLoading={logViewerLoading}
+        error={logViewerError}
       />
     </>
   );

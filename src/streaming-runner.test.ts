@@ -16,6 +16,7 @@ describe('streaming-runner', () => {
     lastSelectedProfile: '',
     lastSelectedProfilePath: '',
     dryRunEnabled: true,
+    showTechnicalDetails: false,
   };
 
   beforeEach(() => {
