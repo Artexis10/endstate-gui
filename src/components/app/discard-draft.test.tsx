@@ -209,7 +209,7 @@ describe('Discard Draft UX Contracts', () => {
   });
 
   describe('Contract 4: Green saved card appears after save', () => {
-    it('shows green saved card when lastSavedProfile exists and no pending draft', async () => {
+    it('shows green saved card when lastSavedProfile exists and no pending draft', () => {
       const lastSavedProfile = {
         name: 'My New Profile',
         timestamp: new Date(),
@@ -222,8 +222,8 @@ describe('Discard Draft UX Contracts', () => {
           profiles={mockProfiles}
           profilesDirectory="C:\\profiles"
           isRunning={false}
-          runningAction="capture"
-          actionStatus="success"
+          runningAction={null}
+          actionStatus="idle"
           actionProgress={null}
           actionResult={null}
           onNavigate={vi.fn()}
@@ -241,11 +241,7 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Expand Capture card to see the saved profile card inside
-      const captureCard = screen.getByTestId('overview-card-capture');
-      await userEvent.click(captureCard);
-
-      // Verify green saved card is shown inside Capture card
+      // Verify green saved card is shown WITHOUT expanding (Contract D)
       expect(screen.getByText('Profile saved')).toBeInTheDocument();
       expect(screen.getByText('My New Profile')).toBeInTheDocument();
     });
@@ -287,7 +283,7 @@ describe('Discard Draft UX Contracts', () => {
       expect(screen.queryByText('Profile saved')).not.toBeInTheDocument();
     });
 
-    it('green saved card persists across navigation (render condition test)', async () => {
+    it('green saved card persists across navigation (render condition test)', () => {
       const lastSavedProfile = {
         name: 'My New Profile',
         timestamp: new Date(),
@@ -300,8 +296,8 @@ describe('Discard Draft UX Contracts', () => {
           profiles={mockProfiles}
           profilesDirectory="C:\\profiles"
           isRunning={false}
-          runningAction="capture"
-          actionStatus="success"
+          runningAction={null}
+          actionStatus="idle"
           actionProgress={null}
           actionResult={null}
           onNavigate={vi.fn()}
@@ -319,11 +315,7 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Expand Capture card to see the saved profile card inside
-      const captureCard = screen.getByTestId('overview-card-capture');
-      await userEvent.click(captureCard);
-
-      // Verify green saved card is shown initially inside Capture card
+      // Verify green saved card is shown initially WITHOUT expanding (Contract D)
       expect(screen.getByText('Profile saved')).toBeInTheDocument();
 
       // Simulate navigation by re-rendering (component remount)
@@ -334,8 +326,8 @@ describe('Discard Draft UX Contracts', () => {
           profiles={mockProfiles}
           profilesDirectory="C:\\profiles"
           isRunning={false}
-          runningAction="capture"
-          actionStatus="success"
+          runningAction={null}
+          actionStatus="idle"
           actionProgress={null}
           actionResult={null}
           onNavigate={vi.fn()}
@@ -353,7 +345,7 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Capture card should still be expanded, verify green saved card still shows after re-render
+      // Verify green saved card still shows after re-render WITHOUT expanding (Contract D)
       expect(screen.getByText('Profile saved')).toBeInTheDocument();
       expect(screen.getByText('My New Profile')).toBeInTheDocument();
     });

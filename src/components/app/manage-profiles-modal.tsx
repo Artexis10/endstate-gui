@@ -134,7 +134,7 @@ export function ManageProfilesModal({
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{getDisplayLabel(profile)}</span>
                           {selected && (
-                            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                            <span className="text-xs bg-primary/15 text-primary border border-primary/25 px-2 py-0.5 rounded font-medium">
                               Active
                             </span>
                           )}
