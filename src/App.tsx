@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { motion } from 'framer-motion';
 import {
   EndstateEnvelope,
   EndstateCapabilitiesData,
@@ -36,7 +37,7 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
-import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FileText } from 'lucide-react';
+import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FileText, CheckCircle2 } from 'lucide-react';
 import { useMicroFeedback } from './lib/micro-feedback';
 import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
 import { copyText } from './lib/clipboard';
@@ -178,6 +179,8 @@ function AppContent() {
   const [profileNameModalMoreOptions, setProfileNameModalMoreOptions] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_pendingSuggestedName, setPendingSuggestedName] = useState(''); // Suggested filename for new profile (reserved for future use)
+  const [profileNameModalSuccess, setProfileNameModalSuccess] = useState(false); // Transitory success state
+  const [savedProfileDisplayName, setSavedProfileDisplayName] = useState(''); // Store name for success animation
   
   // Profile delete confirmation modal state
   const [showDeleteProfileModal, setShowDeleteProfileModal] = useState(false);
@@ -405,6 +408,9 @@ function AppContent() {
       
       await refreshProfiles();
       
+      // Track the saved profile for success animation
+      let savedProfileForAnimation: DiscoveredProfile | null = null;
+      
       // If this was a save from capture draft, clear the pending draft and select the new profile
       if (profileNameModalMode === 'save' && pendingCaptureDraftPath) {
         // Find the saved profile (may have been renamed)
@@ -418,6 +424,7 @@ function AppContent() {
           ) || discovered.sort((a, b) => b.path.localeCompare(a.path))[0];
           
           if (savedProfile) {
+            savedProfileForAnimation = savedProfile;
             setSelectedProfile(savedProfile.name);
             setSelectedProfilePath(savedProfile.path);
             updateSettings({ lastSelectedProfile: savedProfile.name, lastSelectedProfilePath: savedProfile.path });
@@ -437,14 +444,25 @@ function AppContent() {
         }
       }
       
-      showToast('Profile saved', 'success');
+      // Show transitory success state in modal
+      // Use the saved profile we just found, or fall back to the trimmed value
+      let displayName = trimmedValue || 'Profile';
+      if (savedProfileForAnimation) {
+        displayName = savedProfileForAnimation.displayName || savedProfileForAnimation.name;
+      }
+      setSavedProfileDisplayName(displayName);
+      setProfileNameModalSuccess(true);
       
-      // Close modal on success
-      setShowProfileNameModal(false);
-      setProfileNameModalPath('');
-      setProfileNameModalValue('');
-      setProfileNameModalMoreOptions(false);
-      setPendingSuggestedName('');
+      // Auto-close modal after success animation (750ms total)
+      setTimeout(() => {
+        setShowProfileNameModal(false);
+        setProfileNameModalPath('');
+        setProfileNameModalValue('');
+        setProfileNameModalMoreOptions(false);
+        setPendingSuggestedName('');
+        setProfileNameModalSuccess(false);
+        setSavedProfileDisplayName('');
+      }, 750);
     } catch (err) {
       console.error('Failed to save profile name:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -466,6 +484,8 @@ function AppContent() {
         setProfileNameModalValue('');
         setProfileNameModalMoreOptions(false);
         setPendingSuggestedName('');
+        setProfileNameModalSuccess(false);
+        setSavedProfileDisplayName('');
         
         showToast('Draft file no longer exists. Run capture again to create a new profile.', 'error');
       } else {
@@ -2505,7 +2525,7 @@ function AppContent() {
 
       {/* Profile Name Modal */}
       <Dialog open={showProfileNameModal} onOpenChange={(open) => {
-        if (!open) {
+        if (!open && !profileNameModalSuccess) {
           // Treat closing via X button same as Cancel - delete profile in save mode
           handleCancelProfileName();
         }
@@ -2513,22 +2533,57 @@ function AppContent() {
         <DialogContent 
           data-testid="profile-name-modal" 
           role="dialog"
-          onInteractOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            if (!profileNameModalSuccess) {
+              e.preventDefault();
+            }
+          }}
           onEscapeKeyDown={(e) => {
-            e.preventDefault();
-            // Treat Escape same as Cancel - delete profile in save mode
-            handleCancelProfileName();
+            if (!profileNameModalSuccess) {
+              e.preventDefault();
+              // Treat Escape same as Cancel - delete profile in save mode
+              handleCancelProfileName();
+            }
           }}
         >
-          <DialogHeader>
-            <DialogTitle>{profileNameModalMode === 'rename' ? 'Rename profile' : 'Save profile'}</DialogTitle>
-            <DialogDescription>
-              {profileNameModalMode === 'rename' 
-                ? 'Enter a new name for this profile. Leave empty to use filename.'
-                : 'Give this profile a name (optional). Leave empty to use filename.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-3">
+          {profileNameModalSuccess ? (
+            // Transitory success state
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="py-12 flex flex-col items-center justify-center gap-4"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.1, duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+                className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center"
+              >
+                <CheckCircle2 className="w-10 h-10 text-success" />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, duration: 0.3 }}
+                className="text-center space-y-1"
+              >
+                <p className="text-lg font-semibold text-success">Profile saved</p>
+                <p className="text-sm text-muted-foreground">{savedProfileDisplayName}</p>
+              </motion.div>
+            </motion.div>
+          ) : (
+            // Normal input state
+            <>
+              <DialogHeader>
+                <DialogTitle>{profileNameModalMode === 'rename' ? 'Rename profile' : 'Save profile'}</DialogTitle>
+                <DialogDescription>
+                  {profileNameModalMode === 'rename' 
+                    ? 'Enter a new name for this profile. Leave empty to use filename.'
+                    : 'Give this profile a name (optional). Leave empty to use filename.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-3">
             {/* Show filename info in save mode - only when showDetails is ON */}
             {profileNameModalMode === 'save' && profileNameModalPath && settings.showDetails && (() => {
               const parts = profileNameModalPath.split(/[\\/]/);
@@ -2594,15 +2649,17 @@ function AppContent() {
                 })()}
               </div>
             )}
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="secondary" onClick={handleCancelProfileName} data-testid="profile-name-cancel">
-              Cancel
-            </Button>
-            <Button onClick={handleSaveProfileName} data-testid="profile-name-save">
-              {profileNameModalMode === 'rename' ? 'Rename' : 'Save profile'}
-            </Button>
-          </DialogFooter>
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="secondary" onClick={handleCancelProfileName} data-testid="profile-name-cancel">
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveProfileName} data-testid="profile-name-save" disabled={isSavingProfile}>
+                  {isSavingProfile ? 'Saving...' : (profileNameModalMode === 'rename' ? 'Rename' : 'Save profile')}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
