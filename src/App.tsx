@@ -475,43 +475,11 @@ function AppContent() {
   };
 
   const handleCancelProfileName = async () => {
-    // In 'save' mode, canceling should delete the profile file that was just created
-    // This makes profile creation truly opt-in
-    if (profileNameModalMode === 'save' && profileNameModalPath) {
-      try {
-        // Delete the profile file and any metadata
-        await deleteProfileFiles(profileNameModalPath);
-        
-        // Refresh profiles to remove the deleted profile from the list
-        await refreshProfiles();
-        
-        // Clear selection if the deleted profile was selected
-        if (profileNameModalPath === selectedProfilePath) {
-          const dir = await loadProfilesDirectory();
-          if (dir) {
-            const discovered = await discoverProfiles(dir);
-            if (discovered.length > 0) {
-              const firstProfile = discovered[0];
-              setSelectedProfile(firstProfile.name);
-              setSelectedProfilePath(firstProfile.path);
-              updateSettings({ lastSelectedProfile: firstProfile.name, lastSelectedProfilePath: firstProfile.path });
-            } else {
-              setSelectedProfile('');
-              setSelectedProfilePath('');
-              updateSettings({ lastSelectedProfile: '', lastSelectedProfilePath: '' });
-            }
-          }
-        }
-        
-        showToast('Profile creation cancelled', 'info');
-      } catch (err) {
-        console.error('Failed to delete profile on cancel:', err);
-      }
-    }
+    // Contract A: Cancel/close does NOT delete the draft file, does NOT clear pendingCaptureDraftPath.
+    // The draft persists until the user explicitly chooses Save profile OR Discard draft.
+    // This allows users to close the modal and return later to save.
     
-    // Do NOT clear pendingCaptureDraftPath on cancel - draft persists until save or explicit dismiss
-    
-    // Close modal and reset state
+    // Close modal and reset modal-specific state only
     setShowProfileNameModal(false);
     setProfileNameModalPath('');
     setProfileNameModalValue('');

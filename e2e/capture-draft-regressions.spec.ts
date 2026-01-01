@@ -226,7 +226,11 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     }
   });
 
-  test('Cancel deletes draft: modal cancel is opt-in behavior', async ({ page }) => {
+  test('T2: Cancel does NOT delete draft - draft persists for later save', async ({ page }) => {
+    // Contract A: Cancel/close Save Profile modal does NOT delete the draft file,
+    // and does NOT clear pendingCaptureDraftPath. The draft persists until the user
+    // explicitly chooses Save profile OR Discard draft.
+    
     // Create draft
     await page.evaluate((draftPath) => {
       const existingPaths = (window as any).__test_existingPaths;
@@ -249,19 +253,39 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     await page.click('[data-testid="profile-name-cancel"]');
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
     
-    // Wait for delete operation
-    await page.waitForTimeout(500);
+    // Wait for any async operations
+    await page.waitForTimeout(300);
     
-    // Draft should be deleted (opt-in behavior: cancel = delete)
+    // Contract A: Draft should STILL exist after cancel
     const draftExists = await page.evaluate((draftPath) => {
       return (window as any).__test_existingPaths.has(draftPath);
     }, DRAFT_PATH);
-    expect(draftExists).toBe(false);
+    expect(draftExists).toBe(true);
     
-    // Verify delete was called
+    // Verify NO delete was called
     const operations = await page.evaluate(() => (window as any).__test_operations);
     const deleteOps = operations.filter((op: any) => op.type === 'delete_file' && op.path === DRAFT_PATH);
-    expect(deleteOps.length).toBeGreaterThan(0);
+    expect(deleteOps.length).toBe(0);
+    
+    // Draft can still be saved afterward - open modal again
+    await page.evaluate((draftPath) => {
+      (window as any).__endstate_e2e_openSaveProfileModal?.({ 
+        pendingPath: draftPath, 
+        suggestedName: 'Now Saving' 
+      });
+    }, DRAFT_PATH);
+    
+    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
+    await page.locator('[data-testid="profile-name-input"]').fill('Now Saving');
+    await page.click('[data-testid="profile-name-save"]');
+    
+    // Save should succeed
+    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
+    
+    // Verify rename was called (save operation)
+    const finalOps = await page.evaluate(() => (window as any).__test_operations);
+    const renameOps = finalOps.filter((op: any) => op.type === 'rename_file');
+    expect(renameOps.length).toBeGreaterThan(0);
   });
 
   test('Discard works: removes draft and returns to neutral state', async ({ page }) => {
