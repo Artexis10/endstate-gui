@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { invoke } from '@/lib/tauri-bridge';
 import { parseJsonc, type ProfileApp } from '@/lib/jsonc-parse';
-import { Search, Package, ChevronDown, ChevronRight, Copy, FileText } from 'lucide-react';
+import { Search, Package, Copy, FileText } from 'lucide-react';
 import { useMicroFeedback } from '@/lib/micro-feedback';
 import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
 import { copyText } from '@/lib/clipboard';
+import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 
 interface ViewAppsModalProps {
   open: boolean;
@@ -45,7 +46,6 @@ export function ViewAppsModal({
 }: ViewAppsModalProps) {
   const [apps, setApps] = useState<ProfileApp[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [technicalExpanded, setTechnicalExpanded] = useState(false);
   const diagnosticsFeedback = useMicroFeedback();
   const pathFeedback = useMicroFeedback();
 
@@ -56,19 +56,24 @@ export function ViewAppsModal({
       });
       // Reset state when opening
       setSearchQuery('');
-      setTechnicalExpanded(false);
     }
   }, [open, profilePath]);
 
-  // Filter apps by search query (search both id and name if available)
+  // Filter apps by search query (search id, name, and winget ref)
   const filteredApps = searchQuery.trim()
     ? apps.filter(app => {
         const query = searchQuery.toLowerCase();
         const matchesId = app.id.toLowerCase().includes(query);
         const matchesName = app.name?.toLowerCase().includes(query);
-        return matchesId || matchesName;
+        const matchesWinget = app.refs?.windows?.toLowerCase().includes(query);
+        return matchesId || matchesName || matchesWinget;
       })
     : apps;
+
+  // Get display identifier: prefer Winget ID, fallback to app.id
+  const getDisplayId = (app: ProfileApp): string => {
+    return app.refs?.windows ?? app.id;
+  };
 
   const copyDiagnostics = async () => {
     const diagnostics = [
@@ -135,79 +140,72 @@ export function ViewAppsModal({
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {filteredApps.map((app, idx) => (
-                  <div key={idx} className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        {/* Show Winget ID as primary identifier */}
-                        <div className="text-sm font-mono truncate" title={app.id}>
-                          {app.id}
-                        </div>
-                        {/* Show friendly name and driver/source as secondary info */}
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {app.name && <span className="truncate">{app.name}</span>}
-                          {app.driver && (
-                            <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">
-                              {app.driver}
-                            </span>
-                          )}
+                {filteredApps.map((app, idx) => {
+                  const displayId = getDisplayId(app);
+                  return (
+                    <div key={idx} className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          {/* Show single identifier: Winget ID if available, else app.id */}
+                          <div className="text-sm font-mono truncate" title={displayId}>
+                            {displayId}
+                          </div>
+                          {/* Show friendly name and driver/source as secondary info */}
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {app.name && <span className="truncate">{app.name}</span>}
+                            {app.driver && (
+                              <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">
+                                {app.driver}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
 
-        {/* Technical details - at bottom (advanced) */}
-        <div className="flex-shrink-0 border-t pt-3">
-          <button
-            onClick={() => setTechnicalExpanded(!technicalExpanded)}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full"
-          >
-            {technicalExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            Technical details
-          </button>
-
-          {technicalExpanded && (
-            <div className="mt-2 space-y-2">
-              {/* File path */}
-              <div className="p-2 bg-muted/30 rounded text-xs">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-muted-foreground">Path:</span>
-                  <span className="font-mono truncate flex-1">{profilePath}</span>
-                  <Button
-                    ref={pathFeedback.buttonRef}
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 relative"
-                    onClick={copyPath}
-                  >
-                    <Copy className="h-3 w-3" />
-                    <InlineFeedbackPopover feedback={pathFeedback.feedback} />
-                  </Button>
-                </div>
+        {/* Details disclosure - only renders when setting is enabled */}
+        <DetailsDisclosure title="Details" className="flex-shrink-0 border-t pt-3">
+          <div className="space-y-2">
+            {/* File path */}
+            <div className="p-2 bg-muted/30 rounded text-xs">
+              <div className="flex items-center gap-2">
+                <FileText className="h-3 w-3 text-muted-foreground" />
+                <span className="text-muted-foreground">Path:</span>
+                <span className="font-mono truncate flex-1">{profilePath}</span>
+                <Button
+                  ref={pathFeedback.buttonRef}
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 relative"
+                  onClick={copyPath}
+                >
+                  <Copy className="h-3 w-3" />
+                  <InlineFeedbackPopover feedback={pathFeedback.feedback} />
+                </Button>
               </div>
-
-              {/* Copy diagnostics */}
-              <Button
-                ref={diagnosticsFeedback.buttonRef}
-                variant="ghost"
-                size="sm"
-                onClick={copyDiagnostics}
-                className="h-7 text-xs gap-1 relative"
-              >
-                <Copy className="h-3 w-3" />
-                Copy diagnostics
-                <InlineFeedbackPopover feedback={diagnosticsFeedback.feedback} />
-              </Button>
             </div>
-          )}
-        </div>
+
+            {/* Copy diagnostics */}
+            <Button
+              ref={diagnosticsFeedback.buttonRef}
+              variant="ghost"
+              size="sm"
+              onClick={copyDiagnostics}
+              className="h-7 text-xs gap-1 relative"
+            >
+              <Copy className="h-3 w-3" />
+              Copy diagnostics
+              <InlineFeedbackPopover feedback={diagnosticsFeedback.feedback} />
+            </Button>
+          </div>
+        </DetailsDisclosure>
 
         <DialogFooter className="pt-2 flex-shrink-0">
           <Button onClick={() => onOpenChange(false)}>

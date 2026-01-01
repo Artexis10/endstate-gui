@@ -6,6 +6,11 @@ import userEvent from '@testing-library/user-event';
 import type { ApplyItem, ApplyCounts } from '../../types';
 import '@testing-library/jest-dom/vitest';
 
+// Mock useShowDetails to control Details visibility in tests
+vi.mock('@/lib/use-show-details', () => ({
+  useShowDetails: vi.fn(() => true), // Default to true so Details section renders
+}));
+
 /**
  * Apply Flow UX Contract Tests
  * 
@@ -13,7 +18,7 @@ import '@testing-library/jest-dom/vitest';
  * 1. When a run is active, primary actions are disabled and UI shows clear running state
  * 2. Progress/log updates do not duplicate (no double append on re-render / StrictMode)
  * 3. Errors render a stable, user-readable message and allow retry
- * 4. On success, results modal opens with technical details collapsed
+ * 4. On success, results modal opens with details collapsed
  * 5. Closing results resets transient UI state
  */
 
@@ -370,7 +375,7 @@ describe('Apply Flow UX Contracts', () => {
       expect(screen.getByText('Your computer is ready')).toBeInTheDocument();
       
       // Verify technical details are collapsed
-      const detailsButton = screen.getByRole('button', { name: /Toggle technical details/i });
+      const detailsButton = screen.getByRole('button', { name: /details \(/i });
       expect(detailsButton).toHaveAttribute('aria-expanded', 'false');
       
       // Verify details content is not visible
@@ -405,7 +410,7 @@ describe('Apply Flow UX Contracts', () => {
       expect(screen.getByText("Here's what will change")).toBeInTheDocument();
       
       // Verify technical details are collapsed
-      const detailsButton = screen.getByRole('button', { name: /Toggle technical details/i });
+      const detailsButton = screen.getByRole('button', { name: /details \(/i });
       expect(detailsButton).toHaveAttribute('aria-expanded', 'false');
     });
 
@@ -433,7 +438,7 @@ describe('Apply Flow UX Contracts', () => {
         />
       );
 
-      const detailsButton = screen.getByRole('button', { name: /Toggle technical details/i });
+      const detailsButton = screen.getByRole('button', { name: /details \(/i });
       await user.click(detailsButton);
       
       // Details should now be expanded
@@ -472,7 +477,7 @@ describe('Apply Flow UX Contracts', () => {
       );
 
       // Expand details
-      const detailsButton = screen.getByRole('button', { name: /Toggle technical details/i });
+      const detailsButton = screen.getByRole('button', { name: /details \(/i });
       await user.click(detailsButton);
       expect(detailsButton).toHaveAttribute('aria-expanded', 'true');
       
@@ -492,7 +497,7 @@ describe('Apply Flow UX Contracts', () => {
       );
       
       // Details should be collapsed again
-      const detailsButtonAfterReopen = screen.getByRole('button', { name: /Toggle technical details/i });
+      const detailsButtonAfterReopen = screen.getByRole('button', { name: /details \(/i });
       expect(detailsButtonAfterReopen).toHaveAttribute('aria-expanded', 'false');
     });
 

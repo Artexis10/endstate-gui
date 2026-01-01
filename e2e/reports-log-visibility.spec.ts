@@ -7,7 +7,7 @@ import { forceAdvancedMode } from './helpers/ui-mode';
  * These tests verify that:
  * 1. "View logs" button appears when artifactPaths.logFile exists in lifecycle state
  * 2. "No logs captured" message only appears when no artifact paths
- * 3. Technical details disclosure shows log path and events path
+ * 3. Details disclosure shows log path and events path
  * 4. Page title is "Reports" (not "Report")
  */
 test.describe('Reports - Log Visibility', () => {
@@ -147,7 +147,7 @@ test.describe('Reports - Log Visibility', () => {
     await expect(page.locator('text=Recent Runs')).toBeVisible();
   });
 
-  test('Technical details disclosure shows log path', async ({ page }) => {
+  test('Details disclosure shows log path when setting enabled', async ({ page }) => {
     // Set up lifecycle state with artifact paths
     await page.evaluate((paths) => {
       const lifecycleState = {
@@ -175,7 +175,15 @@ test.describe('Reports - Log Visibility', () => {
     // Verify Reports page loaded - use specific h1 selector
     await expect(page.locator('h1:has-text("Reports")')).toBeVisible();
 
-    // The technical details disclosure should be available when artifact paths exist
+    // The details disclosure should be available when artifact paths exist and setting is ON
+    // Enable the setting first
+    await page.evaluate(() => {
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify({ showTechnicalDetails: true }));
+    });
+    await page.reload();
+    await page.click('[data-testid="nav-report"]');
+    await page.waitForTimeout(500);
+    
     // This verifies the UI structure is correct
     await expect(page.locator('text=Recent Runs')).toBeVisible();
   });

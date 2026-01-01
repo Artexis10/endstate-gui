@@ -131,7 +131,7 @@ test.describe('Capture Live Progress', () => {
     await expect(modalContent.locator('span.font-mono:has-text("7zip.7zip")')).toBeVisible();
   });
 
-  test('Technical details is closed by default and shows continuous log when opened', async ({ page }) => {
+  test('Details disclosure is closed by default and shows continuous log when opened', async ({ page }) => {
     // Navigate to Capture page
     await goToCapturePage(page);
     
@@ -150,22 +150,34 @@ test.describe('Capture Live Progress', () => {
     // Wait a moment for logs to be fully rendered
     await page.waitForTimeout(200);
     
-    // Assert Technical details exists
-    const technicalDetails = page.locator('summary:has-text("Technical details")');
-    await expect(technicalDetails).toBeVisible({ timeout: 2000 });
+    // Assert Details disclosure exists (requires showTechnicalDetails setting to be ON)
+    // First enable the setting
+    await page.evaluate(() => {
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify({ showTechnicalDetails: true }));
+    });
+    // Reload to pick up the setting
+    await page.reload();
+    await goToCapturePage(page);
     
-    // Assert it's closed by default
-    const detailsElement = page.locator('details:has(summary:has-text("Technical details"))');
-    const isOpenBefore = await detailsElement.evaluate((el: HTMLDetailsElement) => el.open);
-    expect(isOpenBefore).toBe(false);
+    // Run capture again with setting enabled
+    await page.click('main >> button:has-text("Capture computer")');
+    await expect(page.locator('text=Profile created')).toBeVisible({ timeout: 6000 });
+    await page.click('button:has-text("Close")');
+    await page.waitForTimeout(200);
     
-    // Expand Technical details
-    await technicalDetails.click();
-    const isOpenAfter = await detailsElement.evaluate((el: HTMLDetailsElement) => el.open);
-    expect(isOpenAfter).toBe(true);
+    // Assert Details exists
+    const detailsButton = page.locator('button:has-text("Details")');
+    await expect(detailsButton).toBeVisible({ timeout: 2000 });
+    
+    // Assert it's closed by default (content not visible)
+    const logPre = page.locator('pre');
+    await expect(logPre).not.toBeVisible();
+    
+    // Expand Details
+    await detailsButton.click();
     
     // Assert continuous log contains multiple app lines in the pre element
-    const logPre = page.locator('details:has(summary:has-text("Technical details")) pre');
+    await expect(logPre).toBeVisible();
     await expect(logPre).toContainText('Discord.Discord');
     await expect(logPre).toContainText('Google.Chrome');
     await expect(logPre).toContainText('Old.App');

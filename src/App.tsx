@@ -1960,11 +1960,11 @@ function AppContent() {
                               </span>
                             ) : run.artifactPaths?.logFile ? (
                               <>
-                                {/* Technical details disclosure - only shown when setting enabled */}
+                                {/* Details disclosure - only shown when setting enabled */}
                                 {settings.showTechnicalDetails && (
                                   <details className="mb-2">
                                     <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                                      Technical details
+                                      Details
                                     </summary>
                                     <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
                                       <div><span className="text-muted-foreground">Log path:</span> {run.artifactPaths.logFile}</div>
@@ -2047,11 +2047,11 @@ function AppContent() {
                           </div>
                         </summary>
                         <div className="px-2 pb-2 pt-1 border-t border-border bg-muted/30">
-                          {/* Technical details disclosure - only shown when setting enabled */}
+                          {/* Details disclosure - only shown when setting enabled */}
                           {settings.showTechnicalDetails && (
                             <details className="mb-2">
                               <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                                Technical details
+                                Details
                               </summary>
                               <div className="mt-1 p-2 bg-muted/50 rounded text-xs font-mono space-y-1">
                                 <div><span className="text-muted-foreground">Run ID:</span> {summary.runId}</div>
@@ -2253,9 +2253,9 @@ function AppContent() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium">Show technical details</label>
+                    <label className="text-sm font-medium">Show details</label>
                     <p className="text-xs text-muted-foreground">
-                      Display file paths and run IDs in Reports
+                      Show file paths and diagnostic info
                     </p>
                   </div>
                   <Button

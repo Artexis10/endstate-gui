@@ -9,6 +9,11 @@ vi.mock('@/lib/tauri-bridge', () => ({
   invoke: vi.fn(),
 }));
 
+// Mock the useShowDetails hook
+vi.mock('@/lib/use-show-details', () => ({
+  useShowDetails: vi.fn(() => false),
+}));
+
 describe('ViewAppsModal', () => {
   const defaultProps = {
     open: true,
@@ -143,18 +148,75 @@ describe('ViewAppsModal', () => {
     });
   });
 
-  it('shows Technical details accordion', async () => {
+  it('hides Details disclosure when showTechnicalDetails setting is OFF', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
+    const { useShowDetails } = await import('@/lib/use-show-details');
     vi.mocked(invoke).mockResolvedValue(JSON.stringify({
       version: 1,
       apps: [{ id: 'App.One' }],
     }));
+    vi.mocked(useShowDetails).mockReturnValue(false);
 
     render(<ViewAppsModal {...defaultProps} />);
     
-    // Technical details toggle should be present
+    // Wait for apps to load
     await waitFor(() => {
-      expect(screen.getByText('Technical details')).toBeInTheDocument();
+      expect(screen.getByText('App.One')).toBeInTheDocument();
+    });
+
+    // Details disclosure should NOT be present when setting is OFF
+    expect(screen.queryByText('Details')).not.toBeInTheDocument();
+  });
+
+  it('shows Details disclosure when showTechnicalDetails setting is ON', async () => {
+    const { invoke } = await import('@/lib/tauri-bridge');
+    const { useShowDetails } = await import('@/lib/use-show-details');
+    vi.mocked(invoke).mockResolvedValue(JSON.stringify({
+      version: 1,
+      apps: [{ id: 'App.One' }],
+    }));
+    vi.mocked(useShowDetails).mockReturnValue(true);
+
+    render(<ViewAppsModal {...defaultProps} />);
+    
+    // Details toggle should be present when setting is ON
+    await waitFor(() => {
+      expect(screen.getByText('Details')).toBeInTheDocument();
+    });
+  });
+
+  it('displays Winget ID when refs.windows is available', async () => {
+    const { invoke } = await import('@/lib/tauri-bridge');
+    vi.mocked(invoke).mockResolvedValue(JSON.stringify({
+      version: 1,
+      apps: [
+        { id: 'vscode', refs: { windows: 'Microsoft.VisualStudioCode' } },
+      ],
+    }));
+
+    render(<ViewAppsModal {...defaultProps} />);
+    
+    // Should show Winget ID, not the internal id
+    await waitFor(() => {
+      expect(screen.getByText('Microsoft.VisualStudioCode')).toBeInTheDocument();
+      expect(screen.queryByText('vscode')).not.toBeInTheDocument();
+    });
+  });
+
+  it('falls back to app.id when refs.windows is not available', async () => {
+    const { invoke } = await import('@/lib/tauri-bridge');
+    vi.mocked(invoke).mockResolvedValue(JSON.stringify({
+      version: 1,
+      apps: [
+        { id: 'some-internal-id', name: 'Some App' },
+      ],
+    }));
+
+    render(<ViewAppsModal {...defaultProps} />);
+    
+    // Should show app.id as fallback
+    await waitFor(() => {
+      expect(screen.getByText('some-internal-id')).toBeInTheDocument();
     });
   });
 });

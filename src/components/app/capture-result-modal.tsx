@@ -3,6 +3,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { CheckCircle2, Copy, Package, ChevronDown, ChevronRight, FileText, Search } from 'lucide-react';
 import { useState } from 'react';
+import { DetailsDisclosure } from '../ui/details-disclosure';
 import type { CapturedApp, CaptureCounts } from '../../types';
 import { useMicroFeedback } from '@/lib/micro-feedback';
 import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
@@ -33,7 +34,6 @@ export function CaptureResultModal({
   enableSearch = false,
   customTitle,
 }: CaptureResultModalProps) {
-  const [showDetails, setShowDetails] = useState(false);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const diagnosticsFeedback = useMicroFeedback(2000);
   const pathFeedback = useMicroFeedback();
@@ -145,18 +145,8 @@ export function CaptureResultModal({
                 />
               </div>
             )}
-            <button
-              onClick={() => setShowDetails(!showDetails)}
-              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
-              aria-label="Toggle technical details"
-              aria-expanded={showDetails}
-            >
-              {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              Details ({searchQuery ? `${filteredApps.length} of ${appsIncluded.length}` : appsIncluded.length} apps)
-            </button>
-            
-            {showDetails && (
-              <div className="mt-3 space-y-3">
+            <DetailsDisclosure title={`Details (${searchQuery ? `${filteredApps.length} of ${appsIncluded.length}` : appsIncluded.length} apps)`}>
+              <div className="space-y-3">
                 {/* Apps grouped by source */}
                 {Object.entries(appsBySource).map(([source, apps]) => (
                   <div key={source} className="border border-border rounded-lg">
@@ -199,7 +189,7 @@ export function CaptureResultModal({
                   </Button>
                 </div>
               </div>
-            )}
+            </DetailsDisclosure>
           </div>
         )}
 

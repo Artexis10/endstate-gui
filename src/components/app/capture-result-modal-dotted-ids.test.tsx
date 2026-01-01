@@ -5,6 +5,11 @@ import '@testing-library/jest-dom/vitest';
 import { CaptureResultModal } from './capture-result-modal';
 import type { CapturedApp, CaptureCounts } from '../../types';
 
+// Mock useShowDetails to control Details visibility in tests
+vi.mock('@/lib/use-show-details', () => ({
+  useShowDetails: vi.fn(() => true), // Default to true so Details section renders
+}));
+
 /**
  * Test that raw app IDs with dots (e.g., Notepad++.Notepad++) display correctly
  * in Capture Details modal without being slugified to hyphens.
@@ -39,7 +44,7 @@ describe('CaptureResultModal - Raw Dotted IDs', () => {
     );
 
     // Expand details section
-    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
+    const detailsButton = screen.getByRole('button', { name: /details \(/i });
     await user.click(detailsButton);
 
     await waitFor(() => {
@@ -85,7 +90,7 @@ describe('CaptureResultModal - Raw Dotted IDs', () => {
     await user.type(searchInput, 'notepad++');
 
     // Expand details
-    const detailsButton = screen.getByRole('button', { name: /toggle technical details/i });
+    const detailsButton = screen.getByRole('button', { name: /details \(/i });
     await user.click(detailsButton);
 
     // Should show filtered count

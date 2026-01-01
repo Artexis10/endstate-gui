@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LogViewer } from './log-viewer';
 import { ChevronDown, ChevronRight, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 
 interface ActivityItem {
   id: string;
@@ -29,11 +30,7 @@ export function ActivityLog({
   isComplete = false,
   totalAppsChecked = 0
 }: ActivityLogProps) {
-  // Technical details always starts collapsed - only user click expands
-  const [showTechnical, setShowTechnical] = useState(false);
   const [showActivity, setShowActivity] = useState(true);
-
-  // No longer persist technical details state - always start collapsed
 
   const getStatusIcon = (status: ActivityItem['status']) => {
     switch (status) {
@@ -148,34 +145,18 @@ export function ActivityLog({
           <p className="text-sm text-muted-foreground italic">No recent activity</p>
         )}
 
-        {/* Technical details disclosure */}
+        {/* Details disclosure - only renders when setting is enabled */}
         {technicalLogs && (
-          <div className="pt-2 border-t border-border">
-            <button
-              onClick={() => setShowTechnical(!showTechnical)}
-              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showTechnical ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-              Technical details
-            </button>
-            
-            {showTechnical && (
-              <div className="mt-3">
-                <LogViewer
-                  logs={technicalLogs}
-                  truncated={logsTruncated}
-                  onClear={onClearLogs}
-                  title=""
-                  showControls={true}
-                  className="border-0"
-                />
-              </div>
-            )}
-          </div>
+          <DetailsDisclosure title="Details" className="pt-2 border-t border-border">
+            <LogViewer
+              logs={technicalLogs}
+              truncated={logsTruncated}
+              onClear={onClearLogs}
+              title=""
+              showControls={true}
+              className="border-0"
+            />
+          </DetailsDisclosure>
         )}
       </CardContent>
     </Card>

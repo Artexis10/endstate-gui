@@ -94,4 +94,7 @@ export interface ProfileApp {
   id: string;
   name?: string;
   driver?: string;
+  refs?: {
+    windows?: string;
+  };
 }

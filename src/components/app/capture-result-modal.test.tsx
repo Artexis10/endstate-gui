@@ -1,10 +1,18 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProviders, screen, waitFor } from '../../test/test-utils';
 import { seedLocalStorage } from '../../test/localStorage-helpers';
 import { CaptureResultModal } from './capture-result-modal';
 import type { CapturedApp, CaptureCounts } from '../../types';
 
+// Mock useShowDetails to control Details visibility in tests
+vi.mock('@/lib/use-show-details', () => ({
+  useShowDetails: vi.fn(() => true), // Default to true so Details section renders
+}));
+
 describe('CaptureResultModal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   const mockCounts: CaptureCounts = {
     totalFound: 10,
     included: 8,
@@ -28,20 +36,20 @@ describe('CaptureResultModal', () => {
     outputPath: 'C:\\profiles\\setup_2024-12-24.jsonc',
   };
 
-  describe('Technical details collapse behavior', () => {
-    it('starts with technical details collapsed on initial open', () => {
+  describe('Details collapse behavior', () => {
+    it('starts with details collapsed on initial open', () => {
       renderWithProviders(<CaptureResultModal {...defaultProps} />);
 
-      const toggleButton = screen.getByRole('button', { name: /toggle technical details/i });
+      const toggleButton = screen.getByRole('button', { name: /details \(/i });
       expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
       
       expect(screen.queryByText(/winget/i)).not.toBeInTheDocument();
     });
 
-    it('expands technical details when toggle button is clicked', async () => {
+    it('expands details when toggle button is clicked', async () => {
       renderWithProviders(<CaptureResultModal {...defaultProps} />);
 
-      const toggleButton = screen.getByRole('button', { name: /toggle technical details/i });
+      const toggleButton = screen.getByRole('button', { name: /details \(/i });
       toggleButton.click();
 
       await waitFor(() => {
@@ -51,10 +59,10 @@ describe('CaptureResultModal', () => {
       expect(screen.getByText(/winget/i)).toBeInTheDocument();
     });
 
-    it('collapses technical details when toggle button is clicked again', async () => {
+    it('collapses details when toggle button is clicked again', async () => {
       renderWithProviders(<CaptureResultModal {...defaultProps} />);
 
-      const toggleButton = screen.getByRole('button', { name: /toggle technical details/i });
+      const toggleButton = screen.getByRole('button', { name: /details \(/i });
       
       toggleButton.click();
       await waitFor(() => {
@@ -75,14 +83,14 @@ describe('CaptureResultModal', () => {
 
       renderWithProviders(<CaptureResultModal {...defaultProps} />);
 
-      const toggleButton = screen.getByRole('button', { name: /toggle technical details/i });
+      const toggleButton = screen.getByRole('button', { name: /details \(/i });
       expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('resets to collapsed when modal is closed and reopened', async () => {
       const { unmount } = renderWithProviders(<CaptureResultModal {...defaultProps} />);
 
-      const toggleButton = screen.getByRole('button', { name: /toggle technical details/i });
+      const toggleButton = screen.getByRole('button', { name: /details \(/i });
       toggleButton.click();
       
       await waitFor(() => {
@@ -93,7 +101,7 @@ describe('CaptureResultModal', () => {
       
       renderWithProviders(<CaptureResultModal {...defaultProps} />);
 
-      const newToggleButton = screen.getByRole('button', { name: /toggle technical details/i });
+      const newToggleButton = screen.getByRole('button', { name: /details \(/i });
       expect(newToggleButton).toHaveAttribute('aria-expanded', 'false');
     });
   });
@@ -144,12 +152,12 @@ describe('CaptureResultModal', () => {
   });
 
   describe('No persistence behavior', () => {
-    it('does not write technical details state to localStorage', async () => {
+    it('does not write details state to localStorage', async () => {
       localStorage.clear();
       
       renderWithProviders(<CaptureResultModal {...defaultProps} />);
 
-      const toggleButton = screen.getByRole('button', { name: /toggle technical details/i });
+      const toggleButton = screen.getByRole('button', { name: /details \(/i });
       toggleButton.click();
 
       await waitFor(() => {
@@ -159,6 +167,18 @@ describe('CaptureResultModal', () => {
       const keys = Object.keys(localStorage);
       const hasDetailsKey = keys.some(k => k.includes('details') || k.includes('expanded') || k.includes('technical'));
       expect(hasDetailsKey).toBe(false);
+    });
+  });
+
+  describe('Details visibility gating', () => {
+    it('hides Details section when showDetails setting is OFF', async () => {
+      const { useShowDetails } = await import('@/lib/use-show-details');
+      vi.mocked(useShowDetails).mockReturnValue(false);
+      
+      renderWithProviders(<CaptureResultModal {...defaultProps} />);
+
+      // Details button should not be present when setting is OFF
+      expect(screen.queryByRole('button', { name: /details \(/i })).not.toBeInTheDocument();
     });
   });
 });

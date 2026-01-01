@@ -1,7 +1,8 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { CheckCircle2, AlertTriangle, Copy, Package, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Copy, Package, Loader2 } from 'lucide-react';
 import { useState, useMemo, useRef, useCallback } from 'react';
+import { DetailsDisclosure } from '../ui/details-disclosure';
 import type { ApplyItem, ApplyCounts } from '../../types';
 import { 
   categorizeApplyItems, 
@@ -40,7 +41,6 @@ export function ApplyResultModal({
   rawLogs,
   rawEnvelope,
 }: ApplyResultModalProps) {
-  const [showDetails, setShowDetails] = useState(false);
   const copyFeedback = useMicroFeedback(2000);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   
@@ -350,18 +350,8 @@ export function ApplyResultModal({
           {/* Details: unified single list with per-item action badges */}
           {items.length > 0 && !isApplying && (
             <div className="border-t border-border pt-4">
-              <button
-                onClick={() => setShowDetails(!showDetails)}
-                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
-                aria-label="Toggle technical details"
-                aria-expanded={showDetails}
-              >
-                {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                Details ({activeFilters.size > 0 ? `${filteredItems.length} of ${items.length}` : items.length} apps)
-              </button>
-              
-              {showDetails && (
-                <div className="mt-3 space-y-1">
+              <DetailsDisclosure title={`Details (${activeFilters.size > 0 ? `${filteredItems.length} of ${items.length}` : items.length} apps)`}>
+                <div className="space-y-1">
                   {/* Single unified list - actionable items shown first */}
                   <div className="border border-border rounded-lg max-h-48 overflow-y-auto pb-1">
                     {filteredItems.map((item, idx) => {
@@ -398,7 +388,7 @@ export function ApplyResultModal({
                     </Button>
                   </div>
                 </div>
-              )}
+              </DetailsDisclosure>
             </div>
           )}
         </div>
