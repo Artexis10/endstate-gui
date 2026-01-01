@@ -164,6 +164,12 @@ function AppContent() {
   // Pending capture draft state - separate from selectedProfile
   const [pendingCaptureDraftPath, setPendingCaptureDraftPath] = useState<string | null>(null);
   
+  // Saved profile state - shown after successful save
+  const [lastSavedProfile, setLastSavedProfile] = useState<{ name: string; timestamp: Date } | null>(null);
+  
+  // Save in progress flag to prevent double-submit
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  
   // Profile naming modal state
   const [showProfileNameModal, setShowProfileNameModal] = useState(false);
   const [profileNameModalPath, setProfileNameModalPath] = useState(''); // Path to pending profile file
@@ -311,6 +317,9 @@ function AppContent() {
   }, []);
 
   const handleSaveProfileName = async () => {
+    if (isSavingProfile) return; // Prevent double-submit
+    
+    setIsSavingProfile(true);
     try {
       const trimmedValue = profileNameModalValue.trim();
       
@@ -391,6 +400,12 @@ function AppContent() {
             setSelectedProfile(savedProfile.name);
             setSelectedProfilePath(savedProfile.path);
             updateSettings({ lastSelectedProfile: savedProfile.name, lastSelectedProfilePath: savedProfile.path });
+            
+            // Set saved profile state for green card
+            setLastSavedProfile({
+              name: savedProfile.displayName || savedProfile.name,
+              timestamp: new Date()
+            });
           }
         }
         setPendingCaptureDraftPath(null);
@@ -402,15 +417,21 @@ function AppContent() {
       }
       
       showToast('Profile saved', 'success');
+      
+      // Close modal on success
+      setShowProfileNameModal(false);
+      setProfileNameModalPath('');
+      setProfileNameModalValue('');
+      setProfileNameModalMoreOptions(false);
+      setPendingSuggestedName('');
     } catch (err) {
       console.error('Failed to save profile name:', err);
-      showToast('Failed to save profile', 'error');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      showToast(`Failed to save profile: ${errorMessage}`, 'error');
+      // Do NOT close modal or clear pendingCaptureDraftPath on error - user can retry
+    } finally {
+      setIsSavingProfile(false);
     }
-    setShowProfileNameModal(false);
-    setProfileNameModalPath('');
-    setProfileNameModalValue('');
-    setProfileNameModalMoreOptions(false);
-    setPendingSuggestedName('');
   };
 
   const handleCancelProfileName = async () => {
@@ -1577,6 +1598,7 @@ function AppContent() {
                 if (import.meta.env.DEV) {
                   console.log(`[RUN START] Capture runId=${runId}`);
                 }
+                setLastSavedProfile(null); // Clear saved state when starting new capture
                 setOverviewRunningAction('capture');
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Scanning installed applications...' });
@@ -1771,6 +1793,9 @@ function AppContent() {
                   promptForProfileName(pendingCaptureDraftPath);
                 }
               }}
+              pendingCaptureDraftPath={pendingCaptureDraftPath}
+              lastSavedProfile={lastSavedProfile}
+              onDismissSaved={() => setLastSavedProfile(null)}
             />
           </div>
         );

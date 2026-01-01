@@ -132,6 +132,9 @@ interface OverviewScreenProps {
   onSetActiveProfile?: (profile: DiscoveredProfile) => void;
   onClearExpandedCard?: () => void;
   onSaveProfile?: () => void;
+  pendingCaptureDraftPath?: string | null;
+  lastSavedProfile?: { name: string; timestamp: Date } | null;
+  onDismissSaved?: () => void;
 }
 
 export function OverviewScreen({
@@ -160,6 +163,9 @@ export function OverviewScreen({
   onSetActiveProfile,
   onClearExpandedCard,
   onSaveProfile,
+  pendingCaptureDraftPath,
+  lastSavedProfile,
+  onDismissSaved,
 }: OverviewScreenProps) {
   // Initialize expandedCard: prioritize active running action, then initialExpandedCard, then null
   // This ensures returning to Overview during an active run shows the correct expanded card
@@ -616,8 +622,8 @@ export function OverviewScreen({
             exit="exit"
             className="space-y-3"
           >
-            {action === 'capture' ? (
-              // Capture success = draft state (amber/neutral, not green)
+            {action === 'capture' && pendingCaptureDraftPath ? (
+              // Capture success = draft state (amber/neutral, not green) - only show if draft exists
               <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20">
                 <FileText className="h-4 w-4 text-warning" />
                 <div className="flex-1">
@@ -698,6 +704,43 @@ export function OverviewScreen({
                 </div>
               </div>
             )}
+          </motion.div>
+        )}
+        </AnimatePresence>
+
+        {/* Saved profile state - green card shown after successful save */}
+        <AnimatePresence mode="wait">
+        {lastSavedProfile && !pendingCaptureDraftPath && (
+          <motion.div
+            key="saved"
+            variants={fadeSlideVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-success">
+                  Profile saved
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {lastSavedProfile.name}
+                </p>
+              </div>
+              {onDismissSaved && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDismissSaved();
+                  }}
+                >
+                  Dismiss
+                </Button>
+              )}
+            </div>
           </motion.div>
         )}
         </AnimatePresence>
