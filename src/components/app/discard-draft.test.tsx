@@ -246,13 +246,14 @@ describe('Discard Draft UX Contracts', () => {
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
     });
 
-    it('capture success card persists even with pending draft', () => {
+    it('draft warning card shows when there is a pending draft (takes precedence over success)', () => {
       const captureResult = {
         action: 'capture' as const,
         status: 'success' as const,
         summary: '63 apps captured',
         counts: { total: 63 },
       };
+
       const pendingDraftPath = 'C:\\profiles\\draft_2024-01-01.jsonc';
 
       renderWithProviders(
@@ -280,9 +281,12 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Verify both capture success card and draft card are shown
-      expect(screen.getByText('Completed successfully')).toBeInTheDocument();
-      expect(screen.getByText(/apps captured/i)).toBeInTheDocument();
+      // When there's a pending draft, draft warning takes precedence (more urgent)
+      expect(screen.getByText('Capture finished')).toBeInTheDocument();
+      expect(screen.getByText(/not saved yet/i)).toBeInTheDocument();
+      
+      // Success card should NOT be shown while draft exists
+      expect(screen.queryByText('Completed successfully')).not.toBeInTheDocument();
     });
 
     it('capture success card persists across navigation', () => {

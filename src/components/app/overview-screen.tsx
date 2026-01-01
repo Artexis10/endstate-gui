@@ -954,41 +954,9 @@ export function OverviewScreen({
                 </div>
               </CardHeader>
               
-              {/* Unified status strip: success OR draft (always visible) */}
+              {/* Unified status strip: draft warning OR success (always visible) */}
               <AnimatePresence mode="wait">
-                {actionStatus === 'success' && actionResult?.action === 'capture' ? (
-                  <motion.div
-                    key="capture-success"
-                    variants={fadeSlideVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                  >
-                    <CardContent className="pt-0 pb-3">
-                      <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="capture-success-card">
-                        <CheckCircle2 className="h-4 w-4 text-success" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-success">
-                            Completed successfully
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {actionProgress?.message || actionResult.summary}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDetailsModalOpen(true);
-                          }}
-                        >
-                          View details
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </motion.div>
-                ) : pendingCaptureDraftPath ? (
+                {pendingCaptureDraftPath ? (
                   <motion.div
                     key="draft-status"
                     variants={fadeSlideVariants}
@@ -1033,6 +1001,38 @@ export function OverviewScreen({
                             Save profile
                           </Button>
                         )}
+                      </div>
+                    </CardContent>
+                  </motion.div>
+                ) : actionStatus === 'success' && actionResult?.action === 'capture' ? (
+                  <motion.div
+                    key="capture-success"
+                    variants={fadeSlideVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                  >
+                    <CardContent className="pt-0 pb-3">
+                      <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="capture-success-card">
+                        <CheckCircle2 className="h-4 w-4 text-success" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-success">
+                            Completed successfully
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {actionProgress?.message || actionResult.summary}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDetailsModalOpen(true);
+                          }}
+                        >
+                          View details
+                        </Button>
                       </div>
                     </CardContent>
                   </motion.div>
