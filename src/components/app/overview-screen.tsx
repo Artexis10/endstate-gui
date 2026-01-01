@@ -200,7 +200,7 @@ export function OverviewScreen({
   const [activityExpanded, setActivityExpanded] = useState(false);
   const [manageProfilesOpen, setManageProfilesOpen] = useState(false);
   const [viewProfilePath, setViewProfilePath] = useState<string | null>(null);
-  const [viewProfileName, setViewProfileName] = useState<string>('');
+  const [viewProfileName] = useState<string>('');
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [lastSeenPhase, setLastSeenPhase] = useState<UiPhase | undefined>(undefined);
   const [userHasScrolledAway, setUserHasScrolledAway] = useState(false);
@@ -629,59 +629,7 @@ export function OverviewScreen({
             exit="exit"
             className="space-y-3"
           >
-            {action === 'capture' && pendingCaptureDraftPath ? (
-              // Capture success = draft state (amber/neutral, not green) - only show if draft exists
-              <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20" data-testid="capture-draft-card">
-                <FileText className="h-4 w-4 text-warning" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-warning">
-                    Capture finished
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Not saved yet — save to create a profile
-                  </p>
-                </div>
-                {showDetails && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setViewProfilePath(pendingCaptureDraftPath);
-                      setViewProfileName('Draft');
-                    }}
-                  >
-                    Details
-                  </Button>
-                )}
-                {onDiscardDraft && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDiscardDraft();
-                    }}
-                    data-testid="discard-draft-button"
-                  >
-                    Discard draft
-                  </Button>
-                )}
-                {onSaveProfile && (
-                  <Button
-                    size="sm"
-                    className="bg-warning hover:bg-warning/90 text-warning-foreground"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSaveProfile();
-                    }}
-                    data-testid="save-profile-button"
-                  >
-                    Save profile
-                  </Button>
-                )}
-              </div>
-            ) : action !== 'capture' ? (
+            {action !== 'capture' ? (
               // Non-capture success = green success state
               <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
                 <CheckCircle2 className="h-4 w-4 text-success" />
@@ -970,9 +918,57 @@ export function OverviewScreen({
                 </div>
               </CardHeader>
               
-              {/* Always-visible status strip for Profile saved card (Contract D) */}
+              {/* Unified status strip: draft OR saved (Contract D - always visible) */}
               <AnimatePresence mode="wait">
-                {lastSavedProfile && !pendingCaptureDraftPath && (
+                {pendingCaptureDraftPath ? (
+                  <motion.div
+                    key="draft-status"
+                    variants={fadeSlideVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                  >
+                    <CardContent className="pt-0 pb-3">
+                      <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20" data-testid="capture-draft-card">
+                        <FileText className="h-4 w-4 text-warning" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-warning">
+                            Capture finished
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Not saved yet — save to create a profile
+                          </p>
+                        </div>
+                        {onDiscardDraft && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDiscardDraft();
+                            }}
+                            data-testid="discard-draft-button"
+                          >
+                            Discard draft
+                          </Button>
+                        )}
+                        {onSaveProfile && (
+                          <Button
+                            size="sm"
+                            className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSaveProfile();
+                            }}
+                            data-testid="save-profile-button"
+                          >
+                            Save profile
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </motion.div>
+                ) : lastSavedProfile ? (
                   <motion.div
                     key="saved-status"
                     variants={fadeSlideVariants}
@@ -991,24 +987,6 @@ export function OverviewScreen({
                             {lastSavedProfile.name}
                           </p>
                         </div>
-                        {showDetails && (() => {
-                          const savedProfile = profiles.find(p => 
-                            p.displayName === lastSavedProfile.name || p.name === lastSavedProfile.name
-                          );
-                          return savedProfile ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setViewProfilePath(savedProfile.path);
-                                setViewProfileName(savedProfile.displayName || savedProfile.name);
-                              }}
-                            >
-                              Details
-                            </Button>
-                          ) : null;
-                        })()}
                         {onDismissSaved && (
                           <Button
                             variant="ghost"
@@ -1024,7 +1002,7 @@ export function OverviewScreen({
                       </div>
                     </CardContent>
                   </motion.div>
-                )}
+                ) : null}
               </AnimatePresence>
               
               <AnimatePresence initial={false}>

@@ -604,4 +604,143 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       }
     }
   });
+
+  test('No profiles state: Capture CTA visible and accessible', async ({ page }) => {
+    // Clear all profiles to simulate no-profiles state
+    await page.evaluate(() => {
+      (window as any).__test_existingPaths.clear();
+      (window as any).__test_fileContents.clear();
+    });
+
+    // Reload to reflect empty state
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Capture card should be visible at top of Overview
+    const captureCard = page.locator('[data-testid="overview-card-capture"]');
+    await expect(captureCard).toBeVisible();
+
+    // Verify it's near the top (not buried)
+    const cardBox = await captureCard.boundingBox();
+    expect(cardBox).not.toBeNull();
+    if (cardBox) {
+      // Card should be in upper portion of viewport (y < 400px is reasonable)
+      expect(cardBox.y).toBeLessThan(400);
+    }
+  });
+
+  test('First capture not saved: draft strip in unified status slot', async ({ page }) => {
+    // Simulate capture creating draft
+    await page.evaluate((draftPath) => {
+      const existingPaths = (window as any).__test_existingPaths;
+      const fileContents = (window as any).__test_fileContents;
+      existingPaths.add(draftPath);
+      fileContents.set(draftPath, '{"version": 1, "apps": [{"name": "first-app"}]}');
+    }, DRAFT_PATH);
+
+    // Trigger capture completion with draft
+    await page.evaluate((draftPath) => {
+      (window as any).__endstate_e2e_openSaveProfileModal?.({ 
+        pendingPath: draftPath, 
+        suggestedName: 'First Profile' 
+      });
+    }, DRAFT_PATH);
+
+    // Close modal without saving (Cancel)
+    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
+    await page.click('[data-testid="profile-name-cancel"]');
+    await page.waitForTimeout(500);
+
+    // Draft strip should be visible in unified status slot (always visible, not in expanded content)
+    const draftCard = page.locator('[data-testid="capture-draft-card"]');
+    await expect(draftCard).toBeVisible();
+
+    // Verify it contains expected text
+    await expect(draftCard).toContainText('Capture finished');
+    await expect(draftCard).toContainText('Not saved yet');
+
+    // Verify Save and Discard buttons are present
+    await expect(page.locator('[data-testid="save-profile-button"]')).toBeVisible();
+    await expect(page.locator('[data-testid="discard-draft-button"]')).toBeVisible();
+  });
+
+  test('Saved strip in unified slot: same position as draft strip', async ({ page }) => {
+    // Simulate capture and save
+    await page.evaluate((draftPath) => {
+      const existingPaths = (window as any).__test_existingPaths;
+      const fileContents = (window as any).__test_fileContents;
+      existingPaths.add(draftPath);
+      fileContents.set(draftPath, '{"version": 1, "apps": [{"name": "saved-app"}]}');
+    }, DRAFT_PATH);
+
+    await page.evaluate((draftPath) => {
+      (window as any).__endstate_e2e_openSaveProfileModal?.({ 
+        pendingPath: draftPath, 
+        suggestedName: 'Saved Profile' 
+      });
+    }, DRAFT_PATH);
+
+    // Save the profile
+    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
+    await page.locator('[data-testid="profile-name-input"]').fill('Saved Profile');
+    await page.click('[data-testid="profile-name-save"]');
+    await page.waitForTimeout(1000);
+
+    // Saved strip should be visible in the same unified status slot
+    const savedCard = page.locator('[data-testid="saved-profile-card"]');
+    await expect(savedCard).toBeVisible();
+
+    // Verify it's in the same structural position (inside Capture card, always visible)
+    await expect(savedCard).toContainText('Profile saved');
+    await expect(savedCard).toContainText('Saved Profile');
+
+    // Get position of saved card
+    const savedBox = await savedCard.boundingBox();
+    expect(savedBox).not.toBeNull();
+
+    // Navigate away and back - card should remain in same position
+    await page.click('text=Settings');
+    await page.waitForTimeout(300);
+    await page.click('text=Overview');
+    await page.waitForTimeout(300);
+
+    await expect(savedCard).toBeVisible();
+    const savedBoxAfter = await savedCard.boundingBox();
+    expect(savedBoxAfter).not.toBeNull();
+
+    // Position should be consistent (within reasonable tolerance)
+    if (savedBox && savedBoxAfter) {
+      expect(Math.abs(savedBox.y - savedBoxAfter.y)).toBeLessThan(50);
+    }
+  });
+
+  test('No duplicate Details buttons: only one entry point', async ({ page }) => {
+    // Simulate saved profile
+    await page.evaluate((savedPath) => {
+      const existingPaths = (window as any).__test_existingPaths;
+      const fileContents = (window as any).__test_fileContents;
+      existingPaths.add(savedPath);
+      fileContents.set(savedPath, '{"version": 1, "apps": [{"name": "saved-app"}]}');
+    }, SAVED_PROFILE_PATH);
+
+    await page.evaluate((savedPath) => {
+      (window as any).__endstate_e2e_openSaveProfileModal?.({ 
+        pendingPath: savedPath, 
+        suggestedName: 'Test Profile' 
+      });
+    }, SAVED_PROFILE_PATH);
+
+    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
+    await page.locator('[data-testid="profile-name-input"]').fill('Test Profile');
+    await page.click('[data-testid="profile-name-save"]');
+    await page.waitForTimeout(1000);
+
+    // Count Details buttons in Capture context (should be 0 or 1, not 2+)
+    const captureCard = page.locator('[data-testid="overview-card-capture"]');
+    const detailsButtons = captureCard.locator('button:has-text("Details")');
+    const count = await detailsButtons.count();
+
+    // Should have at most 1 Details button (we removed duplicates)
+    expect(count).toBeLessThanOrEqual(1);
+  });
 });

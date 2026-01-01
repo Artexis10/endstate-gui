@@ -308,6 +308,7 @@ function AppContent() {
   useEffect(() => {
     if (import.meta.env.DEV || import.meta.env.VITE_E2E === '1') {
       (window as any).__endstate_e2e_openSaveProfileModal = ({ pendingPath, suggestedName }: { pendingPath: string; suggestedName: string }) => {
+        setPendingCaptureDraftPath(pendingPath);
         openProfileNameModal(pendingPath, suggestedName, 'save', suggestedName);
       };
       (window as any).__endstate_e2e_showToast = showToast;
