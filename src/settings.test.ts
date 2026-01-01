@@ -30,7 +30,7 @@ describe('settings', () => {
         lastSelectedProfile: 'TestProfile',
         lastSelectedProfilePath: '/manifests/TestProfile.jsonc',
         dryRunEnabled: false,
-        showTechnicalDetails: false,
+        showDetails: false,
       };
       localStorage.setItem(NAMESPACED_KEY, JSON.stringify(stored));
 
@@ -47,7 +47,7 @@ describe('settings', () => {
         lastSelectedProfile: 'Legacy',
         lastSelectedProfilePath: '/legacy/Legacy.jsonc',
         dryRunEnabled: false,
-        showTechnicalDetails: false,
+        showDetails: false,
       };
       localStorage.setItem(LEGACY_KEY, JSON.stringify(stored));
 
@@ -93,7 +93,7 @@ describe('settings', () => {
         lastSelectedProfile: 'Profile1',
         lastSelectedProfilePath: '/test/manifests/Profile1.jsonc',
         dryRunEnabled: false,
-        showTechnicalDetails: false,
+        showDetails: false,
       };
 
       saveSettings(settings);
@@ -111,7 +111,7 @@ describe('settings', () => {
         lastSelectedProfile: 'Old',
         lastSelectedProfilePath: '/old/Old.jsonc',
         dryRunEnabled: true,
-        showTechnicalDetails: false,
+        showDetails: false,
       };
       saveSettings(initial);
 
@@ -122,7 +122,7 @@ describe('settings', () => {
         lastSelectedProfile: 'New',
         lastSelectedProfilePath: '/new/New.jsonc',
         dryRunEnabled: false,
-        showTechnicalDetails: false,
+        showDetails: false,
       };
       saveSettings(updated);
 

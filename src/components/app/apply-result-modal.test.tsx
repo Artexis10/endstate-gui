@@ -80,7 +80,6 @@ describe('ApplyResultModal', () => {
       seedLocalStorage({ 
         'apply-modal-details-expanded': 'true',
         'showDetails': 'true',
-        'showTechnicalDetails': 'true',
       });
 
       renderWithProviders(<ApplyResultModal {...defaultProps} />);

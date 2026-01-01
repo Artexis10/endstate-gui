@@ -77,18 +77,15 @@ export async function goToApplyPage(page: Page): Promise<void> {
 
 /**
  * Navigate to Capture page.
- * Works in both Default mode (clicks Overview card) and Advanced mode (clicks sidebar nav).
+ * In the Overview-centric design, this expands the Capture card.
  */
 export async function goToCapturePage(page: Page): Promise<void> {
-  const sidebarNav = page.locator('[data-testid="nav-capture"]');
+  // Click the capture card to expand it
   const overviewCard = page.locator('[data-testid="overview-card-capture"]');
+  await overviewCard.click();
   
-  if (await sidebarNav.isVisible({ timeout: 500 }).catch(() => false)) {
-    await sidebarNav.click();
-  } else {
-    await overviewCard.click();
-  }
-  await expect(page.locator('button:has-text("Capture computer")')).toBeVisible({ timeout: 5000 });
+  // Wait for the expanded content to appear (contains the Capture button)
+  await expect(page.locator('[data-testid="capture-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
 }
 
 /**

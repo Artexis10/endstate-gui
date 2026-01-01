@@ -78,7 +78,7 @@ describe('CaptureResultModal', () => {
     it('REGRESSION: starts collapsed even if localStorage has expanded state', () => {
       seedLocalStorage({ 
         'capture-modal-details-expanded': 'true',
-        'showTechnicalDetails': 'true',
+        'showDetails': 'true',
       });
 
       renderWithProviders(<CaptureResultModal {...defaultProps} />);

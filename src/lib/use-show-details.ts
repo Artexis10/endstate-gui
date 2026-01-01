@@ -35,5 +35,5 @@ function subscribeToSettings(callback: () => void): () => void {
 // Get current snapshot of the setting
 function getShowDetailsSnapshot(): boolean {
   const settings = loadSettings();
-  return settings.showTechnicalDetails;
+  return settings.showDetails;
 }

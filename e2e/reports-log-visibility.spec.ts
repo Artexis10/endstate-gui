@@ -178,7 +178,7 @@ test.describe('Reports - Log Visibility', () => {
     // The details disclosure should be available when artifact paths exist and setting is ON
     // Enable the setting first
     await page.evaluate(() => {
-      localStorage.setItem('test:endstate-gui-settings', JSON.stringify({ showTechnicalDetails: true }));
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify({ showDetails: true }));
     });
     await page.reload();
     await page.click('[data-testid="nav-report"]');

@@ -11,7 +11,7 @@ import { seedLocalStorage, clearLocalStorage, getLocalStorageKeys } from '../tes
  * PERSISTED PREFERENCES (survive reload):
  * 1. App Settings (engineMode, engineScriptPath, customProfilesDirectory, lastSelectedProfile, dryRunEnabled)
  * 2. Last Run Data per command (capture/apply/verify outcomes with timestamps)
- * 3. Technical Logs Visibility (showTechnicalDetails preference)
+ * 3. Technical Logs Visibility (showDetails preference)
  * 
  * TRANSIENT UI STATES (must reset on reload/close):
  * 1. Modal open/close state (capture modal, apply modal)
@@ -47,7 +47,7 @@ describe('Persistence Boundaries', () => {
         lastSelectedProfile: 'my-profile',
         lastSelectedProfilePath: 'C:\\custom\\profiles\\my-profile.jsonc',
         dryRunEnabled: false,
-        showTechnicalDetails: false,
+        showDetails: false,
       };
 
       seedLocalStorage({
@@ -66,7 +66,7 @@ describe('Persistence Boundaries', () => {
         lastSelectedProfile: 'work-setup',
         lastSelectedProfilePath: '/home/user/profiles/work-setup.jsonc',
         dryRunEnabled: true,
-        showTechnicalDetails: false,
+        showDetails: false,
       };
 
       saveSettings(settings);
@@ -95,7 +95,7 @@ describe('Persistence Boundaries', () => {
         lastSelectedProfile: '',
         lastSelectedProfilePath: '',
         dryRunEnabled: true,
-        showTechnicalDetails: false,
+        showDetails: false,
       };
 
       saveSettings(initial);
@@ -286,7 +286,6 @@ describe('Persistence Boundaries', () => {
       seedLocalStorage({
         'web:capture-details-expanded': 'true',
         'web:apply-details-expanded': 'true',
-        'showTechnicalDetails': 'true',
         'showDetails': 'true',
       });
 
@@ -440,7 +439,7 @@ describe('Persistence Boundaries', () => {
         lastSelectedProfile: 'test',
         lastSelectedProfilePath: 'C:\\profiles\\test.jsonc',
         dryRunEnabled: true,
-        showTechnicalDetails: false,
+        showDetails: false,
       };
       saveSettings(settings);
 

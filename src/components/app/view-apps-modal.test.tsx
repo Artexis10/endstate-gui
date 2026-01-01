@@ -148,7 +148,7 @@ describe('ViewAppsModal', () => {
     });
   });
 
-  it('hides Details disclosure when showTechnicalDetails setting is OFF', async () => {
+  it('hides Details disclosure when showDetails setting is OFF', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
     const { useShowDetails } = await import('@/lib/use-show-details');
     vi.mocked(invoke).mockResolvedValue(JSON.stringify({
@@ -168,7 +168,7 @@ describe('ViewAppsModal', () => {
     expect(screen.queryByText('Details')).not.toBeInTheDocument();
   });
 
-  it('shows Details disclosure when showTechnicalDetails setting is ON', async () => {
+  it('shows Details disclosure when showDetails setting is ON', async () => {
     const { invoke } = await import('@/lib/tauri-bridge');
     const { useShowDetails } = await import('@/lib/use-show-details');
     vi.mocked(invoke).mockResolvedValue(JSON.stringify({

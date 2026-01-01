@@ -1961,7 +1961,7 @@ function AppContent() {
                             ) : run.artifactPaths?.logFile ? (
                               <>
                                 {/* Details disclosure - only shown when setting enabled */}
-                                {settings.showTechnicalDetails && (
+                                {settings.showDetails && (
                                   <details className="mb-2">
                                     <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
                                       Details
@@ -2048,7 +2048,7 @@ function AppContent() {
                         </summary>
                         <div className="px-2 pb-2 pt-1 border-t border-border bg-muted/30">
                           {/* Details disclosure - only shown when setting enabled */}
-                          {settings.showTechnicalDetails && (
+                          {settings.showDetails && (
                             <details className="mb-2">
                               <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
                                 Details
@@ -2259,11 +2259,11 @@ function AppContent() {
                     </p>
                   </div>
                   <Button
-                    variant={settings.showTechnicalDetails ? 'primary' : 'secondary'}
+                    variant={settings.showDetails ? 'primary' : 'secondary'}
                     size="sm"
-                    onClick={() => updateSettings({ showTechnicalDetails: !settings.showTechnicalDetails })}
+                    onClick={() => updateSettings({ showDetails: !settings.showDetails })}
                   >
-                    {settings.showTechnicalDetails ? 'On' : 'Off'}
+                    {settings.showDetails ? 'On' : 'Off'}
                   </Button>
                 </div>
               </CardContent>
