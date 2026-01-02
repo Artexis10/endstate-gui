@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderWithProviders, screen, waitFor } from '../../test/test-utils';
+import { renderWithProviders, screen, waitFor, fireEvent } from '../../test/test-utils';
 import { OverviewScreen } from './overview-screen';
 import { clearLocalStorage } from '../../test/localStorage-helpers';
 import userEvent from '@testing-library/user-event';
@@ -247,6 +247,10 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
+      // Expand Capture card to see status strip
+      const captureCard = screen.getByTestId('overview-card-capture');
+      fireEvent.click(captureCard);
+
       // Verify capture success card shows "Completed successfully" ONLY after save
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
     });
@@ -283,6 +287,7 @@ describe('Discard Draft UX Contracts', () => {
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
           pendingCaptureDraftPath={pendingDraftPath}
+          initialExpandedCard="capture"
         />
       );
 
@@ -334,6 +339,10 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
+      // Expand Capture card to see status strip
+      const captureCard = screen.getByTestId('overview-card-capture');
+      fireEvent.click(captureCard);
+
       // Verify capture success card is shown initially
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
 
@@ -362,6 +371,7 @@ describe('Discard Draft UX Contracts', () => {
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
           pendingCaptureDraftPath={null}
+          initialExpandedCard="capture"
         />
       );
 

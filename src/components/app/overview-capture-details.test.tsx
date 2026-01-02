@@ -98,6 +98,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
           appCount: 3,
           finishedAt: new Date().toISOString(),
         }}
+        initialExpandedCard="capture"
       />
     );
 
@@ -158,6 +159,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
           appCount: 1,
           finishedAt: new Date().toISOString(),
         }}
+        initialExpandedCard="capture"
       />
     );
 

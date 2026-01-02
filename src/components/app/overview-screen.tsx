@@ -430,6 +430,249 @@ export function OverviewScreen({
           {descriptions[action]}
         </p>
 
+        {/* Status strips - rendered directly under description, before divider */}
+        <AnimatePresence mode="wait">
+          {/* Capture: draft warning OR saved success */}
+          {action === 'capture' && pendingCaptureDraftPath && (
+            <motion.div
+              key="draft-status"
+              variants={fadeSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20" data-testid="capture-draft-card">
+                <FileText className="h-4 w-4 text-warning" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-warning">
+                    Capture finished
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Not saved yet — save to create a profile
+                  </p>
+                </div>
+                {onDiscardDraft && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDiscardDraft();
+                    }}
+                    data-testid="discard-draft-button"
+                  >
+                    Discard draft
+                  </Button>
+                )}
+                {onSaveProfile && (
+                  <Button
+                    size="sm"
+                    className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSaveProfile();
+                    }}
+                    data-testid="save-profile-button"
+                  >
+                    Save profile
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+          )}
+          {action === 'capture' && !pendingCaptureDraftPath && lastSavedProfileSummary && (
+            <motion.div
+              key="capture-success"
+              variants={fadeSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="capture-success-card">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-success">
+                    Completed successfully
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {lastSavedProfileSummary.appCount === 0 
+                      ? 'No apps detected' 
+                      : `${lastSavedProfileSummary.appCount} apps captured`}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsModalOpen(true);
+                  }}
+                >
+                  Details
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Setup: success */}
+          {action === 'setup' && isThisComplete && actionStatus === 'success' && (
+            <motion.div
+              key="setup-success"
+              variants={fadeSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-success">
+                    Completed successfully
+                  </p>
+                  {actionProgress?.message && (
+                    <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsModalOpen(true);
+                  }}
+                >
+                  Details
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Setup: error (partial or fatal) */}
+          {action === 'setup' && isThisComplete && actionStatus === 'error' && (
+            <motion.div
+              key="setup-error"
+              variants={fadeSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              {actionResult?.counts?.failed && actionResult.counts.failed > 0 && (actionResult.counts.installed || actionResult.counts.alreadyPresent) ? (
+                <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3">
+                  <XCircle className="h-4 w-4 text-warning" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-warning">
+                      Completed with issues
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {actionResult.counts.installed || 0} installed • {actionResult.counts.alreadyPresent || 0} already present • {actionResult.counts.failed} failed
+                      {actionResult.counts.skipped && actionResult.counts.skipped > 0 ? ` • ${actionResult.counts.skipped} skipped` : ''}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDetailsModalOpen(true);
+                    }}
+                  >
+                    Details
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 bg-danger/10 rounded-md px-3 py-3">
+                  <XCircle className="h-4 w-4 text-danger" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-danger">
+                      {actionResult?.counts?.failed && actionResult.counts.failed > 0
+                        ? `All apps failed to install (${actionResult.counts.failed} failed)`
+                        : 'Something went wrong'}
+                    </p>
+                    {actionProgress?.message && (
+                      <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDetailsModalOpen(true);
+                    }}
+                  >
+                    Details
+                  </Button>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* Check: success */}
+          {action === 'check' && isThisComplete && actionStatus === 'success' && (
+            <motion.div
+              key="check-success"
+              variants={fadeSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-success">
+                    Completed successfully
+                  </p>
+                  {actionProgress?.message && (
+                    <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsModalOpen(true);
+                  }}
+                >
+                  Details
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Check: error */}
+          {action === 'check' && isThisComplete && actionStatus === 'error' && (
+            <motion.div
+              key="check-error"
+              variants={fadeSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <div className="flex items-center gap-3 bg-danger/10 rounded-md px-3 py-3">
+                <XCircle className="h-4 w-4 text-danger" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-danger">
+                    Something went wrong
+                  </p>
+                  {actionProgress?.message && (
+                    <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsModalOpen(true);
+                  }}
+                >
+                  Details
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Preview/Apply toggle for Setup card */}
         {action === 'setup' && !isThisRunning && !isThisComplete && (
@@ -863,91 +1106,6 @@ export function OverviewScreen({
                 </div>
               </CardHeader>
               
-              {/* Unified status strip: draft warning OR success (always visible) */}
-              <AnimatePresence mode="wait">
-                {pendingCaptureDraftPath ? (
-                  <motion.div
-                    key="draft-status"
-                    variants={fadeSlideVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    className="px-6 pt-0 pb-3"
-                  >
-                      <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20" data-testid="capture-draft-card">
-                        <FileText className="h-4 w-4 text-warning" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-warning">
-                            Capture finished
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Not saved yet — save to create a profile
-                          </p>
-                        </div>
-                        {onDiscardDraft && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDiscardDraft();
-                            }}
-                            data-testid="discard-draft-button"
-                          >
-                            Discard draft
-                          </Button>
-                        )}
-                        {onSaveProfile && (
-                          <Button
-                            size="sm"
-                            className="bg-warning hover:bg-warning/90 text-warning-foreground"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSaveProfile();
-                            }}
-                            data-testid="save-profile-button"
-                          >
-                            Save profile
-                          </Button>
-                        )}
-                      </div>
-                  </motion.div>
-                ) : lastSavedProfileSummary ? (
-                  <motion.div
-                    key="capture-success"
-                    variants={fadeSlideVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    className="px-6 pt-0 pb-3"
-                  >
-                      <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="capture-success-card">
-                        <CheckCircle2 className="h-4 w-4 text-success" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-success">
-                            Completed successfully
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {lastSavedProfileSummary.appCount === 0 
-                              ? 'No apps detected' 
-                              : `${lastSavedProfileSummary.appCount} apps captured`}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDetailsModalOpen(true);
-                          }}
-                        >
-                          Details
-                        </Button>
-                      </div>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-              
               <AnimatePresence initial={false}>
                 {expandedCard === 'capture' && (
                   <motion.div
@@ -1001,101 +1159,6 @@ export function OverviewScreen({
                   </motion.div>
                 </div>
               </CardHeader>
-              
-              {/* Status strip for Setup card - same slot as Capture */}
-              <AnimatePresence mode="wait">
-                {runningAction === 'setup' && actionStatus === 'success' && (
-                  <motion.div
-                    key="setup-success"
-                    variants={fadeSlideVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    className="px-6 pt-0 pb-3"
-                  >
-                    <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
-                      <CheckCircle2 className="h-4 w-4 text-success" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-success">
-                          Completed successfully
-                        </p>
-                        {actionProgress?.message && (
-                          <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDetailsModalOpen(true);
-                        }}
-                      >
-                        Details
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
-                {runningAction === 'setup' && actionStatus === 'error' && (
-                  <motion.div
-                    key="setup-error"
-                    variants={fadeSlideVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    className="px-6 pt-0 pb-3"
-                  >
-                    {actionResult?.counts?.failed && actionResult.counts.failed > 0 && (actionResult.counts.installed || actionResult.counts.alreadyPresent) ? (
-                      <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3">
-                        <XCircle className="h-4 w-4 text-warning" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-warning">
-                            Completed with issues
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {actionResult.counts.installed || 0} installed • {actionResult.counts.alreadyPresent || 0} already present • {actionResult.counts.failed} failed
-                            {actionResult.counts.skipped && actionResult.counts.skipped > 0 ? ` • ${actionResult.counts.skipped} skipped` : ''}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDetailsModalOpen(true);
-                          }}
-                        >
-                          Details
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-3 bg-danger/10 rounded-md px-3 py-3">
-                        <XCircle className="h-4 w-4 text-danger" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-danger">
-                            {actionResult?.counts?.failed && actionResult.counts.failed > 0
-                              ? `All apps failed to install (${actionResult.counts.failed} failed)`
-                              : 'Something went wrong'}
-                          </p>
-                          {actionProgress?.message && (
-                            <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDetailsModalOpen(true);
-                          }}
-                        >
-                          Details
-                        </Button>
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
               
               <AnimatePresence initial={false}>
                 {expandedCard === 'setup' && (
@@ -1154,74 +1217,6 @@ export function OverviewScreen({
                   </motion.div>
                 </div>
               </CardHeader>
-              
-              {/* Status strip for Check card - same slot as Capture */}
-              <AnimatePresence mode="wait">
-                {runningAction === 'check' && actionStatus === 'success' && (
-                  <motion.div
-                    key="check-success"
-                    variants={fadeSlideVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    className="px-6 pt-0 pb-3"
-                  >
-                    <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
-                      <CheckCircle2 className="h-4 w-4 text-success" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-success">
-                          Completed successfully
-                        </p>
-                        {actionProgress?.message && (
-                          <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDetailsModalOpen(true);
-                        }}
-                      >
-                        Details
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
-                {runningAction === 'check' && actionStatus === 'error' && (
-                  <motion.div
-                    key="check-error"
-                    variants={fadeSlideVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    className="px-6 pt-0 pb-3"
-                  >
-                    <div className="flex items-center gap-3 bg-danger/10 rounded-md px-3 py-3">
-                      <XCircle className="h-4 w-4 text-danger" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-danger">
-                          Something went wrong
-                        </p>
-                        {actionProgress?.message && (
-                          <p className="text-xs text-muted-foreground">{actionProgress.message}</p>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDetailsModalOpen(true);
-                        }}
-                      >
-                        Details
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
               
               <AnimatePresence initial={false}>
                 {expandedCard === 'check' && (
