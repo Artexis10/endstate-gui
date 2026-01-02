@@ -165,11 +165,12 @@ function AppContent() {
   // Pending capture draft state - separate from selectedProfile
   const [pendingCaptureDraftPath, setPendingCaptureDraftPath] = useState<string | null>(null);
   
-  // Persistent capture summary - survives beyond ephemeral actionResult
-  const [lastCaptureSummary, setLastCaptureSummary] = useState<{
+  // Saved profile summary - drives green success strip
+  // Set ONLY after successful Save Profile (not after capture, not after discard)
+  const [lastSavedProfileSummary, setLastSavedProfileSummary] = useState<{
     appCount: number;
     finishedAt: string;
-    runId?: string;
+    profileName?: string;
   } | null>(null);
   
   // Save in progress flag to prevent double-submit
@@ -436,12 +437,13 @@ function AppContent() {
         }
         setPendingCaptureDraftPath(null);
         
-        // Set lastCaptureSummary to show green success after draft is saved
+        // Set lastSavedProfileSummary to show green success after profile is saved
+        // This is the ONLY place green success should be set for Capture
         if (overviewActionResult?.action === 'capture' && overviewActionResult.counts?.total !== undefined) {
-          setLastCaptureSummary({
+          setLastSavedProfileSummary({
             appCount: overviewActionResult.counts.total,
-            finishedAt: overviewActionResult.timestamp || new Date().toISOString(),
-            runId: undefined,
+            finishedAt: new Date().toISOString(),
+            profileName: savedProfileForAnimation?.displayName || savedProfileForAnimation?.name || trimmedValue,
           });
         }
       }
@@ -547,38 +549,21 @@ function AppContent() {
       // Clear draft state
       setPendingCaptureDraftPath(null);
       
-      // Set lastCaptureSummary to show green success after draft is discarded
-      if (overviewActionResult?.action === 'capture' && overviewActionResult.counts?.total !== undefined) {
-        setLastCaptureSummary({
-          appCount: overviewActionResult.counts.total,
-          finishedAt: overviewActionResult.timestamp || new Date().toISOString(),
-          runId: undefined,
-        });
-      }
-      
-      // Keep the capture result for showing success - only clear the transient action state
+      // Clear capture action state - return to idle
+      // Per contract: NO green success after discard
+      setOverviewActionResult(null);
       setOverviewActionStatus('idle');
       
       // Refresh profiles to update the list
       await refreshProfiles();
-      
-      showToast('Draft discarded', 'info');
     } catch (err) {
       console.error('Failed to discard draft:', err);
       // Even if delete fails, clear the state (idempotent)
       setPendingCaptureDraftPath(null);
       
-      // Set lastCaptureSummary to show green success after draft is cleared
-      if (overviewActionResult?.action === 'capture' && overviewActionResult.counts?.total !== undefined) {
-        setLastCaptureSummary({
-          appCount: overviewActionResult.counts.total,
-          finishedAt: overviewActionResult.timestamp || new Date().toISOString(),
-          runId: undefined,
-        });
-      }
-      
+      // Clear capture action state - return to idle
+      setOverviewActionResult(null);
       setOverviewActionStatus('idle');
-      showToast('Draft already gone', 'info');
       await refreshProfiles();
     }
   };
@@ -1689,7 +1674,7 @@ function AppContent() {
               liveAppEvents={liveAppEvents}
               liveCounters={liveCounters}
               initialExpandedCard={overviewExpandedCard}
-              lastCaptureSummary={lastCaptureSummary}
+              lastSavedProfileSummary={lastSavedProfileSummary}
               onNavigate={navigateWithHistory}
               onClearExpandedCard={() => setOverviewExpandedCard(null)}
               onCapture={async () => {
@@ -1711,8 +1696,8 @@ function AppContent() {
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Scanning installed applications...' });
                 
-                // Clear previous capture summary and draft when starting new capture
-                setLastCaptureSummary(null);
+                // Clear previous summary and draft when starting new capture
+                setLastSavedProfileSummary(null);
                 setPendingCaptureDraftPath(null);
                 try {
                   const result = await handleCaptureFromOverview();
@@ -1722,21 +1707,13 @@ function AppContent() {
                     : `${result.count} apps captured`;
                   setOverviewActionProgress({ message: countText });
                   
-                  // CRITICAL: Set draft path BEFORE summary to ensure draft takes precedence
-                  // This prevents green success from flashing before amber draft appears
+                  // Set draft path if capture created a draft
                   if (result.draftPath) {
                     setPendingCaptureDraftPath(result.draftPath);
                   }
                   
-                  // Set persistent capture summary (survives beyond ephemeral actionResult)
-                  // Only set if no draft (edge case: capture with 0 apps may not create draft)
-                  if (!result.draftPath) {
-                    setLastCaptureSummary({
-                      appCount: result.count,
-                      finishedAt: new Date().toISOString(),
-                      runId: runId,
-                    });
-                  }
+                  // DO NOT set lastSavedProfileSummary here
+                  // Green success only appears after Save Profile (in handleSaveProfileName)
                   
                   setOverviewActionResult({ 
                     action: 'capture', 

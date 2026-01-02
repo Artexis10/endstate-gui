@@ -215,7 +215,7 @@ describe('ManageProfilesModal', () => {
   });
 
   describe('Pending draft protection', () => {
-    it('disables delete button for pending draft profile', () => {
+    it('filters out pending draft from profiles list (does not appear)', () => {
       const pendingDraftPath = 'C:\\profiles\\profile-2.jsonc';
       render(
         <ManageProfilesModal
@@ -225,12 +225,13 @@ describe('ManageProfilesModal', () => {
         />
       );
       
+      // Per locked contract: drafts do NOT appear in Manage Profiles
+      // Only 2 profiles should be visible (profile-1 and profile-3), not profile-2 (draft)
       const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
-      // Second profile is the pending draft, should be disabled
-      expect(deleteButtons[1]).toBeDisabled();
+      expect(deleteButtons).toHaveLength(2); // Only 2 profiles visible, not 3
     });
 
-    it('shows tooltip explaining why pending draft cannot be deleted', () => {
+    it('draft is not visible in the list (filtered out)', () => {
       const pendingDraftPath = 'C:\\profiles\\profile-2.jsonc';
       render(
         <ManageProfilesModal
@@ -240,29 +241,28 @@ describe('ManageProfilesModal', () => {
         />
       );
       
-      const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
-      const draftDeleteBtn = deleteButtons[1];
-      
-      expect(draftDeleteBtn).toHaveAttribute('title', 'Cannot delete unsaved draft. Save or discard the draft first.');
+      // Draft should not appear in the list at all
+      // We should only see profile-1 and profile-3
+      expect(screen.queryByText('Second Profile')).not.toBeInTheDocument();
+      expect(screen.getByText('My First Profile')).toBeInTheDocument();
+      expect(screen.getByText('profile-3')).toBeInTheDocument();
     });
 
-    it('does not call onDelete when clicking pending draft delete button', () => {
-      const pendingDraftPath = 'C:\\profiles\\profile-2.jsonc';
+    it('shows all profiles when no draft exists', () => {
       render(
         <ManageProfilesModal
           {...defaultProps}
           selectedProfile="profile-1"
-          pendingCaptureDraftPath={pendingDraftPath}
+          pendingCaptureDraftPath={null}
         />
       );
       
+      // All 3 profiles should be visible when there's no draft
       const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
-      fireEvent.click(deleteButtons[1]); // Click pending draft's delete button
-      
-      expect(defaultProps.onDelete).not.toHaveBeenCalled();
+      expect(deleteButtons).toHaveLength(3);
     });
 
-    it('enables delete for profiles that are not selected or pending draft', () => {
+    it('enables delete for non-selected profiles when draft is filtered out', () => {
       const pendingDraftPath = 'C:\\profiles\\profile-2.jsonc';
       render(
         <ManageProfilesModal
@@ -273,10 +273,10 @@ describe('ManageProfilesModal', () => {
       );
       
       const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
-      // profile-1 is selected (disabled), profile-2 is draft (disabled), profile-3 should be enabled
-      expect(deleteButtons[0]).toBeDisabled(); // selected
-      expect(deleteButtons[1]).toBeDisabled(); // pending draft
-      expect(deleteButtons[2]).not.toBeDisabled(); // neither selected nor draft
+      // Only 2 profiles visible: profile-1 (selected, disabled) and profile-3 (enabled)
+      expect(deleteButtons).toHaveLength(2);
+      expect(deleteButtons[0]).toBeDisabled(); // selected profile-1
+      expect(deleteButtons[1]).not.toBeDisabled(); // profile-3 (not selected)
     });
 
     it('allows deleting profile when no pending draft exists', () => {

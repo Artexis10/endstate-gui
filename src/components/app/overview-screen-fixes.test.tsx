@@ -275,8 +275,8 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
     const setupCard = screen.getByTestId('overview-card-apply');
     fireEvent.click(setupCard);
 
-    // Click "View details"
-    const viewDetailsButton = screen.getByText('View details');
+    // Click "Details"
+    const viewDetailsButton = screen.getByText('Details');
     fireEvent.click(viewDetailsButton);
 
     // Should show "Completed with issues" in modal

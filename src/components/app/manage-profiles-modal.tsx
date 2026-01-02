@@ -119,14 +119,22 @@ export function ManageProfilesModal({
               </tr>
             </thead>
             <tbody>
-              {profiles.length === 0 ? (
-                <tr>
-                  <td colSpan={showDetails ? 3 : 2} className="p-8 text-center text-muted-foreground">
-                    No profiles found
-                  </td>
-                </tr>
-              ) : (
-                profiles.map((profile) => {
+              {(() => {
+                // Filter out drafts - they are NOT profiles and should not appear here
+                // Per contract: drafts handled exclusively in Capture card
+                const savedProfiles = profiles.filter(p => !isPendingDraft(p));
+                
+                if (savedProfiles.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={showDetails ? 3 : 2} className="p-8 text-center text-muted-foreground">
+                        No profiles found
+                      </td>
+                    </tr>
+                  );
+                }
+                
+                return savedProfiles.map((profile) => {
                   const selected = isSelected(profile);
                   return (
                     <tr key={profile.path} className="border-b hover:bg-muted/30">
@@ -210,8 +218,8 @@ export function ManageProfilesModal({
                       </td>
                     </tr>
                   );
-                })
-              )}
+                });
+              })()}
             </tbody>
           </table>
         </div>

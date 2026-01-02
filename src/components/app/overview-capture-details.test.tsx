@@ -94,19 +94,19 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
         runningAction="capture"
         actionStatus="success"
         actionResult={captureResult}
-        lastCaptureSummary={{
+        lastSavedProfileSummary={{
           appCount: 3,
           finishedAt: new Date().toISOString(),
         }}
       />
     );
 
-    // View details button should be visible immediately in the success strip
+    // Details button should be visible immediately in the success strip
     await waitFor(() => {
-      expect(screen.getByText('View details')).toBeInTheDocument();
+      expect(screen.getByText('Details')).toBeInTheDocument();
     });
     
-    const viewDetailsButton = screen.getByText('View details');
+    const viewDetailsButton = screen.getByText('Details');
     await user.click(viewDetailsButton);
 
     // Modal should open
@@ -154,19 +154,19 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
         runningAction="capture"
         actionStatus="success"
         actionResult={captureResult}
-        lastCaptureSummary={{
+        lastSavedProfileSummary={{
           appCount: 1,
           finishedAt: new Date().toISOString(),
         }}
       />
     );
 
-    // View details button should be visible immediately in the success strip
+    // Details button should be visible immediately in the success strip
     await waitFor(() => {
-      expect(screen.getByText('View details')).toBeInTheDocument();
+      expect(screen.getByText('Details')).toBeInTheDocument();
     });
     
-    const viewDetailsButton = screen.getByText('View details');
+    const viewDetailsButton = screen.getByText('Details');
     await user.click(viewDetailsButton);
 
     await waitFor(() => {

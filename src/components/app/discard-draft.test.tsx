@@ -209,7 +209,7 @@ describe('Discard Draft UX Contracts', () => {
   });
 
   describe('Contract 4: Capture success card persists after save', () => {
-    it('shows capture success card after capture completes', () => {
+    it('shows capture success card after profile is saved (not after capture)', () => {
       const captureResult = {
         action: 'capture' as const,
         status: 'success' as const,
@@ -228,9 +228,10 @@ describe('Discard Draft UX Contracts', () => {
           actionStatus="success"
           actionProgress={null}
           actionResult={captureResult}
-          lastCaptureSummary={{
+          lastSavedProfileSummary={{
             appCount: 63,
             finishedAt: new Date().toISOString(),
+            profileName: 'Test Profile',
           }}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
@@ -246,7 +247,7 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Verify capture success card shows "Completed successfully"
+      // Verify capture success card shows "Completed successfully" ONLY after save
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
     });
 
@@ -293,7 +294,7 @@ describe('Discard Draft UX Contracts', () => {
       expect(screen.queryByText('Completed successfully')).not.toBeInTheDocument();
     });
 
-    it('capture success card persists across navigation', () => {
+    it('saved profile success card persists across navigation', () => {
       const captureResult = {
         action: 'capture' as const,
         status: 'success' as const,
@@ -301,9 +302,10 @@ describe('Discard Draft UX Contracts', () => {
         counts: { total: 63 },
       };
 
-      const lastCaptureSummary = {
+      const lastSavedProfileSummary = {
         appCount: 63,
         finishedAt: new Date().toISOString(),
+        profileName: 'Test Profile',
       };
 
       const { rerender } = renderWithProviders(
@@ -317,7 +319,7 @@ describe('Discard Draft UX Contracts', () => {
           actionStatus="success"
           actionProgress={null}
           actionResult={captureResult}
-          lastCaptureSummary={lastCaptureSummary}
+          lastSavedProfileSummary={lastSavedProfileSummary}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -336,7 +338,7 @@ describe('Discard Draft UX Contracts', () => {
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
 
       // Simulate navigation by re-rendering (component remount)
-      // Key point: lastCaptureSummary persists, even if actionResult is cleared
+      // Key point: lastSavedProfileSummary persists, even if actionResult is cleared
       rerender(
         <OverviewScreen
           lifecycleState={mockLifecycleState}
@@ -348,7 +350,7 @@ describe('Discard Draft UX Contracts', () => {
           actionStatus="idle"
           actionProgress={null}
           actionResult={null}
-          lastCaptureSummary={lastCaptureSummary}
+          lastSavedProfileSummary={lastSavedProfileSummary}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -363,8 +365,8 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Verify capture success card still shows after re-render
-      // This proves lastCaptureSummary is persistent, not ephemeral like actionResult
+      // Verify saved profile success card still shows after re-render
+      // This proves lastSavedProfileSummary is persistent, not ephemeral like actionResult
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
     });
   });

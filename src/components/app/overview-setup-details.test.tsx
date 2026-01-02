@@ -104,12 +104,12 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     const setupCard = screen.getByTestId('overview-card-apply');
     await user.click(setupCard);
 
-    // Click "View details" button
+    // Click "Details" button
     await waitFor(() => {
-      expect(screen.getByText('View details')).toBeInTheDocument();
+      expect(screen.getByText('Details')).toBeInTheDocument();
     });
     
-    const viewDetailsButton = screen.getByText('View details');
+    const viewDetailsButton = screen.getByText('Details');
     await user.click(viewDetailsButton);
 
     // Modal should open
@@ -187,12 +187,12 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     const setupCard = screen.getByTestId('overview-card-apply');
     await user.click(setupCard);
 
-    // Click "View details" button
+    // Click "Details" button
     await waitFor(() => {
-      expect(screen.getByText('View details')).toBeInTheDocument();
+      expect(screen.getByText('Details')).toBeInTheDocument();
     });
     
-    const viewDetailsButton = screen.getByText('View details');
+    const viewDetailsButton = screen.getByText('Details');
     await user.click(viewDetailsButton);
 
     // Modal should open
@@ -267,12 +267,12 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     const setupCard = screen.getByTestId('overview-card-apply');
     await user.click(setupCard);
 
-    // Click "View details"
+    // Click "Details"
     await waitFor(() => {
-      expect(screen.getByText('View details')).toBeInTheDocument();
+      expect(screen.getByText('Details')).toBeInTheDocument();
     });
     
-    const viewDetailsButton = screen.getByText('View details');
+    const viewDetailsButton = screen.getByText('Details');
     await user.click(viewDetailsButton);
 
     // Modal should open

@@ -120,10 +120,10 @@ interface OverviewScreenProps {
   liveAppEvents?: AppEvent[];
   liveCounters?: LiveCounters;
   initialExpandedCard?: ActionType;
-  lastCaptureSummary?: {
+  lastSavedProfileSummary?: {
     appCount: number;
     finishedAt: string;
-    runId?: string;
+    profileName?: string;
   } | null;
   onNavigate: (page: 'report' | 'settings') => void;
   onCapture: () => void;
@@ -155,7 +155,7 @@ export function OverviewScreen({
   liveAppEvents = [],
   liveCounters,
   initialExpandedCard,
-  lastCaptureSummary,
+  lastSavedProfileSummary,
   onNavigate,
   onCapture,
   onSetup,
@@ -659,7 +659,7 @@ export function OverviewScreen({
                   setDetailsModalOpen(true);
                 }}
               >
-                View details
+                Details
               </Button>
             </div>
           </motion.div>
@@ -696,7 +696,7 @@ export function OverviewScreen({
                     setDetailsModalOpen(true);
                   }}
                 >
-                  View details
+                  Details
                 </Button>
               </div>
             ) : (
@@ -721,7 +721,7 @@ export function OverviewScreen({
                     setDetailsModalOpen(true);
                   }}
                 >
-                  View details
+                  Details
                 </Button>
               </div>
             )}
@@ -1010,7 +1010,7 @@ export function OverviewScreen({
                       </div>
                     </CardContent>
                   </motion.div>
-                ) : lastCaptureSummary ? (
+                ) : lastSavedProfileSummary ? (
                   <motion.div
                     key="capture-success"
                     variants={fadeSlideVariants}
@@ -1026,9 +1026,9 @@ export function OverviewScreen({
                             Completed successfully
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {lastCaptureSummary.appCount === 0 
+                            {lastSavedProfileSummary.appCount === 0 
                               ? 'No apps detected' 
-                              : `${lastCaptureSummary.appCount} apps captured`}
+                              : `${lastSavedProfileSummary.appCount} apps captured`}
                           </p>
                         </div>
                         <Button
@@ -1039,7 +1039,7 @@ export function OverviewScreen({
                             setDetailsModalOpen(true);
                           }}
                         >
-                          View details
+                          Details
                         </Button>
                       </div>
                     </CardContent>
