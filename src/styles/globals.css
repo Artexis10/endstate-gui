@@ -126,8 +126,12 @@
   }
 }
 
-/* Sonner toast z-index fix: ensure toasts appear above modals (z-50) */
-[data-sonner-toaster] {
-  z-index: 100 !important;
+/* Sonner toast z-index fix: ensure toasts appear above modals (z-50) and remain clickable */
+.endstate-sonner [data-sonner-toaster] {
+  z-index: 9999;
+}
+
+.endstate-sonner [data-sonner-toast] {
+  pointer-events: auto;
 }
 

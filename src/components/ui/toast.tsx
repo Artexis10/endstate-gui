@@ -7,23 +7,31 @@ type ToastType = "info" | "success" | "warning" | "error"
 export function showToast(message: string, type: ToastType = "info") {
   const duration = type === "warning" || type === "error" ? 5000 : 3000
   
+  let toastId: string | number
+  
   const toastOptions = {
     duration,
-    onClick: (id: string | number) => {
-      toast.dismiss(id)
+    onClick: () => {
+      toast.dismiss(toastId)
     },
   }
 
   switch (type) {
     case "success":
-      return toast.success(message, toastOptions)
+      toastId = toast.success(message, toastOptions)
+      break
     case "error":
-      return toast.error(message, toastOptions)
+      toastId = toast.error(message, toastOptions)
+      break
     case "warning":
-      return toast.warning(message, toastOptions)
+      toastId = toast.warning(message, toastOptions)
+      break
     default:
-      return toast.info(message, toastOptions)
+      toastId = toast.info(message, toastOptions)
+      break
   }
+  
+  return toastId
 }
 
 export function useToast() {
@@ -36,10 +44,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
 
       <Sonner
-        theme="dark"
         position="bottom-right"
         closeButton={false}
-        className="toaster group"
+        className="endstate-sonner"
         icons={{
           success: <CircleCheckIcon className="size-4 text-success" />,
           info: <InfoIcon className="size-4 text-primary" />,
