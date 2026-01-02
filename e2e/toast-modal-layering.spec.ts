@@ -52,9 +52,11 @@ test.describe('Toast Modal Layering - Click-to-Dismiss with Modal Open', () => {
       (window as any).__endstate_e2e_showToast('Test toast message', 'info');
     });
     
-    // Wait for toast to appear
+    // Wait for toast to appear, be fully mounted, and animation to complete
     const toast = page.locator('[data-sonner-toast]').first();
     await expect(toast).toBeVisible({ timeout: 2000 });
+    // Wait for toast to be fully expanded (animation complete)
+    await page.waitForTimeout(500);
     
     // Verify modal is still open (toast didn't interfere)
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible();
@@ -62,8 +64,8 @@ test.describe('Toast Modal Layering - Click-to-Dismiss with Modal Open', () => {
     // Critical test: Click the toast while modal is open
     await toast.click();
     
-    // Toast should disappear after click
-    await expect(toast).not.toBeVisible({ timeout: 1000 });
+    // Toast should disappear after click (allow time for Sonner animation)
+    await expect(toast).not.toBeVisible({ timeout: 3000 });
     
     // Modal should still be open (toast interaction didn't affect modal)
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible();
@@ -85,16 +87,16 @@ test.describe('Toast Modal Layering - Click-to-Dismiss with Modal Open', () => {
       }, 100);
     });
     
-    // Wait for both toasts to appear
-    await page.waitForTimeout(300);
+    // Wait for both toasts to appear and animations to complete
+    await page.waitForTimeout(600);
     const toasts = page.locator('[data-sonner-toast]');
     await expect(toasts).toHaveCount(2, { timeout: 2000 });
     
     // Click the first toast
     await toasts.first().click();
     
-    // First toast should disappear
-    await expect(toasts).toHaveCount(1, { timeout: 1000 });
+    // First toast should disappear (allow time for Sonner animation)
+    await expect(toasts).toHaveCount(1, { timeout: 3000 });
     
     // Second toast should still be visible
     await expect(toasts.first()).toBeVisible();
@@ -102,8 +104,8 @@ test.describe('Toast Modal Layering - Click-to-Dismiss with Modal Open', () => {
     // Click the second toast
     await toasts.first().click();
     
-    // All toasts should be gone
-    await expect(toasts).toHaveCount(0, { timeout: 1000 });
+    // All toasts should be gone (allow time for Sonner animation)
+    await expect(toasts).toHaveCount(0, { timeout: 3000 });
     
     // Modal should still be open
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible();

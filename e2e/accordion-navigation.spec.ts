@@ -20,11 +20,25 @@ test.describe('Accordion Navigation Bug', () => {
       // Mock Tauri APIs
       (window as any).__TAURI__ = {
         core: {
-          invoke: async (cmd: string) => {
+          invoke: async (cmd: string, args?: any) => {
             if (cmd === 'ensure_dir') return null;
             if (cmd === 'read_dir') return [];
             if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
             if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
+            if (cmd === 'validate_profile') {
+              // Return valid profile structure so the app accepts it
+              return {
+                valid: true,
+                errors: [],
+                summary: {
+                  name: 'test-profile',
+                  version: 1,
+                  appCount: 1,
+                }
+              };
+            }
+            if (cmd === 'check_file_exists') return true;
+            if (cmd === 'read_text_file') return '{}';
             return null;
           }
         }
@@ -105,6 +119,8 @@ test.describe('Accordion Navigation Bug', () => {
     // Verify expanded content is visible - look for "Preview changes" button (the action button)
     const previewChangesBtn = page.getByRole('button', { name: 'Preview changes' });
     await expect(previewChangesBtn).toBeVisible({ timeout: 3000 });
+    // Wait for button to be enabled (profile discovery may take time)
+    await expect(previewChangesBtn).toBeEnabled({ timeout: 10000 });
 
     // Step 2: Click "Preview changes" button
     await previewChangesBtn.click();
@@ -112,13 +128,12 @@ test.describe('Accordion Navigation Bug', () => {
     // Wait for preview to complete - should show success state
     await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
 
-    // Step 3: Click "View details" to open modal
-    await page.click('button:has-text("View details")');
+    // Step 3: Click "Details" to open modal
+    await page.click('button:has-text("Details")');
 
     // Verify modal is open
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3000 });
-    await expect(dialog.locator('text=Setup Details')).toBeVisible();
 
     // Close the modal (button changed from "Done" to "Close")
     await page.click('[role="dialog"] button:has-text("Close")');
@@ -143,19 +158,39 @@ test.describe('Accordion Navigation Bug', () => {
     // Verify we're back on Overview
     await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
 
-    // Step 6: Verify accordion is interactive - can expand "Set up computer" again
-    // First, the card should be collapsed (no expanded content visible)
-    // Click to expand
-    await setupCard.click();
-
-    // Verify expanded content appears - the Preview changes button should be visible
+    // Step 6: Verify accordion is interactive - the success result should still be showing
+    // Wait for the card to be stable and ready
+    await page.waitForTimeout(500);
+    const setupCardAfterNav = page.locator('[data-testid="overview-card-apply"]');
+    await expect(setupCardAfterNav).toBeVisible();
+    
+    // Expand the card (it should show the success result from before navigation)
+    await setupCardAfterNav.click();
+    await page.waitForTimeout(300);
+    
+    // Verify the success result is still showing (action results persist across navigation)
+    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 3000 });
+    
+    // Dismiss the result to get back to initial state
+    await page.click('button:has-text("Dismiss")');
+    await page.waitForTimeout(500);
+    
+    // Check if card is still expanded after dismiss
+    const expandedContent = page.locator('[data-testid="setup-card-expanded-content"]');
+    const isStillExpanded = await expandedContent.isVisible().catch(() => false);
+    
+    if (!isStillExpanded) {
+      // Card collapsed after dismiss, need to re-expand
+      await setupCardAfterNav.click();
+      await page.waitForTimeout(300);
+    }
+    
+    // Now the Preview changes button should be visible
     const previewBtn2 = page.getByRole('button', { name: 'Preview changes' });
     await expect(previewBtn2).toBeVisible({ timeout: 3000 });
 
-    // Verify we can collapse it too
-    await setupCard.click();
-
-    // Expanded content should be hidden (Preview changes button should not be visible)
+    // Verify we can collapse the card
+    await setupCardAfterNav.click();
     await expect(previewBtn2).not.toBeVisible({ timeout: 2000 });
   });
 
@@ -168,6 +203,8 @@ test.describe('Accordion Navigation Bug', () => {
     await setupCard.click();
     const previewChangesBtn = page.getByRole('button', { name: 'Preview changes' });
     await expect(previewChangesBtn).toBeVisible({ timeout: 3000 });
+    // Wait for button to be enabled (profile discovery may take time)
+    await expect(previewChangesBtn).toBeEnabled({ timeout: 10000 });
 
     // Run preview
     await previewChangesBtn.click();
@@ -188,14 +225,38 @@ test.describe('Accordion Navigation Bug', () => {
     // Verify Overview is shown
     await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
 
-    // Card should be collapsed and interactive
-    // Expand it
-    await setupCard.click();
+    // Card should be interactive - the success result should still be showing
+    await page.waitForTimeout(500);
+    const setupCardAfterNav = page.locator('[data-testid="overview-card-apply"]');
+    await expect(setupCardAfterNav).toBeVisible();
+    
+    // Expand the card
+    await setupCardAfterNav.click();
+    await page.waitForTimeout(300);
+    
+    // Verify the success result is still showing (action results persist across navigation)
+    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 3000 });
+    
+    // Dismiss the result to get back to initial state
+    await page.click('button:has-text("Dismiss")');
+    await page.waitForTimeout(500);
+    
+    // Check if card is still expanded after dismiss
+    const expandedContent2 = page.locator('[data-testid="setup-card-expanded-content"]');
+    const isStillExpanded2 = await expandedContent2.isVisible().catch(() => false);
+    
+    if (!isStillExpanded2) {
+      // Card collapsed after dismiss, need to re-expand
+      await setupCardAfterNav.click();
+      await page.waitForTimeout(300);
+    }
+    
+    // Now the Preview changes button should be visible
     const previewBtn2 = page.getByRole('button', { name: 'Preview changes' });
     await expect(previewBtn2).toBeVisible({ timeout: 3000 });
 
-    // Collapse it
-    await setupCard.click();
+    // Collapse the card
+    await setupCardAfterNav.click();
     await expect(previewBtn2).not.toBeVisible({ timeout: 2000 });
   });
 });

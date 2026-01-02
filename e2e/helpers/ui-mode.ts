@@ -60,19 +60,23 @@ export function forceDefaultMode(page: Page): Promise<void> {
 
 /**
  * Navigate to Apply page ("Set up computer").
- * Works in both Default mode (clicks Overview card) and Advanced mode (clicks sidebar nav).
+ * In the Overview-centric design, this expands the Apply card.
+ * Works in both Default and Advanced modes (both use Overview cards).
  */
 export async function goToApplyPage(page: Page): Promise<void> {
-  // Try sidebar nav first (Advanced mode), fall back to Overview card (Default mode)
-  const sidebarNav = page.locator('[data-testid="nav-apply"]');
-  const overviewCard = page.locator('[data-testid="overview-card-apply"]');
-  
-  if (await sidebarNav.isVisible({ timeout: 500 }).catch(() => false)) {
-    await sidebarNav.click();
-  } else {
-    await overviewCard.click();
+  // Navigate to Overview first if not already there
+  const overviewNav = page.locator('[data-testid="nav-overview"]');
+  if (await overviewNav.isVisible({ timeout: 500 }).catch(() => false)) {
+    await overviewNav.click();
+    await page.waitForTimeout(300);
   }
-  await expect(page.locator('h1:has-text("Set up computer")')).toBeVisible({ timeout: 5000 });
+  
+  // Click the Apply card to expand it
+  const overviewCard = page.locator('[data-testid="overview-card-apply"]');
+  await overviewCard.click();
+  
+  // Verify expanded content appears
+  await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
 }
 
 /**
@@ -90,16 +94,21 @@ export async function goToCapturePage(page: Page): Promise<void> {
 
 /**
  * Navigate to Verify page ("Check computer").
- * Works in both Default mode (clicks Overview card) and Advanced mode (clicks sidebar nav).
+ * In the Overview-centric design, this expands the Verify card.
+ * Works in both Default and Advanced modes (both use Overview cards).
  */
 export async function goToVerifyPage(page: Page): Promise<void> {
-  const sidebarNav = page.locator('[data-testid="nav-verify"]');
-  const overviewCard = page.locator('[data-testid="overview-card-verify"]');
-  
-  if (await sidebarNav.isVisible({ timeout: 500 }).catch(() => false)) {
-    await sidebarNav.click();
-  } else {
-    await overviewCard.click();
+  // Navigate to Overview first if not already there
+  const overviewNav = page.locator('[data-testid="nav-overview"]');
+  if (await overviewNav.isVisible({ timeout: 500 }).catch(() => false)) {
+    await overviewNav.click();
+    await page.waitForTimeout(300);
   }
-  await expect(page.locator('h1:has-text("Check computer")')).toBeVisible({ timeout: 5000 });
+  
+  // Click the Verify card to expand it
+  const overviewCard = page.locator('[data-testid="overview-card-verify"]');
+  await overviewCard.click();
+  
+  // Verify expanded content appears
+  await expect(page.locator('[data-testid="check-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
 }
