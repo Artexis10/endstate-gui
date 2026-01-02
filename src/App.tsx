@@ -435,8 +435,15 @@ function AppContent() {
           }
         }
         setPendingCaptureDraftPath(null);
-        // Keep the capture result card visible - it shows "Completed successfully + X apps captured"
-        // Do NOT clear it - the capture success is independent of the save event
+        
+        // Set lastCaptureSummary to show green success after draft is saved
+        if (overviewActionResult?.action === 'capture' && overviewActionResult.counts?.total !== undefined) {
+          setLastCaptureSummary({
+            appCount: overviewActionResult.counts.total,
+            finishedAt: overviewActionResult.timestamp || new Date().toISOString(),
+            runId: undefined,
+          });
+        }
       }
       
       // Show transitory success state in modal
@@ -540,11 +547,17 @@ function AppContent() {
       // Clear draft state
       setPendingCaptureDraftPath(null);
       
-      // Clear the capture result card
-      if (overviewActionResult?.action === 'capture') {
-        setOverviewActionResult(null);
-        setOverviewActionStatus('idle');
+      // Set lastCaptureSummary to show green success after draft is discarded
+      if (overviewActionResult?.action === 'capture' && overviewActionResult.counts?.total !== undefined) {
+        setLastCaptureSummary({
+          appCount: overviewActionResult.counts.total,
+          finishedAt: overviewActionResult.timestamp || new Date().toISOString(),
+          runId: undefined,
+        });
       }
+      
+      // Keep the capture result for showing success - only clear the transient action state
+      setOverviewActionStatus('idle');
       
       // Refresh profiles to update the list
       await refreshProfiles();
@@ -554,10 +567,17 @@ function AppContent() {
       console.error('Failed to discard draft:', err);
       // Even if delete fails, clear the state (idempotent)
       setPendingCaptureDraftPath(null);
-      if (overviewActionResult?.action === 'capture') {
-        setOverviewActionResult(null);
-        setOverviewActionStatus('idle');
+      
+      // Set lastCaptureSummary to show green success after draft is cleared
+      if (overviewActionResult?.action === 'capture' && overviewActionResult.counts?.total !== undefined) {
+        setLastCaptureSummary({
+          appCount: overviewActionResult.counts.total,
+          finishedAt: overviewActionResult.timestamp || new Date().toISOString(),
+          runId: undefined,
+        });
       }
+      
+      setOverviewActionStatus('idle');
       showToast('Draft already gone', 'info');
       await refreshProfiles();
     }
@@ -978,14 +998,9 @@ function AppContent() {
     
     await refreshProfiles();
     const discovered = await discoverProfiles(dir);
-    if (discovered.length > 0) {
-      const newest = discovered.sort((a, b) => b.path.localeCompare(a.path))[0];
-      // Store the pending draft path separately - do NOT modify selectedProfile yet
-      setPendingCaptureDraftPath(newest.path);
-      
-      // Prompt for optional display name using the draft path
-      await promptForProfileName(newest.path);
-    }
+    const draftPath = discovered.length > 0 
+      ? discovered.sort((a, b) => b.path.localeCompare(a.path))[0].path 
+      : null;
     
     // Get app list from envelope data
     const appsList = envelopeData?.appsIncluded?.map(a => a.id) || [];
@@ -996,8 +1011,8 @@ function AppContent() {
       ? refreshedProfiles.sort((a, b) => b.path.localeCompare(a.path))[0].name 
       : 'Unknown';
     
-    // Return structured result
-    return { count: capturedCount, profileName, apps: appsList };
+    // Return structured result including draft path for atomic state update
+    return { count: capturedCount, profileName, apps: appsList, draftPath };
   };
 
   const handlePreviewFromOverview = async () => {
@@ -1696,8 +1711,9 @@ function AppContent() {
                 setOverviewActionStatus('running');
                 setOverviewActionProgress({ message: 'Scanning installed applications...' });
                 
-                // Clear previous capture summary when starting new capture
+                // Clear previous capture summary and draft when starting new capture
                 setLastCaptureSummary(null);
+                setPendingCaptureDraftPath(null);
                 try {
                   const result = await handleCaptureFromOverview();
                   setOverviewActionStatus('success');
@@ -1706,12 +1722,21 @@ function AppContent() {
                     : `${result.count} apps captured`;
                   setOverviewActionProgress({ message: countText });
                   
+                  // CRITICAL: Set draft path BEFORE summary to ensure draft takes precedence
+                  // This prevents green success from flashing before amber draft appears
+                  if (result.draftPath) {
+                    setPendingCaptureDraftPath(result.draftPath);
+                  }
+                  
                   // Set persistent capture summary (survives beyond ephemeral actionResult)
-                  setLastCaptureSummary({
-                    appCount: result.count,
-                    finishedAt: new Date().toISOString(),
-                    runId: runId,
-                  });
+                  // Only set if no draft (edge case: capture with 0 apps may not create draft)
+                  if (!result.draftPath) {
+                    setLastCaptureSummary({
+                      appCount: result.count,
+                      finishedAt: new Date().toISOString(),
+                      runId: runId,
+                    });
+                  }
                   
                   setOverviewActionResult({ 
                     action: 'capture', 
@@ -1722,6 +1747,11 @@ function AppContent() {
                     counts: { total: result.count },
                     appEvents: result.apps?.map(app => ({ app, action: 'Captured', statusKey: 'detected' as const, phase: 'capture' as const })),
                   });
+                  
+                  // Prompt for profile name after state is set
+                  if (result.draftPath) {
+                    await promptForProfileName(result.draftPath);
+                  }
                 } catch (err) {
                   setOverviewActionStatus('error');
                   setOverviewActionResult({ 

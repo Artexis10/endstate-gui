@@ -631,7 +631,7 @@ export function OverviewScreen({
 
         {/* Success state - animated swap with running */}
         <AnimatePresence mode="wait">
-        {isThisComplete && actionStatus === 'success' && (
+        {isThisComplete && actionStatus === 'success' && action !== 'capture' && (
           <motion.div
             key="success"
             variants={fadeSlideVariants}
@@ -640,7 +640,7 @@ export function OverviewScreen({
             exit="exit"
             className="space-y-3"
           >
-            {/* Success completion strip for all actions */}
+            {/* Success completion strip for Setup and Check only - Capture uses canonical strip */}
             <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3">
               <CheckCircle2 className="h-4 w-4 text-success" />
               <div className="flex-1">
