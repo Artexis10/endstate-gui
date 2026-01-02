@@ -846,22 +846,32 @@ export function OverviewScreen({
                           );
                         })}
                       </div>
-                      {!isAtBottom && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Scroll to bottom and re-enable auto-follow
-                            activityScrollRef.current?.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
-                            setIsAtBottom(true);
-                          }}
-                          className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-colors"
-                          aria-label="Jump to latest and re-enable auto-follow"
-                          data-testid="latest-pill"
-                        >
-                          <ArrowDown className="h-3 w-3" />
-                          Latest
-                        </button>
-                      )}
+                      {!isAtBottom && (() => {
+                        // Derive button color from current phase
+                        const currentPhase = actionProgress?.phase;
+                        const buttonClasses = currentPhase === 'apply' 
+                          ? 'bg-green-600 hover:bg-green-700 text-white'
+                          : currentPhase === 'verify'
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                          : 'bg-primary hover:bg-primary/90 text-primary-foreground';
+                        
+                        return (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Scroll to bottom and re-enable auto-follow
+                              activityScrollRef.current?.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
+                              setIsAtBottom(true);
+                            }}
+                            className={`absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs rounded-full shadow-lg transition-colors ${buttonClasses}`}
+                            aria-label="Jump to latest and re-enable auto-follow"
+                            data-testid="latest-pill"
+                          >
+                            <ArrowDown className="h-3 w-3" />
+                            Latest
+                          </button>
+                        );
+                      })()}
                     </div>
                   )}
                 </motion.div>

@@ -1,4 +1,5 @@
 import { Toaster, toast } from 'sonner';
+import { X } from 'lucide-react';
 
 type ToastType = 'info' | 'success' | 'warning' | 'error';
 
@@ -41,16 +42,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <Toaster 
         position="bottom-right"
         closeButton={true}
+        icons={{
+          close: <X className="h-3.5 w-3.5" />,
+        }}
         toastOptions={{
           classNames: {
-            toast: 'bg-card text-card-foreground border-border',
-            title: 'text-foreground',
+            toast: 'bg-background/95 backdrop-blur-sm text-foreground border border-border shadow-lg',
+            title: 'text-foreground font-medium',
             description: 'text-muted-foreground',
-            closeButton: 'bg-muted hover:bg-muted-foreground/20 text-muted-foreground border-border',
-            success: 'bg-success/10 text-success border-success/20',
-            error: 'bg-danger/10 text-danger border-danger/20',
-            warning: 'bg-warning/10 text-warning border-warning/20',
-            info: 'bg-card text-card-foreground border-border',
+            closeButton: 'bg-transparent hover:bg-muted/50 text-muted-foreground hover:text-foreground border-0 transition-colors',
+            success: 'bg-background/95 backdrop-blur-sm text-success border-success/30',
+            error: 'bg-background/95 backdrop-blur-sm text-danger border-danger/30',
+            warning: 'bg-background/95 backdrop-blur-sm text-warning border-warning/30',
+            info: 'bg-background/95 backdrop-blur-sm text-primary border-primary/30',
           },
         }}
       />
