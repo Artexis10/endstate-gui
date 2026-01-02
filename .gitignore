@@ -32,3 +32,4 @@ npm-debug.log*
 
 # Coverage reports (generated)
 coverage/
+test-results/
