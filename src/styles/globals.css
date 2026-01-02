@@ -3,33 +3,39 @@
 @tailwind utilities;
 
 @layer base {
+  /* Default theme = DARK */
   :root {
+    /* Surfaces */
     --background: 220 13% 8%;
     --foreground: 210 40% 98%;
     --panel: 220 13% 12%;
     --card: 220 13% 15%;
 
+    /* Neutrals */
     --muted: 217 10% 25%;
     --muted-foreground: 215 20% 65%;
 
+    /* Popover */
     --popover: 220 13% 12%;
     --popover-foreground: 210 40% 98%;
 
+    /* Borders / inputs */
     --border: 217 10% 20%;
     --input: 217 10% 20%;
 
-    /* Substrate / Endstate primary */
-   --primary: 25 95% 55%;          /* mineral blue */
+    /* Brand */
+    /* Primary + Accent should be stable and not redefined elsewhere */
+    --primary: 215 28% 42%;
     --primary-foreground: 210 40% 98%;
-    --ring: 217 91% 65%;
-
-    /* Accent should be softer / different from primary */
-   --accent: 45 93% 47%;           /* cyan-leaning highlight */
+    --accent: 210 18% 40%;
     --accent-foreground: 210 40% 98%;
+    --ring: 215 35% 50%;
 
+    /* Secondary */
     --secondary: 217 19% 27%;
     --secondary-foreground: 210 40% 98%;
 
+    /* Semantic */
     --success: 142 71% 45%;
     --success-foreground: 144 61% 20%;
 
@@ -39,55 +45,50 @@
     --danger: 0 84% 60%;
     --danger-foreground: 210 40% 98%;
 
+    /* Radius */
     --radius: 0.5rem;
 
-    /* Phase colors - stable identity mapping */
-    --phase-capture: 217 91% 60%;     /* Blue */
-    --phase-setup: 142 71% 45%;       /* Green (matches success) */
-    --phase-verify: 38 92% 50%;       /* Amber (matches warning) */
+    /* Phase colors (stable identity mapping) */
+    --phase-capture: 217 91% 60%; /* blue */
+    --phase-setup: 142 71% 45%;   /* green (matches success) */
+    --phase-verify: 38 92% 50%;   /* amber (matches warning) */
 
-    /* Action required - stronger than info, not error */
-    --action-required: 217 91% 60%;   /* Vivid blue for to_install/missing */
-
-/* Primary = signal slate */
---primary: 215 28% 42%;
---primary-foreground: 210 40% 98%;
---ring: 215 35% 50%;
-
-/* Accent = secondary slate */
---accent: 210 18% 40%;
---accent-foreground: 210 40% 98%;
-
-
-
-
-
+    /* “Action required” — stronger than info, not error */
+    --action-required: 217 91% 60%;
   }
 
+  /* Light theme overrides */
   .light {
+    /* Surfaces */
     --background: 0 0% 100%;
     --foreground: 222 47% 11%;
     --panel: 210 40% 98%;
+    --card: 0 0% 100%;
 
+    /* Neutrals */
     --muted: 210 40% 96%;
     --muted-foreground: 215 16% 47%;
 
+    /* Popover */
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
+    /* Borders / inputs */
     --border: 214 32% 91%;
     --input: 214 32% 91%;
 
+    /* Brand */
     --primary: 217 91% 52%;
     --primary-foreground: 0 0% 100%;
-    --ring: 217 91% 52%;
-
     --accent: 198 88% 40%;
     --accent-foreground: 0 0% 100%;
+    --ring: 217 91% 52%;
 
+    /* Secondary */
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;
 
+    /* Semantic */
     --success: 142 71% 40%;
     --success-foreground: 144 61% 20%;
 
@@ -97,33 +98,36 @@
     --danger: 0 84% 55%;
     --danger-foreground: 0 0% 100%;
   }
-}
 
-
-@layer base {
   * {
     @apply border-border;
   }
-  
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-  
+
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-  
+
   ::-webkit-scrollbar-track {
     @apply bg-background;
   }
-  
+
   ::-webkit-scrollbar-thumb {
     @apply bg-muted rounded;
   }
-  
+
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-muted-foreground/50;
   }
 }
+
+/* Sonner toast z-index fix: ensure toasts appear above modals (z-50) */
+[data-sonner-toaster] {
+  z-index: 100 !important;
+}
+
