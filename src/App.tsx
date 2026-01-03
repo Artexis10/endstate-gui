@@ -232,13 +232,16 @@ function AppContent() {
   const artifactPathCopyFeedback = useMicroFeedback();
   const artifactDiagnosticsCopyFeedback = useMicroFeedback();
   
-  // Dismiss result - only collapse UI, preserve summary for Overview display
+  // Dismiss result - clear transient result state so card returns to neutral
   const dismissOverviewResult = () => {
-    // Only reset transient UI state (expanded/collapsed, filters)
-    // Keep overviewActionResult so the summary remains visible on Overview
+    // Reset all transient UI state for the action
     setOverviewActionProgress(null);
+    setOverviewActionResult(null);
+    setOverviewActionStatus('idle');
     setLiveAppEvents([]);
     setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+    // Also clear lastSavedProfileSummary for capture card dismissal
+    setLastSavedProfileSummary(null);
   };
   
   // Navigation with back support - tracks previous page when navigating from Overview

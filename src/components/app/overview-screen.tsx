@@ -68,6 +68,8 @@ import {
   getPhaseColor,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
+import { useShowDetails } from '@/lib/use-show-details';
+import { X } from 'lucide-react';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
 type ActionStatus = 'idle' | 'running' | 'success' | 'error';
@@ -211,6 +213,7 @@ export function OverviewScreen({
   const setupCardRef = useRef<HTMLDivElement>(null);
   const checkCardRef = useRef<HTMLDivElement>(null);
   const hasProfile = !!selectedProfile && profiles.length > 0;
+  const showDetails = useShowDetails();
   
   // Reset activity expanded state when a new run starts
   useEffect(() => {
@@ -329,6 +332,109 @@ export function OverviewScreen({
       default:
         return null;
     }
+  };
+
+  // Render collapsed status strip for a card (visible when collapsed with result state)
+  const renderCollapsedStatusStrip = (action: ActionType) => {
+    if (!action) return null;
+    
+    // Determine if this card has a displayable result state
+    const isThisComplete = runningAction === action && !isRunning && actionStatus !== 'idle';
+    const isThisRunning = runningAction === action && isRunning;
+    
+    // For capture: show draft or saved profile status
+    const hasDraft = action === 'capture' && pendingCaptureDraftPath;
+    const hasSavedCapture = action === 'capture' && !pendingCaptureDraftPath && lastSavedProfileSummary;
+    
+    // Only show strip if there's something to display AND card is collapsed
+    const hasResultState = isThisComplete || hasDraft || hasSavedCapture;
+    if (!hasResultState || isThisRunning) return null;
+    
+    // Determine status strip content
+    let statusText = '';
+    let detailText = '';
+    let statusColor: 'success' | 'warning' | 'error' = 'success';
+    let testIdSuffix = action === 'capture' ? 'capture' : action === 'setup' ? 'apply' : 'verify';
+    
+    if (hasDraft) {
+      statusText = 'Capture finished';
+      detailText = 'Not saved yet';
+      statusColor = 'warning';
+    } else if (hasSavedCapture && lastSavedProfileSummary) {
+      statusText = 'Completed successfully';
+      detailText = lastSavedProfileSummary.appCount === 0 
+        ? 'No apps detected' 
+        : `${lastSavedProfileSummary.appCount} apps captured`;
+    } else if (isThisComplete) {
+      if (actionStatus === 'success') {
+        statusText = 'Completed successfully';
+        detailText = actionProgress?.message || '';
+      } else if (actionStatus === 'error') {
+        // Check for partial failure
+        if (actionResult?.counts?.failed && actionResult.counts.failed > 0 && 
+            (actionResult.counts.installed || actionResult.counts.alreadyPresent)) {
+          statusText = 'Completed with issues';
+          statusColor = 'warning';
+          detailText = `${actionResult.counts.installed || 0} installed · ${actionResult.counts.failed} failed`;
+        } else {
+          statusText = 'Something went wrong';
+          statusColor = 'error';
+          detailText = actionProgress?.message || '';
+        }
+      }
+    }
+    
+    if (!statusText) return null;
+    
+    const colorClasses = statusColor === 'success' 
+      ? 'bg-success/10 text-success border-success/20'
+      : statusColor === 'warning'
+      ? 'bg-warning/10 text-warning border-warning/20'
+      : 'bg-danger/10 text-danger border-danger/20';
+    
+    const IconComponent = statusColor === 'success' ? CheckCircle2 
+      : statusColor === 'warning' ? FileText 
+      : XCircle;
+    
+    return (
+      <div 
+        className={`flex items-center gap-2 px-3 py-1.5 mt-2 rounded-md border text-xs ${colorClasses}`}
+        data-testid={`card-status-strip-${testIdSuffix}`}
+      >
+        <IconComponent className="h-3 w-3 flex-shrink-0" />
+        <span className="font-medium">{statusText}</span>
+        {detailText && (
+          <>
+            <span className="text-muted-foreground">—</span>
+            <span className="text-muted-foreground truncate">{detailText}</span>
+          </>
+        )}
+        <div className="flex-1" />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setDetailsModalOpen(true);
+          }}
+          className="text-[10px] hover:underline"
+        >
+          Details
+        </button>
+        {/* Dismiss button - for completed states (not drafts, which have Discard draft) */}
+        {!hasDraft && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDismiss();
+            }}
+            className="p-0.5 hover:bg-background/50 rounded"
+            data-testid="card-status-dismiss"
+            aria-label="Dismiss"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    );
   };
 
   const recentActivity = [
@@ -885,8 +991,9 @@ export function OverviewScreen({
         {/* Success and error states now rendered at card level (after CardHeader) */}
         {/* This ensures consistent placement whether card is collapsed or expanded */}
 
-        {/* Visual separator before action row */}
-        <div className="border-t border-border/50 pt-3 mt-1" />
+        {/* Visual separator before action row - only in Advanced mode */}
+        {showDetails && <div className="border-t border-border/50 pt-3 mt-1" data-testid="card-divider" />}
+        {!showDetails && <div className="pt-3 mt-1" />}
 
         {/* Action buttons */}
         <div className="flex items-center gap-2">
@@ -1114,6 +1221,8 @@ export function OverviewScreen({
                     <ChevronUp className="h-4 w-4 text-muted-foreground" />
                   </motion.div>
                 </div>
+                {/* Collapsed status strip - visible when card is collapsed with result state */}
+                {expandedCard !== 'capture' && renderCollapsedStatusStrip('capture')}
               </CardHeader>
               
               <AnimatePresence initial={false}>
@@ -1168,6 +1277,8 @@ export function OverviewScreen({
                     <ChevronUp className="h-4 w-4 text-muted-foreground" />
                   </motion.div>
                 </div>
+                {/* Collapsed status strip - visible when card is collapsed with result state */}
+                {expandedCard !== 'setup' && renderCollapsedStatusStrip('setup')}
               </CardHeader>
               
               <AnimatePresence initial={false}>
@@ -1226,6 +1337,8 @@ export function OverviewScreen({
                     <ChevronUp className="h-4 w-4 text-muted-foreground" />
                   </motion.div>
                 </div>
+                {/* Collapsed status strip - visible when card is collapsed with result state */}
+                {expandedCard !== 'check' && renderCollapsedStatusStrip('check')}
               </CardHeader>
               
               <AnimatePresence initial={false}>
