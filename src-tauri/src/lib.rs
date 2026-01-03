@@ -210,6 +210,118 @@ fn get_default_profiles_directory() -> Result<String, String> {
         .map(|s| s.to_string())
 }
 
+/// Get the capture cache directory path for transient capture output.
+///
+/// Returns %LOCALAPPDATA%\Endstate\cache\captures on Windows.
+/// Creates the directory if it doesn't exist.
+/// This directory is for temporary capture output that hasn't been saved as a profile yet.
+///
+/// # Returns
+/// * `Ok(String)` - Absolute path to the capture cache directory
+/// * `Err(String)` - Failed to determine or create directory
+#[tauri::command]
+fn get_capture_cache_directory() -> Result<String, String> {
+    let local_data = dirs::data_local_dir()
+        .ok_or_else(|| "Failed to determine LocalAppData directory".to_string())?;
+    
+    let cache_dir = local_data.join("Endstate").join("cache").join("captures");
+    
+    fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("Failed to create capture cache directory: {}", e))?;
+    
+    cache_dir
+        .to_str()
+        .ok_or_else(|| "Invalid path encoding".to_string())
+        .map(|s| s.to_string())
+}
+
+/// Copy a file from source to destination.
+///
+/// # Arguments
+/// * `source_path` - Path to the source file
+/// * `dest_path` - Path to the destination file
+///
+/// # Returns
+/// * `Ok(())` - File copied successfully
+/// * `Err(String)` - Failed to copy file
+#[tauri::command]
+fn copy_file(source_path: String, dest_path: String) -> Result<(), String> {
+    use std::path::Path;
+    
+    let source = Path::new(&source_path);
+    let dest = Path::new(&dest_path);
+    
+    if !source.exists() || !source.is_file() {
+        return Err(format!("Source file does not exist: {}", source_path));
+    }
+    
+    // Ensure destination directory exists
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create destination directory: {}", e))?;
+    }
+    
+    fs::copy(source, dest)
+        .map_err(|e| format!("Failed to copy file: {}", e))?;
+    
+    Ok(())
+}
+
+/// Delete a file silently (ignore if not found).
+///
+/// # Arguments
+/// * `path` - Path to the file to delete
+///
+/// # Returns
+/// * `Ok(())` - File deleted or didn't exist
+/// * `Err(String)` - Failed to delete file (other than not found)
+#[tauri::command]
+fn delete_file_silent(path: String) -> Result<(), String> {
+    use std::path::Path;
+    
+    let file_path = Path::new(&path);
+    if !file_path.exists() {
+        return Ok(()); // Already gone, success
+    }
+    if !file_path.is_file() {
+        return Ok(()); // Not a file, ignore
+    }
+    
+    fs::remove_file(file_path)
+        .map_err(|e| format!("Failed to delete file: {}", e))
+}
+
+/// Clean up all files in the capture cache directory.
+/// Called on app startup to remove any leftover transient capture files.
+///
+/// # Returns
+/// * `Ok(())` - Cleanup completed (errors are logged but not fatal)
+#[tauri::command]
+fn cleanup_capture_cache() -> Result<(), String> {
+    let local_data = match dirs::data_local_dir() {
+        Some(d) => d,
+        None => return Ok(()), // Can't determine dir, skip cleanup
+    };
+    
+    let cache_dir = local_data.join("Endstate").join("cache").join("captures");
+    
+    if !cache_dir.exists() {
+        return Ok(()); // Nothing to clean
+    }
+    
+    // Delete all files in the cache directory
+    if let Ok(entries) = fs::read_dir(&cache_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let _ = fs::remove_file(&path); // Ignore individual errors
+            }
+        }
+    }
+    
+    Ok(())
+}
+
 /// Ensure a directory exists by creating it if necessary.
 ///
 /// # Arguments
@@ -874,6 +986,7 @@ pub fn run() {
             run_endstate_streaming,
             check_file_exists,
             get_default_profiles_directory,
+            get_capture_cache_directory,
             ensure_dir,
             import_profile,
             show_file_dialog,
@@ -881,7 +994,10 @@ pub fn run() {
             read_text_file,
             write_text_file,
             delete_file,
+            delete_file_silent,
             rename_file,
+            copy_file,
+            cleanup_capture_cache,
             validate_profile
         ])
         .run(tauri::generate_context!())

@@ -286,3 +286,148 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
     expect(screen.queryByText('An error occurred during the operation.')).not.toBeInTheDocument();
   });
 });
+
+describe('OverviewScreen - Success Strip Dismiss Button', () => {
+  it('should show Dismiss button in expanded success strip', () => {
+    const onDismissResult = vi.fn();
+    
+    render(
+      <OverviewScreen
+        lifecycleState={mockLifecycleState}
+        selectedProfile="test-profile"
+        profiles={mockProfiles}
+        profilesDirectory="/test"
+        isRunning={false}
+        runningAction={null}
+        actionStatus="success"
+        actionProgress={null}
+        actionResult={{
+          action: 'capture',
+          status: 'success',
+          summary: '63 apps captured',
+          counts: { total: 63 },
+        }}
+        lastSavedProfileSummary={{
+          appCount: 63,
+          finishedAt: new Date().toISOString(),
+          profileName: 'Test Profile',
+        }}
+        liveAppEvents={[]}
+        liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
+        onNavigate={vi.fn()}
+        onCapture={vi.fn()}
+        onSetup={vi.fn()}
+        onCheck={vi.fn()}
+        onProfileChange={vi.fn()}
+        onDismissResult={onDismissResult}
+        onOpenProfilesFolder={vi.fn()}
+        onRefreshProfiles={vi.fn()}
+        onSaveProfile={vi.fn()}
+        onDiscardDraft={vi.fn()}
+        pendingCaptureDraft={null}
+        initialExpandedCard="capture"
+      />
+    );
+
+    // Verify success strip is shown with Dismiss button
+    expect(screen.getByText('Completed successfully')).toBeInTheDocument();
+    
+    // Find the Dismiss button in the expanded success strip
+    const dismissButton = screen.getByTestId('expanded-success-dismiss');
+    expect(dismissButton).toBeInTheDocument();
+    expect(dismissButton).toHaveTextContent('Dismiss');
+  });
+
+  it('should call onDismissResult when Dismiss button is clicked in expanded success strip', () => {
+    const onDismissResult = vi.fn();
+    
+    render(
+      <OverviewScreen
+        lifecycleState={mockLifecycleState}
+        selectedProfile="test-profile"
+        profiles={mockProfiles}
+        profilesDirectory="/test"
+        isRunning={false}
+        runningAction={null}
+        actionStatus="success"
+        actionProgress={null}
+        actionResult={{
+          action: 'capture',
+          status: 'success',
+          summary: '63 apps captured',
+          counts: { total: 63 },
+        }}
+        lastSavedProfileSummary={{
+          appCount: 63,
+          finishedAt: new Date().toISOString(),
+          profileName: 'Test Profile',
+        }}
+        liveAppEvents={[]}
+        liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
+        onNavigate={vi.fn()}
+        onCapture={vi.fn()}
+        onSetup={vi.fn()}
+        onCheck={vi.fn()}
+        onProfileChange={vi.fn()}
+        onDismissResult={onDismissResult}
+        onOpenProfilesFolder={vi.fn()}
+        onRefreshProfiles={vi.fn()}
+        onSaveProfile={vi.fn()}
+        onDiscardDraft={vi.fn()}
+        pendingCaptureDraft={null}
+        initialExpandedCard="capture"
+      />
+    );
+
+    // Click the Dismiss button
+    const dismissButton = screen.getByTestId('expanded-success-dismiss');
+    fireEvent.click(dismissButton);
+
+    // Verify onDismissResult was called
+    expect(onDismissResult).toHaveBeenCalledTimes(1);
+  });
+
+  it('should show both Dismiss and Details buttons in expanded success strip', () => {
+    render(
+      <OverviewScreen
+        lifecycleState={mockLifecycleState}
+        selectedProfile="test-profile"
+        profiles={mockProfiles}
+        profilesDirectory="/test"
+        isRunning={false}
+        runningAction={null}
+        actionStatus="success"
+        actionProgress={null}
+        actionResult={{
+          action: 'capture',
+          status: 'success',
+          summary: '63 apps captured',
+          counts: { total: 63 },
+        }}
+        lastSavedProfileSummary={{
+          appCount: 63,
+          finishedAt: new Date().toISOString(),
+          profileName: 'Test Profile',
+        }}
+        liveAppEvents={[]}
+        liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
+        onNavigate={vi.fn()}
+        onCapture={vi.fn()}
+        onSetup={vi.fn()}
+        onCheck={vi.fn()}
+        onProfileChange={vi.fn()}
+        onDismissResult={vi.fn()}
+        onOpenProfilesFolder={vi.fn()}
+        onRefreshProfiles={vi.fn()}
+        onSaveProfile={vi.fn()}
+        onDiscardDraft={vi.fn()}
+        pendingCaptureDraft={null}
+        initialExpandedCard="capture"
+      />
+    );
+
+    // Verify both buttons are present
+    expect(screen.getByTestId('expanded-success-dismiss')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument();
+  });
+});

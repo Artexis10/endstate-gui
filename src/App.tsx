@@ -347,8 +347,29 @@ function AppContent() {
       const trimmedValue = profileNameModalValue.trim();
       
       if (profileNameModalMode === 'save' && profileNameModalPath) {
-        // In save mode, rename the pending profile file to match the typed name
-        // and save the display name as metadata
+        // In save mode, copy from cache to profiles directory with the user's chosen name
+        // profileNameModalPath points to the transient file in cache
+        
+        // Get profiles directory as destination
+        const profilesDir = await loadProfilesDirectory();
+        if (!profilesDir) {
+          throw new Error('Failed to determine profiles directory');
+        }
+        await ensureDirectory(profilesDir);
+        
+        // Preflight check: verify source file exists before attempting copy
+        const sourceExists = await invoke<boolean>('check_file_exists', { path: profileNameModalPath });
+        if (!sourceExists) {
+          throw new Error(`Source file no longer exists: ${profileNameModalPath}. The draft may have been deleted or moved.`);
+        }
+        
+        // Determine filename
+        const currentFilename = profileNameModalPath.split(/[\\/]/).pop() || 'profile.jsonc';
+        const extension = currentFilename.match(/\.(jsonc?|json5)$/i)?.[0] || '.jsonc';
+        
+        let newFilename: string;
+        let destPath: string;
+        
         if (trimmedValue) {
           // Sanitize the name for use as filename
           const sanitized = trimmedValue
@@ -356,52 +377,40 @@ function AppContent() {
             .replace(/\s+/g, '_') // Replace spaces with underscores
             .slice(0, 100); // Limit length
           
-          // Get directory and extension from current path
-          const pathParts = profileNameModalPath.split(/[\\/]/);
-          const directory = pathParts.slice(0, -1).join('\\');
-          const currentFilename = pathParts[pathParts.length - 1];
-          const extension = currentFilename.match(/\.(jsonc?|json5)$/i)?.[0] || '.jsonc';
-          
           // Generate new filename with collision avoidance
-          let newFilename = `${sanitized}${extension}`;
-          let newPath = `${directory}\\${newFilename}`;
+          newFilename = `${sanitized}${extension}`;
+          destPath = `${profilesDir}\\${newFilename}`;
           
           // Check for collision and add suffix if needed
           let suffix = 1;
-          while (newPath !== profileNameModalPath) {
-            const exists = await invoke<boolean>('check_file_exists', { path: newPath });
+          while (true) {
+            const exists = await invoke<boolean>('check_file_exists', { path: destPath });
             if (!exists) break;
             newFilename = `${sanitized}_${suffix}${extension}`;
-            newPath = `${directory}\\${newFilename}`;
+            destPath = `${profilesDir}\\${newFilename}`;
             suffix++;
             if (suffix > 100) break; // Safety limit
           }
-          
-          // Rename the file if path changed
-          if (newPath !== profileNameModalPath) {
-            // Preflight check: verify source file exists before attempting rename
-            const sourceExists = await invoke<boolean>('check_file_exists', { path: profileNameModalPath });
-            if (!sourceExists) {
-              throw new Error(`Source file no longer exists: ${profileNameModalPath}. The draft may have been deleted or moved.`);
-            }
-            await invoke('rename_file', { oldPath: profileNameModalPath, newPath });
-            
-            // Update selected profile if it was the renamed one
-            if (profileNameModalPath === selectedProfilePath) {
-              const newName = newFilename.replace(/\.(jsonc?|json5)$/i, '');
-              setSelectedProfile(newName);
-              setSelectedProfilePath(newPath);
-              updateSettings({ lastSelectedProfile: newName, lastSelectedProfilePath: newPath });
-            }
-            
-            // Save display name as metadata on the new path
-            await saveProfileMetadata(newPath, { displayName: trimmedValue });
-          } else {
-            // No rename needed, just save metadata
-            await saveProfileMetadata(profileNameModalPath, { displayName: trimmedValue });
-          }
         } else {
-          // No name provided, keep filename as-is, no metadata needed
+          // No name provided, use timestamp-based name
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+          newFilename = `setup_${timestamp}${extension}`;
+          destPath = `${profilesDir}\\${newFilename}`;
+        }
+        
+        // Copy from cache to profiles directory
+        await invoke('copy_file', { sourcePath: profileNameModalPath, destPath });
+        
+        // Delete the cache file after successful copy
+        try {
+          await invoke('delete_file_silent', { path: profileNameModalPath });
+        } catch {
+          // Ignore cleanup errors
+        }
+        
+        // Save display name as metadata on the new path
+        if (trimmedValue) {
+          await saveProfileMetadata(destPath, { displayName: trimmedValue });
         }
       } else {
         // Rename mode: just update display name metadata
@@ -508,7 +517,16 @@ function AppContent() {
   const handleDiscardDraft = async () => {
     if (!pendingCaptureDraft) return;
     
-    // Clear in-memory draft state (no file to delete)
+    // Delete transient capture file from cache (ignore errors if already gone)
+    if (pendingCaptureDraft.outputPath) {
+      try {
+        await invoke('delete_file_silent', { path: pendingCaptureDraft.outputPath });
+      } catch {
+        // Ignore - file may already be deleted
+      }
+    }
+    
+    // Clear in-memory draft state
     setPendingCaptureDraft(null);
     
     // Clear capture action state - return to idle
@@ -665,6 +683,11 @@ function AppContent() {
     setLastRunApply(loadLastRunForCommand('apply'));
     setLastRunVerify(loadLastRunForCommand('verify'));
     
+    // Clean up any leftover transient capture files from previous sessions
+    invoke('cleanup_capture_cache').catch(() => {
+      // Ignore cleanup errors - best effort only
+    });
+    
     refreshProfiles();
   }, []);
 
@@ -792,20 +815,25 @@ function AppContent() {
       setLogTruncated(truncated);
     });
 
-    const dir = await loadProfilesDirectory();
-    if (!dir) {
-      throw new Error('Failed to determine profiles directory');
+    // Get capture cache directory for transient output (NOT profiles directory)
+    // The file will only be copied to profiles when user clicks "Save profile"
+    const cacheDir = await invoke<string>('get_capture_cache_directory');
+    if (!cacheDir) {
+      throw new Error('Failed to determine capture cache directory');
     }
     
-    await ensureDirectory(dir);
+    await ensureDirectory(cacheDir);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
-    const filename = `setup_${timestamp}.jsonc`;
-    const outputPath = `${dir}\\${filename}`;
+    const filename = `draft_${timestamp}.jsonc`;
+    const outputPath = `${cacheDir}\\${filename}`;
+
+    // Get profiles directory for run artifacts (separate from cache)
+    const profilesDir = await loadProfilesDirectory();
 
     // Create run artifact bundle
     const runId = generateRunId();
-    const runBundle = await createRunBundle(dir, runId);
+    const runBundle = profilesDir ? await createRunBundle(profilesDir, runId) : null;
     const runStartTime = Date.now();
 
     // Track capture live activity via NDJSON events

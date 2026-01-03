@@ -420,6 +420,18 @@ export function OverviewScreen({
                   className="text-foreground"
                   onClick={(e) => {
                     e.stopPropagation();
+                    handleDismiss();
+                  }}
+                  data-testid="expanded-success-dismiss"
+                >
+                  Dismiss
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setDetailsModalOpen(true);
                   }}
                 >
