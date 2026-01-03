@@ -16,11 +16,10 @@ vi.mock('@/lib/use-show-details', () => ({
  * Discard Draft UX Tests
  * 
  * These tests enforce the UX contracts for the discard draft functionality:
- * 1. Discard draft button appears when pendingCaptureDraftPath exists
+ * 1. Discard draft button appears when pendingCaptureDraft exists
  * 2. Clicking discard draft calls onDiscardDraft handler
  * 3. Cancel/close of Save Profile modal does NOT clear draft
  * 4. Save success clears draft and shows green card
- * 5. Manage Profiles delete is blocked when target == pending draft path
  */
 
 describe('Discard Draft UX Contracts', () => {
@@ -44,9 +43,14 @@ describe('Discard Draft UX Contracts', () => {
   ];
 
   describe('Contract 1: Discard draft button appears with pending draft', () => {
-    it('shows discard draft button when pendingCaptureDraftPath exists', async () => {
+    it('shows discard draft button when pendingCaptureDraft exists', async () => {
       const onDiscardDraft = vi.fn();
-      const pendingDraftPath = 'C:\\profiles\\draft_2024-01-01.jsonc';
+      const pendingDraft = {
+        capturedAppsCount: 5,
+        capturedAt: new Date().toISOString(),
+        outputPath: 'C:\\profiles\\draft_2024-01-01.jsonc',
+        apps: ['app1', 'app2', 'app3', 'app4', 'app5'],
+      };
 
       renderWithProviders(
         <OverviewScreen
@@ -74,7 +78,7 @@ describe('Discard Draft UX Contracts', () => {
           onRefreshProfiles={vi.fn()}
           onSaveProfile={vi.fn()}
           onDiscardDraft={onDiscardDraft}
-          pendingCaptureDraftPath={pendingDraftPath}
+          pendingCaptureDraft={pendingDraft}
         />
       );
 
@@ -108,7 +112,7 @@ describe('Discard Draft UX Contracts', () => {
           onRefreshProfiles={vi.fn()}
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
-          pendingCaptureDraftPath={null}
+          pendingCaptureDraft={null}
         />
       );
 
@@ -125,7 +129,12 @@ describe('Discard Draft UX Contracts', () => {
     it('calls onDiscardDraft when discard draft button is clicked', async () => {
       const user = userEvent.setup();
       const onDiscardDraft = vi.fn();
-      const pendingDraftPath = 'C:\\profiles\\draft_2024-01-01.jsonc';
+      const pendingDraft = {
+        capturedAppsCount: 5,
+        capturedAt: new Date().toISOString(),
+        outputPath: 'C:\\profiles\\draft_2024-01-01.jsonc',
+        apps: ['app1', 'app2', 'app3', 'app4', 'app5'],
+      };
 
       renderWithProviders(
         <OverviewScreen
@@ -153,7 +162,7 @@ describe('Discard Draft UX Contracts', () => {
           onRefreshProfiles={vi.fn()}
           onSaveProfile={vi.fn()}
           onDiscardDraft={onDiscardDraft}
-          pendingCaptureDraftPath={pendingDraftPath}
+          pendingCaptureDraft={pendingDraft}
         />
       );
 
@@ -168,7 +177,12 @@ describe('Discard Draft UX Contracts', () => {
 
   describe('Contract 3: Draft card shows amber warning state', () => {
     it('shows amber warning card for capture success with pending draft', async () => {
-      const pendingDraftPath = 'C:\\profiles\\draft_2024-01-01.jsonc';
+      const pendingDraft = {
+        capturedAppsCount: 5,
+        capturedAt: new Date().toISOString(),
+        outputPath: 'C:\\profiles\\draft_2024-01-01.jsonc',
+        apps: ['app1', 'app2', 'app3', 'app4', 'app5'],
+      };
 
       renderWithProviders(
         <OverviewScreen
@@ -196,7 +210,7 @@ describe('Discard Draft UX Contracts', () => {
           onRefreshProfiles={vi.fn()}
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
-          pendingCaptureDraftPath={pendingDraftPath}
+          pendingCaptureDraft={pendingDraft}
         />
       );
 
@@ -243,7 +257,7 @@ describe('Discard Draft UX Contracts', () => {
           onRefreshProfiles={vi.fn()}
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
-          pendingCaptureDraftPath={null}
+          pendingCaptureDraft={null}
         />
       );
 
@@ -263,7 +277,12 @@ describe('Discard Draft UX Contracts', () => {
         counts: { total: 63 },
       };
 
-      const pendingDraftPath = 'C:\\profiles\\draft_2024-01-01.jsonc';
+      const pendingDraft = {
+        capturedAppsCount: 63,
+        capturedAt: new Date().toISOString(),
+        outputPath: 'C:\\profiles\\draft_2024-01-01.jsonc',
+        apps: Array.from({ length: 63 }, (_, i) => `app${i + 1}`),
+      };
 
       renderWithProviders(
         <OverviewScreen
@@ -286,7 +305,7 @@ describe('Discard Draft UX Contracts', () => {
           onRefreshProfiles={vi.fn()}
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
-          pendingCaptureDraftPath={pendingDraftPath}
+          pendingCaptureDraft={pendingDraft}
           initialExpandedCard="capture"
         />
       );
@@ -335,7 +354,7 @@ describe('Discard Draft UX Contracts', () => {
           onRefreshProfiles={vi.fn()}
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
-          pendingCaptureDraftPath={null}
+          pendingCaptureDraft={null}
         />
       );
 
@@ -370,7 +389,7 @@ describe('Discard Draft UX Contracts', () => {
           onRefreshProfiles={vi.fn()}
           onSaveProfile={vi.fn()}
           onDiscardDraft={vi.fn()}
-          pendingCaptureDraftPath={null}
+          pendingCaptureDraft={null}
           initialExpandedCard="capture"
         />
       );

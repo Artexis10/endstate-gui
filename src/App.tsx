@@ -162,8 +162,13 @@ function AppContent() {
   const [showFolderPathModal, setShowFolderPathModal] = useState(false);
   const [folderPathForModal, setFolderPathForModal] = useState('');
   
-  // Pending capture draft state - separate from selectedProfile
-  const [pendingCaptureDraftPath, setPendingCaptureDraftPath] = useState<string | null>(null);
+  // Pending capture draft state - in-memory only (no disk file)
+  const [pendingCaptureDraft, setPendingCaptureDraft] = useState<{
+    capturedAppsCount: number;
+    capturedAt: string;
+    outputPath: string;
+    apps: string[];
+  } | null>(null);
   
   // Saved profile summary - drives green success strip
   // Set ONLY after successful Save Profile (not after capture, not after discard)
@@ -319,7 +324,12 @@ function AppContent() {
   useEffect(() => {
     if (import.meta.env.DEV || import.meta.env.VITE_E2E === '1') {
       (window as any).__endstate_e2e_openSaveProfileModal = ({ pendingPath, suggestedName }: { pendingPath: string; suggestedName: string }) => {
-        setPendingCaptureDraftPath(pendingPath);
+        setPendingCaptureDraft({
+          capturedAppsCount: 0,
+          capturedAt: new Date().toISOString(),
+          outputPath: pendingPath,
+          apps: [],
+        });
         openProfileNameModal(pendingPath, suggestedName, 'save', suggestedName);
       };
       (window as any).__endstate_e2e_showToast = showToast;
@@ -332,20 +342,6 @@ function AppContent() {
 
   const handleSaveProfileName = async () => {
     if (isSavingProfile) return; // Prevent double-submit
-    
-    // Preflight: check if we're saving a draft and the file is missing
-    if (profileNameModalMode === 'save' && pendingCaptureDraftPath) {
-      const wasStale = await clearStaleDraft();
-      if (wasStale) {
-        setShowProfileNameModal(false);
-        setProfileNameModalPath('');
-        setProfileNameModalValue('');
-        setProfileNameModalMoreOptions(false);
-        setPendingSuggestedName('');
-        showToast('Draft no longer exists. Run capture again.', 'warning');
-        return;
-      }
-    }
     
     try {
       const trimmedValue = profileNameModalValue.trim();
@@ -420,7 +416,7 @@ function AppContent() {
       let savedProfileForAnimation: DiscoveredProfile | null = null;
       
       // If this was a save from capture draft, clear the pending draft and select the new profile
-      if (profileNameModalMode === 'save' && pendingCaptureDraftPath) {
+      if (profileNameModalMode === 'save' && pendingCaptureDraft) {
         // Find the saved profile (may have been renamed)
         const dir = await loadProfilesDirectory();
         if (dir) {
@@ -438,7 +434,7 @@ function AppContent() {
             updateSettings({ lastSelectedProfile: savedProfile.name, lastSelectedProfilePath: savedProfile.path });
           }
         }
-        setPendingCaptureDraftPath(null);
+        setPendingCaptureDraft(null);
         
         // Set lastSavedProfileSummary to show green success after profile is saved
         // This is the ONLY place green success should be set for Capture
@@ -474,14 +470,11 @@ function AppContent() {
       console.error('Failed to save profile name:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       
-      // If source file doesn't exist, clear stale draft state and provide recovery path
+      // If source file doesn't exist and we're saving a draft, clear draft state
       if (errorMessage.includes('Source file no longer exists') || errorMessage.includes('does not exist')) {
-        // Clear stale pending draft state
-        if (profileNameModalMode === 'save' && pendingCaptureDraftPath) {
-          setPendingCaptureDraftPath(null);
-          // Keep the capture result card visible
+        if (profileNameModalMode === 'save' && pendingCaptureDraft) {
+          setPendingCaptureDraft(null);
         }
-        // Close modal since there's nothing to save
         setShowProfileNameModal(false);
         setProfileNameModalPath('');
         setProfileNameModalValue('');
@@ -489,11 +482,10 @@ function AppContent() {
         setPendingSuggestedName('');
         setProfileNameModalSuccess(false);
         setSavedProfileDisplayName('');
-        
-        showToast('Draft file no longer exists. Run capture again to create a new profile.', 'error');
+        showToast('Source file no longer exists. Run capture again to create a new profile.', 'error');
       } else {
         showToast(`Failed to save profile: ${errorMessage}`, 'error');
-        // Do NOT close modal or clear pendingCaptureDraftPath on other errors - user can retry
+        // Do NOT close modal or clear pendingCaptureDraft on other errors - user can retry
       }
     } finally {
       setIsSavingProfile(false);
@@ -501,8 +493,8 @@ function AppContent() {
   };
 
   const handleCancelProfileName = async () => {
-    // Contract A: Cancel/close does NOT delete the draft file, does NOT clear pendingCaptureDraftPath.
-    // The draft persists until the user explicitly chooses Save profile OR Discard draft.
+    // Contract A: Cancel/close does NOT clear pendingCaptureDraft.
+    // The draft persists in memory until the user explicitly chooses Save profile OR Discard draft.
     // This allows users to close the modal and return later to save.
     
     // Close modal and reset modal-specific state only
@@ -513,62 +505,16 @@ function AppContent() {
     setPendingSuggestedName('');
   };
 
-  const clearStaleDraft = async (): Promise<boolean> => {
-    if (!pendingCaptureDraftPath) return false;
-    
-    try {
-      const exists = await invoke<boolean>('check_file_exists', { path: pendingCaptureDraftPath });
-      if (!exists) {
-        // File is missing - clear stale state
-        setPendingCaptureDraftPath(null);
-        if (overviewActionResult?.action === 'capture') {
-          setOverviewActionResult(null);
-          setOverviewActionStatus('idle');
-        }
-        return true; // Indicates stale state was cleared
-      }
-      return false; // File exists, no stale state
-    } catch (err) {
-      console.error('Failed to check draft file existence:', err);
-      return false;
-    }
-  };
-
   const handleDiscardDraft = async () => {
-    if (!pendingCaptureDraftPath) return;
+    if (!pendingCaptureDraft) return;
     
-    // Check if file exists first
-    const wasStale = await clearStaleDraft();
-    if (wasStale) {
-      showToast('Draft already gone', 'info');
-      await refreshProfiles();
-      return;
-    }
+    // Clear in-memory draft state (no file to delete)
+    setPendingCaptureDraft(null);
     
-    try {
-      // Delete the draft file
-      await invoke('delete_file', { path: pendingCaptureDraftPath });
-      
-      // Clear draft state
-      setPendingCaptureDraftPath(null);
-      
-      // Clear capture action state - return to idle
-      // Per contract: NO green success after discard
-      setOverviewActionResult(null);
-      setOverviewActionStatus('idle');
-      
-      // Refresh profiles to update the list
-      await refreshProfiles();
-    } catch (err) {
-      console.error('Failed to discard draft:', err);
-      // Even if delete fails, clear the state (idempotent)
-      setPendingCaptureDraftPath(null);
-      
-      // Clear capture action state - return to idle
-      setOverviewActionResult(null);
-      setOverviewActionStatus('idle');
-      await refreshProfiles();
-    }
+    // Clear capture action state - return to idle
+    setOverviewActionResult(null);
+    setOverviewActionStatus('idle');
+    setOverviewActionProgress(null);
   };
 
   const handleDeleteProfile = async () => {
@@ -577,15 +523,6 @@ function AppContent() {
     // Safety check: prevent deleting the currently selected profile
     if (deleteProfilePath === selectedProfilePath) {
       console.error('Cannot delete the currently selected profile');
-      setShowDeleteProfileModal(false);
-      setDeleteProfilePath('');
-      setDeleteProfileName('');
-      return;
-    }
-    
-    // Safety check: prevent deleting the pending draft
-    if (pendingCaptureDraftPath && deleteProfilePath === pendingCaptureDraftPath) {
-      showToast('Cannot delete unsaved draft. Save or cancel the draft first.', 'error');
       setShowDeleteProfileModal(false);
       setDeleteProfilePath('');
       setDeleteProfileName('');
@@ -984,23 +921,11 @@ function AppContent() {
     const newLifecycleState = recordLifecycleEvent('capture', captureEvent);
     setLifecycleState(newLifecycleState);
     
-    await refreshProfiles();
-    const discovered = await discoverProfiles(dir);
-    const draftPath = discovered.length > 0 
-      ? discovered.sort((a, b) => b.path.localeCompare(a.path))[0].path 
-      : null;
-    
     // Get app list from envelope data
     const appsList = envelopeData?.appsIncluded?.map(a => a.id) || [];
     
-    // Get profile name from the newest discovered profile (refresh to get display name)
-    const refreshedProfiles = await discoverProfiles(dir);
-    const profileName = refreshedProfiles.length > 0 
-      ? refreshedProfiles.sort((a, b) => b.path.localeCompare(a.path))[0].name 
-      : 'Unknown';
-    
-    // Return structured result including draft path for atomic state update
-    return { count: capturedCount, profileName, apps: appsList, draftPath };
+    // Return structured result with output path for in-memory draft
+    return { count: capturedCount, outputPath, apps: appsList };
   };
 
   const handlePreviewFromOverview = async () => {
@@ -1701,7 +1626,7 @@ function AppContent() {
                 
                 // Clear previous summary and draft when starting new capture
                 setLastSavedProfileSummary(null);
-                setPendingCaptureDraftPath(null);
+                setPendingCaptureDraft(null);
                 try {
                   const result = await handleCaptureFromOverview();
                   setOverviewActionStatus('success');
@@ -1710,10 +1635,13 @@ function AppContent() {
                     : `${result.count} apps captured`;
                   setOverviewActionProgress({ message: countText });
                   
-                  // Set draft path if capture created a draft
-                  if (result.draftPath) {
-                    setPendingCaptureDraftPath(result.draftPath);
-                  }
+                  // Store draft in-memory only
+                  setPendingCaptureDraft({
+                    capturedAppsCount: result.count,
+                    capturedAt: new Date().toISOString(),
+                    outputPath: result.outputPath,
+                    apps: result.apps,
+                  });
                   
                   // DO NOT set lastSavedProfileSummary here
                   // Green success only appears after Save Profile (in handleSaveProfileName)
@@ -1722,16 +1650,13 @@ function AppContent() {
                     action: 'capture', 
                     status: 'success', 
                     summary: countText,
-                    profile: result.profileName,
                     timestamp: new Date().toISOString(),
                     counts: { total: result.count },
                     appEvents: result.apps?.map(app => ({ app, action: 'Captured', statusKey: 'detected' as const, phase: 'capture' as const })),
                   });
                   
                   // Prompt for profile name after state is set
-                  if (result.draftPath) {
-                    await promptForProfileName(result.draftPath);
-                  }
+                  await promptForProfileName(result.outputPath);
                 } catch (err) {
                   setOverviewActionStatus('error');
                   setOverviewActionResult({ 
@@ -1903,12 +1828,12 @@ function AppContent() {
               onSetActiveProfile={handleSetActiveProfile}
               onSaveProfile={() => {
                 // Open the save modal for the pending capture draft (not selectedProfile)
-                if (pendingCaptureDraftPath) {
-                  promptForProfileName(pendingCaptureDraftPath);
+                if (pendingCaptureDraft) {
+                  promptForProfileName(pendingCaptureDraft.outputPath);
                 }
               }}
               onDiscardDraft={handleDiscardDraft}
-              pendingCaptureDraftPath={pendingCaptureDraftPath}
+              pendingCaptureDraft={pendingCaptureDraft}
             />
           </div>
         );

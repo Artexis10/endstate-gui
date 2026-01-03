@@ -139,7 +139,12 @@ interface OverviewScreenProps {
   onClearExpandedCard?: () => void;
   onSaveProfile?: () => void;
   onDiscardDraft?: () => void;
-  pendingCaptureDraftPath?: string | null;
+  pendingCaptureDraft?: {
+    capturedAppsCount: number;
+    capturedAt: string;
+    outputPath: string;
+    apps: string[];
+  } | null;
 }
 
 export function OverviewScreen({
@@ -170,7 +175,7 @@ export function OverviewScreen({
   onClearExpandedCard,
   onSaveProfile,
   onDiscardDraft,
-  pendingCaptureDraftPath,
+  pendingCaptureDraft,
 }: OverviewScreenProps) {
   // Initialize expandedCard: prioritize active running action, then initialExpandedCard, then null
   // This ensures returning to Overview during an active run shows the correct expanded card
@@ -333,8 +338,8 @@ export function OverviewScreen({
   const renderExpandedStatusStrip = (action: ActionType) => {
     if (!action || action !== 'capture') return null;
     
-    const hasDraft = pendingCaptureDraftPath;
-    const hasSuccess = !pendingCaptureDraftPath && lastSavedProfileSummary;
+    const hasDraft = pendingCaptureDraft;
+    const hasSuccess = !pendingCaptureDraft && lastSavedProfileSummary;
     
     if (!hasDraft && !hasSuccess) return null;
     
@@ -437,7 +442,7 @@ export function OverviewScreen({
     
     // For capture: prioritize saved success over draft
     const hasSavedCapture = action === 'capture' && lastSavedProfileSummary;
-    const hasDraft = action === 'capture' && pendingCaptureDraftPath && !lastSavedProfileSummary;
+    const hasDraft = action === 'capture' && pendingCaptureDraft && !lastSavedProfileSummary;
     
     // Only show strip if there's something to display AND card is collapsed
     const hasResultState = isThisComplete || hasDraft || hasSavedCapture;
@@ -1190,16 +1195,11 @@ export function OverviewScreen({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {profiles
-                      .filter(p => {
-                        const basename = p.path.split(/[\\/]/).pop() || '';
-                        return !basename.startsWith('draft_') && !basename.match(/^draft_.*\.jsonc$/i);
-                      })
-                      .map((p) => (
-                        <SelectItem key={p.name} value={p.name}>
-                          {p.displayName ? `${p.displayName} (${p.name})` : p.name}
-                        </SelectItem>
-                      ))}
+                    {profiles.map((p) => (
+                      <SelectItem key={p.name} value={p.name}>
+                        {p.displayName ? `${p.displayName} (${p.name})` : p.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Button
@@ -1707,7 +1707,6 @@ export function OverviewScreen({
         profiles={profiles}
         selectedProfile={selectedProfile}
         profilesDirectory={profilesDirectory}
-        pendingCaptureDraftPath={pendingCaptureDraftPath}
         onRenameDisplay={(path, currentName) => {
           onRenameProfile?.(path, currentName);
         }}
