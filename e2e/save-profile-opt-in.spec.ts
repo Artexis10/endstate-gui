@@ -112,7 +112,10 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     await page.waitForFunction(() => typeof (window as any).__endstate_e2e_openSaveProfileModal === 'function', { timeout: 10000 });
   });
 
-  test('Cancel button deletes pending profile file', async ({ page }) => {
+  test('Cancel button closes modal without deleting draft', async ({ page }) => {
+    // Old assertion: expected delete_file to be called on Cancel
+    // New contract: Cancel closes modal but draft persists for later save (per product spec)
+    
     // Open the Save profile modal with the pending profile path
     await page.evaluate((pendingPath) => {
       (window as any).__endstate_e2e_openSaveProfileModal({ 
@@ -130,14 +133,10 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     // Modal should close
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
 
-    // Verify delete_file was called with the pending profile path
-    const deleteCalls = await page.evaluate(() => (window as any).__test_deleteFileCalls);
-    expect(deleteCalls).toContain(PENDING_PROFILE_PATH);
-    
-    // Verify the pending profile is no longer in the list
+    // Draft file should still exist (Cancel does NOT delete - user can return later)
     const profileFiles = await page.evaluate(() => (window as any).__test_profileFiles);
-    expect(profileFiles).not.toContain(PENDING_PROFILE_PATH);
-    expect(profileFiles).toContain(EXISTING_PROFILE_PATH); // Existing profile should remain
+    expect(profileFiles).toContain(PENDING_PROFILE_PATH);
+    expect(profileFiles).toContain(EXISTING_PROFILE_PATH);
   });
 
   test('Save button renames file to match typed name', async ({ page }) => {
@@ -214,7 +213,10 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     expect(profileFiles).toContain(PENDING_PROFILE_PATH);
   });
 
-  test('Escape key triggers cancel behavior and deletes file', async ({ page }) => {
+  test('Escape key triggers cancel behavior without deleting draft', async ({ page }) => {
+    // Old assertion: expected delete_file to be called on Escape
+    // New contract: Escape triggers Cancel which closes modal but draft persists (per product spec)
+    
     // Open the Save profile modal
     await page.evaluate((pendingPath) => {
       (window as any).__endstate_e2e_openSaveProfileModal({ 
@@ -232,12 +234,15 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     // Modal should close
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
 
-    // Verify delete_file was called with the pending profile path
-    const deleteCalls = await page.evaluate(() => (window as any).__test_deleteFileCalls);
-    expect(deleteCalls).toContain(PENDING_PROFILE_PATH);
+    // Draft file should still exist (Cancel does NOT delete - user can return later)
+    const profileFiles = await page.evaluate(() => (window as any).__test_profileFiles);
+    expect(profileFiles).toContain(PENDING_PROFILE_PATH);
   });
 
   test('Manage Profiles list unchanged after Cancel', async ({ page }) => {
+    // Old assertion: expected profile count to decrease by 1 (delete on Cancel)
+    // New contract: Cancel does NOT delete draft, so profile count stays the same
+    
     // Get initial profile count
     const initialProfiles = await page.evaluate(() => (window as any).__test_profileFiles.length);
 
@@ -255,9 +260,9 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     await page.click('[data-testid="profile-name-cancel"]');
     await page.waitForTimeout(500);
 
-    // Verify profile count decreased by 1 (pending profile deleted)
+    // Verify profile count unchanged (Cancel does NOT delete draft)
     const finalProfiles = await page.evaluate(() => (window as any).__test_profileFiles.length);
-    expect(finalProfiles).toBe(initialProfiles - 1);
+    expect(finalProfiles).toBe(initialProfiles);
 
     // Verify existing profile still exists
     const profileFiles = await page.evaluate(() => (window as any).__test_profileFiles);

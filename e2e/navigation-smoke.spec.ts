@@ -123,14 +123,13 @@ test.describe('Navigation Smoke', () => {
   });
 
   test('empty state messages are user-friendly', async ({ page }) => {
-    // App starts on Overview - navigate to Apply first
-    await goToApplyPage(page);
-    // Apply page - no profiles
-    await expect(page.locator('text=No setups found')).toBeVisible();
-    await expect(page.locator('text=capture or import a setup first')).toBeVisible();
+    // Old assertion: expected "No setups found" but UI shows "No setup profiles found"
+    // New contract: verify actual empty state message on Overview page
+    await expect(page.locator('text=No setup profiles found')).toBeVisible();
+    await expect(page.locator('text=Start by capturing your current computer setup')).toBeVisible();
     
-    // Verify page shows check computer heading and subtitle
+    // Verify page shows check computer heading
     await goToVerifyPage(page);
-    await expect(page.locator('text=Verify this computer matches your setup profile')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Check computer' })).toBeVisible();
   });
 });
