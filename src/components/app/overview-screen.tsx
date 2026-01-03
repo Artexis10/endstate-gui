@@ -393,78 +393,80 @@ export function OverviewScreen({
       : XCircle;
     
     return (
-      <div 
-        className={`flex items-center gap-3 px-3 py-2.5 mt-8 rounded-md border text-sm ${colorClasses}`}
-        data-testid={`card-status-strip-${testIdSuffix}`}
-      >
-        <IconComponent className="h-4 w-4 flex-shrink-0" />
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="font-medium whitespace-nowrap">{statusText}</span>
-          {detailText && (
+      <div className="pt-8">
+        <div 
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-md border text-sm ${colorClasses}`}
+          data-testid={`card-status-strip-${testIdSuffix}`}
+        >
+          <IconComponent className="h-4 w-4 flex-shrink-0" />
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="font-medium whitespace-nowrap">{statusText}</span>
+            {detailText && (
+              <>
+                <span className="text-muted-foreground flex-shrink-0">—</span>
+                <span className="text-muted-foreground truncate">{detailText}</span>
+              </>
+            )}
+          </div>
+          {/* Draft state: Save profile / Discard draft affordances */}
+          {hasDraft ? (
             <>
-              <span className="text-muted-foreground flex-shrink-0">—</span>
-              <span className="text-muted-foreground truncate">{detailText}</span>
+              {onDiscardDraft && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDiscardDraft();
+                  }}
+                  data-testid="collapsed-discard-draft"
+                >
+                  Discard draft
+                </Button>
+              )}
+              {onSaveProfile && (
+                <Button
+                  size="sm"
+                  className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSaveProfile();
+                  }}
+                  data-testid="collapsed-save-profile"
+                >
+                  Save profile
+                </Button>
+              )}
             </>
-          )}
-        </div>
-        {/* Draft state: Save profile / Discard draft affordances */}
-        {hasDraft ? (
-          <>
-            {onDiscardDraft && (
+          ) : (
+            <>
               <Button
                 variant="ghost"
                 size="sm"
                 className="text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDiscardDraft();
+                  handleDismiss();
                 }}
-                data-testid="collapsed-discard-draft"
+                data-testid="card-status-dismiss"
               >
-                Discard draft
+                Dismiss
               </Button>
-            )}
-            {onSaveProfile && (
               <Button
+                variant="ghost"
                 size="sm"
-                className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                className="text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSaveProfile();
+                  setDetailsModalOpen(true);
                 }}
-                data-testid="collapsed-save-profile"
               >
-                Save profile
+                Details
               </Button>
-            )}
-          </>
-        ) : (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDismiss();
-              }}
-              data-testid="card-status-dismiss"
-            >
-              Dismiss
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDetailsModalOpen(true);
-              }}
-            >
-              Details
-            </Button>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
     );
   };
@@ -1024,7 +1026,7 @@ export function OverviewScreen({
         {/* This ensures consistent placement whether card is collapsed or expanded */}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mt-8">
           {!isThisComplete ? (
             <>
               <Button
