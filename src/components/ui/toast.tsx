@@ -7,15 +7,13 @@ type ToastType = "info" | "success" | "warning" | "error"
 export function showToast(message: string, type: ToastType = "info") {
   const duration = type === "warning" || type === "error" ? 5000 : 3000
   
-  let toastId: string | number
-  
+  // Use Sonner's dismissible pattern: pass a function that receives the toast ID
   const toastOptions = {
     duration,
-    onClick: () => {
-      toast.dismiss(toastId)
-    },
+    dismissible: true,
   }
 
+  let toastId: string | number
   switch (type) {
     case "success":
       toastId = toast.success(message, toastOptions)
@@ -57,7 +55,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         toastOptions={{
           classNames: {
             toast:
-              "!bg-popover !text-popover-foreground !border !border-border shadow-lg rounded-lg px-4 py-3 cursor-default select-none",
+              "!bg-popover !text-popover-foreground !border !border-border shadow-lg rounded-lg px-4 py-3 cursor-default select-none touch-pan-y",
             title: "text-sm font-medium leading-5",
             description: "text-sm text-muted-foreground leading-5",
             success: "!border-l-2 !border-l-success",
