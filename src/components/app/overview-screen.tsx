@@ -570,89 +570,94 @@ export function OverviewScreen({
           {descriptions[action]}
         </p>
 
-        {/* Status strips - rendered directly under description, before divider */}
-        <AnimatePresence mode="wait">
-          {/* Capture: draft warning OR saved success */}
-          {action === 'capture' && pendingCaptureDraftPath && (
-            <motion.div
-              key="draft-status"
-              variants={fadeSlideVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-            >
-              <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20" data-testid="capture-draft-card">
-                <FileText className="h-4 w-4 text-warning" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-warning">
-                    Capture finished
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Not saved yet — save to create a profile
-                  </p>
+        {/* Status strips - stable container always present to prevent jumpiness */}
+        <div className="min-h-0">
+          <AnimatePresence mode="wait">
+            {/* Capture: draft warning OR saved success */}
+            {action === 'capture' && pendingCaptureDraftPath && (
+              <motion.div
+                key="draft-status"
+                variants={fadeSlideVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+              >
+                <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20" data-testid="capture-draft-card">
+                  <FileText className="h-4 w-4 text-warning" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-warning">
+                      Capture finished
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Not saved yet — save to create a profile
+                    </p>
+                  </div>
+                  {onDiscardDraft && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDiscardDraft();
+                      }}
+                      data-testid="discard-draft-button"
+                    >
+                      Discard draft
+                    </Button>
+                  )}
+                  {onSaveProfile && (
+                    <Button
+                      size="sm"
+                      className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSaveProfile();
+                      }}
+                      data-testid="save-profile-button"
+                    >
+                      Save profile
+                    </Button>
+                  )}
                 </div>
-                {onDiscardDraft && (
+              </motion.div>
+            )}
+            {action === 'capture' && !pendingCaptureDraftPath && lastSavedProfileSummary && (
+              <motion.div
+                key="capture-success"
+                variants={fadeSlideVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+              >
+                <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="capture-success-card">
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-success">
+                      Completed successfully
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {lastSavedProfileSummary.appCount === 0 
+                        ? 'No apps detected' 
+                        : `${lastSavedProfileSummary.appCount} apps captured`}
+                    </p>
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDiscardDraft();
+                      setDetailsModalOpen(true);
                     }}
-                    data-testid="discard-draft-button"
                   >
-                    Discard draft
+                    Details
                   </Button>
-                )}
-                {onSaveProfile && (
-                  <Button
-                    size="sm"
-                    className="bg-warning hover:bg-warning/90 text-warning-foreground"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSaveProfile();
-                    }}
-                    data-testid="save-profile-button"
-                  >
-                    Save profile
-                  </Button>
-                )}
-              </div>
-            </motion.div>
-          )}
-          {action === 'capture' && !pendingCaptureDraftPath && lastSavedProfileSummary && (
-            <motion.div
-              key="capture-success"
-              variants={fadeSlideVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-            >
-              <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="capture-success-card">
-                <CheckCircle2 className="h-4 w-4 text-success" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-success">
-                    Completed successfully
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {lastSavedProfileSummary.appCount === 0 
-                      ? 'No apps detected' 
-                      : `${lastSavedProfileSummary.appCount} apps captured`}
-                  </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDetailsModalOpen(true);
-                  }}
-                >
-                  Details
-                </Button>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <AnimatePresence mode="wait">
 
           {/* Setup: success */}
           {action === 'setup' && isThisComplete && actionStatus === 'success' && (
@@ -1026,7 +1031,7 @@ export function OverviewScreen({
         {/* This ensures consistent placement whether card is collapsed or expanded */}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 mt-8">
+        <div className="flex items-center gap-2 pt-2">
           {!isThisComplete ? (
             <>
               <Button
@@ -1173,11 +1178,13 @@ export function OverviewScreen({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {profiles.map((p) => (
-                      <SelectItem key={p.name} value={p.name}>
-                        {p.displayName ? `${p.displayName} (${p.name})` : p.name}
-                      </SelectItem>
-                    ))}
+                    {profiles
+                      .filter(p => !p.path.includes('draft_'))
+                      .map((p) => (
+                        <SelectItem key={p.name} value={p.name}>
+                          {p.displayName ? `${p.displayName} (${p.name})` : p.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 <Button
