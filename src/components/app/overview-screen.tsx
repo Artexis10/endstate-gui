@@ -356,7 +356,9 @@ export function OverviewScreen({
     
     if (hasDraft) {
       statusText = 'Capture finished';
-      detailText = 'Not saved yet';
+      // Include app count if available from actionResult
+      const appCount = actionResult?.counts?.total;
+      detailText = appCount ? `${appCount} apps captured — not saved yet` : 'Not saved yet';
       statusColor = 'warning';
     } else if (hasSavedCapture && lastSavedProfileSummary) {
       statusText = 'Completed successfully';
@@ -408,28 +410,57 @@ export function OverviewScreen({
           </>
         )}
         <div className="flex-1" />
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setDetailsModalOpen(true);
-          }}
-          className="text-[10px] hover:underline"
-        >
-          Details
-        </button>
-        {/* Dismiss button - for completed states (not drafts, which have Discard draft) */}
-        {!hasDraft && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDismiss();
-            }}
-            className="p-0.5 hover:bg-background/50 rounded"
-            data-testid="card-status-dismiss"
-            aria-label="Dismiss"
-          >
-            <X className="h-3 w-3" />
-          </button>
+        {/* Draft state: Save profile / Discard draft affordances */}
+        {hasDraft ? (
+          <>
+            {onDiscardDraft && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDiscardDraft();
+                }}
+                className="text-[10px] hover:underline text-muted-foreground"
+                data-testid="collapsed-discard-draft"
+              >
+                Discard
+              </button>
+            )}
+            {onSaveProfile && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSaveProfile();
+                }}
+                className="text-[10px] font-medium hover:underline"
+                data-testid="collapsed-save-profile"
+              >
+                Save profile
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setDetailsModalOpen(true);
+              }}
+              className="text-[10px] hover:underline"
+            >
+              Details
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDismiss();
+              }}
+              className="p-0.5 hover:bg-background/50 rounded"
+              data-testid="card-status-dismiss"
+              aria-label="Dismiss"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </>
         )}
       </div>
     );

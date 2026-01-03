@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { forceAdvancedMode } from './helpers/ui-mode';
+import { forceAdvancedMode, forceDefaultMode } from './helpers/ui-mode';
 
 /**
  * E2E tests for Reports page log visibility.
@@ -186,5 +186,188 @@ test.describe('Reports - Log Visibility', () => {
     
     // This verifies the UI structure is correct
     await expect(page.locator('text=Recent Runs')).toBeVisible();
+  });
+});
+
+test.describe('Reports - Run Expansion with showDetails=false', () => {
+  test('run entries expand and show summary content when showDetails is false', async ({ page, baseURL }) => {
+    // Use Advanced mode for navigation but set showDetails=false to test Simplified behavior
+    await forceAdvancedMode(page);
+    
+    await page.addInitScript(() => {
+      // Set showDetails=false to simulate Simplified mode behavior
+      const settings = {
+        engineMode: 'path',
+        engineScriptPath: '',
+        customProfilesDirectory: '',
+        lastSelectedProfile: 'test-profile',
+        lastSelectedProfilePath: 'C:\\test\\profiles\\test-profile.jsonc',
+        dryRunEnabled: true,
+        showDetails: false, // KEY: This is what we're testing
+      };
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
+      localStorage.setItem('endstate-gui-settings', JSON.stringify(settings));
+      
+      // Set up lifecycle state with a recent run
+      const lifecycleState = {
+        lastCapture: {
+          timestamp: new Date().toISOString(),
+          success: true,
+          summary: { total: 15 },
+        },
+        lastApply: {
+          timestamp: new Date(Date.now() - 3600000).toISOString(),
+          success: true,
+          profile: 'test-profile',
+          summary: { installed: 5, alreadyPresent: 8, failed: 0 },
+        },
+        lastPreview: null,
+        lastVerify: null,
+      };
+      localStorage.setItem('endstate-lifecycle-state', JSON.stringify(lifecycleState));
+      localStorage.setItem('test-endstate-lifecycle-state', JSON.stringify(lifecycleState));
+      
+      (window as any).__TAURI__ = {
+        core: {
+          invoke: async (cmd: string) => {
+            if (cmd === 'ensure_dir') return null;
+            if (cmd === 'read_dir') return [];
+            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
+            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
+            if (cmd === 'validate_profile') {
+              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } };
+            }
+            if (cmd === 'check_file_exists') return true;
+            if (cmd === 'read_text_file') return '{}';
+            return null;
+          }
+        }
+      };
+      
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string) => {
+          if (command === 'capabilities') {
+            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } }, ndjsonEvents: [] };
+          }
+          if (command === 'report') {
+            return { exitCode: 0, envelope: { success: true, data: { hasState: false } }, ndjsonEvents: [] };
+          }
+          return { exitCode: 0, envelope: { success: true, data: {} }, ndjsonEvents: [] };
+        }
+      };
+    });
+    
+    await page.goto(baseURL || '/');
+    await page.waitForLoadState('networkidle');
+    
+    // Navigate to Reports page via sidebar
+    await page.click('[data-testid="nav-report"]');
+    await expect(page.locator('text=Recent Runs')).toBeVisible({ timeout: 5000 });
+    
+    // Find a run entry
+    const runEntry = page.locator('details').first();
+    await expect(runEntry).toBeVisible();
+    
+    // Expand the run entry by clicking
+    await runEntry.locator('summary').click();
+    await page.waitForTimeout(300);
+    
+    // Verify expanded content is visible - these should ALWAYS show regardless of mode
+    // Command field
+    await expect(runEntry.locator('text=Command')).toBeVisible({ timeout: 3000 });
+    // Time field
+    await expect(runEntry.locator('text=Time')).toBeVisible({ timeout: 3000 });
+    // Status field
+    await expect(runEntry.locator('text=Status')).toBeVisible({ timeout: 3000 });
+    
+    // Verify the run entry is actually expanded (has the expanded content div)
+    await expect(runEntry.locator('.border-t.border-border.bg-muted\\/30')).toBeVisible();
+  });
+
+  test('run entries with showDetails=true show artifact actions', async ({ page, baseURL }) => {
+    // Force Advanced mode with showDetails=true
+    await forceAdvancedMode(page);
+    
+    await page.addInitScript(() => {
+      // Set showDetails=true explicitly
+      const settings = {
+        engineMode: 'path',
+        engineScriptPath: '',
+        customProfilesDirectory: '',
+        lastSelectedProfile: 'test-profile',
+        lastSelectedProfilePath: 'C:\\test\\profiles\\test-profile.jsonc',
+        dryRunEnabled: true,
+        showDetails: true, // KEY: Advanced mode with details
+      };
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
+      localStorage.setItem('endstate-gui-settings', JSON.stringify(settings));
+      
+      // Set up lifecycle state with a recent run WITH artifact paths
+      const lifecycleState = {
+        lastCapture: {
+          timestamp: new Date().toISOString(),
+          success: true,
+          summary: { total: 15 },
+          artifactPaths: {
+            logFile: 'C:\\test\\logs\\capture.log',
+            eventsFile: 'C:\\test\\logs\\events.jsonl',
+          },
+        },
+        lastPreview: null,
+        lastApply: null,
+        lastVerify: null,
+      };
+      localStorage.setItem('endstate-lifecycle-state', JSON.stringify(lifecycleState));
+      localStorage.setItem('test-endstate-lifecycle-state', JSON.stringify(lifecycleState));
+      
+      (window as any).__TAURI__ = {
+        core: {
+          invoke: async (cmd: string) => {
+            if (cmd === 'ensure_dir') return null;
+            if (cmd === 'read_dir') return [];
+            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
+            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
+            if (cmd === 'validate_profile') {
+              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } };
+            }
+            if (cmd === 'check_file_exists') return true;
+            if (cmd === 'read_text_file') return '{}';
+            return null;
+          }
+        }
+      };
+      
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async (settings: any, command: string) => {
+          if (command === 'capabilities') {
+            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } }, ndjsonEvents: [] };
+          }
+          if (command === 'report') {
+            return { exitCode: 0, envelope: { success: true, data: { hasState: false } }, ndjsonEvents: [] };
+          }
+          return { exitCode: 0, envelope: { success: true, data: {} }, ndjsonEvents: [] };
+        }
+      };
+    });
+    
+    await page.goto(baseURL || '/');
+    await page.waitForLoadState('networkidle');
+    
+    // Navigate to Reports page
+    await page.click('[data-testid="nav-report"]');
+    await expect(page.locator('text=Recent Runs')).toBeVisible({ timeout: 5000 });
+    
+    // Find and expand a run entry - use direct child summary to avoid nested details
+    const runEntry = page.locator('details').first();
+    await expect(runEntry).toBeVisible();
+    await runEntry.locator('> summary').click();
+    await page.waitForTimeout(300);
+    
+    // Verify summary content is visible
+    await expect(runEntry.locator('text=Command')).toBeVisible({ timeout: 3000 });
+    await expect(runEntry.locator('text=Status')).toBeVisible({ timeout: 3000 });
+    
+    // With showDetails=true and artifact paths, "View log" button should be visible
+    await expect(runEntry.locator('button:has-text("View log")')).toBeVisible({ timeout: 3000 });
   });
 });
