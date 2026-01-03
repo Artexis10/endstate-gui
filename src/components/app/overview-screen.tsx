@@ -68,7 +68,6 @@ import {
   getPhaseColor,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
-import { X } from 'lucide-react';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
 type ActionStatus = 'idle' | 'running' | 'success' | 'error';
@@ -254,10 +253,7 @@ export function OverviewScreen({
     
     // Toggle card expansion
     if (expandedCard === action) {
-      // Only collapse if not running and not showing result
-      if (actionStatus === 'idle') {
-        setExpandedCard(null);
-      }
+      setExpandedCard(null);
     } else {
       setExpandedCard(action);
     }
@@ -340,9 +336,9 @@ export function OverviewScreen({
     const isThisComplete = runningAction === action && !isRunning && actionStatus !== 'idle';
     const isThisRunning = runningAction === action && isRunning;
     
-    // For capture: show draft or saved profile status
-    const hasDraft = action === 'capture' && pendingCaptureDraftPath;
-    const hasSavedCapture = action === 'capture' && !pendingCaptureDraftPath && lastSavedProfileSummary;
+    // For capture: prioritize saved success over draft
+    const hasSavedCapture = action === 'capture' && lastSavedProfileSummary;
+    const hasDraft = action === 'capture' && pendingCaptureDraftPath && !lastSavedProfileSummary;
     
     // Only show strip if there's something to display AND card is collapsed
     const hasResultState = isThisComplete || hasDraft || hasSavedCapture;
@@ -354,17 +350,17 @@ export function OverviewScreen({
     let statusColor: 'success' | 'warning' | 'error' = 'success';
     let testIdSuffix = action === 'capture' ? 'capture' : action === 'setup' ? 'apply' : 'verify';
     
-    if (hasDraft) {
+    if (hasSavedCapture && lastSavedProfileSummary) {
+      statusText = 'Completed successfully';
+      detailText = lastSavedProfileSummary.appCount === 0 
+        ? 'No apps detected' 
+        : `${lastSavedProfileSummary.appCount} apps captured`;
+    } else if (hasDraft) {
       statusText = 'Capture finished';
       // Include app count if available from actionResult
       const appCount = actionResult?.counts?.total;
       detailText = appCount ? `${appCount} apps captured — not saved yet` : 'Not saved yet';
       statusColor = 'warning';
-    } else if (hasSavedCapture && lastSavedProfileSummary) {
-      statusText = 'Completed successfully';
-      detailText = lastSavedProfileSummary.appCount === 0 
-        ? 'No apps detected' 
-        : `${lastSavedProfileSummary.appCount} apps captured`;
     } else if (isThisComplete) {
       if (actionStatus === 'success') {
         statusText = 'Completed successfully';
@@ -398,68 +394,75 @@ export function OverviewScreen({
     
     return (
       <div 
-        className={`flex items-center gap-2 px-3 py-1.5 mt-2 rounded-md border text-xs ${colorClasses}`}
+        className={`flex items-center gap-3 px-3 py-2.5 mt-8 rounded-md border text-sm ${colorClasses}`}
         data-testid={`card-status-strip-${testIdSuffix}`}
       >
-        <IconComponent className="h-3 w-3 flex-shrink-0" />
-        <span className="font-medium">{statusText}</span>
-        {detailText && (
-          <>
-            <span className="text-muted-foreground">—</span>
-            <span className="text-muted-foreground truncate">{detailText}</span>
-          </>
-        )}
-        <div className="flex-1" />
+        <IconComponent className="h-4 w-4 flex-shrink-0" />
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="font-medium whitespace-nowrap">{statusText}</span>
+          {detailText && (
+            <>
+              <span className="text-muted-foreground flex-shrink-0">—</span>
+              <span className="text-muted-foreground truncate">{detailText}</span>
+            </>
+          )}
+        </div>
         {/* Draft state: Save profile / Discard draft affordances */}
         {hasDraft ? (
           <>
             {onDiscardDraft && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDiscardDraft();
                 }}
-                className="text-[10px] hover:underline text-muted-foreground"
                 data-testid="collapsed-discard-draft"
               >
-                Discard
-              </button>
+                Discard draft
+              </Button>
             )}
             {onSaveProfile && (
-              <button
+              <Button
+                size="sm"
+                className="bg-warning hover:bg-warning/90 text-warning-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
                   onSaveProfile();
                 }}
-                className="text-[10px] font-medium hover:underline"
                 data-testid="collapsed-save-profile"
               >
                 Save profile
-              </button>
+              </Button>
             )}
           </>
         ) : (
           <>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setDetailsModalOpen(true);
-              }}
-              className="text-[10px] hover:underline"
-            >
-              Details
-            </button>
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-foreground"
               onClick={(e) => {
                 e.stopPropagation();
                 handleDismiss();
               }}
-              className="p-0.5 hover:bg-background/50 rounded"
               data-testid="card-status-dismiss"
-              aria-label="Dismiss"
             >
-              <X className="h-3 w-3" />
-            </button>
+              Dismiss
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDetailsModalOpen(true);
+              }}
+            >
+              Details
+            </Button>
           </>
         )}
       </div>
@@ -1020,9 +1023,6 @@ export function OverviewScreen({
         {/* Success and error states now rendered at card level (after CardHeader) */}
         {/* This ensures consistent placement whether card is collapsed or expanded */}
 
-        {/* Visual separator before action row - consistent across modes */}
-        <div className="border-t border-border/50 pt-3 mt-1" data-testid="card-divider" />
-
         {/* Action buttons */}
         <div className="flex items-center gap-2">
           {!isThisComplete ? (
@@ -1230,24 +1230,26 @@ export function OverviewScreen({
               onClick={() => handleCardClick('capture')}
             >
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-blue-500/10">
-                      <ScanSearch className="h-5 w-5 text-blue-500" />
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-blue-500/10">
+                        <ScanSearch className="h-5 w-5 text-blue-500" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">Capture computer</CardTitle>
+                        <CardDescription className="text-xs mt-0.5">
+                          Save your current setup as a reusable profile
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-base">Capture computer</CardTitle>
-                      <CardDescription className="text-xs mt-0.5">
-                        Save your current setup as a reusable profile
-                      </CardDescription>
-                    </div>
+                    <motion.div
+                      animate={{ rotate: expandedCard === 'capture' ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    </motion.div>
                   </div>
-                  <motion.div
-                    animate={{ rotate: expandedCard === 'capture' ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                  </motion.div>
                 </div>
                 {/* Collapsed status strip - visible when card is collapsed with result state */}
                 {expandedCard !== 'capture' && renderCollapsedStatusStrip('capture')}
