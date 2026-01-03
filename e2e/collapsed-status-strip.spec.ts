@@ -6,7 +6,7 @@ import { forceAdvancedMode, forceDefaultMode, seedProfileSettings, goToApplyPage
  * Verifies:
  * 1) Closed card shows last-run strip after a run completes
  * 2) Clicking "Dismiss" returns the card to neutral state
- * 3) Divider is absent in Default mode and present in Advanced/showDetails
+ * 3) Divider is consistent across Default and Advanced modes (always present)
  */
 test.describe('Collapsed Status Strip', () => {
   test.beforeEach(async ({ page, baseURL }) => {
@@ -144,8 +144,8 @@ test.describe('Collapsed Status Strip', () => {
   });
 });
 
-test.describe('Divider visibility by UI mode', () => {
-  test('divider is absent in Default mode', async ({ page, baseURL }) => {
+test.describe('Divider consistency across UI modes', () => {
+  test('divider is present in Default mode', async ({ page, baseURL }) => {
     await forceDefaultMode(page);
     await seedProfileSettings(page, 'test-profile', true);
 
@@ -187,11 +187,11 @@ test.describe('Divider visibility by UI mode', () => {
     await page.locator('[data-testid="overview-card-apply"]').click();
     await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
     
-    // Divider should NOT be present in Default mode
-    await expect(page.locator('[data-testid="card-divider"]')).not.toBeVisible();
+    // Divider SHOULD be present in Default mode (consistent with Advanced)
+    await expect(page.locator('[data-testid="card-divider"]')).toBeVisible();
   });
 
-  test('divider is present in Advanced mode', async ({ page, baseURL }) => {
+  test('divider is present in Advanced mode (consistent with Default)', async ({ page, baseURL }) => {
     await forceAdvancedMode(page);
     await seedProfileSettings(page, 'test-profile', true);
 
@@ -253,7 +253,7 @@ test.describe('Divider visibility by UI mode', () => {
     await page.locator('[data-testid="overview-card-apply"]').click();
     await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
     
-    // Divider SHOULD be present in Advanced mode (showDetails=true)
+    // Divider SHOULD be present in Advanced mode (consistent with Default)
     await expect(page.locator('[data-testid="card-divider"]')).toBeVisible();
   });
 });

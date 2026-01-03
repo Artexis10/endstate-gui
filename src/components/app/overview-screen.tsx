@@ -68,7 +68,6 @@ import {
   getPhaseColor,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
-import { useShowDetails } from '@/lib/use-show-details';
 import { X } from 'lucide-react';
 
 type ActionType = 'capture' | 'setup' | 'check' | null;
@@ -213,7 +212,6 @@ export function OverviewScreen({
   const setupCardRef = useRef<HTMLDivElement>(null);
   const checkCardRef = useRef<HTMLDivElement>(null);
   const hasProfile = !!selectedProfile && profiles.length > 0;
-  const showDetails = useShowDetails();
   
   // Reset activity expanded state when a new run starts
   useEffect(() => {
@@ -991,9 +989,8 @@ export function OverviewScreen({
         {/* Success and error states now rendered at card level (after CardHeader) */}
         {/* This ensures consistent placement whether card is collapsed or expanded */}
 
-        {/* Visual separator before action row - only in Advanced mode */}
-        {showDetails && <div className="border-t border-border/50 pt-3 mt-1" data-testid="card-divider" />}
-        {!showDetails && <div className="pt-3 mt-1" />}
+        {/* Visual separator before action row - consistent across modes */}
+        <div className="border-t border-border/50 pt-3 mt-1" data-testid="card-divider" />
 
         {/* Action buttons */}
         <div className="flex items-center gap-2">

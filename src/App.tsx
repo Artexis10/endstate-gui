@@ -2075,6 +2075,8 @@ function AppContent() {
                             <ChevronRight className="h-4 w-4 group-open:rotate-90 transition-transform" />
                           </div>
                         </summary>
+                        {/* Only show expanded content section if there's something to display */}
+                        {(settings.showDetails || (activeRunId && overviewRunningAction === run.mode)) && (
                         <div className="px-3 pb-3 pt-1 border-t border-border bg-muted/30">
                           <div className="grid grid-cols-2 gap-2 text-sm">
                             <div>
@@ -2128,6 +2130,7 @@ function AppContent() {
                           </div>
                           
                           {/* Artifact status and actions - show appropriate message/actions based on run state */}
+                          {settings.showDetails && (
                           <div className="col-span-2 pt-2 border-t border-border mt-2">
                             {activeRunId && overviewRunningAction === run.mode ? (
                               <span className="text-xs text-muted-foreground italic">
@@ -2186,7 +2189,9 @@ function AppContent() {
                               </span>
                             )}
                           </div>
+                          )}
                         </div>
+                        )}
                       </details>
                     ))}
                   </div>
