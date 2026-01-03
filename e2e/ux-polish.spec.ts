@@ -6,21 +6,54 @@ test.describe('UX Hardening - Folder Modal', () => {
     await forceDefaultMode(page);
     await seedProfileSettings(page);
     
-    // Mock Tauri in WEB mode (no __TAURI__ object)
+    // Seed showDetails setting so "Open folder" button is visible in ManageProfilesModal
     await page.addInitScript(() => {
-      // Do NOT set __TAURI__ - this simulates web mode
+      const existingSettings = localStorage.getItem('test:endstate-gui-settings') || localStorage.getItem('endstate-gui-settings');
+      const settings = existingSettings ? JSON.parse(existingSettings) : {};
+      settings.showDetails = true;
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
+      localStorage.setItem('endstate-gui-settings', JSON.stringify(settings));
+    });
+    
+    // Set __TAURI__ mock to load profiles. openFolder still returns web fallback because
+    // isTauriRuntime() returns false when hasTestMock() is true (test mock detection).
+    await page.addInitScript(() => {
+      (window as any).__TAURI__ = {
+        core: {
+          invoke: async (cmd: string) => {
+            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
+            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
+            if (cmd === 'read_text_file') return '{"version": 1, "apps": []}';
+            if (cmd === 'validate_profile') return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 0 } };
+            if (cmd === 'ensure_dir') return null;
+            if (cmd === 'read_dir') return [];
+            // open_folder is NOT mocked - will fall through to web fallback
+            return undefined;
+          },
+        },
+        event: { listen: async () => () => {}, emit: async () => {} },
+      };
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runCommand: async (cmd: string) => {
-          if (cmd.includes('capabilities')) {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent?: Function) => {
+          if (command === 'capabilities') {
             return {
-              success: true,
-              stdout: JSON.stringify({
-                data: { commands: ['capture', 'apply', 'verify'], version: '1.0.0' },
-              }),
+              exitCode: 0,
+              stdout: '',
               stderr: '',
+              envelope: { success: true, data: { commands: ['capture', 'apply', 'verify'], version: '1.0.0' } },
+              ndjsonEvents: [],
             };
           }
-          return { success: true, stdout: '{}', stderr: '' };
+          if (command === 'report') {
+            return {
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+              envelope: { success: true, data: { hasState: false } },
+              ndjsonEvents: [],
+            };
+          }
+          return { exitCode: 0, stdout: '{}', stderr: '', envelope: { success: true, data: {} }, ndjsonEvents: [] };
         },
       };
     });
@@ -35,28 +68,40 @@ test.describe('UX Hardening - Folder Modal', () => {
     });
 
     await page.goto('/');
-    await expect(page.locator('main >> h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
+    await page.waitForLoadState('networkidle');
     
-    // Click "Open" button for profiles folder
-    const openButton = page.locator('button:has-text("Open")').first();
-    if (await openButton.isVisible()) {
-      await openButton.click();
-      
-      // Modal should appear (role=dialog)
-      const modal = page.locator('[role="dialog"][data-testid="folder-path-modal"]');
-      await expect(modal).toBeVisible({ timeout: 3000 });
-      
-      // Modal should show the path
-      const pathInput = modal.locator('[data-testid="folder-path-input"]');
-      await expect(pathInput).toBeVisible();
-      
-      // Verify no alert was triggered
-      expect(alertFired).toBe(false);
-      
-      // Close button should work
-      await modal.locator('button:has-text("Close")').click();
-      await expect(modal).not.toBeVisible();
-    }
+    // Wait for app to be ready - use heading role which is stable across UI modes
+    await expect(page.getByRole('heading', { name: 'Endstate' })).toBeVisible({ timeout: 5000 });
+    
+    // First, open the Manage Profiles modal via the settings/gear button
+    // The "Open folder" button is inside ManageProfilesModal
+    const manageProfilesButton = page.locator('[title="Manage profiles"]');
+    await expect(manageProfilesButton).toBeVisible({ timeout: 3000 });
+    await manageProfilesButton.click();
+    
+    // Wait for ManageProfilesModal to open
+    const manageModal = page.locator('[role="dialog"]').filter({ hasText: 'Manage Profiles' });
+    await expect(manageModal).toBeVisible({ timeout: 3000 });
+    
+    // Click "Open folder" button (specific text, inside the modal)
+    const openFolderButton = manageModal.getByRole('button', { name: /Open folder/i });
+    await expect(openFolderButton).toBeVisible();
+    await openFolderButton.click();
+    
+    // Folder path modal should appear (web mode fallback)
+    const folderModal = page.locator('[data-testid="folder-path-modal"]');
+    await expect(folderModal).toBeVisible({ timeout: 3000 });
+    
+    // Modal should show the path input
+    const pathInput = folderModal.locator('[data-testid="folder-path-input"]');
+    await expect(pathInput).toBeVisible();
+    
+    // Verify no alert was triggered
+    expect(alertFired).toBe(false);
+    
+    // Close button should work (use .first() to avoid matching X button)
+    await folderModal.getByRole('button', { name: 'Close' }).first().click();
+    await expect(folderModal).not.toBeVisible();
   });
 });
 
@@ -79,27 +124,52 @@ test.describe('UX Hardening - Card Padding', () => {
         core: {
           invoke: async (cmd: string) => {
             if (cmd === 'get_profiles_directory') return 'C:\\test\\profiles';
+            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
+            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
+            if (cmd === 'read_text_file') return '{"version": 1, "apps": []}';
+            if (cmd === 'validate_profile') return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 0 } };
             if (cmd === 'discover_profiles') return [
               { name: 'test-profile', path: 'C:\\test\\profiles\\test-profile.jsonc' }
             ];
+            if (cmd === 'ensure_dir') return null;
+            if (cmd === 'read_dir') return [];
             return undefined;
           },
         },
         event: { listen: async () => () => {}, emit: async () => {} },
       };
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runCommand: async () => ({
-          success: true,
-          stdout: JSON.stringify({ data: { commands: ['capture', 'apply', 'verify'], version: '1.0.0' } }),
-          stderr: '',
-        }),
+        runEndstateStreaming: async (settings: any, command: string) => {
+          if (command === 'capabilities') {
+            return {
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+              envelope: { success: true, data: { commands: ['capture', 'apply', 'verify'], version: '1.0.0' } },
+              ndjsonEvents: [],
+            };
+          }
+          if (command === 'report') {
+            return {
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+              envelope: { success: true, data: { hasState: false } },
+              ndjsonEvents: [],
+            };
+          }
+          return { exitCode: 0, stdout: '{}', stderr: '', envelope: { success: true, data: {} }, ndjsonEvents: [] };
+        },
       };
     });
   });
 
   test('current profile card has consistent padding', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('main >> h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
+    await page.waitForLoadState('networkidle');
+    
+    // Wait for app to be ready - use heading role which is stable across UI modes
+    await expect(page.getByRole('heading', { name: 'Endstate' })).toBeVisible({ timeout: 5000 });
     
     const profileCard = page.locator('[data-testid="current-profile-card-content"]');
     if (await profileCard.isVisible()) {
