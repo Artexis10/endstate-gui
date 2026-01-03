@@ -329,6 +329,105 @@ export function OverviewScreen({
   };
 
   // Render collapsed status strip for a card (visible when collapsed with result state)
+  // Render status strip in static (non-animated) slot when card is expanded
+  const renderExpandedStatusStrip = (action: ActionType) => {
+    if (!action || action !== 'capture') return null;
+    
+    const hasDraft = pendingCaptureDraftPath;
+    const hasSuccess = !pendingCaptureDraftPath && lastSavedProfileSummary;
+    
+    if (!hasDraft && !hasSuccess) return null;
+    
+    return (
+      <div className="px-6 pt-4">
+        <AnimatePresence mode="wait">
+          {hasDraft && (
+            <motion.div
+              key="draft-status"
+              variants={fadeSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20" data-testid="capture-draft-card">
+                <FileText className="h-4 w-4 text-warning" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-warning">
+                    Capture finished
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    Not saved yet — save to create a profile
+                  </p>
+                </div>
+                {onDiscardDraft && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDiscardDraft();
+                    }}
+                    data-testid="discard-draft-button"
+                  >
+                    Discard draft
+                  </Button>
+                )}
+                {onSaveProfile && (
+                  <Button
+                    size="sm"
+                    className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSaveProfile();
+                    }}
+                    data-testid="save-profile-button"
+                  >
+                    Save profile
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+          )}
+          {hasSuccess && lastSavedProfileSummary && (
+            <motion.div
+              key="capture-success"
+              variants={fadeSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="capture-success-card">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-success">
+                    Completed successfully
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {lastSavedProfileSummary.appCount === 0 
+                      ? 'No apps detected' 
+                      : `${lastSavedProfileSummary.appCount} apps captured`}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsModalOpen(true);
+                  }}
+                >
+                  Details
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
   const renderCollapsedStatusStrip = (action: ActionType) => {
     if (!action) return null;
     
@@ -569,93 +668,6 @@ export function OverviewScreen({
         <p className="text-sm text-muted-foreground">
           {descriptions[action]}
         </p>
-
-        {/* Status strips - stable container always present to prevent jumpiness */}
-        <div className="min-h-0">
-          <AnimatePresence mode="wait">
-            {/* Capture: draft warning OR saved success */}
-            {action === 'capture' && pendingCaptureDraftPath && (
-              <motion.div
-                key="draft-status"
-                variants={fadeSlideVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-              >
-                <div className="flex items-center gap-3 bg-warning/10 rounded-md px-3 py-3 border border-warning/20" data-testid="capture-draft-card">
-                  <FileText className="h-4 w-4 text-warning" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-warning">
-                      Capture finished
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Not saved yet — save to create a profile
-                    </p>
-                  </div>
-                  {onDiscardDraft && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDiscardDraft();
-                      }}
-                      data-testid="discard-draft-button"
-                    >
-                      Discard draft
-                    </Button>
-                  )}
-                  {onSaveProfile && (
-                    <Button
-                      size="sm"
-                      className="bg-warning hover:bg-warning/90 text-warning-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSaveProfile();
-                      }}
-                      data-testid="save-profile-button"
-                    >
-                      Save profile
-                    </Button>
-                  )}
-                </div>
-              </motion.div>
-            )}
-            {action === 'capture' && !pendingCaptureDraftPath && lastSavedProfileSummary && (
-              <motion.div
-                key="capture-success"
-                variants={fadeSlideVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-              >
-                <div className="flex items-center gap-3 bg-success/10 rounded-md px-3 py-3 border border-success/20" data-testid="capture-success-card">
-                  <CheckCircle2 className="h-4 w-4 text-success" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-success">
-                      Completed successfully
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {lastSavedProfileSummary.appCount === 0 
-                        ? 'No apps detected' 
-                        : `${lastSavedProfileSummary.appCount} apps captured`}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDetailsModalOpen(true);
-                    }}
-                  >
-                    Details
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
 
         <AnimatePresence mode="wait">
 
@@ -1179,7 +1191,10 @@ export function OverviewScreen({
                   </SelectTrigger>
                   <SelectContent>
                     {profiles
-                      .filter(p => !p.path.includes('draft_'))
+                      .filter(p => {
+                        const basename = p.path.split(/[\\/]/).pop() || '';
+                        return !basename.startsWith('draft_') && !basename.match(/^draft_.*\.jsonc$/i);
+                      })
                       .map((p) => (
                         <SelectItem key={p.name} value={p.name}>
                           {p.displayName ? `${p.displayName} (${p.name})` : p.name}
@@ -1263,6 +1278,9 @@ export function OverviewScreen({
                 {/* Collapsed status strip - visible when card is collapsed with result state */}
                 {expandedCard !== 'capture' && renderCollapsedStatusStrip('capture')}
               </CardHeader>
+              
+              {/* Static status strip slot - outside animated region to prevent jumpiness */}
+              {expandedCard === 'capture' && renderExpandedStatusStrip('capture')}
               
               <AnimatePresence initial={false}>
                 {expandedCard === 'capture' && (
