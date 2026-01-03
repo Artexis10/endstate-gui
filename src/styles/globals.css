@@ -133,5 +133,16 @@
 
 .endstate-sonner [data-sonner-toast] {
   pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Force brand CSS variables to win over Sonner defaults */
+.endstate-sonner [data-sonner-toast] {
+  background-color: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  border-color: hsl(var(--border)) !important;
 }
 

@@ -3,6 +3,7 @@ import { Button } from '../ui/button';
 import { CheckCircle2, AlertTriangle, Copy, Package, Loader2 } from 'lucide-react';
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { DetailsDisclosure } from '../ui/details-disclosure';
+import { useShowDetails } from '@/lib/use-show-details';
 import type { ApplyItem, ApplyCounts } from '../../types';
 import { 
   categorizeApplyItems, 
@@ -43,6 +44,7 @@ export function ApplyResultModal({
 }: ApplyResultModalProps) {
   const copyFeedback = useMicroFeedback(2000);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const showDetails = useShowDetails();
   
   // Local guard to prevent double-click on Apply button
   const applyClickedRef = useRef(false);
@@ -348,7 +350,7 @@ export function ApplyResultModal({
         </div>
 
           {/* Details: unified single list with per-item action badges */}
-          {items.length > 0 && !isApplying && (
+          {items.length > 0 && !isApplying && showDetails && (
             <div className="border-t border-border pt-4">
               <DetailsDisclosure title={`Details (${activeFilters.size > 0 ? `${filteredItems.length} of ${items.length}` : items.length} apps)`}>
                 <div className="space-y-1">

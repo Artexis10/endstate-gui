@@ -4,6 +4,7 @@ import { Input } from '../ui/input';
 import { AlertCircle, Copy, Package, ChevronDown, ChevronRight, FileText, Search } from 'lucide-react';
 import { useState } from 'react';
 import { DetailsDisclosure } from '../ui/details-disclosure';
+import { useShowDetails } from '@/lib/use-show-details';
 import type { CapturedApp, CaptureCounts } from '../../types';
 import { useMicroFeedback } from '@/lib/micro-feedback';
 import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
@@ -38,6 +39,7 @@ export function CaptureResultModal({
   const diagnosticsFeedback = useMicroFeedback(2000);
   const pathFeedback = useMicroFeedback();
   const [searchQuery, setSearchQuery] = useState('');
+  const showDetails = useShowDetails();
 
   // Filter apps by search query
   const filteredApps = searchQuery.trim()
@@ -129,7 +131,7 @@ export function CaptureResultModal({
         </div>
 
         {/* Details expander (technical) */}
-        {appsIncluded.length > 0 && (
+        {appsIncluded.length > 0 && showDetails && (
           <div className="border-t border-border pt-4">
             {enableSearch && (
               <div className="mb-3 relative">

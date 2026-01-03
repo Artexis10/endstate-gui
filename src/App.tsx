@@ -2223,7 +2223,7 @@ function AppContent() {
                             <ChevronRight className="h-3 w-3 group-open:rotate-90 transition-transform" />
                           </div>
                         </summary>
-                        <div className="px-2 pb-2 pt-1 border-t border-border bg-muted/30">
+                        <div className={`px-2 pb-2 pt-1 bg-muted/30 ${settings.showDetails ? 'border-t border-border' : ''}`}>
                           {/* Details disclosure - only shown when setting enabled */}
                           {settings.showDetails && (
                             <details className="mb-2">

@@ -57,9 +57,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         toastOptions={{
           classNames: {
             toast:
-              "bg-popover text-popover-foreground border border-border shadow-lg rounded-lg px-4 py-3 cursor-pointer",
+              "!bg-popover !text-popover-foreground !border !border-border shadow-lg rounded-lg px-4 py-3 cursor-default select-none",
             title: "text-sm font-medium leading-5",
             description: "text-sm text-muted-foreground leading-5",
+            success: "!border-l-2 !border-l-success",
+            error: "!border-l-2 !border-l-danger",
+            warning: "!border-l-2 !border-l-warning",
+            info: "!border-l-2 !border-l-primary",
           },
         }}
       />
