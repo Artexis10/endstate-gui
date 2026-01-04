@@ -1686,6 +1686,7 @@ function AppContent() {
                 isRunningRef.current = true;
                 activeRunIdRef.current = runId;
                 setActiveRunId(runId);
+                setIsRunning(true);
                 if (import.meta.env.DEV) {
                   console.log(`[RUN START] Capture runId=${runId}`);
                 }
@@ -1740,6 +1741,7 @@ function AppContent() {
                   isRunningRef.current = false;
                   activeRunIdRef.current = null;
                   setActiveRunId(null);
+                  setIsRunning(false);
                 }
               }}
               onSetup={async (intent) => {
@@ -1754,6 +1756,7 @@ function AppContent() {
                 isRunningRef.current = true;
                 activeRunIdRef.current = runId;
                 setActiveRunId(runId);
+                setIsRunning(true);
                 if (import.meta.env.DEV) {
                   console.log(`[RUN START] Setup ${intent} runId=${runId}`);
                 }
@@ -1825,6 +1828,7 @@ function AppContent() {
                   isRunningRef.current = false;
                   activeRunIdRef.current = null;
                   setActiveRunId(null);
+                  setIsRunning(false);
                 }
               }}
               onCheck={async () => {
@@ -1839,6 +1843,7 @@ function AppContent() {
                 isRunningRef.current = true;
                 activeRunIdRef.current = runId;
                 setActiveRunId(runId);
+                setIsRunning(true);
                 if (import.meta.env.DEV) {
                   console.log(`[RUN START] Check runId=${runId}`);
                 }
@@ -1879,6 +1884,7 @@ function AppContent() {
                   isRunningRef.current = false;
                   activeRunIdRef.current = null;
                   setActiveRunId(null);
+                  setIsRunning(false);
                 }
               }}
               onProfileChange={(profile, path) => {
