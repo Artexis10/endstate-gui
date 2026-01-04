@@ -100,9 +100,6 @@ export function ActionCard({
           {!expanded && collapsedStatusSlot}
         </CardHeader>
         
-        {/* Static status strip slot - outside animated region to prevent jumpiness */}
-        {expanded && expandedStatusSlot}
-        
         <AnimatePresence initial={false}>
           {expanded && (
             <motion.div
@@ -113,6 +110,8 @@ export function ActionCard({
               exit="collapsed"
             >
               <CardContent className="pt-0 pb-4" data-testid={expandedContentTestId}>
+                {/* Expanded status strip - inside CardContent for correct padding/placement */}
+                {expandedStatusSlot}
                 {children}
               </CardContent>
             </motion.div>

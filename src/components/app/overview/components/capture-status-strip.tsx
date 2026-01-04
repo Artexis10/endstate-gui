@@ -150,7 +150,7 @@ export function CaptureStatusStrip({
   if (hasDraft) {
     const detailText = appCount ? `${appCount} apps captured — not saved yet` : 'Not saved yet';
     return (
-      <div className="pt-8">
+      <div className="pt-3">
         <div 
           className="flex items-center gap-3 px-3 py-2.5 rounded-md border text-sm bg-warning/10 text-warning border-warning/20"
           data-testid="card-status-strip-capture"
@@ -198,7 +198,7 @@ export function CaptureStatusStrip({
       ? 'No apps detected' 
       : `${lastSavedProfileSummary.appCount} apps captured`;
     return (
-      <div className="pt-8">
+      <div className="pt-3">
         <div 
           className="flex items-center gap-3 px-3 py-2.5 rounded-md border text-sm bg-success/10 text-success border-success/20"
           data-testid="card-status-strip-capture"
