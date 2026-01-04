@@ -13,7 +13,7 @@
  * access detailed activity via per-section "Show activity" disclosure.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ScanSearch, PlayCircle, CheckCircle } from 'lucide-react';
 import { ManageProfilesModal } from '../manage-profiles-modal';
 import { ViewAppsModal } from '../view-apps-modal';
@@ -65,6 +65,8 @@ export function OverviewScreen({
   pendingCaptureDraft,
 }: OverviewScreenProps) {
   const hasProfile = !!selectedProfile && profiles.length > 0;
+  
+  const [detailsAction, setDetailsAction] = useState<'capture' | 'setup' | 'check' | null>(null);
   
   const {
     expandedCard,
@@ -171,7 +173,10 @@ export function OverviewScreen({
                 onSaveProfile={onSaveProfile}
                 onDiscardDraft={onDiscardDraft}
                 onDismiss={handleDismiss}
-                onShowDetails={() => setDetailsModalOpen(true)}
+                onShowDetails={() => {
+                  setDetailsAction('capture');
+                  setDetailsModalOpen(true);
+                }}
               />
             }
           >
@@ -200,7 +205,10 @@ export function OverviewScreen({
               onDismissResult={onDismissResult}
               onSetup={onSetup}
               onCapture={onCapture}
-              onShowDetails={() => setDetailsModalOpen(true)}
+              onShowDetails={() => {
+                setDetailsAction('capture');
+                setDetailsModalOpen(true);
+              }}
               setExpandedCard={setExpandedCard}
               pendingCaptureDraft={pendingCaptureDraft}
               lastSavedProfileSummary={lastSavedProfileSummary}
@@ -233,7 +241,10 @@ export function OverviewScreen({
                 actionResultByAction={actionResultByAction}
                 isRunning={isRunning}
                 onDismiss={handleDismiss}
-                onShowDetails={() => setDetailsModalOpen(true)}
+                onShowDetails={() => {
+                  setDetailsAction('setup');
+                  setDetailsModalOpen(true);
+                }}
               />
             }
           >
@@ -262,7 +273,10 @@ export function OverviewScreen({
               onDismissResult={onDismissResult}
               onSetup={onSetup}
               onCapture={onCapture}
-              onShowDetails={() => setDetailsModalOpen(true)}
+              onShowDetails={() => {
+                setDetailsAction('setup');
+                setDetailsModalOpen(true);
+              }}
               setExpandedCard={setExpandedCard}
             />
           </ActionCard>
@@ -295,7 +309,10 @@ export function OverviewScreen({
                 actionResultByAction={actionResultByAction}
                 isRunning={isRunning}
                 onDismiss={handleDismiss}
-                onShowDetails={() => setDetailsModalOpen(true)}
+                onShowDetails={() => {
+                  setDetailsAction('check');
+                  setDetailsModalOpen(true);
+                }}
               />
             }
           >
@@ -324,7 +341,10 @@ export function OverviewScreen({
               onDismissResult={onDismissResult}
               onSetup={onSetup}
               onCapture={onCapture}
-              onShowDetails={() => setDetailsModalOpen(true)}
+              onShowDetails={() => {
+                setDetailsAction('check');
+                setDetailsModalOpen(true);
+              }}
               setExpandedCard={setExpandedCard}
             />
           </ActionCard>
@@ -342,9 +362,12 @@ export function OverviewScreen({
       {/* Details Modal - shows logs/results without navigation */}
       <ActionDetailsModal
         open={detailsModalOpen}
-        onOpenChange={setDetailsModalOpen}
-        actionResult={actionResult}
-        actionProgress={actionProgress}
+        onOpenChange={(open) => {
+          setDetailsModalOpen(open);
+          if (!open) setDetailsAction(null);
+        }}
+        actionResult={detailsAction ? actionResultByAction[detailsAction] : null}
+        actionProgress={detailsAction ? actionProgressByAction[detailsAction] : null}
       />
 
       {/* Manage Profiles Modal */}
