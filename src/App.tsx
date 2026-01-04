@@ -1760,7 +1760,10 @@ function AppContent() {
                 setLiveAppEvents([]);
                 setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
                 
+                // CRITICAL: Set runningAction BEFORE calling helper functions
+                // The helpers check if overviewRunningAction exists before updating state
                 setOverviewRunningAction('setup');
+                
                 setOverviewActionStatus('running');
                 const isApply = intent === 'apply';
                 setOverviewActionProgress({ 
