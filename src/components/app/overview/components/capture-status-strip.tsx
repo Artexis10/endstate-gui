@@ -45,7 +45,7 @@ export function CaptureStatusStrip({
 
   if (variant === 'expanded') {
     return (
-      <div className="px-6 pt-4">
+      <div>
         <AnimatePresence mode="wait">
           {hasDraft && (
             <motion.div

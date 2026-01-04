@@ -151,9 +151,26 @@ function AppContent() {
   }
   
   const [overviewRunningAction, setOverviewRunningAction] = useState<OverviewActionType>(null);
-  const [overviewActionStatus, setOverviewActionStatus] = useState<OverviewActionStatus>('idle');
-  const [overviewActionProgress, setOverviewActionProgress] = useState<{ message: string; detail?: string; phase?: UiPhase } | null>(null);
-  const [overviewActionResult, setOverviewActionResult] = useState<OverviewActionResult | null>(null);
+  // Per-action state to prevent leakage between actions
+  const [actionStatusByAction, setActionStatusByAction] = useState<Record<string, OverviewActionStatus>>({
+    capture: 'idle',
+    setup: 'idle',
+    check: 'idle',
+  });
+  const [actionProgressByAction, setActionProgressByAction] = useState<Record<string, { message: string; detail?: string; phase?: UiPhase } | null>>({
+    capture: null,
+    setup: null,
+    check: null,
+  });
+  const [actionResultByAction, setActionResultByAction] = useState<Record<string, OverviewActionResult | null>>({
+    capture: null,
+    setup: null,
+    check: null,
+  });
+  // Computed values for current running action (for backward compatibility)
+  const overviewActionStatus = overviewRunningAction ? actionStatusByAction[overviewRunningAction] : 'idle';
+  const overviewActionProgress = overviewRunningAction ? actionProgressByAction[overviewRunningAction] : null;
+  const overviewActionResult = overviewRunningAction ? actionResultByAction[overviewRunningAction] : null;
   const [liveAppEvents, setLiveAppEvents] = useState<AppEvent[]>([]);
   const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
   const isRunningRef = useRef(false); // Robust guard against double-run
@@ -237,16 +254,39 @@ function AppContent() {
   const artifactPathCopyFeedback = useMicroFeedback();
   const artifactDiagnosticsCopyFeedback = useMicroFeedback();
   
-  // Dismiss result - clear transient result state so card returns to neutral
+  // Helper functions to update per-action state
+  const setOverviewActionStatus = (status: OverviewActionStatus) => {
+    if (!overviewRunningAction) return;
+    setActionStatusByAction(prev => ({ ...prev, [overviewRunningAction]: status }));
+  };
+  
+  const setOverviewActionProgress = (progress: { message: string; detail?: string; phase?: UiPhase } | null) => {
+    if (!overviewRunningAction) return;
+    setActionProgressByAction(prev => ({ ...prev, [overviewRunningAction]: progress }));
+  };
+  
+  const setOverviewActionResult = (result: OverviewActionResult | null) => {
+    if (!overviewRunningAction) return;
+    setActionResultByAction(prev => ({ ...prev, [overviewRunningAction]: result }));
+  };
+  
+  // Dismiss result - clear transient result state for ONLY the current running action
   const dismissOverviewResult = () => {
-    // Reset all transient UI state for the action
-    setOverviewActionProgress(null);
-    setOverviewActionResult(null);
-    setOverviewActionStatus('idle');
+    if (!overviewRunningAction) return;
+    
+    // Clear only the specific action's state
+    setActionProgressByAction(prev => ({ ...prev, [overviewRunningAction]: null }));
+    setActionResultByAction(prev => ({ ...prev, [overviewRunningAction]: null }));
+    setActionStatusByAction(prev => ({ ...prev, [overviewRunningAction]: 'idle' }));
+    
+    // Clear live events/counters (these are global to the current run)
     setLiveAppEvents([]);
     setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+    
     // Also clear lastSavedProfileSummary for capture card dismissal
-    setLastSavedProfileSummary(null);
+    if (overviewRunningAction === 'capture') {
+      setLastSavedProfileSummary(null);
+    }
   };
   
   // Navigation with back support - tracks previous page when navigating from Overview
@@ -1275,7 +1315,7 @@ function AppContent() {
               setLiveAppEvents([...appEventList]);
               setOverviewActionProgress({ 
                 message: 'Verifying installation…',
-                detail: `Verifying… 0/${verifyCounters.total || '?'}`,
+                detail: undefined, // Don't show counts until we know the total
                 phase: 'verify'
               });
             }
