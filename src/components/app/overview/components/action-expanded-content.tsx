@@ -36,9 +36,9 @@ interface ActionExpandedContentProps {
   lifecycleState: LifecycleState;
   isRunning: boolean;
   runningAction: ActionType;
-  actionStatus: ActionStatus;
-  actionProgress: ActionProgress | null;
-  actionResult: ActionResult | null;
+  actionStatusByAction: Record<string, ActionStatus>;
+  actionProgressByAction: Record<string, ActionProgress | null>;
+  actionResultByAction: Record<string, ActionResult | null>;
   hasProfile: boolean;
   setupIntent: SetupIntent;
   setSetupIntent: (intent: SetupIntent) => void;
@@ -101,9 +101,9 @@ export function ActionExpandedContent({
   lifecycleState,
   isRunning,
   runningAction,
-  actionStatus,
-  actionProgress,
-  actionResult,
+  actionStatusByAction,
+  actionProgressByAction,
+  actionResultByAction,
   hasProfile,
   setupIntent,
   setSetupIntent,
@@ -129,8 +129,15 @@ export function ActionExpandedContent({
   onDiscardDraft,
 }: ActionExpandedContentProps) {
   const fadeSlideVariants = getFadeSlideVariants('up');
-  const isThisRunning = runningAction === action && isRunning;
-  const isThisComplete = runningAction === action && !isRunning && actionStatus !== 'idle';
+  
+  // Extract per-action state for this specific action
+  const actionStatus = actionStatusByAction[action];
+  const actionProgress = actionProgressByAction[action];
+  const actionResult = actionResultByAction[action];
+  
+  // Determine state based on per-action status
+  const isThisRunning = actionStatus === 'running' && isRunning;
+  const isThisComplete = actionStatus !== 'idle' && actionStatus !== 'running';
   const lastEvent = getLastEvent(lifecycleState, action);
   const lastSummary = formatLastEventSummary(lifecycleState, action);
 

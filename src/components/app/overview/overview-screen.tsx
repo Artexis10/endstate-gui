@@ -41,6 +41,9 @@ export function OverviewScreen({
   actionStatus,
   actionProgress,
   actionResult,
+  actionStatusByAction,
+  actionProgressByAction,
+  actionResultByAction,
   liveAppEvents = [],
   liveCounters,
   initialExpandedCard,
@@ -177,9 +180,9 @@ export function OverviewScreen({
               lifecycleState={lifecycleState}
               isRunning={isRunning}
               runningAction={runningAction}
-              actionStatus={actionStatus}
-              actionProgress={actionProgress}
-              actionResult={actionResult}
+              actionStatusByAction={actionStatusByAction}
+              actionProgressByAction={actionProgressByAction}
+              actionResultByAction={actionResultByAction}
               hasProfile={hasProfile}
               setupIntent={setupIntent}
               setSetupIntent={setSetupIntent}
@@ -225,10 +228,9 @@ export function OverviewScreen({
             collapsedStatusSlot={
               <ActionResultStrip
                 action="setup"
-                actionStatus={actionStatus}
-                actionProgress={actionProgress}
-                actionResult={actionResult}
-                runningAction={runningAction}
+                actionStatusByAction={actionStatusByAction}
+                actionProgressByAction={actionProgressByAction}
+                actionResultByAction={actionResultByAction}
                 isRunning={isRunning}
                 onDismiss={handleDismiss}
                 onShowDetails={() => setDetailsModalOpen(true)}
@@ -240,9 +242,9 @@ export function OverviewScreen({
               lifecycleState={lifecycleState}
               isRunning={isRunning}
               runningAction={runningAction}
-              actionStatus={actionStatus}
-              actionProgress={actionProgress}
-              actionResult={actionResult}
+              actionStatusByAction={actionStatusByAction}
+              actionProgressByAction={actionProgressByAction}
+              actionResultByAction={actionResultByAction}
               hasProfile={hasProfile}
               setupIntent={setupIntent}
               setSetupIntent={setSetupIntent}
@@ -288,10 +290,9 @@ export function OverviewScreen({
             collapsedStatusSlot={
               <ActionResultStrip
                 action="check"
-                actionStatus={actionStatus}
-                actionProgress={actionProgress}
-                actionResult={actionResult}
-                runningAction={runningAction}
+                actionStatusByAction={actionStatusByAction}
+                actionProgressByAction={actionProgressByAction}
+                actionResultByAction={actionResultByAction}
                 isRunning={isRunning}
                 onDismiss={handleDismiss}
                 onShowDetails={() => setDetailsModalOpen(true)}
@@ -303,9 +304,9 @@ export function OverviewScreen({
               lifecycleState={lifecycleState}
               isRunning={isRunning}
               runningAction={runningAction}
-              actionStatus={actionStatus}
-              actionProgress={actionProgress}
-              actionResult={actionResult}
+              actionStatusByAction={actionStatusByAction}
+              actionProgressByAction={actionProgressByAction}
+              actionResultByAction={actionResultByAction}
               hasProfile={hasProfile}
               setupIntent={setupIntent}
               setSetupIntent={setSetupIntent}

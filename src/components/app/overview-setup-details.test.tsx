@@ -29,6 +29,12 @@ vi.mock('@/settings', () => ({
  * 2. "Already present" tab in Setup Details modal shows nothing
  * 3. "To install" pill label truncated/cut off
  */
+const defaultPerActionState = {
+  actionStatusByAction: { capture: 'idle' as const, setup: 'idle' as const, check: 'idle' as const },
+  actionProgressByAction: { capture: null, setup: null, check: null },
+  actionResultByAction: { capture: null, setup: null, check: null },
+};
+
 describe('Setup Details Modal - Already Present vs Skipped', () => {
   const mockLifecycleState: LifecycleState = {
     lastCapture: null,
@@ -291,3 +297,5 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
   });
 
 });
+
+

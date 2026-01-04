@@ -28,6 +28,21 @@ describe('OverviewScreen - Setup Actions', () => {
     actionStatus: 'idle' as const,
     actionProgress: null,
     actionResult: null,
+    actionStatusByAction: {
+      capture: 'idle' as const,
+      setup: 'idle' as const,
+      check: 'idle' as const,
+    },
+    actionProgressByAction: {
+      capture: null,
+      setup: null,
+      check: null,
+    },
+    actionResultByAction: {
+      capture: null,
+      setup: null,
+      check: null,
+    },
     liveAppEvents: [],
     liveCounters: undefined,
     onNavigate: vi.fn(),
@@ -148,3 +163,4 @@ describe('OverviewScreen - Setup Actions', () => {
     expect(checkCard).toHaveClass('opacity-50');
   });
 });
+

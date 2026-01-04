@@ -36,6 +36,24 @@ const mockProfiles: DiscoveredProfile[] = [
   { name: 'test-profile', displayName: 'Test Profile', path: '/test/path.jsonc' }
 ];
 
+const defaultPerActionState = {
+  actionStatusByAction: {
+    capture: 'idle' as const,
+    setup: 'idle' as const,
+    check: 'idle' as const,
+  },
+  actionProgressByAction: {
+    capture: null,
+    setup: null,
+    check: null,
+  },
+  actionResultByAction: {
+    capture: null,
+    setup: null,
+    check: null,
+  },
+};
+
 describe('OverviewScreen - Live Activity Scrollback', () => {
   it('should render all events without slicing to last 10', () => {
     // Generate 50 events to test bounded buffer
@@ -56,6 +74,9 @@ describe('OverviewScreen - Live Activity Scrollback', () => {
         actionStatus="running"
         actionProgress={{ message: 'Installing...' }}
         actionResult={null}
+        actionStatusByAction={{ ...defaultPerActionState.actionStatusByAction, setup: 'running' }}
+        actionProgressByAction={{ ...defaultPerActionState.actionProgressByAction, setup: { message: 'Installing...' } }}
+        actionResultByAction={defaultPerActionState.actionResultByAction}
         liveAppEvents={manyEvents}
         liveCounters={{ installed: 50, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -90,6 +111,7 @@ describe('OverviewScreen - Double-Run Prevention', () => {
         actionStatus="idle"
         actionProgress={null}
         actionResult={null}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -123,6 +145,9 @@ describe('OverviewScreen - Double-Run Prevention', () => {
         actionStatus="running"
         actionProgress={{ message: 'Installing...' }}
         actionResult={null}
+        actionStatusByAction={{ ...defaultPerActionState.actionStatusByAction, setup: 'running' }}
+        actionProgressByAction={{ ...defaultPerActionState.actionProgressByAction, setup: { message: 'Installing...' } }}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -167,6 +192,19 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
             failed: 1,
           },
         }}
+        actionStatusByAction={{ ...defaultPerActionState.actionStatusByAction, setup: 'error' }}
+        actionProgressByAction={{ ...defaultPerActionState.actionProgressByAction, setup: { message: 'Some apps failed' } }}
+        actionResultByAction={{ ...defaultPerActionState.actionResultByAction, setup: {
+          action: 'setup',
+          status: 'error',
+          summary: '60 installed, 1 failed',
+          counts: {
+            installed: 60,
+            alreadyPresent: 5,
+            failed: 1,
+          },
+        }}}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 60, alreadyPresent: 5, skipped: 0, failed: 1 }}
         onNavigate={vi.fn()}
@@ -212,6 +250,7 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
             failed: 10,
           },
         }}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 10 }}
         onNavigate={vi.fn()}
@@ -258,6 +297,7 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
             { app: 'App2', action: 'Failed' },
           ],
         }}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 60, alreadyPresent: 5, skipped: 0, failed: 1 }}
         onNavigate={vi.fn()}
@@ -300,6 +340,7 @@ describe('OverviewScreen - Running Action State Cleanup', () => {
         actionStatus="running"
         actionProgress={{ message: 'Evaluating changes' }}
         actionResult={null}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -338,6 +379,7 @@ describe('OverviewScreen - Running Action State Cleanup', () => {
           counts: { toInstall: 5, alreadyPresent: 3 },
           wasPreview: true,
         }}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -368,6 +410,7 @@ describe('OverviewScreen - Running Action State Cleanup', () => {
         actionStatus="running"
         actionProgress={{ message: 'Checking computer...' }}
         actionResult={null}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -405,6 +448,7 @@ describe('OverviewScreen - Running Action State Cleanup', () => {
           summary: 'All 10 apps present',
           counts: { missing: 0, alreadyPresent: 10 },
         }}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -449,6 +493,7 @@ describe('OverviewScreen - Success Strip Dismiss Button', () => {
           finishedAt: new Date().toISOString(),
           profileName: 'Test Profile',
         }}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -499,6 +544,7 @@ describe('OverviewScreen - Success Strip Dismiss Button', () => {
           finishedAt: new Date().toISOString(),
           profileName: 'Test Profile',
         }}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -546,6 +592,7 @@ describe('OverviewScreen - Success Strip Dismiss Button', () => {
           finishedAt: new Date().toISOString(),
           profileName: 'Test Profile',
         }}
+        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -568,3 +615,7 @@ describe('OverviewScreen - Success Strip Dismiss Button', () => {
     expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument();
   });
 });
+
+
+
+

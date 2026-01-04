@@ -255,19 +255,17 @@ function AppContent() {
   const artifactDiagnosticsCopyFeedback = useMicroFeedback();
   
   // Helper functions to update per-action state
-  const setOverviewActionStatus = (status: OverviewActionStatus) => {
-    if (!overviewRunningAction) return;
-    setActionStatusByAction(prev => ({ ...prev, [overviewRunningAction]: status }));
+  // CRITICAL: Accept action parameter to avoid stale closure over overviewRunningAction
+  const setOverviewActionStatus = (action: NonNullable<OverviewActionType>, status: OverviewActionStatus) => {
+    setActionStatusByAction(prev => ({ ...prev, [action]: status }));
   };
   
-  const setOverviewActionProgress = (progress: { message: string; detail?: string; phase?: UiPhase } | null) => {
-    if (!overviewRunningAction) return;
-    setActionProgressByAction(prev => ({ ...prev, [overviewRunningAction]: progress }));
+  const setOverviewActionProgress = (action: NonNullable<OverviewActionType>, progress: { message: string; detail?: string; phase?: UiPhase } | null) => {
+    setActionProgressByAction(prev => ({ ...prev, [action]: progress }));
   };
   
-  const setOverviewActionResult = (result: OverviewActionResult | null) => {
-    if (!overviewRunningAction) return;
-    setActionResultByAction(prev => ({ ...prev, [overviewRunningAction]: result }));
+  const setOverviewActionResult = (action: NonNullable<OverviewActionType>, result: OverviewActionResult | null) => {
+    setActionResultByAction(prev => ({ ...prev, [action]: result }));
   };
   
   // Dismiss result - clear transient result state for ONLY the current running action
@@ -571,9 +569,9 @@ function AppContent() {
     setPendingCaptureDraft(null);
     
     // Clear capture action state - return to idle
-    setOverviewActionResult(null);
-    setOverviewActionStatus('idle');
-    setOverviewActionProgress(null);
+    setOverviewActionResult('capture', null);
+    setOverviewActionStatus('capture', 'idle');
+    setOverviewActionProgress('capture', null);
   };
 
   const handleDeleteProfile = async () => {
@@ -905,7 +903,7 @@ function AppContent() {
               phase: 'capture', 
               reason: appEvent.reason 
             });
-            setOverviewActionProgress({ 
+            setOverviewActionProgress('capture', { 
               message: 'Scanning applications...', 
               detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}` 
             });
@@ -1049,7 +1047,7 @@ function AppContent() {
               phase: 'apply',
               reason: appEvent.reason,
             });
-            setOverviewActionProgress({ 
+            setOverviewActionProgress('setup', { 
               message: 'Evaluating changes', 
               detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}` 
             });
@@ -1118,7 +1116,7 @@ function AppContent() {
     const newState = recordLifecycleEvent('preview', previewEvent);
     setLifecycleState(newState);
     
-    setOverviewActionProgress({ 
+    setOverviewActionProgress('setup', { 
       message: `${installed} to install, ${alreadyPresent} already present` 
     });
     
@@ -1200,7 +1198,7 @@ function AppContent() {
             if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
             const counterText = parts.join(' · ') || 'Checking…';
             
-            setOverviewActionProgress({ 
+            setOverviewActionProgress('check', { 
               message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`, 
               detail: counterText,
               phase: 'verify'
@@ -1235,9 +1233,9 @@ function AppContent() {
     setLifecycleState(newState);
     
     if (missing > 0) {
-      setOverviewActionProgress({ message: `${formatCount(missing, 'app')} missing, ${formatCount(present, 'app')} present` });
+      setOverviewActionProgress('check', { message: `${formatCount(missing, 'app')} missing, ${formatCount(present, 'app')} present` });
     } else {
-      setOverviewActionProgress({ message: `All ${formatCount(present, 'app')} present` });
+      setOverviewActionProgress('check', { message: `All ${formatCount(present, 'app')} present` });
     }
     
     return { missing, present, profile: selectedProfile, appEvents: collectedEvents };
@@ -1314,7 +1312,7 @@ function AppContent() {
               };
               appEventList.push(verifyHeaderEvent);
               setLiveAppEvents([...appEventList]);
-              setOverviewActionProgress({ 
+              setOverviewActionProgress('setup', { 
                 message: 'Verifying installation…',
                 detail: undefined, // Don't show counts until we know the total
                 phase: 'verify'
@@ -1372,7 +1370,7 @@ function AppContent() {
               const verifyProgress = manifestTotal > 0 
                 ? `Verifying… ${verifyCounters.total}/${manifestTotal}`
                 : `Verifying… (${verifyCounters.total} checked)`;
-              setOverviewActionProgress({ 
+              setOverviewActionProgress('setup', { 
                 message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
                 detail: verifyProgress,
                 phase: 'verify'
@@ -1386,7 +1384,7 @@ function AppContent() {
               if (counters.failed > 0) parts.push(`${counters.failed} failed`);
               const counterText = parts.join(' · ') || 'Working…';
               
-              setOverviewActionProgress({ 
+              setOverviewActionProgress('setup', { 
                 message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
                 detail: counterText,
                 phase: 'apply'
@@ -1479,12 +1477,12 @@ function AppContent() {
     
     // Update progress message based on outcome
     if (failed > 0) {
-      setOverviewActionProgress({ 
+      setOverviewActionProgress('setup', { 
         message: `${installed} installed, ${failed} failed`,
         detail: `${alreadyPresent} already present`
       });
     } else {
-      setOverviewActionProgress({ 
+      setOverviewActionProgress('setup', { 
         message: `${installed} installed, ${alreadyPresent} already present` 
       });
     }
@@ -1668,6 +1666,9 @@ function AppContent() {
               actionStatus={overviewActionStatus}
               actionProgress={overviewActionProgress}
               actionResult={overviewActionResult}
+              actionStatusByAction={actionStatusByAction}
+              actionProgressByAction={actionProgressByAction}
+              actionResultByAction={actionResultByAction}
               liveAppEvents={liveAppEvents}
               liveCounters={liveCounters}
               initialExpandedCard={overviewExpandedCard}
@@ -1691,19 +1692,19 @@ function AppContent() {
                   console.log(`[RUN START] Capture runId=${runId}`);
                 }
                 setOverviewRunningAction('capture');
-                setOverviewActionStatus('running');
-                setOverviewActionProgress({ message: 'Scanning installed applications...' });
+                setOverviewActionStatus('capture', 'running');
+                setOverviewActionProgress('capture', { message: 'Scanning installed applications...' });
                 
                 // Clear previous summary and draft when starting new capture
                 setLastSavedProfileSummary(null);
                 setPendingCaptureDraft(null);
                 try {
                   const result = await handleCaptureFromOverview();
-                  setOverviewActionStatus('success');
+                  setOverviewActionStatus('capture', 'success');
                   const countText = result.count === 0 
                     ? 'No apps detected' 
                     : `${result.count} apps captured`;
-                  setOverviewActionProgress({ message: countText });
+                  setOverviewActionProgress('capture', { message: countText });
                   
                   // Store draft in-memory only
                   setPendingCaptureDraft({
@@ -1716,7 +1717,7 @@ function AppContent() {
                   // DO NOT set lastSavedProfileSummary here
                   // Green success only appears after Save Profile (in handleSaveProfileName)
                   
-                  setOverviewActionResult({ 
+                  setOverviewActionResult('capture', { 
                     action: 'capture', 
                     status: 'success', 
                     summary: countText,
@@ -1728,8 +1729,8 @@ function AppContent() {
                   // Prompt for profile name after state is set
                   await promptForProfileName(result.outputPath);
                 } catch (err) {
-                  setOverviewActionStatus('error');
-                  setOverviewActionResult({ 
+                  setOverviewActionStatus('capture', 'error');
+                  setOverviewActionResult('capture', { 
                     action: 'capture', 
                     status: 'error', 
                     summary: err instanceof Error ? err.message : 'Capture failed' 
@@ -1745,7 +1746,7 @@ function AppContent() {
                   setOverviewRunningAction(null);
                 }
               }}
-              onSetup={async (intent) => {
+              onSetup={async (intent: 'preview' | 'apply') => {
                 // Double-run guard with runId
                 const runId = `setup-${intent}-${Date.now()}`;
                 if (isRunning || isRunningRef.current || activeRunIdRef.current) {
@@ -1768,9 +1769,9 @@ function AppContent() {
                 // The helpers check if overviewRunningAction exists before updating state
                 setOverviewRunningAction('setup');
                 
-                setOverviewActionStatus('running');
+                setOverviewActionStatus('setup', 'running');
                 const isApply = intent === 'apply';
-                setOverviewActionProgress({ 
+                setOverviewActionProgress('setup', { 
                   message: isApply ? 'Installing applications...' : 'Evaluating changes',
                   phase: isApply ? 'apply' : 'preview'
                 });
@@ -1779,8 +1780,8 @@ function AppContent() {
                     const result = await handleApplyFromOverview();
                     // Set status based on whether there were failures
                     const hasFailures = result.failed > 0;
-                    setOverviewActionStatus(hasFailures ? 'error' : 'success');
-                    setOverviewActionResult({ 
+                    setOverviewActionStatus('setup', hasFailures ? 'error' : 'success');
+                    setOverviewActionResult('setup', { 
                       action: 'setup', 
                       status: hasFailures ? 'error' : 'success', 
                       summary: hasFailures 
@@ -1799,8 +1800,8 @@ function AppContent() {
                     });
                   } else {
                     const result = await handlePreviewFromOverview();
-                    setOverviewActionStatus('success');
-                    setOverviewActionResult({ 
+                    setOverviewActionStatus('setup', 'success');
+                    setOverviewActionResult('setup', { 
                       action: 'setup', 
                       status: 'success', 
                       summary: `${result.installed} to install, ${result.alreadyPresent} already present`,
@@ -1816,8 +1817,8 @@ function AppContent() {
                     });
                   }
                 } catch (err) {
-                  setOverviewActionStatus('error');
-                  setOverviewActionResult({ 
+                  setOverviewActionStatus('setup', 'error');
+                  setOverviewActionResult('setup', { 
                     action: 'setup', 
                     status: 'error', 
                     summary: err instanceof Error ? err.message : 'Setup failed' 
@@ -1851,15 +1852,15 @@ function AppContent() {
                 }
                 
                 setOverviewRunningAction('check');
-                setOverviewActionStatus('running');
-                setOverviewActionProgress({ message: 'Checking computer...' });
+                setOverviewActionStatus('check', 'running');
+                setOverviewActionProgress('check', { message: 'Checking computer...' });
                 try {
                   const result = await handleCheckFromOverview();
-                  setOverviewActionStatus('success');
+                  setOverviewActionStatus('check', 'success');
                   const summaryText = result.missing > 0 
                     ? `${formatCount(result.missing, 'app')} missing, ${formatCount(result.present, 'app')} present`
                     : `All ${formatCount(result.present, 'app')} present`;
-                  setOverviewActionResult({ 
+                  setOverviewActionResult('check', { 
                     action: 'check', 
                     status: 'success', 
                     summary: summaryText,
@@ -1873,8 +1874,8 @@ function AppContent() {
                     appEvents: result.appEvents,
                   });
                 } catch (err) {
-                  setOverviewActionStatus('error');
-                  setOverviewActionResult({ 
+                  setOverviewActionStatus('check', 'error');
+                  setOverviewActionResult('check', { 
                     action: 'check', 
                     status: 'error', 
                     summary: err instanceof Error ? err.message : 'Check failed' 
@@ -1890,7 +1891,7 @@ function AppContent() {
                   setOverviewRunningAction(null);
                 }
               }}
-              onProfileChange={(profile, path) => {
+              onProfileChange={(profile: string, path: string) => {
                 setSelectedProfile(profile);
                 setSelectedProfilePath(path);
                 updateSettings({ lastSelectedProfile: profile, lastSelectedProfilePath: path });
@@ -1898,10 +1899,10 @@ function AppContent() {
               onDismissResult={dismissOverviewResult}
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
-              onRenameProfile={(path, currentName) => {
+              onRenameProfile={(path: string, currentName: string) => {
                 openProfileNameModal(path, currentName, 'rename');
               }}
-              onDeleteProfile={(path, displayName) => {
+              onDeleteProfile={(path: string, displayName: string) => {
                 setDeleteProfilePath(path);
                 setDeleteProfileName(displayName);
                 setShowDeleteProfileModal(true);

@@ -8,10 +8,9 @@ import type { ActionType, ActionStatus, ActionProgress, ActionResult } from '../
 
 interface ActionResultStripProps {
   action: NonNullable<ActionType>;
-  actionStatus: ActionStatus;
-  actionProgress: ActionProgress | null;
-  actionResult: ActionResult | null;
-  runningAction: ActionType;
+  actionStatusByAction: Record<string, ActionStatus>;
+  actionProgressByAction: Record<string, ActionProgress | null>;
+  actionResultByAction: Record<string, ActionResult | null>;
   isRunning: boolean;
   onDismiss: () => void;
   onShowDetails: () => void;
@@ -19,17 +18,21 @@ interface ActionResultStripProps {
 
 export function ActionResultStrip({
   action,
-  actionStatus,
-  actionProgress,
-  actionResult,
-  runningAction,
+  actionStatusByAction,
+  actionProgressByAction,
+  actionResultByAction,
   isRunning,
   onDismiss,
   onShowDetails,
 }: ActionResultStripProps) {
-  // Determine if this card has a displayable result state
-  const isThisComplete = runningAction === action && !isRunning && actionStatus !== 'idle';
-  const isThisRunning = runningAction === action && isRunning;
+  // Use per-action state to determine if this card has a displayable result
+  const actionStatus = actionStatusByAction[action];
+  const actionProgress = actionProgressByAction[action];
+  const actionResult = actionResultByAction[action];
+  
+  // Show strip if this action has completed (success or error) and is not currently running
+  const isThisComplete = actionStatus !== 'idle' && actionStatus !== 'running';
+  const isThisRunning = actionStatus === 'running' && isRunning;
   
   // Only show strip if there's something to display AND card is collapsed
   if (!isThisComplete || isThisRunning) return null;

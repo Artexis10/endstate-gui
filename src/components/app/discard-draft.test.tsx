@@ -22,6 +22,12 @@ vi.mock('@/lib/use-show-details', () => ({
  * 4. Save success clears draft and shows green card
  */
 
+const defaultPerActionState = {
+  actionStatusByAction: { capture: 'idle' as const, setup: 'idle' as const, check: 'idle' as const },
+  actionProgressByAction: { capture: null, setup: null, check: null },
+  actionResultByAction: { capture: null, setup: null, check: null },
+};
+
 describe('Discard Draft UX Contracts', () => {
   beforeEach(() => {
     clearLocalStorage();
@@ -400,3 +406,5 @@ describe('Discard Draft UX Contracts', () => {
     });
   });
 });
+
+

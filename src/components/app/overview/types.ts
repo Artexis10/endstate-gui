@@ -54,6 +54,9 @@ export interface OverviewScreenProps {
   actionStatus: ActionStatus;
   actionProgress: ActionProgress | null;
   actionResult: ActionResult | null;
+  actionStatusByAction: Record<string, ActionStatus>;
+  actionProgressByAction: Record<string, ActionProgress | null>;
+  actionResultByAction: Record<string, ActionResult | null>;
   liveAppEvents?: AppEvent[];
   liveCounters?: LiveCounters;
   initialExpandedCard?: ActionType;

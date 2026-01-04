@@ -27,6 +27,12 @@ vi.mock('@/settings', () => ({
  * Issue: Capture items showing as "Skipped" instead of "Detected"
  * Root cause: appEvents need statusKey='already_present' and phase='capture' for phase-aware mapping
  */
+const defaultPerActionState = {
+  actionStatusByAction: { capture: 'idle' as const, setup: 'idle' as const, check: 'idle' as const },
+  actionProgressByAction: { capture: null, setup: null, check: null },
+  actionResultByAction: { capture: null, setup: null, check: null },
+};
+
 describe('Capture Details Modal - Detected vs Skipped', () => {
   const mockLifecycleState: LifecycleState = {
     lastCapture: null,
@@ -187,3 +193,5 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
     expect(chipElement).not.toHaveClass('bg-success/10');
   });
 });
+
+
