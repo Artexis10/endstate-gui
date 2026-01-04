@@ -21,6 +21,7 @@ import {
 } from '@/lib/apply-utils';
 import { getLastEvent, formatLastEventSummary } from '../selectors';
 import { LiveActivityPanel } from './live-activity-panel';
+import { CaptureStatusStrip } from './capture-status-strip';
 import type { 
   ActionType, 
   ActionStatus, 
@@ -57,6 +58,11 @@ interface ActionExpandedContentProps {
   onCapture: () => void;
   onShowDetails: () => void;
   setExpandedCard: (card: ActionType) => void;
+  // Capture-specific props
+  pendingCaptureDraft?: { capturedAppsCount: number; capturedAt: string; outputPath: string; apps: string[] } | null;
+  lastSavedProfileSummary?: { appCount: number; finishedAt: string; profileName?: string } | null;
+  onSaveProfile?: () => void;
+  onDiscardDraft?: () => void;
 }
 
 // Action-specific descriptions
@@ -117,6 +123,10 @@ export function ActionExpandedContent({
   onCapture,
   onShowDetails,
   setExpandedCard,
+  pendingCaptureDraft,
+  lastSavedProfileSummary,
+  onSaveProfile,
+  onDiscardDraft,
 }: ActionExpandedContentProps) {
   const fadeSlideVariants = getFadeSlideVariants('up');
   const isThisRunning = runningAction === action && isRunning;
@@ -125,11 +135,25 @@ export function ActionExpandedContent({
   const lastSummary = formatLastEventSummary(lifecycleState, action);
 
   return (
-    <div className="border-t border-border mt-2 pt-2 space-y-3 pb-4">
+    <div className="border-t border-border mt-2 pt-4 space-y-3 pb-4">
       {/* Description */}
       <p className="text-sm text-muted-foreground">
         {descriptions[action]}
       </p>
+
+      {/* Capture status strip - rendered inline after description for correct placement */}
+      {action === 'capture' && (pendingCaptureDraft || lastSavedProfileSummary) && (
+        <CaptureStatusStrip
+          variant="expanded"
+          pendingCaptureDraft={pendingCaptureDraft}
+          lastSavedProfileSummary={lastSavedProfileSummary}
+          appCount={actionResult?.counts?.total}
+          onSaveProfile={onSaveProfile}
+          onDiscardDraft={onDiscardDraft}
+          onDismiss={onDismiss}
+          onShowDetails={onShowDetails}
+        />
+      )}
 
       <AnimatePresence mode="wait">
 
@@ -395,7 +419,7 @@ export function ActionExpandedContent({
       </AnimatePresence>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-2 pt-2">
+      <div className="flex items-center gap-2 pt-3">
         {!isThisComplete ? (
           <>
             <Button

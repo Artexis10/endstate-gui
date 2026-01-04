@@ -171,18 +171,6 @@ export function OverviewScreen({
                 onShowDetails={() => setDetailsModalOpen(true)}
               />
             }
-            expandedStatusSlot={
-              <CaptureStatusStrip
-                variant="expanded"
-                pendingCaptureDraft={pendingCaptureDraft}
-                lastSavedProfileSummary={lastSavedProfileSummary}
-                appCount={actionResult?.counts?.total}
-                onSaveProfile={onSaveProfile}
-                onDiscardDraft={onDiscardDraft}
-                onDismiss={handleDismiss}
-                onShowDetails={() => setDetailsModalOpen(true)}
-              />
-            }
           >
             <ActionExpandedContent
               action="capture"
@@ -211,6 +199,10 @@ export function OverviewScreen({
               onCapture={onCapture}
               onShowDetails={() => setDetailsModalOpen(true)}
               setExpandedCard={setExpandedCard}
+              pendingCaptureDraft={pendingCaptureDraft}
+              lastSavedProfileSummary={lastSavedProfileSummary}
+              onSaveProfile={onSaveProfile}
+              onDiscardDraft={onDiscardDraft}
             />
           </ActionCard>
 

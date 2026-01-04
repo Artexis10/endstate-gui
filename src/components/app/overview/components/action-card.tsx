@@ -19,7 +19,6 @@ interface ActionCardProps {
   testId: string;
   cardRef?: React.RefObject<HTMLDivElement>;
   collapsedStatusSlot?: React.ReactNode;
-  expandedStatusSlot?: React.ReactNode;
   expandedContentTestId: string;
   onToggle: () => void;
   children: React.ReactNode;
@@ -56,7 +55,6 @@ export function ActionCard({
   testId,
   cardRef,
   collapsedStatusSlot,
-  expandedStatusSlot,
   expandedContentTestId,
   onToggle,
   children,
@@ -110,8 +108,6 @@ export function ActionCard({
               exit="collapsed"
             >
               <CardContent className="pt-0 pb-4" data-testid={expandedContentTestId}>
-                {/* Expanded status strip - inside CardContent for correct padding/placement */}
-                {expandedStatusSlot}
                 {children}
               </CardContent>
             </motion.div>
