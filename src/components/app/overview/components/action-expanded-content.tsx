@@ -125,7 +125,7 @@ export function ActionExpandedContent({
   const lastSummary = formatLastEventSummary(lifecycleState, action);
 
   return (
-    <div className="border-t border-border mt-3 pt-4 space-y-3 pb-4">
+    <div className="border-t border-border mt-2 pt-2 space-y-3 pb-4">
       {/* Description */}
       <p className="text-sm text-muted-foreground">
         {descriptions[action]}

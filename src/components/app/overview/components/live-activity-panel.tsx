@@ -134,13 +134,9 @@ export function LiveActivityPanel({
               })}
             </div>
             {!isAtBottom && (() => {
-              // Derive button color from current phase
-              const currentPhase = actionProgress?.phase;
-              const buttonClasses = currentPhase === 'apply' 
-                ? 'bg-green-600 hover:bg-green-700 text-white'
-                : currentPhase === 'verify'
-                ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                : 'bg-primary hover:bg-primary/90 text-primary-foreground';
+              // Use semantic phase color for subtle tinted pill
+              const pillColor = getPhaseColor(actionProgress.phase);
+              const pillClasses = getColorClasses(pillColor);
               
               return (
                 <button
@@ -150,7 +146,7 @@ export function LiveActivityPanel({
                     activityScrollRef.current?.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
                     setIsAtBottom(true);
                   }}
-                  className={`absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs rounded-full shadow-lg transition-colors ${buttonClasses}`}
+                  className={`absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs rounded-full shadow-lg transition-colors border ${pillClasses.bg} ${pillClasses.border} ${pillClasses.text}`}
                   aria-label="Jump to latest and re-enable auto-follow"
                   data-testid="latest-pill"
                 >
