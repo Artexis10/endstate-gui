@@ -64,7 +64,7 @@ export function ActionCard({
   const accent = accentClasses[accentColor];
 
   return (
-    <motion.div layout transition={layoutTransition} ref={cardRef}>
+    <motion.div layout="position" transition={layoutTransition} ref={cardRef}>
       <Card 
         data-testid={testId}
         className={`cursor-pointer transition-all duration-200 border-l-2 ${
@@ -106,6 +106,7 @@ export function ActionCard({
               initial="collapsed"
               animate="expanded"
               exit="collapsed"
+              className="overflow-hidden"
             >
               <CardContent className="pt-0 pb-4" data-testid={expandedContentTestId}>
                 {children}
