@@ -425,7 +425,12 @@ export function ActionExpandedContent({
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                onExecuteAction(action);
+                // For setup, call onSetup directly to pass intent; otherwise use onExecuteAction
+                if (action === 'setup') {
+                  onSetup(setupIntent);
+                } else {
+                  onExecuteAction(action);
+                }
               }}
               disabled={isRunning || (action !== 'capture' && !hasProfile)}
               size="sm"

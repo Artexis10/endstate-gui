@@ -487,9 +487,10 @@ function AppContent() {
         
         // Set lastSavedProfileSummary to show green success after profile is saved
         // This is the ONLY place green success should be set for Capture
-        if (overviewActionResult?.action === 'capture' && overviewActionResult.counts?.total !== undefined) {
+        const captureResult = actionResultByAction['capture'];
+        if (captureResult?.action === 'capture' && captureResult.counts?.total !== undefined) {
           setLastSavedProfileSummary({
-            appCount: overviewActionResult.counts.total,
+            appCount: captureResult.counts.total,
             finishedAt: new Date().toISOString(),
             profileName: savedProfileForAnimation?.displayName || savedProfileForAnimation?.name || trimmedValue,
           });
