@@ -1742,6 +1742,7 @@ function AppContent() {
                   activeRunIdRef.current = null;
                   setActiveRunId(null);
                   setIsRunning(false);
+                  setOverviewRunningAction(null);
                 }
               }}
               onSetup={async (intent) => {
@@ -1829,6 +1830,7 @@ function AppContent() {
                   activeRunIdRef.current = null;
                   setActiveRunId(null);
                   setIsRunning(false);
+                  setOverviewRunningAction(null);
                 }
               }}
               onCheck={async () => {
@@ -1885,6 +1887,7 @@ function AppContent() {
                   activeRunIdRef.current = null;
                   setActiveRunId(null);
                   setIsRunning(false);
+                  setOverviewRunningAction(null);
                 }
               }}
               onProfileChange={(profile, path) => {

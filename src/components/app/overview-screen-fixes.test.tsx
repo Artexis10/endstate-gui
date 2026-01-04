@@ -287,6 +287,143 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
   });
 });
 
+describe('OverviewScreen - Running Action State Cleanup', () => {
+  it('should clear running strip after setup completion', () => {
+    const { rerender } = render(
+      <OverviewScreen
+        lifecycleState={mockLifecycleState}
+        selectedProfile="test-profile"
+        profiles={mockProfiles}
+        profilesDirectory="/test"
+        isRunning={true}
+        runningAction="setup"
+        actionStatus="running"
+        actionProgress={{ message: 'Evaluating changes' }}
+        actionResult={null}
+        liveAppEvents={[]}
+        liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
+        onNavigate={vi.fn()}
+        onCapture={vi.fn()}
+        onSetup={vi.fn()}
+        onCheck={vi.fn()}
+        onProfileChange={vi.fn()}
+        onDismissResult={vi.fn()}
+        onOpenProfilesFolder={vi.fn()}
+        onRefreshProfiles={vi.fn()}
+      />
+    );
+
+    // Expand setup card to see running state
+    const setupCard = screen.getByTestId('overview-card-apply');
+    fireEvent.click(setupCard);
+
+    // Verify "Evaluating…" is shown while running
+    expect(screen.getByText('Evaluating…')).toBeInTheDocument();
+
+    // Simulate completion: isRunning=false AND runningAction=null (both must be cleared)
+    rerender(
+      <OverviewScreen
+        lifecycleState={mockLifecycleState}
+        selectedProfile="test-profile"
+        profiles={mockProfiles}
+        profilesDirectory="/test"
+        isRunning={false}
+        runningAction={null}
+        actionStatus="success"
+        actionProgress={{ message: '5 to install, 3 already present' }}
+        actionResult={{
+          action: 'setup',
+          status: 'success',
+          summary: '5 to install, 3 already present',
+          counts: { toInstall: 5, alreadyPresent: 3 },
+          wasPreview: true,
+        }}
+        liveAppEvents={[]}
+        liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
+        onNavigate={vi.fn()}
+        onCapture={vi.fn()}
+        onSetup={vi.fn()}
+        onCheck={vi.fn()}
+        onProfileChange={vi.fn()}
+        onDismissResult={vi.fn()}
+        onOpenProfilesFolder={vi.fn()}
+        onRefreshProfiles={vi.fn()}
+      />
+    );
+
+    // Verify "Evaluating…" is gone (button should show "Preview changes" again)
+    expect(screen.queryByText('Evaluating…')).not.toBeInTheDocument();
+    expect(screen.getByText('Preview changes')).toBeInTheDocument();
+  });
+
+  it('should clear running strip after check completion', () => {
+    const { rerender } = render(
+      <OverviewScreen
+        lifecycleState={mockLifecycleState}
+        selectedProfile="test-profile"
+        profiles={mockProfiles}
+        profilesDirectory="/test"
+        isRunning={true}
+        runningAction="check"
+        actionStatus="running"
+        actionProgress={{ message: 'Checking computer...' }}
+        actionResult={null}
+        liveAppEvents={[]}
+        liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
+        onNavigate={vi.fn()}
+        onCapture={vi.fn()}
+        onSetup={vi.fn()}
+        onCheck={vi.fn()}
+        onProfileChange={vi.fn()}
+        onDismissResult={vi.fn()}
+        onOpenProfilesFolder={vi.fn()}
+        onRefreshProfiles={vi.fn()}
+      />
+    );
+
+    // Expand check card
+    const checkCard = screen.getByTestId('overview-card-verify');
+    fireEvent.click(checkCard);
+
+    // Verify "Checking..." is shown
+    expect(screen.getByText('Checking...')).toBeInTheDocument();
+
+    // Simulate completion: both isRunning and runningAction cleared
+    rerender(
+      <OverviewScreen
+        lifecycleState={mockLifecycleState}
+        selectedProfile="test-profile"
+        profiles={mockProfiles}
+        profilesDirectory="/test"
+        isRunning={false}
+        runningAction={null}
+        actionStatus="success"
+        actionProgress={{ message: 'All 10 apps present' }}
+        actionResult={{
+          action: 'check',
+          status: 'success',
+          summary: 'All 10 apps present',
+          counts: { missing: 0, alreadyPresent: 10 },
+        }}
+        liveAppEvents={[]}
+        liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
+        onNavigate={vi.fn()}
+        onCapture={vi.fn()}
+        onSetup={vi.fn()}
+        onCheck={vi.fn()}
+        onProfileChange={vi.fn()}
+        onDismissResult={vi.fn()}
+        onOpenProfilesFolder={vi.fn()}
+        onRefreshProfiles={vi.fn()}
+      />
+    );
+
+    // Verify running text is gone
+    expect(screen.queryByText('Checking...')).not.toBeInTheDocument();
+    expect(screen.getByText('Check now')).toBeInTheDocument();
+  });
+});
+
 describe('OverviewScreen - Success Strip Dismiss Button', () => {
   it('should show Dismiss button in expanded success strip', () => {
     const onDismissResult = vi.fn();
