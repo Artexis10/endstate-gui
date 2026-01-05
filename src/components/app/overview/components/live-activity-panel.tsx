@@ -119,12 +119,18 @@ export function LiveActivityPanel({
                   event.action === 'To install' ? 'to_install' :
                   'skipped'
                 );
-                // Use phase-aware status with reason for correct labels per phase
+                // Use event's own phase for label (not current actionProgress.phase)
+                // This preserves APPLY "INSTALLED" labels even when viewing during VERIFY
                 const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: event.phase, reason: event.reason });
                 const colors = getColorClasses(uiStatus.color);
                 
                 return (
-                  <div key={`${event.app}-${event.timestamp}-${idx}`} className="flex items-center gap-2 text-xs pt-1.5">
+                  <div 
+                    key={`${event.app}-${event.timestamp}-${idx}`} 
+                    className="flex items-center gap-2 text-xs pt-1.5"
+                    data-phase={event.phase}
+                    data-event-index={idx}
+                  >
                     <span className={`w-16 text-right font-medium ${colors.text}`}>
                       {uiStatus.shortLabel}
                     </span>
@@ -142,14 +148,25 @@ export function LiveActivityPanel({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Scroll to the last event element (phase-aware)
+                    // Scroll to the last event element matching current phase
                     if (activityScrollRef.current) {
-                      const lastEventElement = activityScrollRef.current.querySelector('div[class*="flex items-center gap-2"]:last-child');
-                      if (lastEventElement) {
-                        lastEventElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                      const currentPhase = actionProgress.phase;
+                      // Find all event elements matching the current phase
+                      const phaseEvents = activityScrollRef.current.querySelectorAll(`div[data-phase="${currentPhase}"]`);
+                      
+                      if (phaseEvents.length > 0) {
+                        // Scroll to the last event of the current phase
+                        const lastPhaseEvent = phaseEvents[phaseEvents.length - 1];
+                        lastPhaseEvent.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                       } else {
-                        // Fallback to bottom if no events found
-                        activityScrollRef.current.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
+                        // Fallback: scroll to last event element regardless of phase
+                        const allEvents = activityScrollRef.current.querySelectorAll('div[data-event-index]');
+                        if (allEvents.length > 0) {
+                          allEvents[allEvents.length - 1].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        } else {
+                          // Final fallback to bottom if no events found
+                          activityScrollRef.current.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
+                        }
                       }
                     }
                     setIsAtBottom(true);
