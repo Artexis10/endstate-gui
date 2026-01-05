@@ -268,21 +268,24 @@ function AppContent() {
     setActionResultByAction(prev => ({ ...prev, [action]: result }));
   };
   
-  // Dismiss result - clear transient result state for ONLY the current running action
-  const dismissOverviewResult = () => {
-    if (!overviewRunningAction) return;
+  // Dismiss result - clear transient result state for a specific action
+  const dismissOverviewResult = (action?: 'capture' | 'setup' | 'check') => {
+    const actionToDismiss = action || overviewRunningAction;
+    if (!actionToDismiss) return;
     
     // Clear only the specific action's state
-    setActionProgressByAction(prev => ({ ...prev, [overviewRunningAction]: null }));
-    setActionResultByAction(prev => ({ ...prev, [overviewRunningAction]: null }));
-    setActionStatusByAction(prev => ({ ...prev, [overviewRunningAction]: 'idle' }));
+    setActionProgressByAction(prev => ({ ...prev, [actionToDismiss]: null }));
+    setActionResultByAction(prev => ({ ...prev, [actionToDismiss]: null }));
+    setActionStatusByAction(prev => ({ ...prev, [actionToDismiss]: 'idle' }));
     
-    // Clear live events/counters (these are global to the current run)
-    setLiveAppEvents([]);
-    setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+    // Clear live events/counters only if dismissing the currently running action
+    if (actionToDismiss === overviewRunningAction) {
+      setLiveAppEvents([]);
+      setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+    }
     
     // Also clear lastSavedProfileSummary for capture card dismissal
-    if (overviewRunningAction === 'capture') {
+    if (actionToDismiss === 'capture') {
       setLastSavedProfileSummary(null);
     }
   };

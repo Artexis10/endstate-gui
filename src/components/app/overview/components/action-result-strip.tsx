@@ -12,7 +12,7 @@ interface ActionResultStripProps {
   actionProgressByAction: Record<string, ActionProgress | null>;
   actionResultByAction: Record<string, ActionResult | null>;
   isRunning: boolean;
-  onDismiss: () => void;
+  onDismiss: (action: NonNullable<ActionType>) => void;
   onShowDetails: () => void;
 }
 
@@ -52,7 +52,11 @@ export function ActionResultStrip({
         (actionResult.counts.installed || actionResult.counts.alreadyPresent)) {
       statusText = 'Completed with issues';
       statusColor = 'warning';
-      detailText = `${actionResult.counts.installed || 0} installed · ${actionResult.counts.failed} failed`;
+      const parts = [];
+      if (actionResult.counts.installed) parts.push(`${actionResult.counts.installed} installed`);
+      if (actionResult.counts.alreadyPresent) parts.push(`${actionResult.counts.alreadyPresent} already present`);
+      parts.push(`${actionResult.counts.failed} failed`);
+      detailText = parts.join(' · ');
     } else {
       statusText = 'Something went wrong';
       statusColor = 'error';
@@ -73,7 +77,7 @@ export function ActionResultStrip({
     : XCircle;
   
   return (
-    <div className="pt-8">
+    <div className="pt-3">
       <div 
         className={`flex items-center gap-3 px-3 py-2.5 rounded-md border text-sm ${colorClasses}`}
         data-testid={`card-status-strip-${testIdSuffix}`}
@@ -94,7 +98,7 @@ export function ActionResultStrip({
           className="text-foreground"
           onClick={(e) => {
             e.stopPropagation();
-            onDismiss();
+            onDismiss(action);
           }}
           data-testid="card-status-dismiss"
         >

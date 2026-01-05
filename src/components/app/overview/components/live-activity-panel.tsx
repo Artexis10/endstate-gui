@@ -142,8 +142,16 @@ export function LiveActivityPanel({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Scroll to bottom and re-enable auto-follow
-                    activityScrollRef.current?.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
+                    // Scroll to the last event element (phase-aware)
+                    if (activityScrollRef.current) {
+                      const lastEventElement = activityScrollRef.current.querySelector('div[class*="flex items-center gap-2"]:last-child');
+                      if (lastEventElement) {
+                        lastEventElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                      } else {
+                        // Fallback to bottom if no events found
+                        activityScrollRef.current.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
+                      }
+                    }
                     setIsAtBottom(true);
                   }}
                   className={`absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs rounded-full shadow-lg transition-colors border ${pillClasses.bg} ${pillClasses.border} ${pillClasses.text}`}

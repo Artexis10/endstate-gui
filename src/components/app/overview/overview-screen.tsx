@@ -172,7 +172,7 @@ export function OverviewScreen({
                 appCount={actionResult?.counts?.total}
                 onSaveProfile={onSaveProfile}
                 onDiscardDraft={onDiscardDraft}
-                onDismiss={handleDismiss}
+                onDismiss={() => handleDismiss('capture')}
                 onShowDetails={() => {
                   setDetailsAction('capture');
                   setDetailsModalOpen(true);
@@ -201,7 +201,7 @@ export function OverviewScreen({
               activityScrollRef={activityScrollRef}
               liveActivityContainerRef={liveActivityContainerRef}
               onExecuteAction={handleExecuteAction}
-              onDismiss={handleDismiss}
+              onDismiss={() => handleDismiss('capture')}
               onDismissResult={onDismissResult}
               onSetup={onSetup}
               onCapture={onCapture}
@@ -240,7 +240,7 @@ export function OverviewScreen({
                 actionProgressByAction={actionProgressByAction}
                 actionResultByAction={actionResultByAction}
                 isRunning={isRunning}
-                onDismiss={handleDismiss}
+                onDismiss={() => handleDismiss('setup')}
                 onShowDetails={() => {
                   setDetailsAction('setup');
                   setDetailsModalOpen(true);
@@ -269,7 +269,7 @@ export function OverviewScreen({
               activityScrollRef={activityScrollRef}
               liveActivityContainerRef={liveActivityContainerRef}
               onExecuteAction={handleExecuteAction}
-              onDismiss={handleDismiss}
+              onDismiss={() => handleDismiss('setup')}
               onDismissResult={onDismissResult}
               onSetup={onSetup}
               onCapture={onCapture}
@@ -308,7 +308,7 @@ export function OverviewScreen({
                 actionProgressByAction={actionProgressByAction}
                 actionResultByAction={actionResultByAction}
                 isRunning={isRunning}
-                onDismiss={handleDismiss}
+                onDismiss={() => handleDismiss('check')}
                 onShowDetails={() => {
                   setDetailsAction('check');
                   setDetailsModalOpen(true);
@@ -337,7 +337,7 @@ export function OverviewScreen({
               activityScrollRef={activityScrollRef}
               liveActivityContainerRef={liveActivityContainerRef}
               onExecuteAction={handleExecuteAction}
-              onDismiss={handleDismiss}
+              onDismiss={() => handleDismiss('check')}
               onDismissResult={onDismissResult}
               onSetup={onSetup}
               onCapture={onCapture}

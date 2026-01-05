@@ -14,7 +14,7 @@ interface UseOverviewStateProps {
   onCapture: () => void;
   onSetup: (intent: SetupIntent) => void;
   onCheck: () => void;
-  onDismissResult: () => void;
+  onDismissResult: (action?: 'capture' | 'setup' | 'check') => void;
 }
 
 interface UseOverviewStateReturn {
@@ -46,7 +46,7 @@ interface UseOverviewStateReturn {
   // Handlers
   handleCardClick: (action: ActionType) => void;
   handleExecuteAction: (action: ActionType) => void;
-  handleDismiss: () => void;
+  handleDismiss: (action: 'capture' | 'setup' | 'check') => void;
 }
 
 export function useOverviewState({
@@ -164,9 +164,9 @@ export function useOverviewState({
   };
 
   // Collapse card and dismiss result
-  const handleDismiss = () => {
+  const handleDismiss = (action: 'capture' | 'setup' | 'check') => {
     setExpandedCard(null);
-    onDismissResult();
+    onDismissResult(action);
   };
 
   return {

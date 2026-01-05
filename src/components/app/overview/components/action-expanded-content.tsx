@@ -52,8 +52,8 @@ interface ActionExpandedContentProps {
   activityScrollRef: React.RefObject<HTMLDivElement>;
   liveActivityContainerRef: React.RefObject<HTMLDivElement>;
   onExecuteAction: (action: ActionType) => void;
-  onDismiss: () => void;
-  onDismissResult: () => void;
+  onDismiss: (action: 'capture' | 'setup' | 'check') => void;
+  onDismissResult: (action?: 'capture' | 'setup' | 'check') => void;
   onSetup: (intent: SetupIntent) => void;
   onCapture: () => void;
   onShowDetails: () => void;
@@ -470,7 +470,7 @@ export function ActionExpandedContent({
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                onDismiss();
+                onDismiss(action);
               }}
               size="sm"
             >

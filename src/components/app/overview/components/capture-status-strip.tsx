@@ -23,7 +23,7 @@ interface CaptureStatusStripProps {
   appCount?: number; // From actionResult.counts.total
   onSaveProfile?: () => void;
   onDiscardDraft?: () => void;
-  onDismiss: () => void;
+  onDismiss: (action: 'capture') => void;
   onShowDetails: () => void;
 }
 
@@ -121,7 +121,7 @@ export function CaptureStatusStrip({
                   className="text-foreground"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDismiss();
+                    onDismiss('capture');
                   }}
                   data-testid="expanded-success-dismiss"
                 >
@@ -215,7 +215,7 @@ export function CaptureStatusStrip({
             className="text-foreground"
             onClick={(e) => {
               e.stopPropagation();
-              onDismiss();
+              onDismiss('capture');
             }}
             data-testid="card-status-dismiss"
           >
