@@ -135,7 +135,7 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
   },
   verify: {
     present: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
-    installed: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
+    installed: { shortLabel: 'INSTALLED', longLabel: 'Installed', color: 'success' },
     to_install: { shortLabel: 'MISSING', longLabel: 'Missing', color: 'warn' },
     installing: { shortLabel: 'CHECKING', longLabel: 'Checking…', color: 'info' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },

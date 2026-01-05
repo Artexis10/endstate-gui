@@ -119,8 +119,7 @@ export function LiveActivityPanel({
                   event.action === 'To install' ? 'to_install' :
                   'skipped'
                 );
-                // Use event's own phase for label (not current actionProgress.phase)
-                // This preserves APPLY "INSTALLED" labels even when viewing during VERIFY
+                // Use phase-aware status with reason for correct labels per phase
                 const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: event.phase, reason: event.reason });
                 const colors = getColorClasses(uiStatus.color);
                 
