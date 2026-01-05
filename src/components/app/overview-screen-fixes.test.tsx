@@ -145,9 +145,9 @@ describe('OverviewScreen - Double-Run Prevention', () => {
         actionStatus="running"
         actionProgress={{ message: 'Installing...' }}
         actionResult={null}
+        {...defaultPerActionState}
         actionStatusByAction={{ ...defaultPerActionState.actionStatusByAction, setup: 'running' }}
         actionProgressByAction={{ ...defaultPerActionState.actionProgressByAction, setup: { message: 'Installing...' } }}
-        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -192,6 +192,7 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
             failed: 1,
           },
         }}
+        {...defaultPerActionState}
         actionStatusByAction={{ ...defaultPerActionState.actionStatusByAction, setup: 'error' }}
         actionProgressByAction={{ ...defaultPerActionState.actionProgressByAction, setup: { message: 'Some apps failed' } }}
         actionResultByAction={{ ...defaultPerActionState.actionResultByAction, setup: {
@@ -204,7 +205,6 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
             failed: 1,
           },
         }}}
-        {...defaultPerActionState}
         liveAppEvents={[]}
         liveCounters={{ installed: 60, alreadyPresent: 5, skipped: 0, failed: 1 }}
         onNavigate={vi.fn()}

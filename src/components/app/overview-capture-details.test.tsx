@@ -96,6 +96,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
 
     render(
       <OverviewScreen
+        {...defaultPerActionState}
         {...defaultProps}
         runningAction="capture"
         actionStatus="success"
@@ -157,6 +158,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
 
     render(
       <OverviewScreen
+        {...defaultPerActionState}
         {...defaultProps}
         runningAction="capture"
         actionStatus="success"

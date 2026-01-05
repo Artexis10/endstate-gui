@@ -38,7 +38,7 @@ export function OverviewScreen({
   profilesDirectory,
   isRunning,
   runningAction,
-  actionStatus,
+  actionStatus: _actionStatus,
   actionProgress,
   actionResult,
   actionStatusByAction,

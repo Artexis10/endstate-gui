@@ -60,6 +60,7 @@ describe('Discard Draft UX Contracts', () => {
 
       renderWithProviders(
         <OverviewScreen
+          {...defaultPerActionState}
           lifecycleState={mockLifecycleState}
           selectedProfile="test-profile"
           profiles={mockProfiles}
@@ -99,6 +100,7 @@ describe('Discard Draft UX Contracts', () => {
       
       renderWithProviders(
         <OverviewScreen
+          {...defaultPerActionState}
           lifecycleState={mockLifecycleState}
           selectedProfile="test-profile"
           profiles={mockProfiles}
@@ -144,6 +146,7 @@ describe('Discard Draft UX Contracts', () => {
 
       renderWithProviders(
         <OverviewScreen
+          {...defaultPerActionState}
           lifecycleState={mockLifecycleState}
           selectedProfile="test-profile"
           profiles={mockProfiles}
@@ -192,6 +195,7 @@ describe('Discard Draft UX Contracts', () => {
 
       renderWithProviders(
         <OverviewScreen
+          {...defaultPerActionState}
           lifecycleState={mockLifecycleState}
           selectedProfile="test-profile"
           profiles={mockProfiles}
@@ -239,6 +243,7 @@ describe('Discard Draft UX Contracts', () => {
 
       renderWithProviders(
         <OverviewScreen
+          {...defaultPerActionState}
           lifecycleState={mockLifecycleState}
           selectedProfile="test-profile"
           profiles={mockProfiles}
@@ -292,6 +297,7 @@ describe('Discard Draft UX Contracts', () => {
 
       renderWithProviders(
         <OverviewScreen
+          {...defaultPerActionState}
           lifecycleState={mockLifecycleState}
           selectedProfile="test-profile"
           profiles={mockProfiles}
@@ -340,6 +346,7 @@ describe('Discard Draft UX Contracts', () => {
 
       const { rerender } = renderWithProviders(
         <OverviewScreen
+          {...defaultPerActionState}
           lifecycleState={mockLifecycleState}
           selectedProfile="test-profile"
           profiles={mockProfiles}
@@ -375,6 +382,7 @@ describe('Discard Draft UX Contracts', () => {
       // Key point: lastSavedProfileSummary persists, even if actionResult is cleared
       rerender(
         <OverviewScreen
+          {...defaultPerActionState}
           lifecycleState={mockLifecycleState}
           selectedProfile="test-profile"
           profiles={mockProfiles}

@@ -100,7 +100,7 @@ export function ActionExpandedContent({
   action,
   lifecycleState,
   isRunning,
-  runningAction,
+  runningAction: _runningAction,
   actionStatusByAction,
   actionProgressByAction,
   actionResultByAction,

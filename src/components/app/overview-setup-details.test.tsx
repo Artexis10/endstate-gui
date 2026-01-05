@@ -99,6 +99,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
 
     render(
       <OverviewScreen
+        {...defaultPerActionState}
         {...defaultProps}
         runningAction="setup"
         actionStatus="success"
@@ -182,6 +183,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
 
     render(
       <OverviewScreen
+        {...defaultPerActionState}
         {...defaultProps}
         runningAction="setup"
         actionStatus="success"
@@ -262,6 +264,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
 
     render(
       <OverviewScreen
+        {...defaultPerActionState}
         {...defaultProps}
         runningAction="setup"
         actionStatus="success"
