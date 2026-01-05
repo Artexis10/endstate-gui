@@ -20,13 +20,19 @@ This document defines the canonical UI language for preview/apply flows and how 
 - Installed
 - Already present
 - Skipped
+- Cancelled (user denied/cancelled installation)
 - Failed
+
+### Verify (result states: "what is the current state?")
+- Confirmed (app is installed)
+- Missing (app not installed - needs action)
+- Failed (verification error)
 
 ## Rules
 
 - Preview shows decisions only (no “would”, no in-progress verbs).
 - Live activity shows verbs only (in-progress, may include spinners).
-- Once an app reaches a terminal state (Installed / Already present / Skipped / Failed),
+- Once an app reaches a terminal state (Installed / Already present / Skipped / Failed / Cancelled),
   it must never show an in-progress verb/spinner again.
 
 ## CLI → GUI mapping

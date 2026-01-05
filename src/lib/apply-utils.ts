@@ -172,21 +172,39 @@ export interface PhaseAwareStatusArgs {
  * Get phase-aware UI status config with reason discrimination.
  * This is the SINGLE SOURCE OF TRUTH for (phase, statusKey, reason) -> UI labels.
  * 
- * Capture phase rules:
- * - present -> DETECTED (detected) - app found on system
- * - to_install -> NOT FOUND (muted) - app not on system
- * - skipped + reason=filtered -> EXCLUDED (muted) - filtered by policy
- * - skipped + reason=sensitive -> PROTECTED (warn) - sensitive data excluded
- * - failed -> ERROR (error)
- * - installing -> SCANNING (info)
+ * TRUTH TABLE: (phase, status, reason) -> StatusKey + Label + Color
+ * ================================================================
  * 
- * Apply phase rules:
- * - present -> PRESENT (success)
- * - skipped + reason=already_installed -> PRESENT (success) - NOT "Skipped"
+ * APPLY PHASE:
+ * - (apply, installing, *)           -> installing   | INSTALLING      | info
+ * - (apply, installed, *)            -> installed    | INSTALLED       | success
+ * - (apply, present, *)              -> present      | PRESENT         | success
+ * - (apply, skipped, already_installed) -> present   | PRESENT         | success  ← NOT "Skipped"
+ * - (apply, skipped, user_denied)    -> cancelled    | CANCELLED       | warn     ← User cancelled, NOT failed
+ * - (apply, skipped, *)              -> skipped      | SKIPPED         | warn
+ * - (apply, failed, install_failed)  -> failed       | FAILED          | error    ← Real install failure
+ * - (apply, failed, *)               -> failed       | FAILED          | error
  * 
- * Verify phase rules:
- * - present -> CONFIRMED (success)
- * - to_install -> MISSING (error)
+ * VERIFY PHASE:
+ * - (verify, present, *)             -> present      | CONFIRMED       | success
+ * - (verify, installed, *)           -> installed    | INSTALLED       | success
+ * - (verify, skipped, already_installed) -> present  | CONFIRMED       | success
+ * - (verify, failed, missing)        -> to_install   | MISSING         | warn     ← NOT failed, needs action
+ * - (verify, failed, *)              -> failed       | FAILED          | error    ← Real verification error
+ * - (verify, to_install, *)          -> to_install   | MISSING         | warn
+ * 
+ * CAPTURE PHASE:
+ * - (capture, present, detected)     -> detected     | DETECTED        | detected
+ * - (capture, detected, *)           -> detected     | DETECTED        | detected
+ * - (capture, skipped, sensitive*)   -> skipped      | PROTECTED       | warn
+ * - (capture, skipped, filtered*)    -> skipped      | EXCLUDED        | muted
+ * - (capture, to_install, *)         -> to_install   | NOT FOUND       | muted
+ * - (capture, failed, *)             -> failed       | ERROR           | error
+ * 
+ * Key semantic distinctions:
+ * 1. User denial (apply, skipped, user_denied) -> CANCELLED (warn), NOT FAILED (error)
+ * 2. Missing apps (verify, failed, missing) -> MISSING (warn), NOT FAILED (error)
+ * 3. Already installed (apply, skipped, already_installed) -> PRESENT (success), NOT SKIPPED
  * 
  * @param args - Status key, phase, and optional reason
  * @returns UI status configuration with labels and color
@@ -221,6 +239,10 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
     if (statusKey === 'skipped' && (reasonLower === 'already_installed' || reasonLower === 'already_present')) {
       return { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' };
     }
+    // skipped + user_denied -> CANCELLED (warn) - user cancelled, not a failure
+    if (statusKey === 'skipped' && reasonLower === 'user_denied') {
+      return { shortLabel: 'CANCELLED', longLabel: 'User cancelled', color: 'warn' };
+    }
     // Default apply phase handling
     if (PHASE_STATUS_MAP.apply[statusKey]) {
       return PHASE_STATUS_MAP.apply[statusKey]!;
@@ -232,6 +254,10 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
     // skipped + already_installed -> CONFIRMED (success)
     if (statusKey === 'skipped' && (reasonLower === 'already_installed' || reasonLower === 'already_present')) {
       return { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' };
+    }
+    // failed + missing -> MISSING (warn) - not a real failure, just needs installation
+    if (statusKey === 'failed' && reasonLower === 'missing') {
+      return { shortLabel: 'MISSING', longLabel: 'Missing', color: 'warn' };
     }
     // Default verify phase handling
     if (PHASE_STATUS_MAP.verify[statusKey]) {
