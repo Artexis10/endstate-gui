@@ -239,3 +239,17 @@ These contracts allow you to later build:
 - UX regression detection (“this breaks G-1”)
 - Clear review criteria for PRs
 - A clean interaction map layer on top
+
+---
+
+## Derived Interaction Maps
+
+The following interaction maps are normative derivations of this contract.
+They must not introduce new rules or weaken existing guarantees.
+
+- [Capture Interaction Map](./CAPTURE_INTERACTION_MAP.md)
+
+All future interaction maps MUST:
+- Fully satisfy these contracts
+- Explicitly list forbidden states
+- Define Simplified vs Detailed behavior
