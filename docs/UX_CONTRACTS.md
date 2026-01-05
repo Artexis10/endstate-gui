@@ -1,3 +1,6 @@
+> This document defines UX contracts, not implementation.
+> Any UI change must satisfy these guarantees in both Simplified and Detailed modes.
+
 # Endstate UX Contracts — v1
 
 ## What a UX contract is (for Endstate)
