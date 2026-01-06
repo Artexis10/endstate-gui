@@ -17,6 +17,7 @@ src-tauri/target/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Logs
 *.log
@@ -30,6 +31,23 @@ npm-debug.log*
 # TypeScript cache
 *.tsbuildinfo
 
-# Coverage reports (generated)
+# Generated artifacts and run outputs (never committed)
+artifacts/
 coverage/
 test-results/
+
+# Event logs and capture outputs (generated at runtime)
+*.jsonl
+*.stdout.txt
+*.stderr.txt
+apply.all.txt
+capture.events.jsonl
+apply.events.jsonl
+verify.events.jsonl
+events.jsonl
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*~
