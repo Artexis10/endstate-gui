@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Windsurf Project Ruleset
 
 This file configures Windsurf behavior for this repository.
