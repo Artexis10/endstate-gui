@@ -91,15 +91,35 @@ endstate-gui/
 
 2. **CLI is the single source of truth.** All operations execute via CLI invocation. GUI never fabricates or infers state.
 
-3. **One run at a time.** Only one CLI process can be active. Concurrent execution is blocked at the Rust layer.
+3. **JSON is the contract.** The GUI MUST invoke the CLI with `--json` at all times and rely exclusively on structured JSON output. Human-readable CLI text MUST NOT be parsed for state.
 
-4. **Schema version compatibility required.** GUI refuses execution if CLI schema version is incompatible.
+4. **Final state derives from JSON envelope only.** Streaming CLI text MAY be parsed for transient UI progress (live activity feed, progress indicators), but final success/failure and app statuses MUST be derived exclusively from the JSON envelope at command completion.
 
-5. **All user-relevant state must be visible.** No hidden state in AppData or invisible databases.
+5. **One run at a time.** Only one CLI process can be active. Concurrent execution is blocked at the Rust layer (mutex guard).
 
-6. **Configuration restore is OFF by default.** Install-only is the default behavior.
+6. **Schema version compatibility required.** GUI refuses execution if CLI schema version is incompatible.
 
-7. **Secrets and credentials are never handled.** No browser profiles, tokens, or license blobs.
+7. **All user-relevant state must be visible.** No hidden state in AppData or invisible databases.
+
+8. **Configuration restore is OFF by default.** Install-only is the default behavior.
+
+9. **Secrets and credentials are never handled.** No browser profiles, tokens, or license blobs.
+
+10. **Errors originate from engine.** All errors MUST originate from the engine JSON envelope. The GUI displays engine error messages verbatim and MUST NOT invent error categories not present in the engine response.
+
+### Responsibility Boundaries
+
+**The GUI MAY:**
+- Render progress and results
+- Visualize drift and verification outcomes
+- Provide UX affordances (confirmations, warnings, summaries)
+- Export JSON reports produced by the engine
+
+**The GUI MUST NOT:**
+- Reimplement install, verify, or planning logic
+- Guess missing parameters or auto-correct manifests
+- Retry destructive actions automatically
+- Mutate manifests or engine state without explicit user action
 
 ---
 
@@ -140,7 +160,26 @@ endstate-gui/
 
 6. **shadcn/ui component requirement.** All interactive UI must use shadcn components unless documented exception exists. Native HTML elements break theming.
 
-7. **Coverage thresholds enforced.** Vitest coverage thresholds (70% lines, 55% functions, 60% branches) will fail CI if not met.
+7. **Coverage thresholds enforced.** Vitest coverage thresholds will fail CI if not met.
+
+8. **Streaming output semantic distinction.** When parsing streaming output:
+   - `skipped` + `already_installed` reason → "Already present" (success color, PRESENT label)
+   - `skipped` + other reasons (filtered, policy) → "Skipped" (warning color, SKIPPED label)
+   This ensures live activity feed matches final JSON envelope semantics.
+
+9. **Phase transitions within single spawn.** The engine performs Apply followed by Verify within a single spawn. The GUI must detect phase transitions via streaming markers. Activity list MUST NOT reset, scroll jump, or reinitialize between phases.
+
+10. **Status/phase semantic rules (must not drift):**
+    - `verify` + `status=failed` + `reason=missing` → UI displays **MISSING** (warn), not FAILED (error)
+    - `apply` + `status=skipped` + `reason=user_denied` → UI displays **CANCELLED** (warn), not FAILED (error)
+    - `verify` + `status=present` → UI displays **CONFIRMED**, not "Already present"
+    - **INSTALLED** vs **CONFIRMED**: Installed = installed this run; Confirmed = verified present
+    - `user_denied` detection is heuristic and unreliable (no standardized winget exit code)
+
+11. **Cross-repo contract coupling.** Status/phase semantics are coupled between GUI and engine:
+    - UI semantics: `docs/ux-language.md`
+    - Engine event schema: `../endstate/docs/event-contract.md`
+    Changes to status/phase behavior MUST update both repos.
 
 ---
 
@@ -157,6 +196,18 @@ endstate-gui/
 5. **No GUI-only features.** Everything the GUI does must be reproducible via CLI.
 
 6. **No secrets handling.** Browser profiles, auth tokens, password managers, and license blobs are intentionally unsupported with no override.
+
+7. **GUI is not a configuration management engine.** That responsibility belongs to Endstate CLI.
+
+8. **GUI is not a policy engine.** Policy decisions are made by the engine.
+
+9. **GUI is not responsible for idempotency or safety guarantees.** Those guarantees belong exclusively to Endstate (engine).
+
+### Guiding Principle
+
+> The GUI is replaceable. The engine is not.
+
+When in doubt, push logic down into the engine.
 
 ---
 
@@ -256,3 +307,17 @@ npm run tauri icon app-icon.png
 - Unclear intent → ask, do not assume
 - Contract conflicts → prefer repository code, propose Delta Shadow
 - UX guardrail violations → redesign required
+
+---
+
+## 11. Delta Shadow Policy
+
+If repository code diverges from this Shadow, **code wins**.
+
+When divergence is detected:
+1. Do not silently drift — propose a Delta Shadow
+2. The Delta Shadow must describe the minimal update to reconcile Shadow with code
+3. Human maintainer approves or rejects the Delta Shadow
+4. Until approved, treat code as authoritative for the divergent area
+
+This ensures the Shadow remains accurate without blocking development.
