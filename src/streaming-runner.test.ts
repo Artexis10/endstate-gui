@@ -6,6 +6,12 @@ import { invoke, listen } from './lib/tauri-bridge';
 vi.mock('./lib/tauri-bridge', () => ({
   invoke: vi.fn(),
   listen: vi.fn(),
+  isTauriRuntime: vi.fn(() => false),
+}));
+
+vi.mock('./lib/engine-path', () => ({
+  validateEngineScriptPath: vi.fn(() => Promise.resolve(null)),
+  getRepoRootFromScriptPath: vi.fn(() => null),
 }));
 
 describe('streaming-runner', () => {

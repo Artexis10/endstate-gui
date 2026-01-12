@@ -1,6 +1,7 @@
 import { invoke, listen } from './lib/tauri-bridge';
 import { EndstateEnvelope } from './types';
 import { AppSettings } from './settings';
+import { validateEngineScriptPath, getRepoRootFromScriptPath } from './lib/engine-path';
 import {
   StreamingEvent as NdjsonEvent,
   StreamingEventBuffer,
@@ -79,7 +80,19 @@ export async function runEndstateStreaming<T>(
     exe = 'endstate';
     execArgs = fullArgs;
   } else {
-    // Script mode
+    // Script mode: validate path exists before attempting execution
+    const validationError = await validateEngineScriptPath(settings.engineScriptPath);
+    if (validationError) {
+      // Build helpful error message with bin/ suggestion
+      const repoRoot = getRepoRootFromScriptPath(settings.engineScriptPath);
+      const binPath = repoRoot ? `${repoRoot}\\bin\\endstate.ps1` : null;
+      let errorMsg = validationError;
+      if (binPath && !validationError.includes(binPath)) {
+        errorMsg += `\nExpected location: ${binPath}`;
+      }
+      throw new Error(errorMsg);
+    }
+    
     exe = 'pwsh';
     execArgs = [
       '-NoProfile',

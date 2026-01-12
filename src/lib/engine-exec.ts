@@ -6,6 +6,7 @@
 
 import { invoke, isTauriRuntime } from './tauri-bridge';
 import { AppSettings } from '../settings';
+import { validateEngineScriptPath, getRepoRootFromScriptPath } from './engine-path';
 
 /** Typed error kinds for engine execution */
 export type EngineErrorKind = 
@@ -122,6 +123,20 @@ export async function runEndstateOnce<T>(
     // Bundled or PATH mode: use 'endstate' directly
     execArgs = fullArgs;
   } else {
+    // Script mode: validate path exists before attempting execution
+    const validationError = await validateEngineScriptPath(settings.engineScriptPath);
+    if (validationError) {
+      return {
+        success: false,
+        error: {
+          kind: 'command_not_found',
+          message: validationError,
+          command: commandStr,
+          details: `Configured path: ${settings.engineScriptPath}`,
+        },
+      };
+    }
+    
     // Script mode: invoke via PowerShell
     execArgs = [
       '-NoProfile',
@@ -145,11 +160,24 @@ export async function runEndstateOnce<T>(
                          result.stderr?.includes('CommandNotFoundException');
       
       if (isNotFound) {
+        // Build helpful error message
+        let message = 'endstate command not found.';
+        if (settings.engineMode === 'script') {
+          const repoRoot = getRepoRootFromScriptPath(settings.engineScriptPath);
+          const binPath = repoRoot ? `${repoRoot}\\bin\\endstate.ps1` : null;
+          message = `Engine script not found at: ${settings.engineScriptPath}`;
+          if (binPath && settings.engineScriptPath !== binPath) {
+            message += `\nThe engine may have moved to: ${binPath}`;
+          }
+        } else {
+          message = 'endstate command not found. Check that it is installed and in PATH.';
+        }
+        
         return {
           success: false,
           error: {
             kind: 'command_not_found',
-            message: 'endstate command not found. Check that it is installed and in PATH.',
+            message,
             command: commandStr,
             exitCode: result.exitCode,
             stderr: result.stderr,
