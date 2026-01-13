@@ -9,17 +9,18 @@ Define the invariants and error semantics for:
 
 ## Invariants
 
-### INV-1: Draft is Ephemeral
+### INV-1: Draft is Store-Based (No Disk Files)
 
 The capture "draft" exists in two forms:
-1. **Transient cache file**: Written by engine to `%LOCALAPPDATA%\endstate-gui\cache\draft_*.jsonc`
-2. **In-memory state**: `pendingCaptureDraft` React state holding metadata
+1. **localStorage**: Draft text persisted via `draft-store.ts` (survives reload/crash)
+2. **In-memory state**: `pendingCaptureDraft` React state holding draft text + metadata
 
 **Rules:**
-- The cache file is immediate-use only (read once after capture, then copied or deleted)
-- On app reload, `pendingCaptureDraft` is null (expected behavior)
-- The GUI never attempts to reload a draft from disk on startup
-- Draft becomes a persisted profile ONLY when user explicitly saves
+- NO draft files are written to disk (no `draft_*.jsonc` anywhere)
+- Engine writes temp file → GUI reads content → temp file deleted immediately
+- Draft text stored in localStorage as JSONC string
+- On app reload, draft is loaded from localStorage into `pendingCaptureDraft`
+- Draft becomes a persisted profile ONLY when user explicitly saves (writes to profiles directory)
 
 ### INV-2: Profile Selection is Name-Based
 

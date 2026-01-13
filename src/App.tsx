@@ -10,6 +10,7 @@ import {
   EndstateApplyResultData,
 } from './types';
 import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration, clearSelectedProfile } from './settings';
+import { saveDraft, loadDraft, clearDraft } from './lib/draft-store';
 import { resolveProfilePath } from './lib/profile-selection-migration';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
 import { StreamEvent } from './streaming-runner';
@@ -180,11 +181,11 @@ function AppContent() {
   const [showFolderPathModal, setShowFolderPathModal] = useState(false);
   const [folderPathForModal, setFolderPathForModal] = useState('');
   
-  // Pending capture draft state - in-memory only (no disk file)
+  // Pending capture draft state - in-memory + localStorage (no disk file)
   const [pendingCaptureDraft, setPendingCaptureDraft] = useState<{
     capturedAppsCount: number;
     capturedAt: string;
-    outputPath: string;
+    draftText: string;
     apps: string[];
   } | null>(null);
   
@@ -201,7 +202,7 @@ function AppContent() {
   
   // Profile naming modal state
   const [showProfileNameModal, setShowProfileNameModal] = useState(false);
-  const [profileNameModalPath, setProfileNameModalPath] = useState(''); // Path to pending profile file
+  const [profileNameModalPath, setProfileNameModalPath] = useState(''); // Path for rename mode only (not used for draft)
   const [profileNameModalValue, setProfileNameModalValue] = useState(''); // User-typed display name
   const [profileNameModalMode, setProfileNameModalMode] = useState<'save' | 'rename'>('save');
   const [profileNameModalMoreOptions, setProfileNameModalMoreOptions] = useState(false);
@@ -353,7 +354,11 @@ function AppContent() {
   };
 
   const openProfileNameModal = (profilePath: string, existingName: string = '', mode: 'save' | 'rename' = 'save', suggestedName: string = '') => {
-    setProfileNameModalPath(profilePath);
+    // For save mode, profilePath is ignored (draft comes from store)
+    // For rename mode, profilePath is the profile file to rename
+    if (mode === 'rename') {
+      setProfileNameModalPath(profilePath);
+    }
     setProfileNameModalValue(existingName);
     setProfileNameModalMode(mode);
     setProfileNameModalMoreOptions(false);
@@ -365,14 +370,14 @@ function AppContent() {
   // Exposed in dev mode or when VITE_E2E is set (harmless in production since it's tree-shaken)
   useEffect(() => {
     if (import.meta.env.DEV || import.meta.env.VITE_E2E === '1') {
-      (window as any).__endstate_e2e_openSaveProfileModal = ({ pendingPath, suggestedName }: { pendingPath: string; suggestedName: string }) => {
+      (window as any).__endstate_e2e_openSaveProfileModal = ({ draftText, suggestedName }: { draftText: string; suggestedName: string }) => {
         setPendingCaptureDraft({
           capturedAppsCount: 0,
           capturedAt: new Date().toISOString(),
-          outputPath: pendingPath,
+          draftText: draftText || '{}',
           apps: [],
         });
-        openProfileNameModal(pendingPath, suggestedName, 'save', suggestedName);
+        openProfileNameModal('', suggestedName, 'save', suggestedName);
       };
       (window as any).__endstate_e2e_showToast = showToast;
       return () => {
@@ -384,13 +389,16 @@ function AppContent() {
 
   const handleSaveProfileName = async () => {
     if (isSavingProfile) return; // Prevent double-submit
+    setIsSavingProfile(true);
     
     try {
       const trimmedValue = profileNameModalValue.trim();
       
-      if (profileNameModalMode === 'save' && profileNameModalPath) {
-        // In save mode, copy from cache to profiles directory with the user's chosen name
-        // profileNameModalPath points to the transient file in cache
+      if (profileNameModalMode === 'save') {
+        // Save mode: write draft text to profiles directory
+        if (!pendingCaptureDraft?.draftText) {
+          throw new Error('Draft capture missing — please run Capture again.');
+        }
         
         // Get profiles directory as destination
         const profilesDir = await loadProfilesDirectory();
@@ -399,16 +407,7 @@ function AppContent() {
         }
         await ensureDirectory(profilesDir);
         
-        // Preflight check: verify source file exists before attempting copy
-        const sourceExists = await invoke<boolean>('check_file_exists', { path: profileNameModalPath });
-        if (!sourceExists) {
-          throw new Error(`Source file no longer exists: ${profileNameModalPath}. The draft may have been deleted or moved.`);
-        }
-        
-        // Determine filename
-        const currentFilename = profileNameModalPath.split(/[\\/]/).pop() || 'profile.jsonc';
-        const extension = currentFilename.match(/\.(jsonc?|json5)$/i)?.[0] || '.jsonc';
-        
+        const extension = '.jsonc';
         let newFilename: string;
         let destPath: string;
         
@@ -440,15 +439,8 @@ function AppContent() {
           destPath = `${profilesDir}\\${newFilename}`;
         }
         
-        // Copy from cache to profiles directory
-        await invoke('copy_file', { sourcePath: profileNameModalPath, destPath });
-        
-        // Delete the cache file after successful copy
-        try {
-          await invoke('delete_file_silent', { path: profileNameModalPath });
-        } catch {
-          // Ignore cleanup errors
-        }
+        // Write draft text to file
+        await invoke('write_text_file', { path: destPath, contents: pendingCaptureDraft.draftText });
         
         // Save display name as metadata on the new path
         if (trimmedValue) {
@@ -472,9 +464,8 @@ function AppContent() {
         const dir = await loadProfilesDirectory();
         if (dir) {
           const discovered = await discoverProfiles(dir);
-          // Find the profile that matches the saved path (or renamed path)
+          // Find the profile that matches the saved name
           const savedProfile = discovered.find(p => 
-            p.path === profileNameModalPath || 
             (trimmedValue && p.displayName === trimmedValue)
           ) || discovered.sort((a, b) => b.path.localeCompare(a.path))[0];
           
@@ -485,6 +476,8 @@ function AppContent() {
             updateSettings({ selectedProfileName: savedProfile.name });
           }
         }
+        // Clear draft from store and memory
+        clearDraft();
         setPendingCaptureDraft(null);
         
         // Set lastSavedProfileSummary to show green success after profile is saved
@@ -522,9 +515,10 @@ function AppContent() {
       console.error('Failed to save profile name:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       
-      // If source file doesn't exist and we're saving a draft, clear draft state
-      if (errorMessage.includes('Source file no longer exists') || errorMessage.includes('does not exist')) {
+      // Handle draft missing error
+      if (errorMessage.includes('Draft capture missing')) {
         if (profileNameModalMode === 'save' && pendingCaptureDraft) {
+          clearDraft();
           setPendingCaptureDraft(null);
         }
         setShowProfileNameModal(false);
@@ -534,10 +528,17 @@ function AppContent() {
         setPendingSuggestedName('');
         setProfileNameModalSuccess(false);
         setSavedProfileDisplayName('');
-        // Distinguish draft capture file missing from selected profile missing (INV-3)
-        if (profileNameModalMode === 'save' && profileNameModalPath.includes('draft_')) {
-          showToast('Draft capture missing — please run Capture again.', 'error');
-        } else if (profileNameModalMode === 'rename') {
+        showToast('Draft capture missing — please run Capture again.', 'error');
+      } else if (errorMessage.includes('Source file no longer exists') || errorMessage.includes('does not exist')) {
+        // Profile file missing (rename mode)
+        setShowProfileNameModal(false);
+        setProfileNameModalPath('');
+        setProfileNameModalValue('');
+        setProfileNameModalMoreOptions(false);
+        setPendingSuggestedName('');
+        setProfileNameModalSuccess(false);
+        setSavedProfileDisplayName('');
+        if (profileNameModalMode === 'rename') {
           showToast('Previously selected profile not found — please select a profile.', 'error');
         } else {
           showToast('Profile file not found — please select a profile.', 'error');
@@ -567,14 +568,8 @@ function AppContent() {
   const handleDiscardDraft = async () => {
     if (!pendingCaptureDraft) return;
     
-    // Delete transient capture file from cache (ignore errors if already gone)
-    if (pendingCaptureDraft.outputPath) {
-      try {
-        await invoke('delete_file_silent', { path: pendingCaptureDraft.outputPath });
-      } catch {
-        // Ignore - file may already be deleted
-      }
-    }
+    // Clear draft from localStorage
+    clearDraft();
     
     // Clear in-memory draft state
     setPendingCaptureDraft(null);
@@ -708,11 +703,11 @@ function AppContent() {
     setRenameFileCurrentName('');
   };
 
-  const promptForProfileName = async (profilePath: string): Promise<void> => {
+  const promptForProfileName = async (_profilePath: string) => {
     // Generate a default name based on timestamp
     const now = new Date();
     const defaultName = `Profile ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    openProfileNameModal(profilePath, defaultName, 'save');
+    openProfileNameModal('', defaultName, 'save');
   };
 
   useEffect(() => {
@@ -761,6 +756,17 @@ function AppContent() {
       invoke('cleanup_capture_cache').catch(() => {
         // Ignore cleanup errors - best effort only
       });
+      
+      // Load draft from store if exists (survives reload)
+      const storedDraft = loadDraft();
+      if (storedDraft) {
+        setPendingCaptureDraft({
+          capturedAppsCount: storedDraft.appCount,
+          capturedAt: storedDraft.createdAt,
+          draftText: storedDraft.text,
+          apps: [],
+        });
+      }
     };
     
     initializeApp();
@@ -891,18 +897,17 @@ function AppContent() {
       setLogTruncated(truncated);
     });
 
-    // Get capture cache directory for transient output (NOT profiles directory)
-    // The file will only be copied to profiles when user clicks "Save profile"
-    const cacheDir = await invoke<string>('get_capture_cache_directory');
-    if (!cacheDir) {
-      throw new Error('Failed to determine capture cache directory');
+    // Use temp directory for engine output (will be read and discarded)
+    const tempDir = await invoke<string>('get_capture_cache_directory');
+    if (!tempDir) {
+      throw new Error('Failed to determine temp directory');
     }
     
-    await ensureDirectory(cacheDir);
+    await ensureDirectory(tempDir);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
-    const filename = `draft_${timestamp}.jsonc`;
-    const outputPath = `${cacheDir}\\${filename}`;
+    const filename = `capture_${timestamp}.jsonc`;
+    const outputPath = `${tempDir}\\${filename}`;
 
     // Get profiles directory for run artifacts (separate from cache)
     const profilesDir = await loadProfilesDirectory();
@@ -1028,8 +1033,24 @@ function AppContent() {
     // Get app list from envelope data
     const appsList = envelopeData?.appsIncluded?.map(a => a.id) || [];
     
-    // Return structured result with output path for in-memory draft
-    return { count: capturedCount, outputPath, apps: appsList };
+    // Read manifest content from temp file
+    let draftText = '{}';
+    try {
+      draftText = await invoke<string>('read_text_file', { path: outputPath });
+    } catch (err) {
+      console.error('Failed to read capture output:', err);
+      // Continue with empty manifest if read fails
+    }
+    
+    // Delete temp file immediately after reading
+    try {
+      await invoke('delete_file_silent', { path: outputPath });
+    } catch {
+      // Ignore cleanup errors
+    }
+    
+    // Return structured result with draft text (no file path)
+    return { count: capturedCount, draftText, apps: appsList };
   };
 
   const handlePreviewFromOverview = async () => {
@@ -1743,12 +1764,20 @@ function AppContent() {
                     : `${result.count} apps captured`;
                   setOverviewActionProgress('capture', { message: countText });
                   
-                  // Store draft in-memory only
-                  setPendingCaptureDraft({
+                  // Store draft in memory and localStorage
+                  const draft = {
                     capturedAppsCount: result.count,
                     capturedAt: new Date().toISOString(),
-                    outputPath: result.outputPath,
+                    draftText: result.draftText,
                     apps: result.apps,
+                  };
+                  setPendingCaptureDraft(draft);
+                  
+                  // Persist draft to localStorage for reload survival
+                  saveDraft({
+                    text: result.draftText,
+                    createdAt: draft.capturedAt,
+                    appCount: result.count,
                   });
                   
                   // DO NOT set lastSavedProfileSummary here
@@ -1764,7 +1793,7 @@ function AppContent() {
                   });
                   
                   // Prompt for profile name after state is set
-                  await promptForProfileName(result.outputPath);
+                  await promptForProfileName('');
                 } catch (err) {
                   setOverviewActionStatus('capture', 'error');
                   setOverviewActionResult('capture', { 
@@ -1948,7 +1977,7 @@ function AppContent() {
               onSaveProfile={() => {
                 // Open the save modal for the pending capture draft (not selectedProfile)
                 if (pendingCaptureDraft) {
-                  promptForProfileName(pendingCaptureDraft.outputPath);
+                  promptForProfileName('');
                 }
               }}
               onDiscardDraft={handleDiscardDraft}

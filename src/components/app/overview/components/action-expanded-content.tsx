@@ -59,7 +59,7 @@ interface ActionExpandedContentProps {
   onShowDetails: () => void;
   setExpandedCard: (card: ActionType) => void;
   // Capture-specific props
-  pendingCaptureDraft?: { capturedAppsCount: number; capturedAt: string; outputPath: string; apps: string[] } | null;
+  pendingCaptureDraft?: { capturedAppsCount: number; capturedAt: string; draftText: string; apps: string[] } | null;
   lastSavedProfileSummary?: { appCount: number; finishedAt: string; profileName?: string } | null;
   onSaveProfile?: () => void;
   onDiscardDraft?: () => void;

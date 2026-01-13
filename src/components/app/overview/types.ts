@@ -82,7 +82,7 @@ export interface OverviewScreenProps {
   pendingCaptureDraft?: {
     capturedAppsCount: number;
     capturedAt: string;
-    outputPath: string;
+    draftText: string;
     apps: string[];
   } | null;
 }

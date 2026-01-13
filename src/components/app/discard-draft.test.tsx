@@ -54,7 +54,7 @@ describe('Discard Draft UX Contracts', () => {
       const pendingDraft = {
         capturedAppsCount: 5,
         capturedAt: new Date().toISOString(),
-        outputPath: 'C:\\profiles\\draft_2024-01-01.jsonc',
+        draftText: '{}',
         apps: ['app1', 'app2', 'app3', 'app4', 'app5'],
       };
 
@@ -140,7 +140,7 @@ describe('Discard Draft UX Contracts', () => {
       const pendingDraft = {
         capturedAppsCount: 5,
         capturedAt: new Date().toISOString(),
-        outputPath: 'C:\\profiles\\draft_2024-01-01.jsonc',
+        draftText: '{}',
         apps: ['app1', 'app2', 'app3', 'app4', 'app5'],
       };
 
@@ -189,7 +189,7 @@ describe('Discard Draft UX Contracts', () => {
       const pendingDraft = {
         capturedAppsCount: 5,
         capturedAt: new Date().toISOString(),
-        outputPath: 'C:\\profiles\\draft_2024-01-01.jsonc',
+        draftText: '{}',
         apps: ['app1', 'app2', 'app3', 'app4', 'app5'],
       };
 
@@ -291,7 +291,7 @@ describe('Discard Draft UX Contracts', () => {
       const pendingDraft = {
         capturedAppsCount: 63,
         capturedAt: new Date().toISOString(),
-        outputPath: 'C:\\profiles\\draft_2024-01-01.jsonc',
+        draftText: '{}',
         apps: Array.from({ length: 63 }, (_, i) => `app${i + 1}`),
       };
 
