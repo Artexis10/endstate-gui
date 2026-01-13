@@ -32,10 +32,9 @@ describe('Persistence Boundaries', () => {
       const settings = loadSettings();
       
       expect(settings.engineMode).toBe('bundled');
-      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1');
+      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\bin\\endstate.ps1');
       expect(settings.customProfilesDirectory).toBe('');
-      expect(settings.lastSelectedProfile).toBe('');
-      expect(settings.lastSelectedProfilePath).toBe('');
+      expect(settings.selectedProfileName).toBeNull();
       expect(settings.dryRunEnabled).toBe(true);
     });
 
@@ -44,9 +43,7 @@ describe('Persistence Boundaries', () => {
         engineMode: 'path',
         engineScriptPath: 'C:\\custom\\path\\endstate.ps1',
         customProfilesDirectory: 'C:\\custom\\profiles',
-        selectedProfileName: null,
-        lastSelectedProfile: 'my-profile',
-        lastSelectedProfilePath: 'C:\\custom\\profiles\\my-profile.jsonc',
+        selectedProfileName: 'my-profile',
         dryRunEnabled: false,
         showDetails: false,
       };
@@ -64,9 +61,7 @@ describe('Persistence Boundaries', () => {
         engineMode: 'path',
         engineScriptPath: '/usr/local/bin/endstate',
         customProfilesDirectory: '/home/user/profiles',
-        selectedProfileName: null,
-        lastSelectedProfile: 'work-setup',
-        lastSelectedProfilePath: '/home/user/profiles/work-setup.jsonc',
+        selectedProfileName: 'work-setup',
         dryRunEnabled: true,
         showDetails: false,
       };
@@ -95,8 +90,6 @@ describe('Persistence Boundaries', () => {
         engineScriptPath: 'C:\\endstate.ps1',
         customProfilesDirectory: '',
         selectedProfileName: null,
-        lastSelectedProfile: '',
-        lastSelectedProfilePath: '',
         dryRunEnabled: true,
         showDetails: false,
       };
@@ -439,9 +432,7 @@ describe('Persistence Boundaries', () => {
         engineMode: 'script',
         engineScriptPath: 'C:\\endstate.ps1',
         customProfilesDirectory: '',
-        selectedProfileName: null,
-        lastSelectedProfile: 'test',
-        lastSelectedProfilePath: 'C:\\profiles\\test.jsonc',
+        selectedProfileName: 'test',
         dryRunEnabled: true,
         showDetails: false,
       };

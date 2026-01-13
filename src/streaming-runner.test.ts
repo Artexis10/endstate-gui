@@ -20,8 +20,6 @@ describe('streaming-runner', () => {
     engineScriptPath: 'C:\\test\\endstate.ps1',
     customProfilesDirectory: '',
     selectedProfileName: null,
-    lastSelectedProfile: '',
-    lastSelectedProfilePath: '',
     dryRunEnabled: true,
     showDetails: false,
   };

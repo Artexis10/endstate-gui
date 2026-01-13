@@ -482,7 +482,7 @@ function AppContent() {
             savedProfileForAnimation = savedProfile;
             setSelectedProfile(savedProfile.name);
             setSelectedProfilePath(savedProfile.path);
-            updateSettings({ selectedProfileName: savedProfile.name, lastSelectedProfile: savedProfile.name, lastSelectedProfilePath: savedProfile.path });
+            updateSettings({ selectedProfileName: savedProfile.name });
           }
         }
         setPendingCaptureDraft(null);
@@ -534,7 +534,12 @@ function AppContent() {
         setPendingSuggestedName('');
         setProfileNameModalSuccess(false);
         setSavedProfileDisplayName('');
-        showToast('Source file no longer exists. Run capture again to create a new profile.', 'error');
+        // Distinguish draft capture file missing from selected profile missing
+        if (profileNameModalMode === 'save' && profileNameModalPath.includes('draft_')) {
+          showToast('Draft capture file missing — please run Capture again.', 'error');
+        } else {
+          showToast('Source file no longer exists.', 'error');
+        }
       } else {
         showToast(`Failed to save profile: ${errorMessage}`, 'error');
         // Do NOT close modal or clear pendingCaptureDraft on other errors - user can retry
@@ -610,18 +615,14 @@ function AppContent() {
             const firstProfile = discovered[0];
             setSelectedProfile(firstProfile.name);
             setSelectedProfilePath(firstProfile.path);
-            updateSettings({ 
-              selectedProfileName: firstProfile.name,
-              lastSelectedProfile: firstProfile.name,
-              lastSelectedProfilePath: firstProfile.path 
-            });
+            updateSettings({ selectedProfileName: firstProfile.name });
             // Show toast notification for fallback selection
             showToast(`Selected profile no longer exists—switched to "${firstProfile.displayName || firstProfile.name}".`, 'info');
           } else {
             // No profiles remain
             setSelectedProfile('');
             setSelectedProfilePath('');
-            updateSettings({ selectedProfileName: null, lastSelectedProfile: '', lastSelectedProfilePath: '' });
+            updateSettings({ selectedProfileName: null });
             showToast('No profiles available. Create a profile by capturing your computer setup.', 'info');
           }
         }
@@ -637,11 +638,7 @@ function AppContent() {
   const handleSetActiveProfile = (profile: DiscoveredProfile) => {
     setSelectedProfile(profile.name);
     setSelectedProfilePath(profile.path);
-    updateSettings({ 
-      selectedProfileName: profile.name,
-      lastSelectedProfile: profile.name, 
-      lastSelectedProfilePath: profile.path 
-    });
+    updateSettings({ selectedProfileName: profile.name });
     showToast(`"${profile.displayName || profile.name}" is now the active profile`, 'success');
   };
 
@@ -694,7 +691,7 @@ function AppContent() {
         const newName = newFilename.replace(/\.(jsonc?|json5)$/i, '');
         setSelectedProfile(newName);
         setSelectedProfilePath(newPath);
-        updateSettings({ selectedProfileName: newName, lastSelectedProfile: newName, lastSelectedProfilePath: newPath });
+        updateSettings({ selectedProfileName: newName });
       }
       
       await refreshProfiles();
@@ -1932,7 +1929,7 @@ function AppContent() {
               onProfileChange={(profile: string, path: string) => {
                 setSelectedProfile(profile);
                 setSelectedProfilePath(path);
-                updateSettings({ selectedProfileName: profile, lastSelectedProfile: profile, lastSelectedProfilePath: path });
+                updateSettings({ selectedProfileName: profile });
               }}
               onDismissResult={dismissOverviewResult}
               onOpenProfilesFolder={handleOpenProfilesFolder}
@@ -2508,7 +2505,7 @@ function AppContent() {
                       clearSelectedProfile();
                       setSelectedProfile('');
                       setSelectedProfilePath('');
-                      setSettings({ ...settings, selectedProfileName: null, lastSelectedProfile: '', lastSelectedProfilePath: '' });
+                      setSettings({ ...settings, selectedProfileName: null });
                       showToast('Selected profile cleared', 'success');
                     }}
                     disabled={!selectedProfile}

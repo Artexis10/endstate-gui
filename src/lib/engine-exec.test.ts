@@ -8,8 +8,6 @@ describe('buildEngineCommand', () => {
     engineScriptPath: '',
     customProfilesDirectory: '',
     selectedProfileName: null,
-    lastSelectedProfile: '',
-    lastSelectedProfilePath: '',
     dryRunEnabled: false,
     showDetails: false,
   };

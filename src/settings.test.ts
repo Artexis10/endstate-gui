@@ -18,7 +18,7 @@ describe('settings', () => {
       expect(settings.engineMode).toBe('bundled');
       expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\bin\\endstate.ps1');
       expect(settings.customProfilesDirectory).toBe('');
-      expect(settings.lastSelectedProfile).toBe('');
+      expect(settings.selectedProfileName).toBeNull();
       expect(settings.dryRunEnabled).toBe(true);
     });
 
@@ -28,8 +28,6 @@ describe('settings', () => {
         engineScriptPath: '/custom/path.ps1',
         customProfilesDirectory: '/manifests',
         selectedProfileName: 'TestProfile',
-        lastSelectedProfile: 'TestProfile',
-        lastSelectedProfilePath: '/manifests/TestProfile.jsonc',
         dryRunEnabled: false,
         showDetails: false,
       };
@@ -46,8 +44,6 @@ describe('settings', () => {
         engineScriptPath: '/legacy/path.ps1',
         customProfilesDirectory: '/legacy',
         selectedProfileName: null,
-        lastSelectedProfile: 'Legacy',
-        lastSelectedProfilePath: '/legacy/Legacy.jsonc',
         dryRunEnabled: false,
         showDetails: false,
       };
@@ -92,9 +88,7 @@ describe('settings', () => {
         engineMode: 'path',
         engineScriptPath: '/test/path.ps1',
         customProfilesDirectory: '/test/manifests',
-        selectedProfileName: null,
-        lastSelectedProfile: 'Profile1',
-        lastSelectedProfilePath: '/test/manifests/Profile1.jsonc',
+        selectedProfileName: 'Profile1',
         dryRunEnabled: false,
         showDetails: false,
       };
@@ -111,9 +105,7 @@ describe('settings', () => {
         engineMode: 'script',
         engineScriptPath: '/old/path.ps1',
         customProfilesDirectory: '/old',
-        selectedProfileName: null,
-        lastSelectedProfile: 'Old',
-        lastSelectedProfilePath: '/old/Old.jsonc',
+        selectedProfileName: 'Old',
         dryRunEnabled: true,
         showDetails: false,
       };
@@ -123,9 +115,7 @@ describe('settings', () => {
         engineMode: 'path',
         engineScriptPath: '/new/path.ps1',
         customProfilesDirectory: '/new',
-        selectedProfileName: null,
-        lastSelectedProfile: 'New',
-        lastSelectedProfilePath: '/new/New.jsonc',
+        selectedProfileName: 'New',
         dryRunEnabled: false,
         showDetails: false,
       };

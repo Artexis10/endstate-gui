@@ -18,13 +18,12 @@ describe('settings profile selection migration', () => {
 
   describe('loadSettingsWithProfileMigration', () => {
     it('should return settings unchanged if selectedProfileName already exists', async () => {
+      // Simulate stored settings with selectedProfileName already set
       const mockSettings = {
-        engineMode: 'bundled' as const,
+        engineMode: 'bundled',
         engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: 'myprofile',
-        lastSelectedProfile: 'myprofile',
-        lastSelectedProfilePath: 'C:\\profiles\\myprofile.jsonc',
         dryRunEnabled: true,
         showDetails: false,
       };
@@ -37,9 +36,10 @@ describe('settings profile selection migration', () => {
       expect(storage.setItem).not.toHaveBeenCalled();
     });
 
-    it('should migrate from lastSelectedProfilePath when selectedProfileName is null', async () => {
-      const mockSettings = {
-        engineMode: 'bundled' as const,
+    it('should migrate from legacy lastSelectedProfilePath when selectedProfileName is null', async () => {
+      // Simulate legacy stored settings with path but no selectedProfileName
+      const legacySettings = {
+        engineMode: 'bundled',
         engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: null,
@@ -49,7 +49,7 @@ describe('settings profile selection migration', () => {
         showDetails: false,
       };
 
-      vi.mocked(storage.getItem).mockReturnValue(JSON.stringify(mockSettings));
+      vi.mocked(storage.getItem).mockReturnValue(JSON.stringify(legacySettings));
       vi.mocked(migration.migrateProfileSelection).mockResolvedValue('myprofile');
 
       const result = await loadSettingsWithProfileMigration('C:\\profiles');
@@ -60,11 +60,16 @@ describe('settings profile selection migration', () => {
       );
       expect(result.selectedProfileName).toBe('myprofile');
       expect(storage.setItem).toHaveBeenCalled();
+      // Verify legacy fields are NOT in the saved settings
+      const savedCall = vi.mocked(storage.setItem).mock.calls[0];
+      const savedSettings = JSON.parse(savedCall[1]);
+      expect(savedSettings).not.toHaveProperty('lastSelectedProfile');
+      expect(savedSettings).not.toHaveProperty('lastSelectedProfilePath');
     });
 
     it('should clear selection when migration fails', async () => {
-      const mockSettings = {
-        engineMode: 'bundled' as const,
+      const legacySettings = {
+        engineMode: 'bundled',
         engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: null,
@@ -74,20 +79,21 @@ describe('settings profile selection migration', () => {
         showDetails: false,
       };
 
-      vi.mocked(storage.getItem).mockReturnValue(JSON.stringify(mockSettings));
+      vi.mocked(storage.getItem).mockReturnValue(JSON.stringify(legacySettings));
       vi.mocked(migration.migrateProfileSelection).mockResolvedValue(null);
 
       const result = await loadSettingsWithProfileMigration('C:\\profiles');
 
       expect(result.selectedProfileName).toBeNull();
-      expect(result.lastSelectedProfile).toBe('');
-      expect(result.lastSelectedProfilePath).toBe('');
       expect(storage.setItem).toHaveBeenCalled();
+      // Verify legacy fields are NOT in the result
+      expect(result).not.toHaveProperty('lastSelectedProfile');
+      expect(result).not.toHaveProperty('lastSelectedProfilePath');
     });
 
-    it('should migrate from lastSelectedProfile when no path exists', async () => {
-      const mockSettings = {
-        engineMode: 'bundled' as const,
+    it('should migrate from legacy lastSelectedProfile when no path exists', async () => {
+      const legacySettings = {
+        engineMode: 'bundled',
         engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: null,
@@ -97,7 +103,7 @@ describe('settings profile selection migration', () => {
         showDetails: false,
       };
 
-      vi.mocked(storage.getItem).mockReturnValue(JSON.stringify(mockSettings));
+      vi.mocked(storage.getItem).mockReturnValue(JSON.stringify(legacySettings));
 
       const result = await loadSettingsWithProfileMigration('C:\\profiles');
 
@@ -106,8 +112,8 @@ describe('settings profile selection migration', () => {
     });
 
     it('should handle draft_ paths by clearing selection', async () => {
-      const mockSettings = {
-        engineMode: 'bundled' as const,
+      const legacySettings = {
+        engineMode: 'bundled',
         engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: null,
@@ -117,26 +123,25 @@ describe('settings profile selection migration', () => {
         showDetails: false,
       };
 
-      vi.mocked(storage.getItem).mockReturnValue(JSON.stringify(mockSettings));
+      vi.mocked(storage.getItem).mockReturnValue(JSON.stringify(legacySettings));
       vi.mocked(migration.migrateProfileSelection).mockResolvedValue(null);
 
       const result = await loadSettingsWithProfileMigration('C:\\profiles');
 
       expect(result.selectedProfileName).toBeNull();
-      expect(result.lastSelectedProfile).toBe('');
-      expect(result.lastSelectedProfilePath).toBe('');
+      // Verify legacy fields are NOT in the result
+      expect(result).not.toHaveProperty('lastSelectedProfile');
+      expect(result).not.toHaveProperty('lastSelectedProfilePath');
     });
   });
 
   describe('clearSelectedProfile', () => {
-    it('should clear all profile selection fields', () => {
+    it('should clear selectedProfileName only', () => {
       const mockSettings = {
-        engineMode: 'bundled' as const,
+        engineMode: 'bundled',
         engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: 'myprofile',
-        lastSelectedProfile: 'myprofile',
-        lastSelectedProfilePath: 'C:\\profiles\\myprofile.jsonc',
         dryRunEnabled: true,
         showDetails: false,
       };
@@ -149,14 +154,11 @@ describe('settings profile selection migration', () => {
         'endstate-gui-settings',
         expect.stringContaining('"selectedProfileName":null')
       );
-      expect(storage.setItem).toHaveBeenCalledWith(
-        'endstate-gui-settings',
-        expect.stringContaining('"lastSelectedProfile":""')
-      );
-      expect(storage.setItem).toHaveBeenCalledWith(
-        'endstate-gui-settings',
-        expect.stringContaining('"lastSelectedProfilePath":""')
-      );
+      // Verify legacy fields are NOT written
+      const savedCall = vi.mocked(storage.setItem).mock.calls[0];
+      const savedSettings = JSON.parse(savedCall[1]);
+      expect(savedSettings).not.toHaveProperty('lastSelectedProfile');
+      expect(savedSettings).not.toHaveProperty('lastSelectedProfilePath');
     });
   });
 });

@@ -7,10 +7,14 @@ export interface AppSettings {
   engineScriptPath: string;
   customProfilesDirectory: string;
   selectedProfileName: string | null;
-  lastSelectedProfile: string;
-  lastSelectedProfilePath: string;
   dryRunEnabled: boolean;
   showDetails: boolean;
+}
+
+/** Legacy settings shape for one-time migration only */
+interface LegacySettings {
+  lastSelectedProfile?: string;
+  lastSelectedProfilePath?: string;
 }
 
 const SETTINGS_KEY = 'endstate-gui-settings';
@@ -20,8 +24,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   engineScriptPath: 'C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\bin\\endstate.ps1',
   customProfilesDirectory: '',
   selectedProfileName: null,
-  lastSelectedProfile: '',
-  lastSelectedProfilePath: '',
   dryRunEnabled: true,
   showDetails: false,
 };
@@ -101,6 +103,7 @@ export function saveSettings(settings: AppSettings): void {
 /**
  * Load settings with profile selection migration.
  * Migrates from legacy path-based selection to name-based selection.
+ * Legacy keys are read once for migration but never re-persisted.
  * 
  * @param profilesDirectory - Current profiles directory for migration
  * @returns Settings with migrated profile selection
@@ -108,37 +111,49 @@ export function saveSettings(settings: AppSettings): void {
 export async function loadSettingsWithProfileMigration(
   profilesDirectory: string
 ): Promise<AppSettings> {
-  const settings = loadSettings();
+  // Load raw stored data to check for legacy fields
+  const stored = getItem(SETTINGS_KEY);
+  const rawSettings: AppSettings & LegacySettings = stored 
+    ? { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
+    : { ...DEFAULT_SETTINGS };
   
-  // If we already have selectedProfileName, no migration needed
-  if (settings.selectedProfileName) {
-    return settings;
+  // If we already have selectedProfileName, return clean settings (no legacy fields)
+  if (rawSettings.selectedProfileName) {
+    // Return only the clean AppSettings fields
+    const { lastSelectedProfile: _lsp, lastSelectedProfilePath: _lspp, ...cleanSettings } = rawSettings as AppSettings & LegacySettings;
+    return cleanSettings as AppSettings;
   }
   
   // Check for legacy path-based selection
-  if (settings.lastSelectedProfilePath) {
+  if (rawSettings.lastSelectedProfilePath) {
     console.debug('[settings] Migrating legacy path-based profile selection');
     
     const migratedName = await migrateProfileSelection(
-      settings.lastSelectedProfilePath,
+      rawSettings.lastSelectedProfilePath,
       profilesDirectory
     );
     
     if (migratedName) {
-      const updatedSettings = {
-        ...settings,
+      const updatedSettings: AppSettings = {
+        engineMode: rawSettings.engineMode,
+        engineScriptPath: rawSettings.engineScriptPath,
+        customProfilesDirectory: rawSettings.customProfilesDirectory,
         selectedProfileName: migratedName,
+        dryRunEnabled: rawSettings.dryRunEnabled,
+        showDetails: rawSettings.showDetails,
       };
       saveSettings(updatedSettings);
       console.debug('[settings] Profile selection migrated to name:', migratedName);
       return updatedSettings;
     } else {
       console.debug('[settings] Could not migrate legacy profile selection, clearing selection');
-      const updatedSettings = {
-        ...settings,
+      const updatedSettings: AppSettings = {
+        engineMode: rawSettings.engineMode,
+        engineScriptPath: rawSettings.engineScriptPath,
+        customProfilesDirectory: rawSettings.customProfilesDirectory,
         selectedProfileName: null,
-        lastSelectedProfile: '',
-        lastSelectedProfilePath: '',
+        dryRunEnabled: rawSettings.dryRunEnabled,
+        showDetails: rawSettings.showDetails,
       };
       saveSettings(updatedSettings);
       return updatedSettings;
@@ -146,17 +161,21 @@ export async function loadSettingsWithProfileMigration(
   }
   
   // Check for legacy lastSelectedProfile (name without path)
-  if (settings.lastSelectedProfile) {
+  if (rawSettings.lastSelectedProfile) {
     console.debug('[settings] Migrating legacy name-based profile selection');
-    const updatedSettings = {
-      ...settings,
-      selectedProfileName: settings.lastSelectedProfile,
+    const updatedSettings: AppSettings = {
+      engineMode: rawSettings.engineMode,
+      engineScriptPath: rawSettings.engineScriptPath,
+      customProfilesDirectory: rawSettings.customProfilesDirectory,
+      selectedProfileName: rawSettings.lastSelectedProfile,
+      dryRunEnabled: rawSettings.dryRunEnabled,
+      showDetails: rawSettings.showDetails,
     };
     saveSettings(updatedSettings);
     return updatedSettings;
   }
   
-  return settings;
+  return rawSettings as AppSettings;
 }
 
 /**
@@ -165,11 +184,9 @@ export async function loadSettingsWithProfileMigration(
  */
 export function clearSelectedProfile(): void {
   const settings = loadSettings();
-  const updated = {
+  const updated: AppSettings = {
     ...settings,
     selectedProfileName: null,
-    lastSelectedProfile: '',
-    lastSelectedProfilePath: '',
   };
   saveSettings(updated);
 }
