@@ -181,6 +181,12 @@ Technical details remain accessible via expandable JSON sections.
 - Immediately runs startup probe (capabilities + report)
 - User cannot break the app permanently - one-click recovery always available
 
+## OpenSpec Behavior Specifications
+
+See `openspec/specs/` for formal behavior specifications:
+
+- **`draft-and-profile-state.md`** - Draft capture handling, profile selection persistence, and error semantics (INV-1, INV-2, INV-3)
+
 ## Preflight Validation
 
 **Settings modal enforces validation before allowing Save:**

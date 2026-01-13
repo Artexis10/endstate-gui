@@ -534,11 +534,13 @@ function AppContent() {
         setPendingSuggestedName('');
         setProfileNameModalSuccess(false);
         setSavedProfileDisplayName('');
-        // Distinguish draft capture file missing from selected profile missing
+        // Distinguish draft capture file missing from selected profile missing (INV-3)
         if (profileNameModalMode === 'save' && profileNameModalPath.includes('draft_')) {
-          showToast('Draft capture file missing — please run Capture again.', 'error');
+          showToast('Draft capture missing — please run Capture again.', 'error');
+        } else if (profileNameModalMode === 'rename') {
+          showToast('Previously selected profile not found — please select a profile.', 'error');
         } else {
-          showToast('Source file no longer exists.', 'error');
+          showToast('Profile file not found — please select a profile.', 'error');
         }
       } else {
         showToast(`Failed to save profile: ${errorMessage}`, 'error');
