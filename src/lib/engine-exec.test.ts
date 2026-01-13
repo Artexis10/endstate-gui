@@ -7,9 +7,10 @@ describe('buildEngineCommand', () => {
     engineMode: 'bundled',
     engineScriptPath: '',
     customProfilesDirectory: '',
+    selectedProfileName: null,
     lastSelectedProfile: '',
     lastSelectedProfilePath: '',
-    dryRunEnabled: true,
+    dryRunEnabled: false,
     showDetails: false,
   };
 

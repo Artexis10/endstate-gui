@@ -1,10 +1,12 @@
 import { getItem, setItem } from './lib/storage';
 import { resolveEnginePath, EnginePathResult } from './lib/engine-path';
+import { migrateProfileSelection } from './lib/profile-selection-migration';
 
 export interface AppSettings {
   engineMode: 'bundled' | 'path' | 'script';
   engineScriptPath: string;
   customProfilesDirectory: string;
+  selectedProfileName: string | null;
   lastSelectedProfile: string;
   lastSelectedProfilePath: string;
   dryRunEnabled: boolean;
@@ -17,6 +19,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   engineMode: 'bundled',
   engineScriptPath: 'C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\bin\\endstate.ps1',
   customProfilesDirectory: '',
+  selectedProfileName: null,
   lastSelectedProfile: '',
   lastSelectedProfilePath: '',
   dryRunEnabled: true,
@@ -93,4 +96,80 @@ export function saveSettings(settings: AppSettings): void {
   } catch (err) {
     console.error('Failed to save settings:', err);
   }
+}
+
+/**
+ * Load settings with profile selection migration.
+ * Migrates from legacy path-based selection to name-based selection.
+ * 
+ * @param profilesDirectory - Current profiles directory for migration
+ * @returns Settings with migrated profile selection
+ */
+export async function loadSettingsWithProfileMigration(
+  profilesDirectory: string
+): Promise<AppSettings> {
+  const settings = loadSettings();
+  
+  // If we already have selectedProfileName, no migration needed
+  if (settings.selectedProfileName) {
+    return settings;
+  }
+  
+  // Check for legacy path-based selection
+  if (settings.lastSelectedProfilePath) {
+    console.debug('[settings] Migrating legacy path-based profile selection');
+    
+    const migratedName = await migrateProfileSelection(
+      settings.lastSelectedProfilePath,
+      profilesDirectory
+    );
+    
+    if (migratedName) {
+      const updatedSettings = {
+        ...settings,
+        selectedProfileName: migratedName,
+      };
+      saveSettings(updatedSettings);
+      console.debug('[settings] Profile selection migrated to name:', migratedName);
+      return updatedSettings;
+    } else {
+      console.debug('[settings] Could not migrate legacy profile selection, clearing selection');
+      const updatedSettings = {
+        ...settings,
+        selectedProfileName: null,
+        lastSelectedProfile: '',
+        lastSelectedProfilePath: '',
+      };
+      saveSettings(updatedSettings);
+      return updatedSettings;
+    }
+  }
+  
+  // Check for legacy lastSelectedProfile (name without path)
+  if (settings.lastSelectedProfile) {
+    console.debug('[settings] Migrating legacy name-based profile selection');
+    const updatedSettings = {
+      ...settings,
+      selectedProfileName: settings.lastSelectedProfile,
+    };
+    saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+  
+  return settings;
+}
+
+/**
+ * Clear selected profile from settings.
+ * Useful for "Reset Selected Profile" action.
+ */
+export function clearSelectedProfile(): void {
+  const settings = loadSettings();
+  const updated = {
+    ...settings,
+    selectedProfileName: null,
+    lastSelectedProfile: '',
+    lastSelectedProfilePath: '',
+  };
+  saveSettings(updated);
 }

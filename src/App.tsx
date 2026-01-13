@@ -9,7 +9,8 @@ import {
   EndstateCaptureData,
   EndstateApplyResultData,
 } from './types';
-import { AppSettings, loadSettings, saveSettings } from './settings';
+import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration, clearSelectedProfile } from './settings';
+import { resolveProfilePath } from './lib/profile-selection-migration';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
@@ -481,7 +482,7 @@ function AppContent() {
             savedProfileForAnimation = savedProfile;
             setSelectedProfile(savedProfile.name);
             setSelectedProfilePath(savedProfile.path);
-            updateSettings({ lastSelectedProfile: savedProfile.name, lastSelectedProfilePath: savedProfile.path });
+            updateSettings({ selectedProfileName: savedProfile.name, lastSelectedProfile: savedProfile.name, lastSelectedProfilePath: savedProfile.path });
           }
         }
         setPendingCaptureDraft(null);
@@ -610,6 +611,7 @@ function AppContent() {
             setSelectedProfile(firstProfile.name);
             setSelectedProfilePath(firstProfile.path);
             updateSettings({ 
+              selectedProfileName: firstProfile.name,
               lastSelectedProfile: firstProfile.name,
               lastSelectedProfilePath: firstProfile.path 
             });
@@ -619,7 +621,7 @@ function AppContent() {
             // No profiles remain
             setSelectedProfile('');
             setSelectedProfilePath('');
-            updateSettings({ lastSelectedProfile: '', lastSelectedProfilePath: '' });
+            updateSettings({ selectedProfileName: null, lastSelectedProfile: '', lastSelectedProfilePath: '' });
             showToast('No profiles available. Create a profile by capturing your computer setup.', 'info');
           }
         }
@@ -636,6 +638,7 @@ function AppContent() {
     setSelectedProfile(profile.name);
     setSelectedProfilePath(profile.path);
     updateSettings({ 
+      selectedProfileName: profile.name,
       lastSelectedProfile: profile.name, 
       lastSelectedProfilePath: profile.path 
     });
@@ -691,7 +694,7 @@ function AppContent() {
         const newName = newFilename.replace(/\.(jsonc?|json5)$/i, '');
         setSelectedProfile(newName);
         setSelectedProfilePath(newPath);
-        updateSettings({ lastSelectedProfile: newName, lastSelectedProfilePath: newPath });
+        updateSettings({ selectedProfileName: newName, lastSelectedProfile: newName, lastSelectedProfilePath: newPath });
       }
       
       await refreshProfiles();
@@ -714,23 +717,54 @@ function AppContent() {
   };
 
   useEffect(() => {
-    const loadedSettings = loadSettings();
-    setSettings(loadedSettings);
-    setSelectedProfile(loadedSettings.lastSelectedProfile);
-    setSelectedProfilePath(loadedSettings.lastSelectedProfilePath || '');
+    const initializeApp = async () => {
+      // Load profiles directory first
+      const dir = await loadProfilesDirectory();
+      if (dir) {
+        setProfilesDirectory(dir);
+        
+        // Load settings with profile selection migration
+        const migratedSettings = await loadSettingsWithProfileMigration(dir);
+        setSettings(migratedSettings);
+        
+        // Resolve selected profile name to path
+        if (migratedSettings.selectedProfileName) {
+          const resolvedPath = await resolveProfilePath(migratedSettings.selectedProfileName, dir);
+          if (resolvedPath) {
+            setSelectedProfile(migratedSettings.selectedProfileName);
+            setSelectedProfilePath(resolvedPath);
+          } else {
+            // Profile name exists in settings but file not found - clear selection
+            console.warn('[init] Selected profile not found, clearing selection:', migratedSettings.selectedProfileName);
+            clearSelectedProfile();
+            setSelectedProfile('');
+            setSelectedProfilePath('');
+            showToast('Previously selected profile not found. Please select a profile.', 'info');
+          }
+        } else {
+          // No profile selected
+          setSelectedProfile('');
+          setSelectedProfilePath('');
+        }
+        
+        // Refresh profiles list
+        const discovered = await discoverProfiles(dir);
+        setProfiles(discovered);
+      }
+      
+      // Migrate legacy last run and load per-command last runs
+      migrateLegacyLastRun();
+      setLastRunCapture(loadLastRunForCommand('capture'));
+      setLastRunApply(loadLastRunForCommand('apply'));
+      setLastRunVerify(loadLastRunForCommand('verify'));
+      
+      // Clean up any leftover transient capture files from previous sessions
+      invoke('cleanup_capture_cache').catch(() => {
+        // Ignore cleanup errors - best effort only
+      });
+    };
     
-    // Migrate legacy last run and load per-command last runs
-    migrateLegacyLastRun();
-    setLastRunCapture(loadLastRunForCommand('capture'));
-    setLastRunApply(loadLastRunForCommand('apply'));
-    setLastRunVerify(loadLastRunForCommand('verify'));
-    
-    // Clean up any leftover transient capture files from previous sessions
-    invoke('cleanup_capture_cache').catch(() => {
-      // Ignore cleanup errors - best effort only
-    });
-    
-    refreshProfiles();
+    initializeApp();
   }, []);
 
   useEffect(() => {
@@ -1898,7 +1932,7 @@ function AppContent() {
               onProfileChange={(profile: string, path: string) => {
                 setSelectedProfile(profile);
                 setSelectedProfilePath(path);
-                updateSettings({ lastSelectedProfile: profile, lastSelectedProfilePath: path });
+                updateSettings({ selectedProfileName: profile, lastSelectedProfile: profile, lastSelectedProfilePath: path });
               }}
               onDismissResult={dismissOverviewResult}
               onOpenProfilesFolder={handleOpenProfilesFolder}
@@ -2457,6 +2491,29 @@ function AppContent() {
                     onClick={() => updateSettings({ showDetails: !settings.showDetails })}
                   >
                     {settings.showDetails ? 'On' : 'Off'}
+                  </Button>
+                </div>
+                
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <div>
+                    <label className="text-sm font-medium">Reset selected profile</label>
+                    <p className="text-xs text-muted-foreground">
+                      Clear the currently selected profile
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      clearSelectedProfile();
+                      setSelectedProfile('');
+                      setSelectedProfilePath('');
+                      setSettings({ ...settings, selectedProfileName: null, lastSelectedProfile: '', lastSelectedProfilePath: '' });
+                      showToast('Selected profile cleared', 'success');
+                    }}
+                    disabled={!selectedProfile}
+                  >
+                    Reset
                   </Button>
                 </div>
               </CardContent>
