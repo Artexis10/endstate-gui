@@ -178,6 +178,16 @@ Any UI/UX bug that reaches production MUST result in a new test.
 
 Do not use `--no-verify` unless explicitly instructed by user.
 
+### OpenSpec Enforcement
+
+This repository uses **Level 2 enforcement** (workflow gate):
+- Pre-push hook validates OpenSpec via lefthook
+- Install hooks: `npm run hooks:install`
+- Validate manually: `npm run openspec:validate`
+- Bypass (emergency only): `OPENSPEC_BYPASS=1 git push`
+
+See `docs/runbooks/OPENSPEC_ENFORCEMENT.md` for details.
+
 ### File Write Fallback
 
 If normal file writes fail, use PowerShell `Set-Content` with leaf-path guard:

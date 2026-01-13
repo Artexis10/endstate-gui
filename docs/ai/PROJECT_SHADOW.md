@@ -300,24 +300,26 @@ npm run tauri icon app-icon.png
 
 - AI proposes; human disposes
 - UX changes require guardrail checklist review
-- Shadow-level changes require Delta Shadow proposal
+- Shadow-level changes require PROJECT_SHADOW.md update proposal
 
 ### Escalation
 
 - Unclear intent → ask, do not assume
-- Contract conflicts → prefer repository code, propose Delta Shadow
+- Contract conflicts -> prefer repository code, propose Shadow update
 - UX guardrail violations → redesign required
 
 ---
 
-## 11. Delta Shadow Policy
+## 11. Shadow Update Policy
 
 If repository code diverges from this Shadow, **code wins**.
 
 When divergence is detected:
-1. Do not silently drift — propose a Delta Shadow
-2. The Delta Shadow must describe the minimal update to reconcile Shadow with code
-3. Human maintainer approves or rejects the Delta Shadow
+1. Do not silently drift - propose a Shadow update via pull request
+2. The update must describe the minimal change to reconcile Shadow with code
+3. Human maintainer approves or rejects the update
 4. Until approved, treat code as authoritative for the divergent area
 
 This ensures the Shadow remains accurate without blocking development.
+
+> **Note:** The historical "Delta Shadow" mechanism (`docs/ai/deltas/`) is archived and no longer active. All Shadow updates now go through standard pull requests.

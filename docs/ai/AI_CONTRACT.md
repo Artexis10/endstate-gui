@@ -13,12 +13,12 @@ Tool-specific rule files (e.g., Windsurf, Cursor) must delegate to this contract
 If `docs/ai/PROJECT_SHADOW.md` exists:
 - Treat it as authoritative architectural context
 - Do not contradict it
-- If it appears outdated or incomplete, generate a Delta Shadow using the delta generator prompt and propose the minimal update — do not free-form architectural assumptions
+- If it appears outdated or incomplete, propose a minimal update via pull request - do not free-form architectural assumptions
 
 If `docs/ai/PROJECT_SHADOW.md` does not exist and the task is architecture-sensitive:
 - Generate it first using the Project Shadow generator prompt before proceeding
 
-If the Project Shadow and repository code appear to conflict, prefer the repository code and propose a Delta Shadow to reconcile the discrepancy.
+If the Project Shadow and repository code appear to conflict, prefer the repository code and propose a reconciliation update via pull request.
 
 ### Decision Authority
 
@@ -79,9 +79,40 @@ If the Project Shadow and repository code appear to conflict, prefer the reposit
 
 ---
 
-## When to Trigger Delta Shadow
+## OpenSpec: Behavior Change Contract
 
-Generate a Delta Shadow when changes affect any of the following:
+**OpenSpec is the canonical behavior specification system for this repository.**
+
+Behavior changes MUST be represented as OpenSpec changes. OpenSpec provides:
+- Machine-readable behavior specifications
+- Change tracking and validation
+- Enforcement at development workflow gates
+
+### Enforcement Levels
+
+| Level | Name | Mechanism | This Repo |
+|-------|------|-----------|----------|
+| 0 | Policy-only | Documentation states requirement | - |
+| 1 | Advisory | CI warns on missing specs | - |
+| **2** | **Workflow gate** | **Pre-push hook blocks invalid changes** | **Active** |
+| 3 | Strict coupling | CI fails, merge blocked | - |
+
+This repository enforces **Level 2**: local workflow gate via lefthook pre-push hook.
+
+### Bypass
+
+For emergency non-behavior changes only:
+```bash
+OPENSPEC_BYPASS=1 git push
+```
+
+Bypass is logged and should be used sparingly.
+
+---
+
+## Shadow Updates
+
+Propose a PROJECT_SHADOW.md update when changes affect:
 
 | Category | Examples |
 |----------|----------|
@@ -94,7 +125,7 @@ Generate a Delta Shadow when changes affect any of the following:
 | Testing philosophy | Strategy changes (not individual test additions) |
 | Development workflow assumptions | Build process, environment requirements |
 
-Do **not** trigger Delta Shadow for:
+Do **not** require Shadow updates for:
 - Bug fixes within existing architecture
 - Documentation updates
 - Dependency version bumps
@@ -109,6 +140,7 @@ AI collaborators operating in this repository must:
 
 1. Read and follow this contract
 2. Respect Project Shadow authority when present
-3. Propose Delta Shadows for shadow-level changes
-4. Stop when acceptance criteria are met
-5. Ask when uncertain rather than assume
+3. Propose Shadow updates for shadow-level changes
+4. Represent behavior changes as OpenSpec changes
+5. Stop when acceptance criteria are met
+6. Ask when uncertain rather than assume
