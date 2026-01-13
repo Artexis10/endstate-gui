@@ -11,6 +11,8 @@
  */
 
 import { invoke, listen } from './lib/tauri-bridge';
+import { buildEngineCommand } from './lib/engine-exec';
+import { AppSettings } from './settings';
 
 export type UnlistenFn = () => void;
 
@@ -148,28 +150,34 @@ export async function engineGetRunId(): Promise<string | null> {
 /**
  * Run endstate capabilities command.
  * 
+ * @param settings - App settings for engine mode configuration
  * @returns The runId of the started run
  */
-export async function runCapabilities(): Promise<string> {
-  return engineRun('endstate', ['capabilities', '-Json']);
+export async function runCapabilities(settings: AppSettings): Promise<string> {
+  const engineCmd = buildEngineCommand(settings, ['capabilities', '-Json']);
+  return engineRun(engineCmd.exe, engineCmd.args);
 }
 
 /**
  * Run endstate verify command.
  * 
+ * @param settings - App settings for engine mode configuration
  * @param manifestPath - Path to the manifest file
  * @returns The runId of the started run
  */
-export async function runVerify(manifestPath: string): Promise<string> {
-  return engineRun('endstate', ['verify', manifestPath, '-Json']);
+export async function runVerify(settings: AppSettings, manifestPath: string): Promise<string> {
+  const engineCmd = buildEngineCommand(settings, ['verify', manifestPath, '-Json']);
+  return engineRun(engineCmd.exe, engineCmd.args);
 }
 
 /**
  * Run endstate apply command.
  * 
+ * @param settings - App settings for engine mode configuration
  * @param manifestPath - Path to the manifest file
  * @returns The runId of the started run
  */
-export async function runApply(manifestPath: string): Promise<string> {
-  return engineRun('endstate', ['apply', manifestPath, '-Json']);
+export async function runApply(settings: AppSettings, manifestPath: string): Promise<string> {
+  const engineCmd = buildEngineCommand(settings, ['apply', manifestPath, '-Json']);
+  return engineRun(engineCmd.exe, engineCmd.args);
 }

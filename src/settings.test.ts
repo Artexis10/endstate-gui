@@ -16,7 +16,7 @@ describe('settings', () => {
       const settings = loadSettings();
       
       expect(settings.engineMode).toBe('bundled');
-      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1');
+      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\bin\\endstate.ps1');
       expect(settings.customProfilesDirectory).toBe('');
       expect(settings.lastSelectedProfile).toBe('');
       expect(settings.dryRunEnabled).toBe(true);

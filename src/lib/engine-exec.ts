@@ -31,6 +31,51 @@ export interface ExecResult {
   exitCode: number;
 }
 
+/**
+ * Result of building an engine command.
+ * Contains the executable, arguments, and display string for diagnostics.
+ */
+export interface EngineCommand {
+  exe: string;
+  args: string[];
+  displayCommand: string;
+}
+
+/**
+ * Build the engine command based on settings and mode.
+ * 
+ * For script mode: exe="pwsh", args include -NoProfile -ExecutionPolicy Bypass -File <scriptPath>
+ * For bundled/path mode: exe="endstate", args are passed directly
+ * 
+ * @param settings - App settings containing engineMode and engineScriptPath
+ * @param commandArgs - Arguments to pass to the engine (e.g., ["capabilities", "--json"])
+ * @returns EngineCommand with exe, args, and displayCommand
+ */
+export function buildEngineCommand(
+  settings: AppSettings,
+  commandArgs: string[]
+): EngineCommand {
+  if (settings.engineMode === 'script') {
+    const exe = 'pwsh';
+    const args = [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      settings.engineScriptPath,
+      ...commandArgs,
+    ];
+    const displayCommand = `pwsh -NoProfile -ExecutionPolicy Bypass -File "${settings.engineScriptPath}" ${commandArgs.join(' ')}`;
+    return { exe, args, displayCommand };
+  } else {
+    // bundled or path mode
+    const exe = 'endstate';
+    const args = commandArgs;
+    const displayCommand = `endstate ${commandArgs.join(' ')}`;
+    return { exe, args, displayCommand };
+  }
+}
+
 export type EngineExecResult<T> = {
   success: true;
   envelope: T;
@@ -81,7 +126,8 @@ export async function runEndstateOnce<T>(
   args: string[] = []
 ): Promise<EngineExecResult<T>> {
   const fullArgs = [command, '--json', ...args];
-  const commandStr = `endstate ${fullArgs.join(' ')}`;
+  const engineCmd = buildEngineCommand(settings, fullArgs);
+  const commandStr = engineCmd.displayCommand;
   
   // Check if we're in web mode
   if (!isTauriRuntime()) {
@@ -116,14 +162,8 @@ export async function runEndstateOnce<T>(
   }
   
   // Tauri runtime - execute via endstate_exec
-  // The backend handles exe selection based on platform
-  let execArgs: string[];
-  
-  if (settings.engineMode === 'bundled' || settings.engineMode === 'path') {
-    // Bundled or PATH mode: use 'endstate' directly
-    execArgs = fullArgs;
-  } else {
-    // Script mode: validate path exists before attempting execution
+  // Script mode validation: check path exists before attempting execution
+  if (settings.engineMode === 'script') {
     const validationError = await validateEngineScriptPath(settings.engineScriptPath);
     if (validationError) {
       return {
@@ -136,21 +176,12 @@ export async function runEndstateOnce<T>(
         },
       };
     }
-    
-    // Script mode: invoke via PowerShell
-    execArgs = [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      settings.engineScriptPath,
-      ...fullArgs,
-    ];
   }
   
   try {
     const result = await invoke<ExecResult>('endstate_exec', {
-      args: execArgs,
+      exe: engineCmd.exe,
+      args: engineCmd.args,
     });
     
     // Check for command not found (typically exit code 1 with specific stderr)

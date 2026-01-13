@@ -21,7 +21,7 @@ import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type Life
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
 import { OverviewScreen } from './components/app/overview-screen';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
-import { runEndstateOnce, getErrorMessage } from './lib/engine-exec';
+import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
@@ -829,11 +829,12 @@ function AppContent() {
       });
     } catch (err) {
       // Catch any unexpected errors (timeouts, network issues, etc.)
+      const fallbackCmd = buildEngineCommand(settings, ['capabilities', '--json']);
       setState({
         status: 'error',
         errorMessage: err instanceof Error ? err.message : 'Failed to initialize engine',
         errorStderr: null,
-        errorCommand: 'endstate capabilities --json',
+        errorCommand: fallbackCmd.displayCommand,
         capabilities: null,
         report: null,
         verify: null,

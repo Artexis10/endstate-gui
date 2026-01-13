@@ -1,4 +1,6 @@
 import { invoke } from './lib/tauri-bridge';
+import { buildEngineCommand } from './lib/engine-exec';
+import { AppSettings } from './settings';
 
 interface ExecResult {
   stdout: string;
@@ -20,13 +22,16 @@ export interface EndstateResult {
 }
 
 export async function runEndstateCommand(
+  settings: AppSettings,
   command: string,
   args: string[] = []
 ): Promise<EndstateResult> {
   const fullArgs = [command, '--json', ...args];
+  const engineCmd = buildEngineCommand(settings, fullArgs);
   
   const result = await invoke<ExecResult>('endstate_exec', {
-    args: fullArgs,
+    exe: engineCmd.exe,
+    args: engineCmd.args,
   });
 
   if (!result.stdout || !result.stdout.trim().startsWith('{')) {
@@ -46,21 +51,21 @@ export async function runEndstateCommand(
     success: parsed.success ?? false,
     data: parsed.data ?? null,
     error: parsed.error ?? null,
-    command: parsed.command ?? command,
+    command: engineCmd.displayCommand,
     schemaVersion: parsed.schemaVersion,
     cliVersion: parsed.cliVersion,
     rawStdout: result.stdout,
   };
 }
 
-export async function runCapabilities(): Promise<EndstateResult> {
-  return runEndstateCommand('capabilities');
+export async function runCapabilities(settings: AppSettings): Promise<EndstateResult> {
+  return runEndstateCommand(settings, 'capabilities');
 }
 
-export async function runVerify(profile: string): Promise<EndstateResult> {
-  return runEndstateCommand('verify', ['--profile', profile]);
+export async function runVerify(settings: AppSettings, profile: string): Promise<EndstateResult> {
+  return runEndstateCommand(settings, 'verify', ['--profile', profile]);
 }
 
-export async function runApply(profile: string): Promise<EndstateResult> {
-  return runEndstateCommand('apply', ['--profile', profile]);
+export async function runApply(settings: AppSettings, profile: string): Promise<EndstateResult> {
+  return runEndstateCommand(settings, 'apply', ['--profile', profile]);
 }

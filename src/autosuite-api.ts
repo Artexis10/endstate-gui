@@ -1,5 +1,7 @@
 import { invoke } from './lib/tauri-bridge';
 import { EndstateEnvelope } from './types';
+import { buildEngineCommand } from './lib/engine-exec';
+import { AppSettings } from './settings';
 
 interface ExecResult {
   stdout: string;
@@ -15,19 +17,22 @@ export interface RunEndstateResult<T> {
 }
 
 export async function runEndstate<T>(
+  settings: AppSettings,
   command: string,
   args: string[] = []
 ): Promise<RunEndstateResult<T>> {
   const fullArgs = [command, '--json', ...args];
+  const engineCmd = buildEngineCommand(settings, fullArgs);
 
   let result: ExecResult;
   try {
     result = await invoke<ExecResult>('endstate_exec', {
-      args: fullArgs,
+      exe: engineCmd.exe,
+      args: engineCmd.args,
     });
   } catch (err) {
     throw new Error(
-      `Failed to execute endstate: ${err instanceof Error ? err.message : String(err)}`
+      `Failed to execute endstate (${engineCmd.displayCommand}): ${err instanceof Error ? err.message : String(err)}`
     );
   }
 

@@ -45,39 +45,27 @@ impl From<std::io::Error> for ExecError {
 
 /// Execute the Endstate CLI with the given arguments.
 ///
-/// This command invokes `endstate` from PATH with the provided arguments,
+/// This command invokes the specified executable with the provided arguments,
 /// captures stdout, stderr, and exit code, and returns them to the frontend.
 ///
 /// # Arguments
-/// * `args` - Command line arguments to pass to endstate CLI
+/// * `exe` - Executable to run (e.g., "endstate" or "pwsh")
+/// * `args` - Command line arguments to pass to the executable
 ///
 /// # Returns
 /// * `Ok(ExecResult)` - Execution completed (check exit_code for success)
 /// * `Err(ExecError)` - Execution failed to start (e.g., CLI not found)
 #[tauri::command]
-fn endstate_exec(args: Vec<String>) -> Result<ExecResult, ExecError> {
-    let endstate_path = std::env::var("ENDSTATE_PATH")
-        .unwrap_or_else(|_| {
-            if cfg!(windows) {
-                "C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1".to_string()
-            } else {
-                "endstate".to_string()
-            }
-        });
-
-    let output = if cfg!(windows) && endstate_path.ends_with(".ps1") {
-        Command::new("pwsh")
-            .arg("-NoProfile")
-            .arg("-File")
-            .arg(&endstate_path)
-            .args(&args)
-            .env("ENDSTATE_ALLOW_DIRECT", "1")
-            .output()?
-    } else {
-        Command::new(&endstate_path)
-            .args(&args)
-            .output()?
-    };
+fn endstate_exec(exe: String, args: Vec<String>) -> Result<ExecResult, ExecError> {
+    let mut cmd = Command::new(&exe);
+    cmd.args(&args);
+    
+    // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode
+    if exe == "pwsh" || exe == "powershell" {
+        cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
+    }
+    
+    let output = cmd.output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
