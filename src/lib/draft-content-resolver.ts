@@ -16,6 +16,34 @@ export interface PendingCaptureDraft {
 }
 
 /**
+ * Validate that draft content contains a valid manifest structure.
+ * Rejects empty objects and ensures required manifest keys are present.
+ */
+function isValidManifestContent(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed || trimmed === '' || trimmed === '{}') {
+    return false;
+  }
+  
+  // Try to parse and check for manifest structure
+  try {
+    const parsed = JSON.parse(trimmed);
+    // Must be an object with at least 'version' or 'apps' field
+    // Empty object {} is not a valid manifest
+    if (typeof parsed !== 'object' || parsed === null) {
+      return false;
+    }
+    // Check for manifest keys (version and apps are required for valid profiles)
+    const hasManifestKeys = 'version' in parsed || 'apps' in parsed;
+    return hasManifestKeys;
+  } catch {
+    // If it's not valid JSON, it might be JSONC with comments - allow it
+    // The engine writes valid JSONC, so we trust non-parseable content
+    return true;
+  }
+}
+
+/**
  * Resolve draft content for Save Profile operation.
  * 
  * Resolution order (INV-SAVE-2):
@@ -31,14 +59,18 @@ export async function resolveDraftContent(
 ): Promise<string | null> {
   // Try in-memory draft first
   if (pendingDraft?.draftText && pendingDraft.draftText.trim() !== '') {
-    return pendingDraft.draftText;
+    if (isValidManifestContent(pendingDraft.draftText)) {
+      return pendingDraft.draftText;
+    }
   }
   
   // Fallback to draft-store
   try {
     const storedDraft = await loadDraft();
     if (storedDraft?.text && storedDraft.text.trim() !== '') {
-      return storedDraft.text;
+      if (isValidManifestContent(storedDraft.text)) {
+        return storedDraft.text;
+      }
     }
   } catch (err) {
     console.error('Failed to load draft from store:', err);

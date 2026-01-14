@@ -236,4 +236,72 @@ describe('Profile Save', () => {
       expect(parsed.version).toBe(1);
     });
   });
+
+  describe('Regression: Empty object draft should be rejected', () => {
+    it('rejects empty object {} as invalid manifest', async () => {
+      const pendingDraft: PendingCaptureDraft = {
+        capturedAppsCount: 0,
+        capturedAt: new Date().toISOString(),
+        draftText: '{}',
+        apps: [],
+      };
+      
+      const draftContent = await resolveDraftContent(pendingDraft);
+      
+      // Empty object should be rejected
+      expect(draftContent).toBeNull();
+    });
+
+    it('rejects draft without manifest keys (version or apps)', async () => {
+      const pendingDraft: PendingCaptureDraft = {
+        capturedAppsCount: 0,
+        capturedAt: new Date().toISOString(),
+        draftText: JSON.stringify({ displayName: 'Test' }),
+        apps: [],
+      };
+      
+      const draftContent = await resolveDraftContent(pendingDraft);
+      
+      // Object without manifest keys should be rejected
+      expect(draftContent).toBeNull();
+    });
+
+    it('accepts draft with version key', async () => {
+      const manifestContent = JSON.stringify({
+        version: 1,
+        apps: [],
+      }, null, 2);
+
+      const pendingDraft: PendingCaptureDraft = {
+        capturedAppsCount: 0,
+        capturedAt: new Date().toISOString(),
+        draftText: manifestContent,
+        apps: [],
+      };
+      
+      const draftContent = await resolveDraftContent(pendingDraft);
+      
+      expect(draftContent).not.toBeNull();
+      expect(draftContent).toContain('"version"');
+    });
+
+    it('accepts draft with apps key', async () => {
+      const manifestContent = JSON.stringify({
+        name: 'Test',
+        apps: [{ id: 'app1' }],
+      }, null, 2);
+
+      const pendingDraft: PendingCaptureDraft = {
+        capturedAppsCount: 1,
+        capturedAt: new Date().toISOString(),
+        draftText: manifestContent,
+        apps: ['app1'],
+      };
+      
+      const draftContent = await resolveDraftContent(pendingDraft);
+      
+      expect(draftContent).not.toBeNull();
+      expect(draftContent).toContain('"apps"');
+    });
+  });
 });

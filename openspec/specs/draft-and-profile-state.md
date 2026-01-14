@@ -82,6 +82,14 @@ The capture "draft" exists in two forms:
 - Manifest must contain profile structure: `{ name, version, apps: [...] }`
 - Manifest must NEVER contain metadata fields like `displayName`
 - Even if capture has 0 apps, manifest must be valid JSONC with `apps: []`
+- Empty object `{}` is INVALID and must be rejected
+- Manifest must contain at least one of: `version` or `apps` field
+
+**Validation:**
+- Before writing, `resolveDraftContent()` validates manifest structure
+- Rejects empty strings, whitespace-only, or `{}`
+- Rejects objects without manifest keys (`version` or `apps`)
+- Capture flow must throw error if temp file read fails or returns empty content
 
 **Rationale:** The `.jsonc` file is the source of truth for the profile's application list. Metadata belongs in the separate `.meta.json` file.
 
@@ -160,6 +168,16 @@ pendingCaptureDraft: {
   apps: string[];
 } | null;
 ```
+
+## Failure Modes
+
+| Issue | Symptom | Root Cause | Prevention |
+|-------|---------|------------|------------|
+| Empty profile .jsonc | Profile saved but contains `{}` or no manifest | Capture temp file read failed, fallback to empty object | Capture flow throws error on read failure; `resolveDraftContent()` validates manifest keys |
+| Metadata in .jsonc | Profile .jsonc contains `displayName` instead of manifest | Swapped variables in write calls | Separate write calls with explicit content validation |
+| Profile not in list after save | Save succeeds but profile doesn't appear in UI | Missing `refreshProfiles()` call or wrong directory | `handleSaveProfileName` must call `refreshProfiles()` after write |
+| Stale draft saved again | User saves same draft multiple times | Draft not cleared after save | `clearDraft()` + `setPendingCaptureDraft(null)` after successful save |
+| Draft lost on reload | User captures, reloads app, draft gone | Draft not persisted to store | `saveDraft()` must be called after capture with `draftText` |
 
 ## Non-Goals
 

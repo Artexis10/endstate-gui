@@ -1048,12 +1048,17 @@ function AppContent() {
     const appsList = envelopeData?.appsIncluded?.map(a => a.id) || [];
     
     // Read manifest content from temp file
-    let draftText = '{}';
+    let draftText = '';
     try {
       draftText = await invoke<string>('read_text_file', { path: outputPath });
     } catch (err) {
       console.error('Failed to read capture output:', err);
-      // Continue with empty manifest if read fails
+      throw new Error('Failed to read capture output file. Please try again.');
+    }
+    
+    // Validate draft content is non-empty and contains manifest structure
+    if (!draftText || draftText.trim() === '' || draftText.trim() === '{}') {
+      throw new Error('Capture output is empty or invalid. Please try again.');
     }
     
     // Delete temp file immediately after reading
