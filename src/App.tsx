@@ -477,7 +477,7 @@ function AppContent() {
           }
         }
         // Clear draft from store and memory
-        clearDraft();
+        await clearDraft();
         setPendingCaptureDraft(null);
         
         // Set lastSavedProfileSummary to show green success after profile is saved
@@ -518,7 +518,7 @@ function AppContent() {
       // Handle draft missing error
       if (errorMessage.includes('Draft capture missing')) {
         if (profileNameModalMode === 'save' && pendingCaptureDraft) {
-          clearDraft();
+          await clearDraft();
           setPendingCaptureDraft(null);
         }
         setShowProfileNameModal(false);
@@ -568,8 +568,8 @@ function AppContent() {
   const handleDiscardDraft = async () => {
     if (!pendingCaptureDraft) return;
     
-    // Clear draft from localStorage
-    clearDraft();
+    // Clear draft from Tauri Store
+    await clearDraft();
     
     // Clear in-memory draft state
     setPendingCaptureDraft(null);
@@ -758,7 +758,7 @@ function AppContent() {
       });
       
       // Load draft from store if exists (survives reload)
-      const storedDraft = loadDraft();
+      const storedDraft = await loadDraft();
       if (storedDraft) {
         setPendingCaptureDraft({
           capturedAppsCount: storedDraft.appCount,
@@ -1773,8 +1773,8 @@ function AppContent() {
                   };
                   setPendingCaptureDraft(draft);
                   
-                  // Persist draft to localStorage for reload survival
-                  saveDraft({
+                  // Persist draft to Tauri Store for reload survival
+                  await saveDraft({
                     text: result.draftText,
                     createdAt: draft.capturedAt,
                     appCount: result.count,

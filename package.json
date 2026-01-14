@@ -28,6 +28,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-switch": "^1.2.6",
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-store": "^2.4.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.26",
@@ -39,6 +40,7 @@
     "zod": "^4.3.4"
   },
   "devDependencies": {
+    "@fission-ai/openspec": "~0.19.0",
     "@playwright/test": "^1.57.0",
     "@tauri-apps/cli": "^2.0.0",
     "@testing-library/jest-dom": "^6.9.1",
@@ -53,12 +55,11 @@
     "autoprefixer": "^10.4.23",
     "happy-dom": "^20.0.11",
     "jsdom": "^27.3.0",
+    "lefthook": "^1.11.0",
     "postcss": "^8.5.6",
     "tailwindcss": "3.4.17",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
-    "vitest": "^4.0.16",
-    "@fission-ai/openspec": "~0.19.0",
-    "lefthook": "^1.11.0"
+    "vitest": "^4.0.16"
   }
 }
