@@ -46,6 +46,33 @@ The capture "draft" exists in two forms:
 - Generic "Source file no longer exists" without context
 - Telling user to "run capture again" when the issue is a missing selected profile
 
+### INV-SAVE-1: Write Commands Must Have Non-Empty Content
+
+**Rule:** GUI must never invoke `write_text_file` unless `content` is a non-empty string.
+
+**Enforcement:**
+- Content resolver must validate draft text is non-empty before write
+- Empty string (`""`) is invalid and must be rejected
+- `null` or `undefined` must be rejected
+
+**Rationale:** Tauri command `write_text_file` requires `{ path, content }` where `content` is non-empty. Missing or empty content causes command failure.
+
+### INV-SAVE-2: Save Profile Requires Valid Draft Content
+
+**Rule:** If no draft content is available, Save Profile must:
+1. Show toast: "No capture draft available. Please run Capture again."
+2. Exit without invoking Tauri write commands
+
+**Content Resolution Order:**
+1. In-memory `pendingCaptureDraft.draftText` (non-empty)
+2. Await `draft-store.loadDraft()` (non-empty)
+3. Otherwise return `null`
+
+**Validation:**
+- Content must be non-empty string after trimming
+- If resolution returns `null`, show error toast and exit
+- Never proceed to `write_text_file` with invalid content
+
 ## Capture Output Contract
 
 ### Artifact Event Shape

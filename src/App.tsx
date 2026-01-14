@@ -11,6 +11,7 @@ import {
 } from './types';
 import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration, clearSelectedProfile } from './settings';
 import { saveDraft, loadDraft, clearDraft } from './lib/draft-store';
+import { resolveDraftContent } from './lib/draft-content-resolver';
 import { resolveProfilePath } from './lib/profile-selection-migration';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
 import { StreamEvent } from './streaming-runner';
@@ -396,8 +397,16 @@ function AppContent() {
       
       if (profileNameModalMode === 'save') {
         // Save mode: write draft text to profiles directory
-        if (!pendingCaptureDraft?.draftText) {
-          throw new Error('Draft capture missing — please run Capture again.');
+        // INV-SAVE-2: Resolve and validate draft content before proceeding
+        const draftContent = await resolveDraftContent(pendingCaptureDraft);
+        if (!draftContent) {
+          showToast('No capture draft available. Please run Capture again.', 'error');
+          setShowProfileNameModal(false);
+          setProfileNameModalPath('');
+          setProfileNameModalValue('');
+          setProfileNameModalMoreOptions(false);
+          setPendingSuggestedName('');
+          return;
         }
         
         // Get profiles directory as destination
@@ -439,8 +448,8 @@ function AppContent() {
           destPath = `${profilesDir}\\${newFilename}`;
         }
         
-        // Write draft text to file
-        await invoke('write_text_file', { path: destPath, contents: pendingCaptureDraft.draftText });
+        // INV-SAVE-1: Write draft text to file with correct parameter name
+        await invoke('write_text_file', { path: destPath, content: draftContent });
         
         // Save display name as metadata on the new path
         if (trimmedValue) {
