@@ -208,3 +208,123 @@ describe('Capture Error Codes (INV-CAPTURE-3)', () => {
     });
   });
 });
+
+/**
+ * Capture Draft Content Validation Tests (INV-CAPTURE-1)
+ * 
+ * Tests for the capture artifact contract: "success implies artifact exists and is valid".
+ * GUI must NOT persist draft content if capture failed or content is empty/invalid.
+ */
+describe('Capture Draft Content Validation (INV-CAPTURE-1)', () => {
+  /**
+   * Validates draft content before persisting.
+   * This mirrors the validation logic in App.tsx handleCaptureFromOverview.
+   * 
+   * @param draftText - The captured manifest text
+   * @returns Error message if invalid, null if valid
+   */
+  function validateDraftContent(draftText: string | null | undefined): string | null {
+    if (!draftText || draftText.trim() === '' || draftText.trim() === '{}') {
+      return 'Capture output is empty or invalid. Please try again.';
+    }
+    return null;
+  }
+
+  /**
+   * Determines if draft should be persisted based on capture result.
+   * 
+   * @param success - Whether capture reported success
+   * @param draftText - The captured manifest text
+   * @returns true if draft should be persisted
+   */
+  function shouldPersistDraft(success: boolean, draftText: string | null | undefined): boolean {
+    if (!success) return false;
+    if (validateDraftContent(draftText) !== null) return false;
+    return true;
+  }
+
+  describe('Empty content validation', () => {
+    it('rejects null draft text', () => {
+      const error = validateDraftContent(null);
+      expect(error).toBe('Capture output is empty or invalid. Please try again.');
+    });
+
+    it('rejects undefined draft text', () => {
+      const error = validateDraftContent(undefined);
+      expect(error).toBe('Capture output is empty or invalid. Please try again.');
+    });
+
+    it('rejects empty string', () => {
+      const error = validateDraftContent('');
+      expect(error).toBe('Capture output is empty or invalid. Please try again.');
+    });
+
+    it('rejects whitespace-only string', () => {
+      const error = validateDraftContent('   \n\t  ');
+      expect(error).toBe('Capture output is empty or invalid. Please try again.');
+    });
+
+    it('rejects empty JSON object {}', () => {
+      const error = validateDraftContent('{}');
+      expect(error).toBe('Capture output is empty or invalid. Please try again.');
+    });
+
+    it('rejects empty JSON object with whitespace', () => {
+      const error = validateDraftContent('  {}  ');
+      expect(error).toBe('Capture output is empty or invalid. Please try again.');
+    });
+  });
+
+  describe('Valid content acceptance', () => {
+    it('accepts valid manifest content', () => {
+      const validManifest = '{ "apps": [{ "id": "Microsoft.VSCode" }] }';
+      const error = validateDraftContent(validManifest);
+      expect(error).toBeNull();
+    });
+
+    it('accepts minimal non-empty JSON', () => {
+      const minimalJson = '{ "name": "test" }';
+      const error = validateDraftContent(minimalJson);
+      expect(error).toBeNull();
+    });
+  });
+
+  describe('Draft persistence decision', () => {
+    it('does NOT persist draft when capture failed (success:false)', () => {
+      const validContent = '{ "apps": [] }';
+      const shouldPersist = shouldPersistDraft(false, validContent);
+      expect(shouldPersist).toBe(false);
+    });
+
+    it('does NOT persist draft when content is empty {}', () => {
+      const shouldPersist = shouldPersistDraft(true, '{}');
+      expect(shouldPersist).toBe(false);
+    });
+
+    it('does NOT persist draft when content is null', () => {
+      const shouldPersist = shouldPersistDraft(true, null);
+      expect(shouldPersist).toBe(false);
+    });
+
+    it('persists draft when success:true AND content is valid', () => {
+      const validContent = '{ "apps": [{ "id": "Microsoft.VSCode" }] }';
+      const shouldPersist = shouldPersistDraft(true, validContent);
+      expect(shouldPersist).toBe(true);
+    });
+  });
+
+  describe('Contract: success implies valid artifact', () => {
+    it('if success:true but content is {}, this is a contract violation that GUI catches', () => {
+      // This scenario represents the bug: engine returns success:true but artifact is empty
+      // GUI must detect and reject this
+      const engineReportedSuccess = true;
+      const emptyArtifact = '{}';
+      
+      const shouldPersist = shouldPersistDraft(engineReportedSuccess, emptyArtifact);
+      expect(shouldPersist).toBe(false);
+      
+      const error = validateDraftContent(emptyArtifact);
+      expect(error).not.toBeNull();
+    });
+  });
+});

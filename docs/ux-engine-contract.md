@@ -157,6 +157,44 @@ Absence of configuration is not an error.
 
 ---
 
+## Capture Artifact Contract (INV-CAPTURE)
+
+### Invariants
+
+1. **Success implies artifact exists and is valid.**
+   If capture returns `success:true`, then `outputPath` MUST exist and contain a valid manifest payload (not `{}`).
+
+2. **CLI missing is a hard failure.**
+   If the provisioning CLI entrypoint is missing, capture MUST return `success:false` with structured error code `ENGINE_CLI_NOT_FOUND`.
+
+3. **No artifact on failure.**
+   If capture fails, no manifest artifact is emitted and no `outputPath` is claimed.
+
+### Failure Mode Table
+
+| Error Code | Cause | GUI Behavior |
+|------------|-------|--------------|
+| `ENGINE_CLI_NOT_FOUND` | Provisioning CLI not found at configured path | Show actionable toast: use `error.hint` if present, else "Engine CLI not found. Configure Engine path in Settings." |
+| `MANIFEST_WRITE_FAILED` | Capture succeeded but file write failed | Show `error.message` verbatim |
+| `CAPTURE_FAILED` | Generic capture failure | Show `error.message` verbatim |
+| (no error code) | Unknown failure | Show "Capture failed" |
+
+### GUI Enforcement
+
+- GUI MUST NOT persist draft content if capture returned `success:false`
+- GUI MUST NOT persist draft content if manifest payload is empty (`{}`)
+- GUI MUST surface `ENGINE_CLI_NOT_FOUND` with actionable hint mentioning Settings
+
+### CLI Path Resolution
+
+Engine script path resolution order (for script mode):
+1. User-configured path (if exists)
+2. `<repoRoot>\bin\endstate.ps1` (preferred)
+3. `<repoRoot>\bin\endstate.cmd` (fallback)
+4. Legacy `<repoRoot>\endstate.ps1` (migration only)
+
+---
+
 ## Contract Violations (Considered Bugs)
 
 The following are bugs:
