@@ -15,6 +15,7 @@ export interface EndstateError {
   detail?: Record<string, unknown>;
   remediation?: string;
   docsKey?: string;
+  hint?: string;
 }
 
 export interface EndstateCapabilitiesData {

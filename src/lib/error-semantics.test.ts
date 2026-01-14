@@ -100,3 +100,111 @@ describe('Error Semantics (INV-3) - Store-based drafts', () => {
     });
   });
 });
+
+/**
+ * Capture Error Code Tests (INV-CAPTURE-3)
+ * 
+ * Tests for the capture artifact contract error code handling.
+ * GUI must surface specific, actionable messages for known error codes.
+ */
+describe('Capture Error Codes (INV-CAPTURE-3)', () => {
+  /**
+   * Maps engine error codes to user-facing messages.
+   * This mirrors the logic in App.tsx handleCaptureFromOverview.
+   */
+  function getCaptureErrorMessage(
+    errorCode: string | undefined,
+    errorMessage: string | undefined,
+    errorHint: string | undefined
+  ): string {
+    if (errorCode === 'ENGINE_CLI_NOT_FOUND') {
+      return errorHint || 'Engine CLI not found. Configure Engine path in Settings.';
+    }
+    return errorMessage || 'Capture failed';
+  }
+
+  describe('ENGINE_CLI_NOT_FOUND error code', () => {
+    it('uses hint when ENGINE_CLI_NOT_FOUND and hint is provided', () => {
+      const message = getCaptureErrorMessage(
+        'ENGINE_CLI_NOT_FOUND',
+        'Engine CLI not found at path: C:\\nonexistent\\cli.ps1',
+        'Verify repo root is configured correctly or configure Engine path in Settings.'
+      );
+      expect(message).toBe('Verify repo root is configured correctly or configure Engine path in Settings.');
+    });
+
+    it('uses default message when ENGINE_CLI_NOT_FOUND and no hint', () => {
+      const message = getCaptureErrorMessage(
+        'ENGINE_CLI_NOT_FOUND',
+        'Engine CLI not found',
+        undefined
+      );
+      expect(message).toBe('Engine CLI not found. Configure Engine path in Settings.');
+    });
+
+    it('mentions Settings in ENGINE_CLI_NOT_FOUND message', () => {
+      const message = getCaptureErrorMessage('ENGINE_CLI_NOT_FOUND', undefined, undefined);
+      expect(message).toContain('Settings');
+    });
+  });
+
+  describe('MANIFEST_WRITE_FAILED error code', () => {
+    it('uses error message for MANIFEST_WRITE_FAILED', () => {
+      const message = getCaptureErrorMessage(
+        'MANIFEST_WRITE_FAILED',
+        'Capture completed but manifest file was not created',
+        'Check disk space and write permissions.'
+      );
+      expect(message).toBe('Capture completed but manifest file was not created');
+    });
+  });
+
+  describe('CAPTURE_FAILED error code', () => {
+    it('uses error message for generic CAPTURE_FAILED', () => {
+      const message = getCaptureErrorMessage(
+        'CAPTURE_FAILED',
+        'Capture failed due to unknown error',
+        undefined
+      );
+      expect(message).toBe('Capture failed due to unknown error');
+    });
+  });
+
+  describe('Unknown error codes', () => {
+    it('falls back to error message for unknown codes', () => {
+      const message = getCaptureErrorMessage(
+        'UNKNOWN_ERROR',
+        'Something went wrong',
+        undefined
+      );
+      expect(message).toBe('Something went wrong');
+    });
+
+    it('falls back to default message when no error info', () => {
+      const message = getCaptureErrorMessage(undefined, undefined, undefined);
+      expect(message).toBe('Capture failed');
+    });
+  });
+
+  describe('Error code priority', () => {
+    it('ENGINE_CLI_NOT_FOUND takes priority over message', () => {
+      // Even if message is provided, ENGINE_CLI_NOT_FOUND should use hint
+      const message = getCaptureErrorMessage(
+        'ENGINE_CLI_NOT_FOUND',
+        'Some other message',
+        'Configure Engine path in Settings.'
+      );
+      expect(message).toBe('Configure Engine path in Settings.');
+      expect(message).not.toBe('Some other message');
+    });
+
+    it('other codes use message, not hint', () => {
+      const message = getCaptureErrorMessage(
+        'CAPTURE_FAILED',
+        'The actual error message',
+        'Some hint that should be ignored'
+      );
+      expect(message).toBe('The actual error message');
+    });
+  });
+});

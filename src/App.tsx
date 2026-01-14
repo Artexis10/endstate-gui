@@ -984,7 +984,16 @@ function AppContent() {
     const isSuccess = captureResult.envelope?.success ?? (captureResult.exitCode === 0);
     
     if (!isSuccess) {
-      throw new Error(captureResult.envelope?.error?.message || 'Capture failed');
+      const errorCode = captureResult.envelope?.error?.code;
+      const errorMessage = captureResult.envelope?.error?.message || 'Capture failed';
+      const errorHint = captureResult.envelope?.error?.hint;
+      
+      // INV-CAPTURE-3: Surface ENGINE_CLI_NOT_FOUND with actionable hint
+      if (errorCode === 'ENGINE_CLI_NOT_FOUND') {
+        throw new Error(errorHint || 'Engine CLI not found. Configure Engine path in Settings.');
+      }
+      
+      throw new Error(errorMessage);
     }
 
     // Get count from envelope data (preferred) or fall back to NDJSON event count
