@@ -2693,17 +2693,13 @@ function AppContent() {
                 </DialogDescription>
               </DialogHeader>
               <div className="py-4 space-y-3">
-            {/* Show filename info in save mode - only when showDetails is ON */}
-            {profileNameModalMode === 'save' && profileNameModalPath && settings.showDetails && (() => {
-              const parts = profileNameModalPath.split(/[\\/]/);
-              const filename = parts[parts.length - 1] || '';
-              return (
-                <div className="p-2 bg-muted/30 rounded text-xs">
-                  <span className="text-muted-foreground">File: </span>
-                  <span className="font-mono">{filename}</span>
-                </div>
-              );
-            })()}
+            {/* Draft info in save mode - drafts are store-based, no file path */}
+            {profileNameModalMode === 'save' && pendingCaptureDraft && settings.showDetails && (
+              <div className="p-2 bg-muted/30 rounded text-xs">
+                <span className="text-muted-foreground">Draft: </span>
+                <span className="font-mono">{pendingCaptureDraft.capturedAppsCount} apps captured</span>
+              </div>
+            )}
             <Input 
               value={profileNameModalValue}
               onChange={(e) => setProfileNameModalValue(e.target.value)}
