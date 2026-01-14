@@ -448,10 +448,12 @@ function AppContent() {
           destPath = `${profilesDir}\\${newFilename}`;
         }
         
-        // INV-SAVE-1: Write draft text to file with correct parameter name
+        // INV-SAVE-MANIFEST: Write manifest JSONC to .jsonc file
+        // draftContent contains the captured manifest (apps, version, etc.), NOT metadata
         await invoke('write_text_file', { path: destPath, content: draftContent });
         
-        // Save display name as metadata on the new path
+        // INV-SAVE-META: Write metadata to separate .meta.json file
+        // Metadata (displayName) is stored separately from the manifest
         if (trimmedValue) {
           await saveProfileMetadata(destPath, { displayName: trimmedValue });
         }
@@ -462,14 +464,16 @@ function AppContent() {
         });
       }
       
+      // INV-SAVE-REFRESH: Post-save state updates
+      // 1. Refresh profiles list from disk
       await refreshProfiles();
       
       // Track the saved profile for success animation
       let savedProfileForAnimation: DiscoveredProfile | null = null;
       
-      // If this was a save from capture draft, clear the pending draft and select the new profile
+      // If this was a save from capture draft, complete post-save flow
       if (profileNameModalMode === 'save' && pendingCaptureDraft) {
-        // Find the saved profile (may have been renamed)
+        // 2. Select the newly saved profile
         const dir = await loadProfilesDirectory();
         if (dir) {
           const discovered = await discoverProfiles(dir);
@@ -485,7 +489,7 @@ function AppContent() {
             updateSettings({ selectedProfileName: savedProfile.name });
           }
         }
-        // Clear draft from store and memory
+        // 3. Clear draft from store and memory
         await clearDraft();
         setPendingCaptureDraft(null);
         
@@ -510,7 +514,8 @@ function AppContent() {
       setSavedProfileDisplayName(displayName);
       setProfileNameModalSuccess(true);
       
-      // Auto-close modal after success animation (1500ms total - 2x slower for calm feel)
+      // 4. Close modal after success animation (INV-SAVE-REFRESH)
+      // Auto-close after 1500ms to show success state
       setTimeout(() => {
         setShowProfileNameModal(false);
         setProfileNameModalPath('');

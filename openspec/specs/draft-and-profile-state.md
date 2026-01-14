@@ -73,6 +73,45 @@ The capture "draft" exists in two forms:
 - If resolution returns `null`, show error toast and exit
 - Never proceed to `write_text_file` with invalid content
 
+### INV-SAVE-MANIFEST: Profile .jsonc Must Contain Manifest Payload
+
+**Rule:** The profile `.jsonc` file must contain the captured manifest JSONC, not metadata.
+
+**Enforcement:**
+- `write_text_file` for `<name>.jsonc` must receive `draftText` (manifest content)
+- Manifest must contain profile structure: `{ name, version, apps: [...] }`
+- Manifest must NEVER contain metadata fields like `displayName`
+- Even if capture has 0 apps, manifest must be valid JSONC with `apps: []`
+
+**Rationale:** The `.jsonc` file is the source of truth for the profile's application list. Metadata belongs in the separate `.meta.json` file.
+
+### INV-SAVE-META: Metadata File Contains Display Name Only
+
+**Rule:** The `.meta.json` file must contain metadata only, never manifest content.
+
+**Enforcement:**
+- `write_text_file` for `<name>.meta.json` must receive metadata JSON: `{ displayName: "..." }`
+- Metadata must NEVER contain manifest fields like `apps`, `version`, `name`
+- Metadata file is optional (only written if displayName is provided)
+
+**Rationale:** Separation of concerns - manifest content and metadata are stored in separate files with distinct purposes.
+
+### INV-SAVE-REFRESH: Post-Save State Updates
+
+**Rule:** After successful profile save, the GUI must:
+1. Refresh profiles list from disk (`refreshProfiles()`)
+2. Select the newly saved profile (`selectedProfileName` updated)
+3. Clear the draft from store and memory (`clearDraft()` + `setPendingCaptureDraft(null)`)
+4. Close the save modal
+
+**Enforcement:**
+- All four steps must complete in sequence
+- Draft clearing prevents stale draft from being saved again
+- Profile selection ensures user sees their saved profile immediately
+- Modal close provides clear feedback that save succeeded
+
+**Rationale:** Ensures UI state is consistent with disk state and provides clear user feedback.
+
 ## Capture Output Contract
 
 ### Artifact Event Shape
