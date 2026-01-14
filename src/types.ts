@@ -138,6 +138,8 @@ export interface EndstateCaptureData {
   isExample?: boolean;
   counts?: CaptureCounts;
   appsIncluded?: CapturedApp[];
+  /** Warning codes from capture (e.g., WINGET_EXPORT_FAILED_FALLBACK_USED) */
+  captureWarnings?: string[];
 }
 
 export interface ApplyItem {

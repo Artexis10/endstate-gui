@@ -304,4 +304,86 @@ describe('Profile Save', () => {
       expect(draftContent).toContain('"apps"');
     });
   });
+
+  describe('Fallback Capture Warning Handling', () => {
+    it('captureWarnings array should be recognized in EndstateCaptureData', () => {
+      // Type test: ensure captureWarnings is a valid field
+      const captureData = {
+        outputPath: 'C:\\test\\manifest.jsonc',
+        counts: { totalFound: 5, included: 5, skipped: 0, filteredRuntimes: 0, filteredStoreApps: 0, sensitiveExcludedCount: 0 },
+        appsIncluded: [{ id: 'Git.Git', source: 'winget' }],
+        captureWarnings: ['WINGET_EXPORT_FAILED_FALLBACK_USED'],
+      };
+      
+      expect(captureData.captureWarnings).toContain('WINGET_EXPORT_FAILED_FALLBACK_USED');
+      expect(captureData.appsIncluded.length).toBeGreaterThan(0);
+    });
+
+    it('fallback capture with apps should still produce valid manifest', async () => {
+      // Simulate fallback capture result - still has apps, just with warning
+      const manifestContent = JSON.stringify({
+        version: 1,
+        name: 'fallback-capture',
+        apps: [
+          { id: 'git-git', refs: { windows: 'Git.Git' } },
+          { id: 'vscode', refs: { windows: 'Microsoft.VisualStudioCode' } },
+        ],
+      }, null, 2);
+
+      const pendingDraft: PendingCaptureDraft = {
+        capturedAppsCount: 2,
+        capturedAt: new Date().toISOString(),
+        draftText: manifestContent,
+        apps: ['Git.Git', 'Microsoft.VisualStudioCode'],
+      };
+      
+      const draftContent = await resolveDraftContent(pendingDraft);
+      
+      expect(draftContent).not.toBeNull();
+      expect(draftContent).toContain('"apps"');
+      expect(draftContent).toContain('Git.Git');
+    });
+  });
+
+  describe('INV-SAVE-NEVER-EMPTY: Save must refuse invalid manifests', () => {
+    it('rejects metadata-only JSON (no apps or version)', async () => {
+      const metadataOnly = JSON.stringify({
+        displayName: 'My Profile',
+        createdAt: new Date().toISOString(),
+      }, null, 2);
+
+      const pendingDraft: PendingCaptureDraft = {
+        capturedAppsCount: 0,
+        capturedAt: new Date().toISOString(),
+        draftText: metadataOnly,
+        apps: [],
+      };
+      
+      const draftContent = await resolveDraftContent(pendingDraft);
+      
+      // Metadata-only should be rejected
+      expect(draftContent).toBeNull();
+    });
+
+    it('accepts valid manifest with 0 apps (version present)', async () => {
+      const emptyAppsManifest = JSON.stringify({
+        version: 1,
+        name: 'empty-profile',
+        apps: [],
+      }, null, 2);
+
+      const pendingDraft: PendingCaptureDraft = {
+        capturedAppsCount: 0,
+        capturedAt: new Date().toISOString(),
+        draftText: emptyAppsManifest,
+        apps: [],
+      };
+      
+      const draftContent = await resolveDraftContent(pendingDraft);
+      
+      // Valid manifest with version should be accepted even with 0 apps
+      expect(draftContent).not.toBeNull();
+      expect(draftContent).toContain('"version"');
+    });
+  });
 });

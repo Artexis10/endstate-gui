@@ -998,6 +998,12 @@ function AppContent() {
 
     // Get count from envelope data (preferred) or fall back to NDJSON event count
     const envelopeData = captureResult.envelope?.data as EndstateCaptureData | undefined;
+    
+    // Show warning toast if fallback capture was used
+    if (envelopeData?.captureWarnings?.includes('WINGET_EXPORT_FAILED_FALLBACK_USED')) {
+      showToast('Winget export failed; captured winget-managed apps only.', 'warning');
+    }
+    
     let capturedCount = 0;
     
     if (envelopeData?.counts?.included !== undefined) {
