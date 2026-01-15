@@ -81,23 +81,24 @@ If engine output changes, this document MUST be updated to match.
 
 ## Canonical Sources {#canonical-source}
 
-### App List Source
+### App List Source (Option A: Contract-Pure)
 
-The GUI MUST use `data.appsIncluded` as the **primary canonical source** for the captured app list.
+The GUI MUST use `data.appsIncluded` as the **ONLY canonical source** for the captured app list.
 
-- **Primary**: `envelopeData.appsIncluded` from engine JSON envelope
-- **NDJSON fallback**: If `appsIncluded` is empty/missing but NDJSON streaming events exist, use those for modal display
+- **Sole source**: `envelopeData.appsIncluded` from engine JSON envelope
+- **No NDJSON fallback**: NDJSON streaming events are for progress UI only, never for final count/list
 - **Never**: Do not parse manifest content to derive app list
+- **If missing/empty**: Report 0 apps captured (optionally log dev warning)
 
-**CRITICAL**: Count and app list MUST derive from the same source. If using NDJSON fallback for the list, count MUST also derive from that list length (not from `counts.included`).
+**CRITICAL**: GUI derives capture count strictly from `appsIncluded.length`. If `appsIncluded` is empty, GUI reports 0 apps captured regardless of `counts.included` or NDJSON events.
 
 ### Count Source
 
-- **Primary**: `appsIncluded.length` (derived from canonical list)
-- **Fallback**: `counts.included` (only if list unavailable)
-- **Backward compatibility**: `counts.captured` may exist historically, but GUI prefers `counts.included`
+- **Sole source**: `appsIncluded.length` (no fallback)
+- **No fallback**: GUI does NOT use `counts.included` as fallback for count
+- **Backward compatibility**: `counts.included` may exist but is informational only
 
-**CRITICAL**: GUI MUST derive count FROM `appsIncluded.length` first, not from `counts.included`. This ensures consistency between the displayed count and the app list shown in modals.
+**CRITICAL**: GUI MUST derive count strictly from `appsIncluded.length`. This ensures consistency between the displayed count and the app list shown in modals.
 
 ## Invariants {#invariants}
 
@@ -144,8 +145,7 @@ The GUI explicitly does NOT:
 | Condition | UI Behavior |
 |-----------|-------------|
 | `appsIncluded` present, length > 0 | Show scrollable app list in Details modal |
-| `appsIncluded` empty, NDJSON events exist | Use NDJSON events for modal list; count = events.length |
-| `appsIncluded` empty, no NDJSON events | Show "No applications detected" |
+| `appsIncluded` empty or missing | Show "No applications were detected on this computer." |
 | `success: false`, `error.code` present | Show error toast with `error.message` |
 | `success: false`, `error.code` = `WINGET_CAPTURE_EMPTY` | Show specific empty capture error |
 | `success: false`, `error.code` = `ENGINE_CLI_NOT_FOUND` | Show error, suggest bootstrap |
@@ -190,9 +190,12 @@ See `src/types.ts`:
 - **Overview flow**: REGRESSION - count derived from appsIncluded.length must match appEvents.length
 - **Overview flow**: REGRESSION - normal case produces consistent count and appEvents
 - **Modal fallback**: INVARIANT - if appEvents.length > 0, modal must NOT show fallback text
-- **NDJSON fallback**: REGRESSION - appsIncluded empty + NDJSON events = use NDJSON for modal
-- **NDJSON fallback**: REGRESSION - appsIncluded present = use appsIncluded (no fallback needed)
-- **Wiring invariant**: detailsAction="capture" -> actionResultByAction["capture"] has consistent count/appEvents
+- **Option A**: INVARIANT - appsIncluded with N entries produces count=N and appEvents.length=N
+- **Option A**: INVARIANT - appsIncluded empty produces count=0 and appEvents.length=0 (no NDJSON fallback)
+- **Option A**: INVARIANT - NDJSON events are ignored for capture count/list
+- **Option A**: INVARIANT - detailsAction="capture" -> actionResultByAction["capture"] has consistent count/appEvents
+- **Option A**: MODAL - shows "No applications were detected" ONLY when appsIncluded.length === 0
+- **Option A**: MODAL - never shows "No applications were detected" when appsIncluded.length > 0
 
 See: `src/lib/capture-continuity.test.ts`
 

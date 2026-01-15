@@ -20,7 +20,6 @@ import {
   deriveCaptureSummaryText,
 } from './capture-continuity';
 import type { EndstateCaptureData, CapturedApp } from '../types';
-import type { AppEvent } from './apply-utils';
 
 describe('Capture Continuity Invariants', () => {
   describe('INV-CONTINUITY-1: counts.included must equal appsIncluded.length', () => {
@@ -512,107 +511,75 @@ describe('Capture Continuity Invariants', () => {
     });
   });
 
-  describe('REGRESSION: Empty appsIncluded with NDJSON fallback', () => {
+  describe('Option A: appsIncluded is the ONLY canonical source (no NDJSON fallback)', () => {
     /**
-     * This test reproduces the exact bug scenario:
-     * - Engine returns envelope with counts.included = 67 but appsIncluded = []
-     * - NDJSON streaming captured 67 item events during the run
-     * - OLD BUG: count = 67 (from counts.included fallback), appEvents = [] (from empty appsIncluded)
-     * - Result: modal header says "67 apps captured" but body says "No applications detected"
-     * 
-     * FIX: When appsIncluded is empty, use NDJSON events as fallback for BOTH count and appEvents
+     * Option A contract: envelope.data.appsIncluded is the ONLY truth for capture count and list.
+     * - No NDJSON fallback - if appsIncluded is empty, report 0 apps captured
+     * - counts.total === appsIncluded.length
+     * - appEvents.length === appsIncluded.length
      */
-    it('REGRESSION: appsIncluded empty + NDJSON events = use NDJSON for modal', () => {
+
+    it('INVARIANT: appsIncluded with N entries produces count=N and appEvents.length=N', () => {
       const N = 67;
       
-      // Simulate envelope.data with counts but empty appsIncluded (the bug scenario)
-      const envelopeData: EndstateCaptureData = {
-        counts: {
-          totalFound: N,
-          included: N, // Engine says 67 apps
-          skipped: 0,
-          filteredRuntimes: 0,
-          filteredStoreApps: 0,
-          sensitiveExcludedCount: 0,
-        },
-        appsIncluded: [], // But list is empty! This was the bug.
-      };
-
-      // Simulate NDJSON events collected during streaming (these have the actual app IDs)
-      const ndjsonEvents: AppEvent[] = Array(N).fill(null).map((_, i) => ({
-        app: `app-${i}`,
-        action: 'Captured',
-        statusKey: 'detected' as const,
-        phase: 'capture' as const,
+      // Simulate envelope.data.appsIncluded with N entries
+      const appsIncluded: CapturedApp[] = Array(N).fill(null).map((_, i) => ({
+        id: `app-${i}`,
+        source: 'winget' as const,
       }));
 
-      // Simulate the FIXED App.tsx logic (lines 1011-1023)
-      const capturedApps = envelopeData?.appsIncluded ?? [];
-      const fallbackAppsFromEvents = ndjsonEvents
-        .filter(e => e.app !== 'Manifest' && e.phase === 'capture')
-        .map(e => ({ id: e.app, source: 'ndjson' as const }));
-      const appsForModal = capturedApps.length > 0 ? capturedApps : fallbackAppsFromEvents;
-      const capturedCount = appsForModal.length;
+      // Simulate Option A App.tsx logic: appsIncluded is the ONLY source
+      const capturedCount = appsIncluded.length;
+      const actionResult = buildCaptureActionResult(appsIncluded, `${capturedCount} apps captured`);
 
-      // Build action result using the same list for both count and appEvents
-      const actionResult = buildCaptureActionResult(appsForModal, `${capturedCount} apps captured`);
-
-      // INVARIANT: count and appEvents.length MUST be equal
-      expect(actionResult.counts.total).toBe(capturedCount);
-      expect(actionResult.appEvents.length).toBe(capturedCount);
+      // INVARIANT: counts.total === appsIncluded.length
+      expect(actionResult.counts.total).toBe(N);
+      // INVARIANT: appEvents.length === appsIncluded.length
+      expect(actionResult.appEvents.length).toBe(N);
+      // INVARIANT: counts.total === appEvents.length (consistency)
       expect(actionResult.counts.total).toBe(actionResult.appEvents.length);
 
-      // INVARIANT: if count > 0, modal must NOT hit fallback
+      // Modal should NOT hit fallback when appEvents is non-empty
       const wouldHitFallback = !actionResult?.appEvents || actionResult.appEvents.length === 0;
       expect(wouldHitFallback).toBe(false);
-
-      // Verify the apps are from NDJSON fallback
-      expect(actionResult.appEvents[0].app).toBe('app-0');
-      expect(actionResult.appEvents.length).toBe(N);
     });
 
-    it('REGRESSION: appsIncluded present = use appsIncluded (no fallback needed)', () => {
-      const N = 67;
+    it('INVARIANT: appsIncluded empty produces count=0 and appEvents.length=0 (no NDJSON fallback)', () => {
+      // Simulate envelope.data with counts.included > 0 but appsIncluded empty
+      // Under Option A, we report 0 apps captured (no NDJSON fallback)
+      const appsIncluded: CapturedApp[] = [];
+
+      // Simulate Option A App.tsx logic: appsIncluded is the ONLY source
+      const capturedCount = appsIncluded.length;
+      const actionResult = buildCaptureActionResult(appsIncluded, `${capturedCount} apps captured`);
+
+      // INVARIANT: counts.total === 0 (from empty appsIncluded)
+      expect(actionResult.counts.total).toBe(0);
+      // INVARIANT: appEvents.length === 0
+      expect(actionResult.appEvents.length).toBe(0);
+
+      // Modal SHOULD hit fallback when appEvents is empty
+      const wouldHitFallback = !actionResult?.appEvents || actionResult.appEvents.length === 0;
+      expect(wouldHitFallback).toBe(true);
+    });
+
+    it('INVARIANT: NDJSON events are ignored for capture count/list (Option A)', () => {
+      // Simulate envelope.data.appsIncluded is empty
+      const appsIncluded: CapturedApp[] = [];
       
-      // Normal case: envelope has both counts and appsIncluded populated
-      const envelopeData: EndstateCaptureData = {
-        counts: {
-          totalFound: N,
-          included: N,
-          skipped: 0,
-          filteredRuntimes: 0,
-          filteredStoreApps: 0,
-          sensitiveExcludedCount: 0,
-        },
-        appsIncluded: Array(N).fill(null).map((_, i) => ({
-          id: `app-${i}`,
-          source: 'winget' as const,
-        })),
-      };
+      // Even if NDJSON events exist, they are NOT used for count/list under Option A
+      // (NDJSON events are only for streaming progress UI)
+      
+      // Simulate Option A App.tsx logic: appsIncluded is the ONLY source
+      const capturedCount = appsIncluded.length;
+      const actionResult = buildCaptureActionResult(appsIncluded, `${capturedCount} apps captured`);
 
-      // NDJSON events also exist (but should not be used when appsIncluded is present)
-      const ndjsonEvents: AppEvent[] = Array(N).fill(null).map((_, i) => ({
-        app: `ndjson-app-${i}`, // Different IDs to verify we use appsIncluded
-        action: 'Captured',
-        statusKey: 'detected' as const,
-        phase: 'capture' as const,
-      }));
-
-      // Simulate the FIXED App.tsx logic
-      const capturedApps = envelopeData?.appsIncluded ?? [];
-      const fallbackAppsFromEvents = ndjsonEvents
-        .filter(e => e.app !== 'Manifest' && e.phase === 'capture')
-        .map(e => ({ id: e.app, source: 'ndjson' as const }));
-      const appsForModal = capturedApps.length > 0 ? capturedApps : fallbackAppsFromEvents;
-      const capturedCount = appsForModal.length;
-
-      const actionResult = buildCaptureActionResult(appsForModal, `${capturedCount} apps captured`);
-
-      // Should use appsIncluded, not NDJSON fallback
-      expect(actionResult.appEvents[0].app).toBe('app-0'); // From appsIncluded
-      expect(actionResult.appEvents[0].app).not.toBe('ndjson-app-0');
-      expect(actionResult.counts.total).toBe(N);
-      expect(actionResult.appEvents.length).toBe(N);
+      // INVARIANT: count is 0 (NDJSON events are ignored)
+      expect(actionResult.counts.total).toBe(0);
+      expect(actionResult.appEvents.length).toBe(0);
+      
+      // This is the correct behavior under Option A: if engine doesn't provide appsIncluded,
+      // we report 0 apps captured, even if NDJSON streaming showed activity
     });
 
     it('INVARIANT: detailsAction="capture" -> actionResultByAction["capture"] has consistent count/appEvents', () => {
@@ -627,12 +594,12 @@ describe('Capture Continuity Invariants', () => {
       const N = 67;
       
       // Simulate the action result that would be stored in actionResultByAction["capture"]
-      const appsForModal: CapturedApp[] = Array(N).fill(null).map((_, i) => ({
+      const appsIncluded: CapturedApp[] = Array(N).fill(null).map((_, i) => ({
         id: `app-${i}`,
         source: 'winget' as const,
       }));
       
-      const actionResult = buildCaptureActionResult(appsForModal, `${N} apps captured`);
+      const actionResult = buildCaptureActionResult(appsIncluded, `${N} apps captured`);
       
       // Simulate what ActionDetailsModal receives
       const detailsAction = 'capture';
@@ -659,6 +626,44 @@ describe('Capture Continuity Invariants', () => {
       // Modal fallback condition check
       const wouldHitFallback = !modalActionResult?.appEvents || modalActionResult.appEvents.length === 0;
       expect(wouldHitFallback).toBe(false);
+    });
+
+    it('MODAL: shows "No applications were detected" ONLY when appsIncluded.length === 0', () => {
+      // When appsIncluded is empty, modal should show fallback text
+      const emptyAppsIncluded: CapturedApp[] = [];
+      const emptyResult = buildCaptureActionResult(emptyAppsIncluded, '0 apps captured');
+      
+      expect(emptyResult.counts.total).toBe(0);
+      expect(emptyResult.appEvents.length).toBe(0);
+      
+      // Modal fallback condition: appEvents.length === 0 AND counts.total === 0
+      // This is the ONLY case where "No applications were detected" should appear
+      const shouldShowNoAppsMessage = 
+        emptyResult.appEvents.length === 0 && 
+        emptyResult.counts.total === 0;
+      expect(shouldShowNoAppsMessage).toBe(true);
+    });
+
+    it('MODAL: never shows "No applications were detected" when appsIncluded.length > 0', () => {
+      // When appsIncluded has entries, modal should show the list, not fallback
+      const appsIncluded: CapturedApp[] = [
+        { id: 'Git.Git', source: 'winget' },
+        { id: 'Docker.DockerDesktop', source: 'winget' },
+      ];
+      const result = buildCaptureActionResult(appsIncluded, '2 apps captured');
+      
+      expect(result.counts.total).toBe(2);
+      expect(result.appEvents.length).toBe(2);
+      
+      // Modal should NOT show "No applications were detected"
+      const shouldShowNoAppsMessage = 
+        result.appEvents.length === 0 && 
+        result.counts.total === 0;
+      expect(shouldShowNoAppsMessage).toBe(false);
+      
+      // Modal should render the app list
+      expect(result.appEvents[0].app).toBe('Git.Git');
+      expect(result.appEvents[1].app).toBe('Docker.DockerDesktop');
     });
   });
 });

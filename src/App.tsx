@@ -1005,22 +1005,15 @@ function AppContent() {
       showToast('Winget export failed; captured winget-managed apps only.', 'warning');
     }
     
-    // CANONICAL SOURCE: appsIncluded is the authoritative list (INV-CONTINUITY-1)
-    // INVARIANT: count and appEvents MUST derive from the same source to prevent
-    // "67 apps captured" header with "No applications detected" body mismatch.
-    const capturedApps = envelopeData?.appsIncluded ?? [];
+    // CANONICAL SOURCE (Option A): envelope.data.appsIncluded is the ONLY truth
+    // No NDJSON fallback - if appsIncluded is empty, report 0 apps captured
+    const appsIncluded = envelopeData?.appsIncluded ?? [];
+    const capturedCount = appsIncluded.length;
     
-    // If appsIncluded is empty but we have NDJSON events, use those as fallback
-    // This ensures modal can display the list even if envelope.data.appsIncluded is missing
-    const fallbackAppsFromEvents = overviewCaptureEvents
-      .filter(e => e.app !== 'Manifest' && e.phase === 'capture')
-      .map(e => ({ id: e.app, source: 'ndjson' as const }));
-    
-    // Use appsIncluded if available, otherwise fallback to NDJSON events
-    const appsForModal = capturedApps.length > 0 ? capturedApps : fallbackAppsFromEvents;
-    
-    // Count MUST derive from the same list used for modal to prevent mismatch
-    const capturedCount = appsForModal.length;
+    // Dev warning: detect potential engine bug where counts.included > 0 but appsIncluded empty
+    if (import.meta.env.DEV && (envelopeData?.counts?.included ?? 0) > 0 && appsIncluded.length === 0) {
+      console.warn('[DEV] Engine reported counts.included > 0 but appsIncluded is empty. This may indicate an engine bug.');
+    }
 
     // Persist run artifacts (logs, diagnostics, summary)
     if (runBundle) {
@@ -1066,8 +1059,8 @@ function AppContent() {
     const newLifecycleState = recordLifecycleEvent('capture', captureEvent);
     setLifecycleState(newLifecycleState);
     
-    // Get app list from the same source used for modal (appsForModal)
-    const appsList = appsForModal.map(a => a.id);
+    // Get app list from canonical source (appsIncluded)
+    const appsList = appsIncluded.map(a => a.id);
     
     // Read manifest content from temp file
     let draftText = '';
@@ -1091,8 +1084,8 @@ function AppContent() {
     }
     
     // Return structured result with draft text and canonical app list for modal
-    // INVARIANT: count, apps, and appsIncluded ALL derive from appsForModal for consistency
-    return { count: capturedCount, draftText, apps: appsList, appsIncluded: appsForModal };
+    // INVARIANT: count, apps, and appsIncluded ALL derive from envelope.data.appsIncluded
+    return { count: capturedCount, draftText, apps: appsList, appsIncluded };
   };
 
   const handlePreviewFromOverview = async () => {

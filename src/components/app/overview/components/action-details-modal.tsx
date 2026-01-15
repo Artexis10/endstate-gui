@@ -237,7 +237,9 @@ export function ActionDetailsModal({
         {(!actionResult?.appEvents || actionResult.appEvents.length === 0) && actionResult?.status === 'success' && (
           <div className="flex-shrink-0 text-sm text-muted-foreground py-4 text-center">
             {actionResult.action === 'capture' 
-              ? 'No applications were detected on this computer.'
+              ? (actionResult.counts?.total === 0
+                  ? 'No applications were detected on this computer.'
+                  : 'Apps were captured but the list is unavailable.')
               : 'Operation completed successfully.'}
           </div>
         )}
