@@ -28,6 +28,7 @@ import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engi
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
+import { buildCaptureActionResult } from './lib/capture-continuity';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -996,7 +997,7 @@ function AppContent() {
       throw new Error(errorMessage);
     }
 
-    // Get count from envelope data (preferred) or fall back to NDJSON event count
+    // Get envelope data from engine response
     const envelopeData = captureResult.envelope?.data as EndstateCaptureData | undefined;
     
     // Show warning toast if fallback capture was used
@@ -1004,16 +1005,22 @@ function AppContent() {
       showToast('Winget export failed; captured winget-managed apps only.', 'warning');
     }
     
-    let capturedCount = 0;
+    // CANONICAL SOURCE: appsIncluded is the authoritative list (INV-CONTINUITY-1)
+    // INVARIANT: count and appEvents MUST derive from the same source to prevent
+    // "67 apps captured" header with "No applications detected" body mismatch.
+    const capturedApps = envelopeData?.appsIncluded ?? [];
     
-    if (envelopeData?.counts?.included !== undefined) {
-      capturedCount = envelopeData.counts.included;
-    } else if (envelopeData?.appsIncluded) {
-      capturedCount = envelopeData.appsIncluded.length;
-    } else {
-      // Fallback: use NDJSON event count
-      capturedCount = overviewCaptureEvents.length;
-    }
+    // If appsIncluded is empty but we have NDJSON events, use those as fallback
+    // This ensures modal can display the list even if envelope.data.appsIncluded is missing
+    const fallbackAppsFromEvents = overviewCaptureEvents
+      .filter(e => e.app !== 'Manifest' && e.phase === 'capture')
+      .map(e => ({ id: e.app, source: 'ndjson' as const }));
+    
+    // Use appsIncluded if available, otherwise fallback to NDJSON events
+    const appsForModal = capturedApps.length > 0 ? capturedApps : fallbackAppsFromEvents;
+    
+    // Count MUST derive from the same list used for modal to prevent mismatch
+    const capturedCount = appsForModal.length;
 
     // Persist run artifacts (logs, diagnostics, summary)
     if (runBundle) {
@@ -1059,8 +1066,8 @@ function AppContent() {
     const newLifecycleState = recordLifecycleEvent('capture', captureEvent);
     setLifecycleState(newLifecycleState);
     
-    // Get app list from envelope data
-    const appsList = envelopeData?.appsIncluded?.map(a => a.id) || [];
+    // Get app list from the same source used for modal (appsForModal)
+    const appsList = appsForModal.map(a => a.id);
     
     // Read manifest content from temp file
     let draftText = '';
@@ -1083,8 +1090,9 @@ function AppContent() {
       // Ignore cleanup errors
     }
     
-    // Return structured result with draft text (no file path)
-    return { count: capturedCount, draftText, apps: appsList };
+    // Return structured result with draft text and canonical app list for modal
+    // INVARIANT: count, apps, and appsIncluded ALL derive from appsForModal for consistency
+    return { count: capturedCount, draftText, apps: appsList, appsIncluded: appsForModal };
   };
 
   const handlePreviewFromOverview = async () => {
@@ -1817,14 +1825,8 @@ function AppContent() {
                   // DO NOT set lastSavedProfileSummary here
                   // Green success only appears after Save Profile (in handleSaveProfileName)
                   
-                  setOverviewActionResult('capture', { 
-                    action: 'capture', 
-                    status: 'success', 
-                    summary: countText,
-                    timestamp: new Date().toISOString(),
-                    counts: { total: result.count },
-                    appEvents: result.apps?.map(app => ({ app, action: 'Captured', statusKey: 'detected' as const, phase: 'capture' as const })),
-                  });
+                  // Use helper with canonical CapturedApp[] to build modal model (INV-DETAILS-1)
+                  setOverviewActionResult('capture', buildCaptureActionResult(result.appsIncluded, countText));
                   
                   // Prompt for profile name after state is set
                   await promptForProfileName('');

@@ -236,7 +236,7 @@ export function ActionDetailsModal({
         {/* Fallback if no app events */}
         {(!actionResult?.appEvents || actionResult.appEvents.length === 0) && actionResult?.status === 'success' && (
           <div className="flex-shrink-0 text-sm text-muted-foreground py-4 text-center">
-            {actionResult.action === 'capture' && actionResult.counts?.total === 0 
+            {actionResult.action === 'capture' 
               ? 'No applications were detected on this computer.'
               : 'Operation completed successfully.'}
           </div>
