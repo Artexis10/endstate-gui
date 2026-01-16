@@ -368,29 +368,23 @@ function AppContent() {
     setShowProfileNameModal(true);
   };
 
-  // Test-only hook for E2E testing
-  // Exposed in dev mode or when VITE_E2E is set (harmless in production since it's tree-shaken)
+  // E2E test hooks - only installed when VITE_E2E === "1"
   useEffect(() => {
-    if (import.meta.env.DEV || import.meta.env.VITE_E2E === '1') {
-      (window as any).__endstate_e2e_openSaveProfileModal = ({ draftText, suggestedName }: { draftText: string; suggestedName: string }) => {
-        setPendingCaptureDraft({
-          capturedAppsCount: 0,
-          capturedAt: new Date().toISOString(),
-          draftText: draftText || '{}',
-          apps: [],
+    if (import.meta.env.VITE_E2E === '1') {
+      let cleanup: (() => void) | undefined;
+      
+      import('./e2e/e2e-hooks').then(({ installE2EHooks }) => {
+        cleanup = installE2EHooks({
+          setPendingCaptureDraft,
+          openProfileNameModal,
+          showToast,
+          setActionResultByAction,
+          setActionStatusByAction,
         });
-        openProfileNameModal('', suggestedName, 'save', suggestedName);
-      };
-      (window as any).__endstate_e2e_showToast = showToast;
-      // E2E hook to inject capture result for testing ActionDetailsModal
-      (window as any).__endstate_e2e_setCaptureResult = (result: import('./components/app/overview/types').ActionResult) => {
-        setActionResultByAction(prev => ({ ...prev, capture: result }));
-        setActionStatusByAction(prev => ({ ...prev, capture: result.status }));
-      };
+      });
+      
       return () => {
-        delete (window as any).__endstate_e2e_openSaveProfileModal;
-        delete (window as any).__endstate_e2e_showToast;
-        delete (window as any).__endstate_e2e_setCaptureResult;
+        cleanup?.();
       };
     }
   }, []);

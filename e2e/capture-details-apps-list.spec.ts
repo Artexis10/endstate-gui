@@ -68,8 +68,7 @@ test.describe('Capture Details Apps List - Regression Prevention', () => {
   });
 
   test('REGRESSION: Capture Details shows apps list when appsIncluded exists (not fallback text)', async ({ page }) => {
-    // Inject capture result state and open modal directly (same pattern as other E2E tests)
-    // This simulates what happens after handleCaptureFromOverview completes
+    // Inject capture result state (simulates handleCaptureFromOverview completing)
     await page.evaluate((fixtureApps) => {
       // Build appEvents from appsIncluded (same as buildCaptureActionResult)
       const appEvents = fixtureApps.map((app: any) => ({
@@ -89,13 +88,45 @@ test.describe('Capture Details Apps List - Regression Prevention', () => {
         counts: { total: fixtureApps.length },
         appEvents,
       });
-
-      // Open the details modal directly
-      (window as any).__endstate_e2e_openDetailsModal?.('capture');
     }, FIXTURE_APPS);
 
-    // Wait for modal to open
+    // Trigger save profile flow to make Details button appear
+    await page.evaluate(() => {
+      const manifest = {
+        version: 1,
+        apps: [
+          { name: '7zip.7zip', source: 'winget' },
+          { name: 'Git.Git', source: 'winget' },
+          { name: 'Docker.DockerDesktop', source: 'winget' },
+          { name: 'Microsoft.VSCode', source: 'winget' },
+          { name: 'Notepad++.Notepad++', source: 'winget' },
+        ],
+      };
+      (window as any).__endstate_e2e_openSaveProfileModal?.({
+        draftText: JSON.stringify(manifest, null, 2),
+        suggestedName: 'Test Profile',
+      });
+    });
+
+    // Wait for profile name modal to appear
+    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
+
+    // Save the profile
+    await page.locator('[data-testid="profile-name-input"]').fill('Test Profile');
+    await page.click('[data-testid="profile-name-save"]');
+
+    // Wait for modal to close (success animation completes)
+    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
+
+    // Expand Capture card to see the success strip with Details button
+    const captureCard = page.locator('[data-testid="overview-card-capture"]');
+    await captureCard.click();
     await page.waitForTimeout(300);
+
+    // Click the real Details button
+    const detailsButton = page.locator('[data-testid="capture-details-button"]');
+    await expect(detailsButton).toBeVisible({ timeout: 5000 });
+    await detailsButton.click();
 
     // Verify modal is open with correct title
     const modal = page.locator('[data-testid="action-details-modal"]');
@@ -119,7 +150,7 @@ test.describe('Capture Details Apps List - Regression Prevention', () => {
   });
 
   test('Capture Details shows correct app count in header', async ({ page }) => {
-    // Inject capture result state and open modal
+    // Inject capture result state
     await page.evaluate((fixtureApps) => {
       const appEvents = fixtureApps.map((app: any) => ({
         app: app.id,
@@ -137,12 +168,40 @@ test.describe('Capture Details Apps List - Regression Prevention', () => {
         counts: { total: fixtureApps.length },
         appEvents,
       });
-
-      // Open the details modal directly
-      (window as any).__endstate_e2e_openDetailsModal?.('capture');
     }, FIXTURE_APPS);
 
+    // Trigger save profile flow to make Details button appear
+    await page.evaluate(() => {
+      const manifest = {
+        version: 1,
+        apps: [
+          { name: '7zip.7zip', source: 'winget' },
+          { name: 'Git.Git', source: 'winget' },
+          { name: 'Docker.DockerDesktop', source: 'winget' },
+          { name: 'Microsoft.VSCode', source: 'winget' },
+          { name: 'Notepad++.Notepad++', source: 'winget' },
+        ],
+      };
+      (window as any).__endstate_e2e_openSaveProfileModal?.({
+        draftText: JSON.stringify(manifest, null, 2),
+        suggestedName: 'Test Profile 2',
+      });
+    });
+
+    // Wait for profile name modal and save
+    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
+    await page.locator('[data-testid="profile-name-input"]').fill('Test Profile 2');
+    await page.click('[data-testid="profile-name-save"]');
+    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
+
+    // Expand Capture card and click Details button
+    const captureCard = page.locator('[data-testid="overview-card-capture"]');
+    await captureCard.click();
     await page.waitForTimeout(300);
+
+    const detailsButton = page.locator('[data-testid="capture-details-button"]');
+    await expect(detailsButton).toBeVisible({ timeout: 5000 });
+    await detailsButton.click();
 
     const modal = page.locator('[data-testid="action-details-modal"]');
     await expect(modal).toBeVisible({ timeout: 5000 });
