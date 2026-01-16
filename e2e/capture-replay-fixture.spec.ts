@@ -20,7 +20,7 @@ test.describe('Capture Golden Replay Fixture', () => {
     await installTauriMock(page);
 
     await page.addInitScript(() => {
-      (window as any).__endstate_e2e_setScenario('capture_ok_replay');
+      (window as any).__ENDSTATE_E2E_SCENARIO__ = 'capture_ok_replay';
     });
 
     await page.goto(baseURL || '/');
@@ -28,141 +28,90 @@ test.describe('Capture Golden Replay Fixture', () => {
   });
 
   test('Replay fixture produces non-empty apps list in Capture Details', async ({ page }) => {
-    // Inject capture result state using replay fixture data
-    await page.evaluate(() => {
-      const fixtureApps = [
-        { id: 'Mozilla.Firefox', source: 'winget' },
-        { id: 'Google.Chrome', source: 'winget' },
-        { id: 'Microsoft.VisualStudioCode', source: 'winget' },
-        { id: 'Git.Git', source: 'winget' },
-        { id: '7zip.7zip', source: 'winget' },
-      ];
+    // Click Capture button to trigger replay scenario
+    await page.click('main >> button:has-text("Capture computer")');
 
-      const appEvents = fixtureApps.map((app: any) => ({
-        app: app.id,
-        action: 'Captured',
-        timestamp: Date.now(),
-        statusKey: 'detected',
-        phase: 'capture',
-      }));
+    // Wait for capture to complete - look for the warning strip
+    await expect(page.locator('text=Capture finished')).toBeVisible({ timeout: 6000 });
 
-      (window as any).__endstate_e2e_setCaptureResult?.({
-        action: 'capture',
-        status: 'success',
-        summary: `${fixtureApps.length} apps captured`,
-        timestamp: new Date().toISOString(),
-        counts: { total: fixtureApps.length },
-        appEvents,
-      });
-    });
+    // Verify the count shows 5 apps in Recent Activity
+    await expect(page.locator('text=5 apps')).toBeVisible({ timeout: 3000 });
 
-    // Trigger save profile flow to make Details button appear
-    await page.evaluate(() => {
-      const manifest = {
-        version: 1,
-        apps: [
-          { name: 'Mozilla.Firefox', source: 'winget' },
-          { name: 'Google.Chrome', source: 'winget' },
-          { name: 'Microsoft.VisualStudioCode', source: 'winget' },
-          { name: 'Git.Git', source: 'winget' },
-          { name: '7zip.7zip', source: 'winget' },
-        ],
-      };
-      (window as any).__endstate_e2e_openSaveProfileModal?.({
-        draftText: JSON.stringify(manifest, null, 2),
-        suggestedName: 'Replay Test Profile',
-      });
-    });
-
-    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
+    // Save the profile so Details button appears
+    const saveProfileModal = page.locator('[data-testid="profile-name-modal"]');
+    await expect(saveProfileModal).toBeVisible({ timeout: 3000 });
     await page.locator('[data-testid="profile-name-input"]').fill('Replay Test Profile');
     await page.click('[data-testid="profile-name-save"]');
-    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
+    await expect(saveProfileModal).not.toBeVisible({ timeout: 3000 });
 
+    // Wait for profile save to complete
+    await page.waitForTimeout(1000);
+
+    // Expand Capture card to see the success strip with Details button
     const captureCard = page.locator('[data-testid="overview-card-capture"]');
     await captureCard.click();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
 
+    // Click the Details button to open Action Details modal
     const detailsButton = page.locator('[data-testid="capture-details-button"]');
     await expect(detailsButton).toBeVisible({ timeout: 5000 });
     await detailsButton.click();
 
+    // Verify Action Details modal is open with correct title
     const modal = page.locator('[data-testid="action-details-modal"]');
     await expect(modal).toBeVisible({ timeout: 5000 });
     await expect(modal.locator('text=Capture Details')).toBeVisible();
 
+    // CRITICAL ASSERTION - Apps list should be visible
     const appsList = page.locator('[data-testid="action-details-apps-list"]');
     await expect(appsList).toBeVisible({ timeout: 5000 });
 
+    // Verify at least one fixture app ID is visible in the list
     await expect(appsList.locator('text=Mozilla.Firefox')).toBeVisible();
 
+    // CRITICAL ASSERTION - Fallback text should NOT be visible
     const fallback = page.locator('[data-testid="action-details-fallback"]');
     await expect(fallback).not.toBeVisible();
   });
 
   test('Replay fixture shows correct count in header', async ({ page }) => {
-    // Inject capture result state using replay fixture data
-    await page.evaluate(() => {
-      const fixtureApps = [
-        { id: 'Mozilla.Firefox', source: 'winget' },
-        { id: 'Google.Chrome', source: 'winget' },
-        { id: 'Microsoft.VisualStudioCode', source: 'winget' },
-        { id: 'Git.Git', source: 'winget' },
-        { id: '7zip.7zip', source: 'winget' },
-      ];
+    // Click Capture button to trigger replay scenario
+    await page.click('main >> button:has-text("Capture computer")');
 
-      const appEvents = fixtureApps.map((app: any) => ({
-        app: app.id,
-        action: 'Captured',
-        timestamp: Date.now(),
-        statusKey: 'detected',
-        phase: 'capture',
-      }));
+    // Wait for capture to complete
+    await expect(page.locator('text=Capture finished')).toBeVisible({ timeout: 6000 });
 
-      (window as any).__endstate_e2e_setCaptureResult?.({
-        action: 'capture',
-        status: 'success',
-        summary: `${fixtureApps.length} apps captured`,
-        timestamp: new Date().toISOString(),
-        counts: { total: fixtureApps.length },
-        appEvents,
-      });
-    });
+    // Verify the count shows 5 apps in Recent Activity
+    await expect(page.locator('text=5 apps')).toBeVisible({ timeout: 3000 });
 
-    // Trigger save profile flow to make Details button appear
-    await page.evaluate(() => {
-      const manifest = {
-        version: 1,
-        apps: [
-          { name: 'Mozilla.Firefox', source: 'winget' },
-          { name: 'Google.Chrome', source: 'winget' },
-          { name: 'Microsoft.VisualStudioCode', source: 'winget' },
-          { name: 'Git.Git', source: 'winget' },
-          { name: '7zip.7zip', source: 'winget' },
-        ],
-      };
-      (window as any).__endstate_e2e_openSaveProfileModal?.({
-        draftText: JSON.stringify(manifest, null, 2),
-        suggestedName: 'Replay Count Test',
-      });
-    });
-
-    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
+    // Save the profile so Details button appears
+    const saveProfileModal = page.locator('[data-testid="profile-name-modal"]');
+    await expect(saveProfileModal).toBeVisible({ timeout: 3000 });
     await page.locator('[data-testid="profile-name-input"]').fill('Replay Count Test');
     await page.click('[data-testid="profile-name-save"]');
-    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
+    await expect(saveProfileModal).not.toBeVisible({ timeout: 3000 });
 
+    // Wait for profile save to complete
+    await page.waitForTimeout(1000);
+
+    // Expand Capture card to see the success strip with Details button
     const captureCard = page.locator('[data-testid="overview-card-capture"]');
     await captureCard.click();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
 
+    // Click the Details button
     const detailsButton = page.locator('[data-testid="capture-details-button"]');
     await expect(detailsButton).toBeVisible({ timeout: 5000 });
     await detailsButton.click();
 
+    // Verify Action Details modal shows correct count
     const modal = page.locator('[data-testid="action-details-modal"]');
     await expect(modal).toBeVisible({ timeout: 5000 });
 
+    // Verify the summary shows correct count (5 apps captured)
     await expect(modal.locator('text=5 apps captured')).toBeVisible();
+
+    // Verify the apps list header shows correct count
+    await expect(modal.locator('text=Apps (5)')).toBeVisible();
   });
 });
