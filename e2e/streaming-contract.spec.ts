@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, goToApplyPage, goToVerifyPage } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * Streaming Contract Tests
@@ -12,59 +13,36 @@ import { forceAdvancedMode, goToApplyPage, goToVerifyPage } from './helpers/ui-m
 test.describe('Streaming Contract', () => {
   
   test('Streaming invoke returns undefined but succeeds - no error banner', async ({ page, baseURL }) => {
-    // Force Advanced mode for sidebar navigation tests
     await forceAdvancedMode(page);
 
-    // Setup: Mock Tauri APIs where invoke returns undefined (as Tauri v2 does)
-    // but streaming events are emitted correctly
-    await page.addInitScript(() => {
-      const eventHandlers: Map<string, Function> = new Map();
-      
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'run_endstate_streaming') {
-              // Simulate streaming: emit events after a short delay
-              const channel = args?.eventChannel;
-              setTimeout(() => {
-                const handler = eventHandlers.get(channel);
-                if (handler) {
-                  // Emit stdout with valid JSON envelope
-                  handler({ payload: { type: 'stdout', data: JSON.stringify({
-                    schemaVersion: '1.0',
-                    cliVersion: '1.0.0',
-                    command: args?.args?.[0] || 'capabilities',
-                    runId: 'test-run',
-                    timestampUtc: new Date().toISOString(),
-                    success: true,
-                    data: { commands: ['capture', 'apply', 'verify', 'report'] },
-                    error: null
-                  }) + '\n' }});
-                  // Emit exit event
-                  handler({ payload: { type: 'exit', data: '', exitCode: 0 }});
-                }
-              }, 100);
-              
-              // CRITICAL: Return undefined - this is what Tauri v2 does
-              // The old buggy code would throw an error here
-              return undefined;
+    await installTauriMock(page, {
+      enableEventListeners: true,
+      invoke: {
+        run_endstate_streaming: (args?: any) => {
+          const channel = args?.eventChannel;
+          setTimeout(() => {
+            const eventHandlers = (window as any).__test_eventHandlers;
+            const handler = eventHandlers?.get(channel);
+            if (handler) {
+              handler({ payload: { type: 'stdout', data: JSON.stringify({
+                schemaVersion: '1.0',
+                cliVersion: '1.0.0',
+                command: args?.args?.[0] || 'capabilities',
+                runId: 'test-run',
+                timestampUtc: new Date().toISOString(),
+                success: true,
+                data: { commands: ['capture', 'apply', 'verify', 'report'] },
+                error: null
+              }) + '\n' }});
+              handler({ payload: { type: 'exit', data: '', exitCode: 0 }});
             }
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return [];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            return null;
-          }
+          }, 100);
+          return undefined;
         },
-        event: {
-          listen: async (event: string, handler: Function) => {
-            eventHandlers.set(event, handler);
-            return () => eventHandlers.delete(event);
-          }
-        }
-      };
-      
-      // Also provide mock engine for non-streaming paths
+      }
+    });
+
+    await page.addInitScript(() => {
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
@@ -89,36 +67,19 @@ test.describe('Streaming Contract', () => {
   });
 
   test('Streaming invoke throws - error banner appears', async ({ page, baseURL }) => {
-    // Force Advanced mode for sidebar navigation tests
     await forceAdvancedMode(page);
 
-    // Setup: Mock Tauri APIs where invoke throws (real transport failure)
-    await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'run_endstate_streaming') {
-              // Simulate real transport failure
-              throw new Error('IPC channel closed unexpectedly');
-            }
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return [];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            return null;
-          }
+    await installTauriMock(page, {
+      enableEventListeners: true,
+      invoke: {
+        run_endstate_streaming: () => {
+          throw new Error('IPC channel closed unexpectedly');
         },
-        event: {
-          listen: async (event: string, handler: Function) => {
-            return () => {};
-          }
-        }
-      };
+      }
     });
     
     await page.goto(baseURL || '/');
     
-    // Wait for error state
     await page.waitForSelector('text=Engine Connection Issue', { timeout: 15000 });
     
     // CRITICAL ASSERTIONS:

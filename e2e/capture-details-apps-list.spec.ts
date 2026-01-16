@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * E2E Regression Test: Capture Details Apps List
@@ -28,28 +29,9 @@ test.describe('Capture Details Apps List - Regression Prevention', () => {
 
   test.beforeEach(async ({ page, baseURL }) => {
     await forceAdvancedMode(page);
+    await installTauriMock(page);
 
     await page.addInitScript(() => {
-      // Mock Tauri invoke
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return [];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'get_capture_cache_directory') return 'C:\\test\\cache';
-            if (cmd === 'read_text_file') return '{"version": 1, "apps": []}';
-            if (cmd === 'check_file_exists') return false;
-            if (cmd === 'validate_profile') return { valid: true, summary: { name: 'test', version: 1, appCount: 0 } };
-            if (cmd === 'delete_file' || cmd === 'delete_file_silent') return null;
-            if (cmd === 'rename_file') return null;
-            return null;
-          }
-        }
-      };
-
-      // Mock engine for capabilities/report only
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (_settings: any, command: string) => {
           if (command === 'capabilities') {

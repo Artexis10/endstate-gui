@@ -1,26 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, goToApplyPage, goToCapturePage } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 test.describe('UX Contract Tests', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    // Force Advanced mode for sidebar navigation tests
     await forceAdvancedMode(page);
+    await installTauriMock(page);
 
     await page.addInitScript(() => {
-      // Mock Tauri APIs for web-only testing
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return [];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            return null;
-          }
-        }
-      };
-      
-      // Mock engine for streaming operations
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {

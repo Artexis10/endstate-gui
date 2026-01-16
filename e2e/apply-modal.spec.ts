@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, seedProfileSettings, goToApplyPage } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 // Helper to create mock engine for Apply-only flow
 function createApplyMockEngine(applyResponse: any) {
@@ -21,29 +22,19 @@ function createApplyMockEngine(applyResponse: any) {
 
 test.describe('Apply Page - Apply Only Flow', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    // Force Advanced mode and seed profile settings
     await forceAdvancedMode(page);
     await seedProfileSettings(page, 'test-profile', true);
 
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } }),
+        check_file_exists: () => true,
+        read_text_file: () => '{}',
+      }
+    });
+
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'validate_profile') {
-              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } };
-            }
-            if (cmd === 'check_file_exists') return true;
-            if (cmd === 'read_text_file') return '{}';
-            return null;
-          }
-        }
-      };
-      
-      // Default mock: all apps already installed
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function, options?: any) => {
           if (command === 'capabilities') {
@@ -53,7 +44,6 @@ test.describe('Apply Page - Apply Only Flow', () => {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } }, ndjsonEvents: [] };
           }
           if (command === 'apply') {
-            // Emit streaming events
             const items = [
               { id: 'Discord.Discord', driver: 'winget', status: 'ok', reason: 'already_installed', name: 'Discord' },
               { id: 'Google.Chrome', driver: 'winget', status: 'ok', reason: 'already_installed', name: 'Chrome' },
@@ -90,7 +80,6 @@ test.describe('Apply Page - Apply Only Flow', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    // App starts on Overview - navigate to Apply page
     await goToApplyPage(page);
   });
 
