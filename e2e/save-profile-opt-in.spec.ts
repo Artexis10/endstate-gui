@@ -15,7 +15,6 @@ test.describe('Save Profile - Opt-in Behavior', () => {
   const EXISTING_PROFILE_PATH = 'C:\\test\\profiles\\existing-profile.jsonc';
 
   test.beforeEach(async ({ page, baseURL }) => {
-    // Force advanced mode for sidebar navigation
     await forceAdvancedMode(page);
     
     await page.addInitScript(() => {
@@ -24,7 +23,7 @@ test.describe('Save Profile - Opt-in Behavior', () => {
       const writeFileCalls: { path: string; content: string }[] = [];
       const profileFiles = [
         'C:\\test\\profiles\\existing-profile.jsonc',
-        'C:\\test\\profiles\\setup_2024-12-31_23-59-00.jsonc', // Pending profile
+        'C:\\test\\profiles\\setup_2024-12-31_23-59-00.jsonc',
       ];
       
       (window as any).__test_deleteFileCalls = deleteFileCalls;
@@ -35,14 +34,10 @@ test.describe('Save Profile - Opt-in Behavior', () => {
       (window as any).__TAURI__ = {
         core: {
           invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
             if (cmd === 'list_manifest_files') {
               return (window as any).__test_profileFiles.map((p: string) => p);
             }
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
             if (cmd === 'read_text_file') {
-              // Return metadata if it exists
               if (args?.path?.endsWith('.meta.json')) {
                 const metaFiles = (window as any).__test_writeFileCalls
                   .filter((c: any) => c.path === args.path);
@@ -59,9 +54,7 @@ test.describe('Save Profile - Opt-in Behavior', () => {
             }
             if (cmd === 'check_file_exists') {
               const path = args?.path;
-              // Check if file is in our list
               if ((window as any).__test_profileFiles.includes(path)) return true;
-              // Check if it's a meta file we've written
               const metaWritten = (window as any).__test_writeFileCalls.some((c: any) => c.path === path);
               if (metaWritten) return true;
               return false;
@@ -71,7 +64,6 @@ test.describe('Save Profile - Opt-in Behavior', () => {
             }
             if (cmd === 'delete_file') {
               (window as any).__test_deleteFileCalls.push(args?.path);
-              // Remove from profile files list
               const idx = (window as any).__test_profileFiles.indexOf(args?.path);
               if (idx > -1) {
                 (window as any).__test_profileFiles.splice(idx, 1);
@@ -80,18 +72,22 @@ test.describe('Save Profile - Opt-in Behavior', () => {
             }
             if (cmd === 'rename_file') {
               (window as any).__test_renameFileCalls.push({ oldPath: args?.oldPath, newPath: args?.newPath });
-              // Update profile files list
               const idx = (window as any).__test_profileFiles.indexOf(args?.oldPath);
               if (idx > -1) {
                 (window as any).__test_profileFiles[idx] = args?.newPath;
               }
               return null;
             }
+            if (cmd === 'ensure_dir') return null;
+            if (cmd === 'read_dir') return [];
+            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
             return null;
           }
         }
       };
+    });
 
+    await page.addInitScript(() => {
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string) => {
           if (command === 'capabilities') {
@@ -108,7 +104,6 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
     
-    // Wait for the E2E hook to be available
     await page.waitForFunction(() => typeof (window as any).__endstate_e2e_openSaveProfileModal === 'function', { timeout: 10000 });
   });
 
