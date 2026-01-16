@@ -382,9 +382,15 @@ function AppContent() {
         openProfileNameModal('', suggestedName, 'save', suggestedName);
       };
       (window as any).__endstate_e2e_showToast = showToast;
+      // E2E hook to inject capture result for testing ActionDetailsModal
+      (window as any).__endstate_e2e_setCaptureResult = (result: import('./components/app/overview/types').ActionResult) => {
+        setActionResultByAction(prev => ({ ...prev, capture: result }));
+        setActionStatusByAction(prev => ({ ...prev, capture: result.status }));
+      };
       return () => {
         delete (window as any).__endstate_e2e_openSaveProfileModal;
         delete (window as any).__endstate_e2e_showToast;
+        delete (window as any).__endstate_e2e_setCaptureResult;
       };
     }
   }, []);
@@ -1000,6 +1006,33 @@ function AppContent() {
     // Get envelope data from engine response
     const envelopeData = captureResult.envelope?.data as EndstateCaptureData | undefined;
     
+    // DEV INVESTIGATION: Log raw capture envelope to determine if bug is GUI or Engine
+    if (import.meta.env.DEV) {
+      console.log('[CAPTURE] raw envelope:', captureResult.envelope);
+      console.log(
+        '[CAPTURE] envelope.data keys:',
+        captureResult.envelope?.data
+          ? Object.keys(captureResult.envelope.data as object)
+          : null
+      );
+      console.log(
+        '[CAPTURE] appsIncluded:',
+        (captureResult.envelope?.data as EndstateCaptureData | undefined)?.appsIncluded
+      );
+      console.log(
+        '[CAPTURE] appsIncluded length:',
+        (captureResult.envelope?.data as EndstateCaptureData | undefined)?.appsIncluded?.length ?? 'undefined/null'
+      );
+      console.log(
+        '[CAPTURE] counts:',
+        (captureResult.envelope?.data as EndstateCaptureData | undefined)?.counts
+      );
+      console.log(
+        '[CAPTURE] outputPath from envelope:',
+        (captureResult.envelope?.data as EndstateCaptureData | undefined)?.outputPath
+      );
+    }
+    
     // Show warning toast if fallback capture was used
     if (envelopeData?.captureWarnings?.includes('WINGET_EXPORT_FAILED_FALLBACK_USED')) {
       showToast('Winget export failed; captured winget-managed apps only.', 'warning');
@@ -1076,11 +1109,32 @@ function AppContent() {
       throw new Error('Capture output is empty or invalid. Please try again.');
     }
     
-    // Delete temp file immediately after reading
-    try {
-      await invoke('delete_file_silent', { path: outputPath });
-    } catch {
-      // Ignore cleanup errors
+    // DEV INVESTIGATION: Log draftText to see if manifest contains apps
+    if (import.meta.env.DEV) {
+      console.log('[CAPTURE] draftText length:', draftText.length);
+      console.log(
+        '[CAPTURE] draftText contains apps key:',
+        /"apps"\s*:/.test(draftText)
+      );
+      console.log('[CAPTURE] draftText head:', draftText.slice(0, 300));
+      // Parse manifest to count apps directly from file
+      try {
+        const manifestJson = draftText.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        const manifest = JSON.parse(manifestJson);
+        console.log('[CAPTURE] manifest.apps count from file:', manifest.apps?.length ?? 0);
+        console.log('[CAPTURE] outputPath (preserved for inspection):', outputPath);
+      } catch (e) {
+        console.warn('[CAPTURE] Failed to parse manifest for DEV inspection:', e);
+      }
+    }
+    
+    // Delete temp file immediately after reading (skip in DEV to allow inspection)
+    if (!import.meta.env.DEV) {
+      try {
+        await invoke('delete_file_silent', { path: outputPath });
+      } catch {
+        // Ignore cleanup errors
+      }
     }
     
     // Return structured result with draft text and canonical app list for modal

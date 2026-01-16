@@ -135,6 +135,7 @@ export function CaptureStatusStrip({
                     e.stopPropagation();
                     onShowDetails();
                   }}
+                  data-testid="capture-details-button"
                 >
                   Details
                 </Button>
@@ -229,6 +230,7 @@ export function CaptureStatusStrip({
               e.stopPropagation();
               onShowDetails();
             }}
+            data-testid="capture-details-button"
           >
             Details
           </Button>

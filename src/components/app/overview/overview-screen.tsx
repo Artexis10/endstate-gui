@@ -112,6 +112,19 @@ export function OverviewScreen({
     }
   }, [liveAppEvents, isAtBottom, activityExpanded]);
 
+  // E2E hook to open details modal with injected action result
+  useEffect(() => {
+    if (import.meta.env.DEV || import.meta.env.VITE_E2E === '1') {
+      (window as any).__endstate_e2e_openDetailsModal = (action: 'capture' | 'setup' | 'check') => {
+        setDetailsAction(action);
+        setDetailsModalOpen(true);
+      };
+      return () => {
+        delete (window as any).__endstate_e2e_openDetailsModal;
+      };
+    }
+  }, [setDetailsModalOpen]);
+
   // Check if a card should be disabled (another action is running)
   const isCardDisabled = (action: 'capture' | 'setup' | 'check') => {
     if (isRunning && runningAction !== action) return true;

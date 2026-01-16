@@ -58,7 +58,7 @@ export function ActionDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col" data-testid="action-details-modal">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>
             {actionResult?.action === 'capture' && 'Capture Details'}
@@ -208,7 +208,7 @@ export function ActionDetailsModal({
                     : `Apps (${shownCount})`}
                 </p>
               </div>
-              <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border">
+              <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border" data-testid="action-details-apps-list">
                 <div className="divide-y divide-border">
                   {uniqueSortedEvents.map((event, i) => {
                     // Use canonical statusKey derivation (same as filter logic)
@@ -235,7 +235,7 @@ export function ActionDetailsModal({
 
         {/* Fallback if no app events */}
         {(!actionResult?.appEvents || actionResult.appEvents.length === 0) && actionResult?.status === 'success' && (
-          <div className="flex-shrink-0 text-sm text-muted-foreground py-4 text-center">
+          <div className="flex-shrink-0 text-sm text-muted-foreground py-4 text-center" data-testid="action-details-fallback">
             {actionResult.action === 'capture' 
               ? (actionResult.counts?.total === 0
                   ? 'No applications were detected on this computer.'
