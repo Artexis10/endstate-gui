@@ -1,0 +1,8 @@
+{"version":1,"runId":"test-run-001","timestamp":"2025-01-01T00:00:00.000Z","event":"phase","phase":"capture"}
+{"version":1,"runId":"test-run-001","timestamp":"2025-01-01T00:00:01.000Z","event":"item","id":"Mozilla.Firefox","driver":"winget","status":"present","reason":"detected","message":"Firefox Browser"}
+{"version":1,"runId":"test-run-001","timestamp":"2025-01-01T00:00:02.000Z","event":"item","id":"Google.Chrome","driver":"winget","status":"present","reason":"detected","message":"Google Chrome"}
+{"version":1,"runId":"test-run-001","timestamp":"2025-01-01T00:00:03.000Z","event":"item","id":"Microsoft.VisualStudioCode","driver":"winget","status":"present","reason":"detected","message":"Visual Studio Code"}
+{"version":1,"runId":"test-run-001","timestamp":"2025-01-01T00:00:04.000Z","event":"item","id":"Git.Git","driver":"winget","status":"present","reason":"detected","message":"Git"}
+{"version":1,"runId":"test-run-001","timestamp":"2025-01-01T00:00:05.000Z","event":"item","id":"7zip.7zip","driver":"winget","status":"present","reason":"detected","message":"7-Zip"}
+{"version":1,"runId":"test-run-001","timestamp":"2025-01-01T00:00:06.000Z","event":"artifact","phase":"capture","kind":"manifest","path":"C:\\test\\profiles\\captured.jsonc"}
+{"version":1,"runId":"test-run-001","timestamp":"2025-01-01T00:00:07.000Z","event":"summary","phase":"capture","total":5,"success":5,"skipped":0,"failed":0}

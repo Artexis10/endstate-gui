@@ -10,6 +10,8 @@
 
 import type { AppSettings } from '../settings';
 import type { StreamEvent, RunResult } from '../streaming-runner';
+import { parseEventsFile, replayEvents } from '../lib/event-replay';
+import fixtureContent from '../../e2e/fixtures/capture_ok_realistic.events.jsonl?raw';
 
 // Scenario types
 export type E2EScenario = 
@@ -19,6 +21,7 @@ export type E2EScenario =
   | 'verify_missing_apps'
   | 'report_empty'
   | 'capture_ok_minimal'
+  | 'capture_ok_replay'
   | 'capabilities_ok';
 
 // Deterministic timestamps for stable tests
@@ -176,6 +179,12 @@ const SCENARIOS: Record<E2EScenario, {
     },
     exitCode: 0,
   },
+
+  capture_ok_replay: {
+    events: [],
+    envelope: {},
+    exitCode: 0,
+  },
 };
 
 // Get current scenario from window
@@ -232,6 +241,65 @@ export async function runEndstateStreaming<T>(
   if (!scenarioData) {
     console.warn(`[E2E Mock] Unknown scenario: ${scenario}, using preview_ok_minimal`);
     return runEndstateStreaming(_settings, command, args, onEvent, _options);
+  }
+
+  // Special handling for replay scenario
+  if (scenario === 'capture_ok_replay') {
+    const events = parseEventsFile(fixtureContent);
+    const { counters } = replayEvents(events);
+
+    // Emit parsed events
+    for (const event of events) {
+      if (_options?.onNdjsonEvent) {
+        _options.onNdjsonEvent(event);
+      }
+      
+      if (onEvent) {
+        onEvent({ type: 'stdout', data: JSON.stringify(event) + '\n' });
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+
+    // Extract item events for appsIncluded
+    const itemEvents = events.filter(e => e.event === 'item') as Array<{ id: string; driver: string }>;
+
+    // Build envelope from replayed data
+    const envelope = {
+      schemaVersion: '1.0',
+      cliVersion: '0.0.0-dev',
+      command: 'capture',
+      timestampUtc: '2025-01-01T00:00:00.000Z',
+      success: true,
+      data: {
+        outputPath: 'C:\\test\\profiles\\captured.jsonc',
+        isExample: null,
+        sanitized: false,
+        counts: {
+          totalFound: itemEvents.length,
+          included: itemEvents.length,
+          skipped: counters.skipped,
+          filteredRuntimes: 0,
+          filteredStoreApps: 0,
+          sensitiveExcludedCount: 0,
+        },
+        appsIncluded: itemEvents.map(item => ({
+          id: item.id,
+          source: item.driver,
+        })),
+      },
+      error: null,
+    };
+
+    const stdout = JSON.stringify(envelope);
+
+    return {
+      exitCode: 0,
+      stdout,
+      stderr: '',
+      envelope: envelope as any,
+      ndjsonEvents: events,
+    };
   }
 
   // Emit events with minimal delay for UI to process
