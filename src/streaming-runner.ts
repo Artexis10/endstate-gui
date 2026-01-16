@@ -76,9 +76,15 @@ export async function runEndstateStreaming<T>(
     // Bundled mode: use 'endstate' from PATH (bundled with app)
     exe = 'endstate';
     execArgs = fullArgs;
+    if (import.meta.env.DEV) {
+      console.log(`[ENGINE] mode=bundled, exe=endstate (from PATH)`);
+    }
   } else if (settings.engineMode === 'path') {
     exe = 'endstate';
     execArgs = fullArgs;
+    if (import.meta.env.DEV) {
+      console.log(`[ENGINE] mode=path, exe=endstate (from PATH)`);
+    }
   } else {
     // Script mode: validate path exists before attempting execution
     const validationError = await validateEngineScriptPath(settings.engineScriptPath);
@@ -102,6 +108,9 @@ export async function runEndstateStreaming<T>(
       settings.engineScriptPath,
       ...fullArgs,
     ];
+    if (import.meta.env.DEV) {
+      console.log(`[ENGINE] mode=script, exe=pwsh, scriptPath=${settings.engineScriptPath}`);
+    }
   }
 
   const eventChannel = `endstate-stream-${Date.now()}`;
@@ -191,6 +200,19 @@ export async function runEndstateStreaming<T>(
   const stdout = stdoutBuffer.trim();
   let envelope: EndstateEnvelope<T> | null = null;
 
+  // DEV: Log raw stdout length and last 500 chars for debugging truncation issues
+  if (import.meta.env.DEV) {
+    console.log(`[STREAMING] stdout length: ${stdout.length} chars`);
+    console.log(`[STREAMING] stdout last 500 chars:`, stdout.slice(-500));
+    
+    // Write full stdout to debug file
+    const debugTimestamp = Date.now();
+    invoke<string>('write_text_file_debug', {
+      filename: `ts-stdout-${command}-${debugTimestamp}.txt`,
+      content: `=== TS STDOUT BUFFER (${stdout.length} chars) ===\n${stdout}`
+    }).catch(e => console.error('[DEBUG] Failed to write stdout debug file:', e));
+  }
+
   // Extract last JSON object from stdout (engine may output logs before JSON)
   if (stdout) {
     try {
@@ -201,6 +223,16 @@ export async function runEndstateStreaming<T>(
         if (line.startsWith('{')) {
           // Try to parse from this line to the end
           const jsonCandidate = lines.slice(i).join('\n');
+          if (import.meta.env.DEV) {
+            console.log(`[STREAMING] JSON candidate at line ${i}, length: ${jsonCandidate.length}, starts with: ${jsonCandidate.slice(0, 100)}`);
+            
+            // Write JSON candidate to debug file BEFORE parsing
+            const debugTimestamp = Date.now();
+            invoke<string>('write_text_file_debug', {
+              filename: `ts-json-candidate-${command}-${debugTimestamp}.txt`,
+              content: `=== JSON CANDIDATE (line ${i}, ${jsonCandidate.length} chars) ===\n${jsonCandidate}`
+            }).catch(e => console.error('[DEBUG] Failed to write json candidate debug file:', e));
+          }
           try {
             const parsed = JSON.parse(jsonCandidate);
             // Validate it's an envelope (has required fields)
@@ -209,10 +241,30 @@ export async function runEndstateStreaming<T>(
                 'command' in parsed && 
                 'success' in parsed) {
               envelope = parsed as EndstateEnvelope<T>;
+              if (import.meta.env.DEV) {
+                console.log(`[STREAMING] Parsed envelope, data keys:`, envelope.data ? Object.keys(envelope.data as object) : 'null');
+                
+                // Write parsed envelope to debug file
+                const debugTimestamp = Date.now();
+                invoke<string>('write_text_file_debug', {
+                  filename: `ts-parsed-envelope-${command}-${debugTimestamp}.json`,
+                  content: JSON.stringify(envelope, null, 2)
+                }).catch(e => console.error('[DEBUG] Failed to write parsed envelope debug file:', e));
+              }
               break; // Successfully parsed valid envelope, stop searching
             }
-          } catch {
+          } catch (parseErr) {
             // Not valid JSON, continue searching backwards
+            if (import.meta.env.DEV) {
+              console.log(`[STREAMING] JSON parse failed at line ${i}:`, parseErr);
+              
+              // Write parse error to debug file
+              const debugTimestamp = Date.now();
+              invoke<string>('write_text_file_debug', {
+                filename: `ts-parse-error-${command}-${debugTimestamp}.txt`,
+                content: `=== PARSE ERROR at line ${i} ===\nError: ${parseErr}\n\nCandidate:\n${jsonCandidate}`
+              }).catch(e => console.error('[DEBUG] Failed to write parse error debug file:', e));
+            }
             continue;
           }
         }

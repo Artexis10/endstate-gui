@@ -136,15 +136,29 @@ const SCENARIOS: Record<E2EScenario, {
       { type: 'phase', data: { phase: 'end', command: 'capture', timestamp: BASE_TIMESTAMP } },
     ],
     envelope: {
+      schemaVersion: '1.0',
+      cliVersion: '0.0.0-dev',
+      command: 'capture',
+      timestampUtc: BASE_TIMESTAMP,
       success: true,
       data: {
-        capturedCount: 2,
         outputPath: 'C:\\test\\profiles\\captured.jsonc',
-        items: [
-          { id: 'app-1', driver: 'winget', name: 'Captured App 1' },
-          { id: 'app-2', driver: 'winget', name: 'Captured App 2' },
+        isExample: null,
+        sanitized: false,
+        counts: {
+          totalFound: 2,
+          included: 2,
+          skipped: 0,
+          filteredRuntimes: 0,
+          filteredStoreApps: 0,
+          sensitiveExcludedCount: 0,
+        },
+        appsIncluded: [
+          { id: 'app-1', source: 'winget' },
+          { id: 'app-2', source: 'winget' },
         ],
       },
+      error: null,
     },
     exitCode: 0,
   },

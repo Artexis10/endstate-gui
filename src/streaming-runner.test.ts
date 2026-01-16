@@ -306,6 +306,67 @@ describe('streaming-runner', () => {
       expect(result.envelope?.data).toHaveProperty('outputPath');
     });
 
+    it('REGRESSION: should parse capture envelope with appsIncluded array', async () => {
+      // This test simulates the exact engine output format for capture with appsIncluded
+      const mockUnlisten = vi.fn();
+      let eventCallback: (event: any) => void = () => {};
+
+      vi.mocked(listen).mockImplementation(async (_channel, callback) => {
+        eventCallback = callback;
+        return mockUnlisten;
+      });
+
+      const captureEnvelope = {
+        schemaVersion: '1.0',
+        cliVersion: '0.0.0-dev',
+        command: 'capture',
+        timestampUtc: '2026-01-15T21:53:47.932Z',
+        success: true,
+        data: {
+          sanitized: false,
+          captureWarnings: ['WINGET_EXPORT_FAILED_FALLBACK_USED'],
+          counts: {
+            totalFound: 67,
+            filteredRuntimes: 0,
+            included: 67,
+            filteredStoreApps: 0,
+            sensitiveExcludedCount: 0,
+            skipped: 0,
+          },
+          appsIncluded: [
+            { source: 'winget', id: '7zip.7zip' },
+            { source: 'winget', id: 'Git.Git' },
+            { source: 'winget', id: 'Docker.DockerDesktop' },
+          ],
+          isExample: null,
+          outputPath: 'C:\\Users\\test\\AppData\\Local\\Temp\\capture.jsonc',
+        },
+        error: null,
+      };
+
+      vi.mocked(invoke).mockImplementation(async () => {
+        // Simulate engine output: logs on stderr, JSON envelope on stdout
+        eventCallback({ payload: { type: 'stderr', data: '[INFO] Capture starting...\n' } });
+        eventCallback({ payload: { type: 'stdout', data: JSON.stringify(captureEnvelope) + '\n' } });
+        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
+      });
+
+      const onEvent = vi.fn();
+      const result = await runEndstateStreaming(mockSettings, 'capture', ['--out', 'C:\\test\\capture.jsonc'], onEvent);
+
+      // Verify envelope is parsed correctly
+      expect(result.envelope).not.toBeNull();
+      expect(result.envelope?.success).toBe(true);
+      expect(result.envelope?.command).toBe('capture');
+      
+      // CRITICAL: Verify appsIncluded is present and has correct length
+      const data = result.envelope?.data as { appsIncluded?: Array<{ id: string; source: string }> };
+      expect(data).toHaveProperty('appsIncluded');
+      expect(data.appsIncluded).toHaveLength(3);
+      expect(data.appsIncluded?.[0]).toEqual({ source: 'winget', id: '7zip.7zip' });
+    });
+
     it('should extract multi-line JSON envelope from stdout', async () => {
       const mockUnlisten = vi.fn();
       let eventCallback: (event: any) => void = () => {};
@@ -618,6 +679,99 @@ describe('streaming-runner', () => {
       expect(onNdjsonEvent).not.toHaveBeenCalled();
       // Stderr should still be captured
       expect(result.stderr).toContain('{"version":1');
+    });
+
+    it('REGRESSION: should extract envelope when stdout has multiple JSON-like lines before final envelope', async () => {
+      // This test reproduces the bug where stdout contains multiple JSON-like lines
+      // (e.g., NDJSON events accidentally on stdout, or log lines with JSON)
+      // and the extraction logic picks the wrong one or fails to parse
+      const mockUnlisten = vi.fn();
+      let eventCallback: (event: any) => void = () => {};
+
+      vi.mocked(listen).mockImplementation(async (_channel, callback) => {
+        eventCallback = callback;
+        return mockUnlisten;
+      });
+
+      // Simulate stdout with multiple JSON-like lines before the final envelope
+      const stdoutWithMultipleJsonLines = `[INFO] Starting capture...
+{"event":"phase","phase":"capture"}
+{"event":"item","id":"app-1","status":"detected"}
+{"event":"item","id":"app-2","status":"detected"}
+[INFO] Processing complete
+{"schemaVersion":"1.0","cliVersion":"0.0.0-dev","command":"capture","timestampUtc":"2026-01-16T00:00:00.000Z","success":true,"data":{"counts":{"included":65,"totalFound":65},"appsIncluded":[{"source":"winget","id":"7zip.7zip"},{"source":"winget","id":"Git.Git"},{"source":"winget","id":"Docker.DockerDesktop"}],"outputPath":"C:\\\\test\\\\capture.jsonc"},"error":null}`;
+
+      vi.mocked(invoke).mockImplementation(async () => {
+        eventCallback({ payload: { type: 'stdout', data: stdoutWithMultipleJsonLines } });
+        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
+      });
+
+      const onEvent = vi.fn();
+      const result = await runEndstateStreaming(mockSettings, 'capture', ['--out', 'C:\\test\\capture.jsonc'], onEvent);
+
+      // CRITICAL: Must parse the FINAL envelope, not an earlier JSON-like line
+      expect(result.envelope).not.toBeNull();
+      expect(result.envelope?.schemaVersion).toBe('1.0');
+      expect(result.envelope?.command).toBe('capture');
+      expect(result.envelope?.success).toBe(true);
+      
+      // CRITICAL: appsIncluded must be present and populated
+      const data = result.envelope?.data as { appsIncluded?: Array<{ id: string; source: string }>; counts?: { included: number } };
+      expect(data).toHaveProperty('appsIncluded');
+      expect(data.appsIncluded).toHaveLength(3);
+      expect(data.appsIncluded?.[0]).toEqual({ source: 'winget', id: '7zip.7zip' });
+      expect(data.counts?.included).toBe(65);
+    });
+
+    it('REGRESSION: should handle stdout where envelope is on a single line at the end', async () => {
+      // Real engine output: logs followed by single-line JSON envelope
+      const mockUnlisten = vi.fn();
+      let eventCallback: (event: any) => void = () => {};
+
+      vi.mocked(listen).mockImplementation(async (_channel, callback) => {
+        eventCallback = callback;
+        return mockUnlisten;
+      });
+
+      // Simulate real engine output with many log lines then single-line envelope
+      const realEngineOutput = `[INFO] Starting capture...
+[INFO] Checking prerequisites
+[OK] winget is available
+[INFO] Capturing applications
+[INFO] Raw capture: 73 applications
+[INFO] Filtered 6 runtime packages
+[INFO] Filtered 2 store apps
+[OK] Final app count: 65 applications
+[INFO] Security Check
+[WARN] Detected 7 sensitive paths
+[OK] Manifest saved: C:\\test\\capture.jsonc
+Summary: 65 succeeded, 8 skipped, 0 failed
+Capture complete!
+{"schemaVersion":"1.0","cliVersion":"0.0.0-dev+abc123","command":"capture","timestampUtc":"2026-01-16T10:00:00.000Z","success":true,"data":{"outputPath":"C:\\\\test\\\\capture.jsonc","isExample":null,"counts":{"filteredStoreApps":0,"totalFound":65,"included":65,"filteredRuntimes":0,"sensitiveExcludedCount":0,"skipped":0},"sanitized":false,"appsIncluded":[{"source":"winget","id":"7zip.7zip"},{"source":"winget","id":"Adobe.CreativeCloud"},{"source":"winget","id":"Anthropic.Claude"}]},"error":null}`;
+
+      vi.mocked(invoke).mockImplementation(async () => {
+        // Emit as multiple stdout events (simulating line-by-line streaming)
+        for (const line of realEngineOutput.split('\n')) {
+          eventCallback({ payload: { type: 'stdout', data: line + '\n' } });
+        }
+        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        return true;
+      });
+
+      const onEvent = vi.fn();
+      const result = await runEndstateStreaming(mockSettings, 'capture', ['--out', 'C:\\test\\capture.jsonc'], onEvent);
+
+      // Must successfully parse the envelope
+      expect(result.envelope).not.toBeNull();
+      expect(result.envelope?.command).toBe('capture');
+      expect(result.envelope?.success).toBe(true);
+      
+      // appsIncluded must be present
+      const data = result.envelope?.data as { appsIncluded?: Array<{ id: string; source: string }>; counts?: { included: number } };
+      expect(data.appsIncluded).toBeDefined();
+      expect(data.appsIncluded?.length).toBeGreaterThan(0);
+      expect(data.counts?.included).toBe(65);
     });
   });
 });

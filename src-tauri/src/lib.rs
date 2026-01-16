@@ -829,6 +829,42 @@ fn validate_profile(path: String) -> Result<ValidationResult, String> {
     Ok(validate_profile_object(&json))
 }
 
+/// Write text to a debug file (DEV-only).
+/// Used by TS layer to persist JSON candidates for debugging.
+///
+/// # Arguments
+/// * `filename` - Filename (will be placed in debug directory)
+/// * `content` - Text content to write
+///
+/// # Returns
+/// * `Ok(String)` - Full path to written file
+/// * `Err(String)` - Failed to write file
+#[tauri::command]
+fn write_text_file_debug(filename: String, content: String) -> Result<String, String> {
+    #[cfg(debug_assertions)]
+    {
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".to_string());
+        let debug_dir = std::path::PathBuf::from(&local_app_data)
+            .join("Endstate")
+            .join("debug");
+        std::fs::create_dir_all(&debug_dir)
+            .map_err(|e| format!("Failed to create debug dir: {}", e))?;
+        
+        let path = debug_dir.join(&filename);
+        std::fs::write(&path, &content)
+            .map_err(|e| format!("Failed to write debug file: {}", e))?;
+        
+        Ok(path.display().to_string())
+    }
+    
+    #[cfg(not(debug_assertions))]
+    {
+        // In release builds, do nothing
+        let _ = (filename, content);
+        Ok("debug writing disabled in release".to_string())
+    }
+}
+
 /// Open a folder in the OS file explorer.
 ///
 /// # Arguments
@@ -892,10 +928,63 @@ async fn run_endstate_streaming(
     event_channel: String,
 ) -> Result<(), String> {
     use std::process::{Command, Stdio};
-    use std::io::{BufRead, BufReader};
+    use std::io::{BufRead, BufReader, Write};
     use serde_json::json;
 
     let result = tauri::async_runtime::spawn_blocking(move || {
+        // Generate run_id for debug artifacts
+        let run_id = format!("{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0));
+        
+        // DEV-ONLY: Setup debug artifact files
+        #[cfg(debug_assertions)]
+        let debug_dir = {
+            let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".to_string());
+            let dir = std::path::PathBuf::from(&local_app_data)
+                .join("Endstate")
+                .join("debug")
+                .join(&run_id);
+            std::fs::create_dir_all(&dir).ok();
+            dir
+        };
+        
+        #[cfg(debug_assertions)]
+        let stdout_log_path = debug_dir.join("stdout.log");
+        #[cfg(debug_assertions)]
+        let stderr_log_path = debug_dir.join("stderr.log");
+        #[cfg(debug_assertions)]
+        let meta_path = debug_dir.join("meta.json");
+        
+        let cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_else(|_| "unknown".to_string());
+        let mode = if exe == "endstate" { "bundled/path" } else if exe == "pwsh" || exe == "powershell" { "script" } else { "unknown" };
+        
+        // Resolve absolute path of executable for bundled/path mode
+        let resolved_exe = if exe == "endstate" {
+            which::which("endstate")
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| format!("{} (NOT FOUND IN PATH)", exe))
+        } else {
+            exe.clone()
+        };
+        
+        // DEV-ONLY: Log engine invocation details for debugging
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("=== ENGINE INVOCATION (DEV) ===");
+            eprintln!("  run_id: {}", &run_id);
+            eprintln!("  exe (raw): {}", &exe);
+            eprintln!("  exe (resolved): {}", &resolved_exe);
+            eprintln!("  args: {:?}", &args);
+            eprintln!("  cwd: {}", &cwd);
+            eprintln!("  mode: {}", mode);
+            eprintln!("  debug_dir: {}", debug_dir.display());
+            eprintln!("================================");
+        }
+        
+        let start_time = std::time::Instant::now();
+        
         let mut cmd = Command::new(&exe);
         cmd.args(&args)
             .stdout(Stdio::piped())
@@ -912,12 +1001,50 @@ async fn run_endstate_streaming(
         let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
         let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
 
+        // DEV-ONLY: Create debug log files
+        #[cfg(debug_assertions)]
+        let stdout_log_file = std::sync::Arc::new(std::sync::Mutex::new(
+            std::fs::File::create(&stdout_log_path).ok()
+        ));
+        #[cfg(debug_assertions)]
+        let stderr_log_file = std::sync::Arc::new(std::sync::Mutex::new(
+            std::fs::File::create(&stderr_log_path).ok()
+        ));
+        
+        #[cfg(debug_assertions)]
+        let stdout_bytes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        #[cfg(debug_assertions)]
+        let stderr_bytes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        #[cfg(debug_assertions)]
+        let stdout_lines = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        #[cfg(debug_assertions)]
+        let stderr_lines = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
         let app_clone = app.clone();
         let channel_clone = event_channel.clone();
+        #[cfg(debug_assertions)]
+        let stdout_log_clone = stdout_log_file.clone();
+        #[cfg(debug_assertions)]
+        let stdout_bytes_clone = stdout_bytes.clone();
+        #[cfg(debug_assertions)]
+        let stdout_lines_clone = stdout_lines.clone();
+        
         let stdout_thread = std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 if let Ok(line) = line {
+                    // DEV-ONLY: Write to debug log with length prefix
+                    #[cfg(debug_assertions)]
+                    {
+                        if let Ok(mut guard) = stdout_log_clone.lock() {
+                            if let Some(ref mut file) = *guard {
+                                let _ = writeln!(file, "LEN={} | {}", line.len(), &line);
+                            }
+                        }
+                        stdout_bytes_clone.fetch_add(line.len(), std::sync::atomic::Ordering::Relaxed);
+                        stdout_lines_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    
                     let _ = app_clone.emit(&channel_clone, json!({
                         "type": "stdout",
                         "data": line + "\n"
@@ -928,10 +1055,29 @@ async fn run_endstate_streaming(
 
         let app_clone = app.clone();
         let channel_clone = event_channel.clone();
+        #[cfg(debug_assertions)]
+        let stderr_log_clone = stderr_log_file.clone();
+        #[cfg(debug_assertions)]
+        let stderr_bytes_clone = stderr_bytes.clone();
+        #[cfg(debug_assertions)]
+        let stderr_lines_clone = stderr_lines.clone();
+        
         let stderr_thread = std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(line) = line {
+                    // DEV-ONLY: Write to debug log with length prefix
+                    #[cfg(debug_assertions)]
+                    {
+                        if let Ok(mut guard) = stderr_log_clone.lock() {
+                            if let Some(ref mut file) = *guard {
+                                let _ = writeln!(file, "LEN={} | {}", line.len(), &line);
+                            }
+                        }
+                        stderr_bytes_clone.fetch_add(line.len(), std::sync::atomic::Ordering::Relaxed);
+                        stderr_lines_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    
                     let _ = app_clone.emit(&channel_clone, json!({
                         "type": "stderr",
                         "data": line + "\n"
@@ -945,6 +1091,43 @@ async fn run_endstate_streaming(
 
         stdout_thread.join().ok();
         stderr_thread.join().ok();
+        
+        let elapsed = start_time.elapsed();
+
+        // DEV-ONLY: Write meta.json with run details
+        #[cfg(debug_assertions)]
+        {
+            let meta = json!({
+                "run_id": run_id,
+                "exe_raw": exe,
+                "exe_resolved": resolved_exe,
+                "args": args,
+                "cwd": cwd,
+                "mode": mode,
+                "exit_code": exit_code,
+                "elapsed_ms": elapsed.as_millis() as u64,
+                "stdout_bytes": stdout_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                "stdout_lines": stdout_lines.load(std::sync::atomic::Ordering::Relaxed),
+                "stderr_bytes": stderr_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                "stderr_lines": stderr_lines.load(std::sync::atomic::Ordering::Relaxed),
+                "stdout_log": stdout_log_path.display().to_string(),
+                "stderr_log": stderr_log_path.display().to_string(),
+            });
+            if let Ok(meta_str) = serde_json::to_string_pretty(&meta) {
+                let _ = std::fs::write(&meta_path, meta_str);
+            }
+            
+            eprintln!("=== ENGINE COMPLETE (DEV) ===");
+            eprintln!("  run_id: {}", &run_id);
+            eprintln!("  exit_code: {}", exit_code);
+            eprintln!("  stdout_lines: {}", stdout_lines.load(std::sync::atomic::Ordering::Relaxed));
+            eprintln!("  stderr_lines: {}", stderr_lines.load(std::sync::atomic::Ordering::Relaxed));
+            eprintln!("  debug files:");
+            eprintln!("    stdout: {}", stdout_log_path.display());
+            eprintln!("    stderr: {}", stderr_log_path.display());
+            eprintln!("    meta: {}", meta_path.display());
+            eprintln!("=============================");
+        }
 
         let _ = app.emit(&event_channel, json!({
             "type": "exit",
@@ -981,6 +1164,7 @@ pub fn run() {
             open_folder,
             read_text_file,
             write_text_file,
+            write_text_file_debug,
             delete_file,
             delete_file_silent,
             rename_file,
