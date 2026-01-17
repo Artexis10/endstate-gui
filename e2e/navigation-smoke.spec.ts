@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, goToApplyPage, goToCapturePage, goToVerifyPage } from './helpers/ui-mode';
-import { installTauriMock } from './helpers/tauri-mock';
+import { installTauriMockOnContext } from './helpers/tauri-mock';
 
 /**
  * Navigation Smoke Test
@@ -14,19 +14,16 @@ import { installTauriMock } from './helpers/tauri-mock';
  */
 
 test.describe('Navigation Smoke', () => {
-  test.beforeEach(async ({ page }) => {
-    // Install Tauri mock FIRST to ensure __TAURI__ is available when plugin-store loads
-    await installTauriMock(page, {
+  test.beforeEach(async ({ page, context }) => {
+    // Install Tauri mock at context level BEFORE page creation
+    await installTauriMockOnContext(context, {
       invoke: {
         list_manifest_files: () => [],
       }
     });
 
-    // Force Advanced mode for sidebar navigation tests
-    await forceAdvancedMode(page);
-
-    // Mock endstate engine
-    await page.addInitScript(() => {
+    // Mock endstate engine at context level
+    await context.addInitScript(() => {
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
@@ -47,6 +44,9 @@ test.describe('Navigation Smoke', () => {
       };
     });
 
+    // Force Advanced mode for sidebar navigation tests
+    await forceAdvancedMode(page);
+
     // Listen for console errors
     page.on('console', msg => {
       if (msg.type() === 'error') {
@@ -64,6 +64,9 @@ test.describe('Navigation Smoke', () => {
 
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    
+    // Assert __TAURI__ mock is available (regression probe)
+    await expect.poll(() => page.evaluate(() => !!(window as any).__TAURI__?.core?.invoke)).toBeTruthy();
   });
 
   test('navigates through all pages and verifies stable landmarks', async ({ page }) => {
