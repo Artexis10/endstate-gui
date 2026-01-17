@@ -536,9 +536,6 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       await page.click('[data-testid="profile-name-save"]');
       await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
       
-      // Wait for potential green card
-      await page.waitForTimeout(1000);
-      
       const cardVisible = await page.locator('[data-testid="saved-profile-card"]')
         .isVisible({ timeout: 2000 })
         .catch(() => false);
@@ -554,9 +551,9 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
         // Navigate away and back multiple times
         for (let i = 0; i < 3; i++) {
           await page.click('text=Settings');
-          await page.waitForTimeout(300);
+          await expect(page.locator('text=Settings')).toBeVisible();
           await page.click('text=Overview');
-          await page.waitForTimeout(300);
+          await expect(page.locator('[data-testid="overview-card-capture"]')).toBeVisible();
           
           // Card should still be visible
           await expect(card).toBeVisible();
@@ -629,11 +626,11 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     // Close modal without saving (Cancel)
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
     await page.click('[data-testid="profile-name-cancel"]');
-    await page.waitForTimeout(500);
+    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
 
     // Expand Capture card to see draft strip (it's inside expanded content)
     await page.click('[data-testid="overview-card-capture"]');
-    await page.waitForTimeout(300);
+    await expect(page.locator('[data-testid="capture-card-expanded-content"]')).toBeVisible();
 
     // Draft strip should be visible in expanded Capture card
     const draftCard = page.locator('[data-testid="capture-draft-card"]');
@@ -699,7 +696,7 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
     await page.locator('[data-testid="profile-name-input"]').fill('Test Profile');
     await page.click('[data-testid="profile-name-save"]');
-    await page.waitForTimeout(1000);
+    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
 
     // Count Details buttons in Capture context (should be 0 or 1, not 2+)
     const captureCard = page.locator('[data-testid="overview-card-capture"]');
@@ -769,12 +766,9 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       window.dispatchEvent(event);
     });
 
-    // Wait a bit for state to update
-    await page.waitForTimeout(500);
-
     // Expand Setup card
     await page.click('[data-testid="overview-card-apply"]');
-    await page.waitForTimeout(300);
+    await expect(page.locator('[data-testid="overview-card-apply"]')).toBeVisible();
 
     // Look for "View details" buttons in the Setup card context
     const setupCard = page.locator('[data-testid="overview-card-apply"]');
@@ -788,14 +782,14 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
   test('Verify start: scrolls to Check card', async ({ page }) => {
     // Scroll to bottom first
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout(300);
 
     // Click Check card to expand it
-    await page.click('[data-testid="overview-card-verify"]');
-    await page.waitForTimeout(300);
+    const checkCard = page.locator('[data-testid="overview-card-verify"]');
+    await expect(checkCard).toBeVisible();
+    await checkCard.click();
+    await expect(page.locator('[data-testid="verify-card-expanded-content"]')).toBeVisible();
 
     // Get Check card position
-    const checkCard = page.locator('[data-testid="overview-card-verify"]');
     const checkBox = await checkCard.boundingBox();
     
     expect(checkBox).not.toBeNull();

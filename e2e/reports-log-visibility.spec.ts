@@ -68,7 +68,6 @@ test.describe('Reports - Log Visibility', () => {
   test('Reports page title is "Reports" not "Report"', async ({ page }) => {
     // Navigate to Reports page
     await page.click('[data-testid="nav-report"]');
-    await page.waitForTimeout(500);
 
     // Verify the page header says "Reports"
     const pageHeader = page.locator('h1, h2').filter({ hasText: /^Reports$/ });
@@ -102,7 +101,6 @@ test.describe('Reports - Log Visibility', () => {
 
     // Navigate to Reports page
     await page.click('[data-testid="nav-report"]');
-    await page.waitForTimeout(500);
 
     // Verify Reports page loaded - use specific h1 selector
     await expect(page.locator('h1:has-text("Reports")')).toBeVisible();
@@ -130,7 +128,6 @@ test.describe('Reports - Log Visibility', () => {
 
     // Navigate to Reports page
     await page.click('[data-testid="nav-report"]');
-    await page.waitForTimeout(500);
 
     // Verify Reports page loaded - use specific h1 selector
     await expect(page.locator('h1:has-text("Reports")')).toBeVisible();
@@ -160,7 +157,6 @@ test.describe('Reports - Log Visibility', () => {
 
     // Navigate to Reports page
     await page.click('[data-testid="nav-report"]');
-    await page.waitForTimeout(500);
 
     // Verify Reports page loaded - use specific h1 selector
     await expect(page.locator('h1:has-text("Reports")')).toBeVisible();
@@ -171,8 +167,9 @@ test.describe('Reports - Log Visibility', () => {
       localStorage.setItem('test:endstate-gui-settings', JSON.stringify({ showDetails: true }));
     });
     await page.reload();
+    await page.waitForLoadState('networkidle');
     await page.click('[data-testid="nav-report"]');
-    await page.waitForTimeout(500);
+    await expect(page.locator('h1:has-text("Reports")')).toBeVisible();
     
     // This verifies the UI structure is correct
     await expect(page.locator('text=Recent Runs')).toBeVisible();
@@ -254,7 +251,7 @@ test.describe('Reports - Run Expansion with showDetails=false', () => {
     
     // Expand the run entry by clicking
     await runEntry.locator('summary').click();
-    await page.waitForTimeout(300);
+    await expect(runEntry.locator('text=Command')).toBeVisible({ timeout: 3000 });
     
     // Verify expanded content is visible - these should ALWAYS show regardless of mode
     // Command field

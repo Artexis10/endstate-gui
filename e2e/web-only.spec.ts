@@ -62,7 +62,7 @@ test.describe('UX Contract Tests', () => {
       }));
     });
     await page.reload();
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
     
     // Verify both per-command keys exist
     const captureExists = await page.evaluate(() => localStorage.getItem('test:endstate-last-run-capture') !== null);

@@ -105,7 +105,6 @@ test.describe('Save Profile - Opt-in Behavior', () => {
 
     // Click Cancel
     await page.click('[data-testid="profile-name-cancel"]');
-    await page.waitForTimeout(500);
 
     // Modal should close
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
@@ -134,7 +133,6 @@ test.describe('Save Profile - Opt-in Behavior', () => {
 
     // Click Save
     await page.click('[data-testid="profile-name-save"]');
-    await page.waitForTimeout(500);
 
     // Modal should close
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
@@ -172,7 +170,6 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     const input = page.locator('[data-testid="profile-name-input"]');
     await input.clear();
     await page.click('[data-testid="profile-name-save"]');
-    await page.waitForTimeout(500);
 
     // Modal should close
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
@@ -206,7 +203,6 @@ test.describe('Save Profile - Opt-in Behavior', () => {
 
     // Press Escape
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
 
     // Modal should close
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
@@ -235,7 +231,7 @@ test.describe('Save Profile - Opt-in Behavior', () => {
 
     // Click Cancel
     await page.click('[data-testid="profile-name-cancel"]');
-    await page.waitForTimeout(500);
+    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
 
     // Verify profile count unchanged (Cancel does NOT delete draft)
     const finalProfiles = await page.evaluate(() => (window as any).__test_profileFiles.length);

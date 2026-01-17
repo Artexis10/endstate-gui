@@ -151,13 +151,12 @@ test.describe('Accordion Navigation Bug', () => {
 
     // Step 6: Verify accordion is interactive - the success result should still be showing
     // This tests that action results persist across navigation (correct behavior)
-    await page.waitForTimeout(500);
     const setupCardAfterNav = page.locator('[data-testid="overview-card-apply"]');
     await expect(setupCardAfterNav).toBeVisible();
     
     // Expand the card
     await setupCardAfterNav.click();
-    await page.waitForTimeout(300);
+    await expect(page.locator('[data-testid="apply-card-expanded-content"]')).toBeVisible();
     
     // Verify the success result is still showing (action results persist across navigation)
     await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 3000 });
@@ -201,13 +200,12 @@ test.describe('Accordion Navigation Bug', () => {
     await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
 
     // Card should be interactive - the success result should still be showing
-    await page.waitForTimeout(500);
     const setupCardAfterNav = page.locator('[data-testid="overview-card-apply"]');
     await expect(setupCardAfterNav).toBeVisible();
     
     // Expand the card
     await setupCardAfterNav.click();
-    await page.waitForTimeout(300);
+    await expect(page.locator('[data-testid="apply-card-expanded-content"]')).toBeVisible();
     
     // Verify the success result is still showing (action results persist across navigation)
     await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 3000 });
