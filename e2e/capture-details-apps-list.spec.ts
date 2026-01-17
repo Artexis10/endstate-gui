@@ -103,7 +103,6 @@ test.describe('Capture Details Apps List - Regression Prevention', () => {
     // Expand Capture card to see the success strip with Details button
     const captureCard = page.locator('[data-testid="overview-card-capture"]');
     await captureCard.click();
-    await page.waitForTimeout(300);
 
     // Click the real Details button
     const detailsButton = page.locator('[data-testid="capture-details-button"]');
@@ -179,7 +178,6 @@ test.describe('Capture Details Apps List - Regression Prevention', () => {
     // Expand Capture card and click Details button
     const captureCard = page.locator('[data-testid="overview-card-capture"]');
     await captureCard.click();
-    await page.waitForTimeout(300);
 
     const detailsButton = page.locator('[data-testid="capture-details-button"]');
     await expect(detailsButton).toBeVisible({ timeout: 5000 });

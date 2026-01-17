@@ -182,9 +182,6 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     // Wait for modal to close
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
     
-    // Wait a bit for state updates
-    await page.waitForTimeout(1000);
-    
     // Contract D: Green card should be visible WITHOUT expanding accordion
     const cardVisible = await page.locator('[data-testid="saved-profile-card"]').isVisible({ timeout: 2000 }).catch(() => false);
     
@@ -202,11 +199,9 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       
       // Navigate to Settings
       await page.click('text=Settings');
-      await page.waitForTimeout(500);
       
       // Navigate back to Overview
       await page.click('text=Overview');
-      await page.waitForTimeout(500);
       
       // Contract D: Green card should STILL be visible WITHOUT expanding accordion
       await expect(page.locator('[data-testid="saved-profile-card"]')).toBeVisible();
@@ -259,9 +254,6 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     await page.click('[data-testid="profile-name-cancel"]');
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
     
-    // Wait for any async operations
-    await page.waitForTimeout(300);
-    
     // Contract A: Draft should STILL exist after cancel
     const draftExists = await page.evaluate((draftPath) => {
       return (window as any).__test_existingPaths.has(draftPath);
@@ -305,7 +297,6 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
 
     // Expand capture card to show draft controls
     await page.click('[data-testid="overview-card-capture"]');
-    await page.waitForTimeout(300);
     
     // Draft card should be visible (this would appear after capture completes)
     // For this test, we'll directly trigger the discard via the test hook if needed
@@ -326,7 +317,6 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     const discardButton = page.locator('[data-testid="discard-draft-button"]');
     if (await discardButton.isVisible({ timeout: 1000 }).catch(() => false)) {
       await discardButton.click();
-      await page.waitForTimeout(500);
       
       // Draft should be deleted
       const draftExists = await page.evaluate((draftPath) => {
@@ -371,7 +361,6 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     // Try to save
     await page.locator('[data-testid="profile-name-input"]').fill('Stale Draft');
     await page.click('[data-testid="profile-name-save"]');
-    await page.waitForTimeout(500);
     
     // Modal should close (recovery path)
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
@@ -395,7 +384,6 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
 
     // Expand capture card
     await page.click('[data-testid="overview-card-capture"]');
-    await page.waitForTimeout(300);
     
     // Simulate draft being deleted externally
     await page.evaluate((draftPath) => {
@@ -409,7 +397,6 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     const discardButton = page.locator('[data-testid="discard-draft-button"]');
     if (await discardButton.isVisible({ timeout: 1000 }).catch(() => false)) {
       await discardButton.click();
-      await page.waitForTimeout(500);
       
       // Should not throw error, should handle gracefully
       // Verify the operation was attempted but handled the missing file
@@ -434,10 +421,10 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     const manageButton = page.locator('[data-testid="manage-profiles-button"]');
     if (await manageButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await manageButton.click();
-      await page.waitForTimeout(500);
       
       // Look for delete buttons - draft delete should be disabled
       const deleteButtons = page.locator('button:has-text("Delete")');
+      await expect(deleteButtons.first()).toBeVisible({ timeout: 3000 });
       const count = await deleteButtons.count();
       
       // At least one delete button should exist
@@ -490,7 +477,6 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       // Can still save the draft
       await page.locator('[data-testid="profile-name-input"]').fill('After Delete');
       await page.click('[data-testid="profile-name-save"]');
-      await page.waitForTimeout(500);
       
       // Should succeed
       await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();

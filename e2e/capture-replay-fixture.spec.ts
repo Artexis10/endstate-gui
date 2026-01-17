@@ -44,16 +44,12 @@ test.describe('Capture Golden Replay Fixture', () => {
     await page.click('[data-testid="profile-name-save"]');
     await expect(saveProfileModal).not.toBeVisible({ timeout: 3000 });
 
-    // Wait for profile save to complete
-    await page.waitForTimeout(1000);
-
     // Expand Capture card to see the success strip with Details button
     const captureCard = page.locator('[data-testid="overview-card-capture"]');
     await captureCard.click();
-    await page.waitForTimeout(500);
 
     // Click the Details button to open Action Details modal
-    const detailsButton = page.locator('[data-testid="capture-details-button"]');
+    const detailsButton = page.locator('[data-testid="capture-details-button"]').first();
     await expect(detailsButton).toBeVisible({ timeout: 5000 });
     await detailsButton.click();
 
@@ -91,16 +87,12 @@ test.describe('Capture Golden Replay Fixture', () => {
     await page.click('[data-testid="profile-name-save"]');
     await expect(saveProfileModal).not.toBeVisible({ timeout: 3000 });
 
-    // Wait for profile save to complete
-    await page.waitForTimeout(1000);
-
     // Expand Capture card to see the success strip with Details button
     const captureCard = page.locator('[data-testid="overview-card-capture"]');
     await captureCard.click();
-    await page.waitForTimeout(500);
 
     // Click the Details button
-    const detailsButton = page.locator('[data-testid="capture-details-button"]');
+    const detailsButton = page.locator('[data-testid="capture-details-button"]').first();
     await expect(detailsButton).toBeVisible({ timeout: 5000 });
     await detailsButton.click();
 
