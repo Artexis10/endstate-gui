@@ -1,26 +1,16 @@
 import { test, expect } from '@playwright/test';
+import { installTauriMock } from './helpers/tauri-mock';
 
 test.describe('Toast Auto-Dismiss', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    // Mock Tauri for basic operations
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: [{ path: 'C:\\test\\profile.jsonc', name: 'profile.jsonc' }],
+        check_file_exists: true,
+      }
+    });
+
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') {
-              return [{ path: 'C:\\test\\profile.jsonc', name: 'profile.jsonc' }];
-            }
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'read_text_file') return '{}';
-            if (cmd === 'write_text_file') return null;
-            if (cmd === 'check_file_exists') return true;
-            return null;
-          }
-        }
-      };
-      
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {

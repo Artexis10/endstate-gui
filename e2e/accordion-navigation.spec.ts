@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * Accordion Navigation Regression Test
@@ -16,34 +17,24 @@ import { test, expect } from '@playwright/test';
  */
 test.describe('Accordion Navigation Bug', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    await page.addInitScript(() => {
-      // Mock Tauri APIs
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'validate_profile') {
-              // Return valid profile structure so the app accepts it
-              return {
-                valid: true,
-                errors: [],
-                summary: {
-                  name: 'test-profile',
-                  version: 1,
-                  appCount: 1,
-                }
-              };
-            }
-            if (cmd === 'check_file_exists') return true;
-            if (cmd === 'read_text_file') return '{}';
-            return null;
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: ['C:\\test\\profiles\\test-profile.jsonc'],
+        validate_profile: () => ({
+          valid: true,
+          errors: [],
+          summary: {
+            name: 'test-profile',
+            version: 1,
+            appCount: 1,
           }
-        }
-      };
+        }),
+        check_file_exists: true,
+        read_text_file: '{}',
+      }
+    });
 
+    await page.addInitScript(() => {
       // Mock engine with preview support
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, forceDefaultMode } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * E2E tests for Reports page log visibility.
@@ -19,44 +20,33 @@ test.describe('Reports - Log Visibility', () => {
     // Force advanced mode for sidebar navigation
     await forceAdvancedMode(page);
     
-    await page.addInitScript(() => {
-      const LOG_FILE_PATH = 'C:\\test\\profiles\\Runs\\2025-01-01T00-00-00_abc1\\engine.log';
-      const EVENTS_FILE_PATH = 'C:\\test\\profiles\\Runs\\2025-01-01T00-00-00_abc1\\events.jsonl';
+    const LOG_FILE_PATH = 'C:\\test\\profiles\\Runs\\2025-01-01T00-00-00_abc1\\engine.log';
+    const EVENTS_FILE_PATH = 'C:\\test\\profiles\\Runs\\2025-01-01T00-00-00_abc1\\events.jsonl';
 
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') {
-              return ['C:\\test\\profiles\\test-profile.jsonc'];
-            }
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'read_text_file') {
-              // Return log content
-              if (args?.path === LOG_FILE_PATH) {
-                return '=== Test Log Content ===\nThis is a test log file.\nCapture completed successfully.';
-              }
-              // Return events content
-              if (args?.path === EVENTS_FILE_PATH) {
-                return '{"version":1,"runId":"test-run","event":"phase","phase":"capture"}\n';
-              }
-              return '{"version": 1, "apps": []}';
-            }
-            if (cmd === 'write_text_file') return null;
-            if (cmd === 'check_file_exists') {
-              const path = args?.path;
-              if (path === LOG_FILE_PATH) return true;
-              if (path === EVENTS_FILE_PATH) return true;
-              return true; // Default for other files
-            }
-            if (cmd === 'validate_profile') {
-              return { valid: true, summary: { name: 'test', version: 1, appCount: 0 } };
-            }
-            return null;
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: ['C:\\test\\profiles\\test-profile.jsonc'],
+        read_text_file: (args?: any) => {
+          // Return log content
+          if (args?.path === LOG_FILE_PATH) {
+            return '=== Test Log Content ===\nThis is a test log file.\nCapture completed successfully.';
           }
-        }
-      };
+          // Return events content
+          if (args?.path === EVENTS_FILE_PATH) {
+            return '{"version":1,"runId":"test-run","event":"phase","phase":"capture"}\n';
+          }
+          return '{"version": 1, "apps": []}';
+        },
+        check_file_exists: (args?: any) => {
+          const path = args?.path;
+          if (path === LOG_FILE_PATH) return true;
+          if (path === EVENTS_FILE_PATH) return true;
+          return true; // Default for other files
+        },
+      }
+    });
+
+    await page.addInitScript(() => {
 
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string) => {
