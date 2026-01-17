@@ -15,6 +15,9 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
 
   await page.addInitScript(
     ({ customHandlers, enableEventListeners, allowUnknownInvokes }) => {
+      // In-memory plugin-store implementation
+      const pluginStoreData = new Map<string, any>();
+
       // Support multiple listeners per event topic
       const eventListeners: Map<string, Set<Function>> = new Map();
 
@@ -34,18 +37,46 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         copy_file: () => null,
         cleanup_capture_cache: () => null,
         show_file_dialog: () => null,
-        // Plugin-store commands
-        'plugin:store|load': () => ({}),
-        'plugin:store|save': () => null,
-        'plugin:store|get': () => null,
-        'plugin:store|set': () => null,
-        'plugin:store|delete': () => null,
-        'plugin:store|clear': () => null,
-        'plugin:store|keys': () => [],
-        'plugin:store|values': () => [],
-        'plugin:store|entries': () => [],
-        'plugin:store|length': () => 0,
-        'plugin:store|has': () => false,
+        // Plugin-store commands with in-memory implementation
+        'plugin:store|load': () => {
+          // Return all stored data as an object
+          const result: any = {};
+          pluginStoreData.forEach((value, key) => {
+            result[key] = value;
+          });
+          return result;
+        },
+        'plugin:store|save': () => null, // No-op for in-memory store
+        'plugin:store|get': (args?: any) => {
+          const key = args?.key;
+          return pluginStoreData.get(key) ?? null;
+        },
+        'plugin:store|set': (args?: any) => {
+          const { key, value } = args || {};
+          if (key !== undefined) {
+            pluginStoreData.set(key, value);
+          }
+          return null;
+        },
+        'plugin:store|delete': (args?: any) => {
+          const key = args?.key;
+          if (key !== undefined) {
+            pluginStoreData.delete(key);
+          }
+          return null;
+        },
+        'plugin:store|clear': () => {
+          pluginStoreData.clear();
+          return null;
+        },
+        'plugin:store|keys': () => Array.from(pluginStoreData.keys()),
+        'plugin:store|values': () => Array.from(pluginStoreData.values()),
+        'plugin:store|entries': () => Array.from(pluginStoreData.entries()),
+        'plugin:store|length': () => pluginStoreData.size,
+        'plugin:store|has': (args?: any) => {
+          const key = args?.key;
+          return pluginStoreData.has(key);
+        },
       };
 
       const invokeImpl = async (cmd: string, args?: any) => {
@@ -66,33 +97,39 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         return null;
       };
 
+      // Merge with existing __TAURI__ if present, don't overwrite
+      const existingTauri = (window as any).__TAURI__ || {};
+      const existingCore = existingTauri.core || {};
+      const existingEvent = existingTauri.event || {};
+
       (window as any).__TAURI__ = {
+        ...existingTauri,
         core: {
+          ...existingCore,
           invoke: invokeImpl
         },
         // Top-level invoke alias (matches tauri-bridge contract)
         invoke: invokeImpl,
-        ...(enableEventListeners && {
-          event: {
-            listen: async (event: string, handler: Function) => {
-              if (!eventListeners.has(event)) {
-                eventListeners.set(event, new Set());
-              }
-              eventListeners.get(event)!.add(handler);
-              
-              // Return async unlisten function that removes only this specific handler
-              return async () => {
-                const handlers = eventListeners.get(event);
-                if (handlers) {
-                  handlers.delete(handler);
-                  if (handlers.size === 0) {
-                    eventListeners.delete(event);
-                  }
-                }
-              };
+        event: enableEventListeners ? {
+          ...existingEvent,
+          listen: async (event: string, handler: Function) => {
+            if (!eventListeners.has(event)) {
+              eventListeners.set(event, new Set());
             }
+            eventListeners.get(event)!.add(handler);
+            
+            // Return async unlisten function that removes only this specific handler
+            return async () => {
+              const handlers = eventListeners.get(event);
+              if (handlers) {
+                handlers.delete(handler);
+                if (handlers.size === 0) {
+                  eventListeners.delete(event);
+                }
+              }
+            };
           }
-        }),
+        } : existingEvent,
         // Stable test-only emitter API for replay/streaming tests
         __test: {
           emit: (event: string, payload: any) => {
