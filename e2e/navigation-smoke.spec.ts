@@ -1,6 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/tauri';
 import { forceAdvancedMode, goToApplyPage, goToCapturePage, goToVerifyPage } from './helpers/ui-mode';
-import { installTauriMockOnContext } from './helpers/tauri-mock';
 
 /**
  * Navigation Smoke Test
@@ -14,59 +13,20 @@ import { installTauriMockOnContext } from './helpers/tauri-mock';
  */
 
 test.describe('Navigation Smoke', () => {
-  test.beforeEach(async ({ page, context }) => {
-    // Install Tauri mock at context level BEFORE page creation
-    await installTauriMockOnContext(context, {
+  test.use({
+    tauriMockOptions: {
       invoke: {
         list_manifest_files: () => [],
       }
-    });
+    }
+  });
 
-    // Mock endstate engine at context level
-    await context.addInitScript(() => {
-      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
-          if (command === 'capabilities') {
-            return {
-              exitCode: 0,
-              envelope: {
-                success: true,
-                data: {
-                  version: '1.0.0',
-                  drivers: ['winget', 'scoop'],
-                  features: []
-                }
-              }
-            };
-          }
-          return { exitCode: 0, envelope: { success: true, data: {} } };
-        }
-      };
-    });
-
+  test.beforeEach(async ({ page }) => {
     // Force Advanced mode for sidebar navigation tests
     await forceAdvancedMode(page);
 
-    // Listen for console errors
-    page.on('console', msg => {
-      if (msg.type() === 'error') {
-        // Whitelist known benign errors
-        const text = msg.text();
-        
-        // React StrictMode double-render warnings are benign
-        if (text.includes('Warning: ReactDOM.render')) return;
-        if (text.includes('act(...)')) return;
-        
-        // Fail on unexpected console errors
-        throw new Error(`Console error: ${text}`);
-      }
-    });
-
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    
-    // Assert __TAURI__ mock is available (regression probe)
-    await expect.poll(() => page.evaluate(() => !!(window as any).__TAURI__?.core?.invoke)).toBeTruthy();
   });
 
   test('navigates through all pages and verifies stable landmarks', async ({ page }) => {
