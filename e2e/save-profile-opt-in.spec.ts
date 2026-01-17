@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * E2E tests for Save Profile opt-in behavior.
@@ -18,73 +19,54 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     await forceAdvancedMode(page);
     
     await page.addInitScript(() => {
-      const deleteFileCalls: string[] = [];
-      const renameFileCalls: { oldPath: string; newPath: string }[] = [];
-      const writeFileCalls: { path: string; content: string }[] = [];
-      const profileFiles = [
-        'C:\\test\\profiles\\existing-profile.jsonc',
-        'C:\\test\\profiles\\setup_2024-12-31_23-59-00.jsonc',
-      ];
+      // Track file operations
+      const writeFileCalls: Array<{ path: string; content: string }> = [];
+      const renameFileCalls: Array<{ oldPath: string; newPath: string }> = [];
+      const deleteFileCalls: Array<string> = [];
+      const profileFiles = new Set<string>([EXISTING_PROFILE_PATH]);
       
-      (window as any).__test_deleteFileCalls = deleteFileCalls;
-      (window as any).__test_renameFileCalls = renameFileCalls;
       (window as any).__test_writeFileCalls = writeFileCalls;
+      (window as any).__test_renameFileCalls = renameFileCalls;
+      (window as any).__test_deleteFileCalls = deleteFileCalls;
       (window as any).__test_profileFiles = profileFiles;
+    });
 
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'list_manifest_files') {
-              return (window as any).__test_profileFiles.map((p: string) => p);
-            }
-            if (cmd === 'read_text_file') {
-              if (args?.path?.endsWith('.meta.json')) {
-                const metaFiles = (window as any).__test_writeFileCalls
-                  .filter((c: any) => c.path === args.path);
-                if (metaFiles.length > 0) {
-                  return metaFiles[metaFiles.length - 1].content;
-                }
-                throw new Error('File not found');
-              }
-              return '{"version": 1, "apps": []}';
-            }
-            if (cmd === 'write_text_file') {
-              (window as any).__test_writeFileCalls.push({ path: args?.path, content: args?.content });
-              return null;
-            }
-            if (cmd === 'check_file_exists') {
-              const path = args?.path;
-              if ((window as any).__test_profileFiles.includes(path)) return true;
-              const metaWritten = (window as any).__test_writeFileCalls.some((c: any) => c.path === path);
-              if (metaWritten) return true;
-              return false;
-            }
-            if (cmd === 'validate_profile') {
-              return { valid: true, summary: { name: 'test', version: 1, appCount: 0 } };
-            }
-            if (cmd === 'delete_file') {
-              (window as any).__test_deleteFileCalls.push(args?.path);
-              const idx = (window as any).__test_profileFiles.indexOf(args?.path);
-              if (idx > -1) {
-                (window as any).__test_profileFiles.splice(idx, 1);
-              }
-              return null;
-            }
-            if (cmd === 'rename_file') {
-              (window as any).__test_renameFileCalls.push({ oldPath: args?.oldPath, newPath: args?.newPath });
-              const idx = (window as any).__test_profileFiles.indexOf(args?.oldPath);
-              if (idx > -1) {
-                (window as any).__test_profileFiles[idx] = args?.newPath;
-              }
-              return null;
-            }
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            return null;
-          }
-        }
-      };
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => {
+          const profileFiles = (window as any).__test_profileFiles;
+          return Array.from(profileFiles);
+        },
+        write_text_file: (args?: any) => {
+          const writeFileCalls = (window as any).__test_writeFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          writeFileCalls.push({ path: args?.path, content: args?.content });
+          profileFiles.add(args?.path);
+          return null;
+        },
+        check_file_exists: (args?: any) => {
+          const profileFiles = (window as any).__test_profileFiles;
+          return profileFiles.has(args?.path);
+        },
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test', version: 1, appCount: 0 } }),
+        read_text_file: () => '{"version": 1, "apps": []}',
+        rename_file: (args?: any) => {
+          const renameFileCalls = (window as any).__test_renameFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          renameFileCalls.push({ oldPath: args?.oldPath, newPath: args?.newPath });
+          profileFiles.delete(args?.oldPath);
+          profileFiles.add(args?.newPath);
+          return null;
+        },
+        delete_file: (args?: any) => {
+          const deleteFileCalls = (window as any).__test_deleteFileCalls || [];
+          const profileFiles = (window as any).__test_profileFiles;
+          deleteFileCalls.push(args?.path);
+          (window as any).__test_deleteFileCalls = deleteFileCalls;
+          profileFiles.delete(args?.path);
+          return null;
+        },
+      }
     });
 
     await page.addInitScript(() => {

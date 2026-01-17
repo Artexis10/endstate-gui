@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, seedProfileSettings, goToApplyPage } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * E2E tests for live activity stability and profile select readability
@@ -11,26 +12,16 @@ test.describe('Live Activity Stability', () => {
     await forceAdvancedMode(page);
     await seedProfileSettings(page, 'test-profile', true);
 
-    // Mock Tauri environment with basic setup
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } }),
+        check_file_exists: () => true,
+        read_text_file: () => '{}',
+      }
+    });
+
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: { 
-          invoke: async (cmd: string) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'validate_profile') {
-              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } };
-            }
-            if (cmd === 'check_file_exists') return true;
-            if (cmd === 'read_text_file') return '{}';
-            return null;
-          }
-        },
-        event: { listen: async () => () => {} }
-      };
-      
       // Deterministic mock engine with scenario-based streaming
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function, options?: any) => {
@@ -146,28 +137,18 @@ test.describe('Double-Run Prevention', () => {
     await forceAdvancedMode(page);
     await seedProfileSettings(page, 'test-profile', true);
 
-    // Mock Tauri environment with basic setup
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } }),
+        check_file_exists: () => true,
+        read_text_file: () => '{}',
+      }
+    });
+
     await page.addInitScript(() => {
       // Track run count for double-run prevention tests
       (window as any).__test_runCount = 0;
-      
-      (window as any).__TAURI__ = {
-        core: { 
-          invoke: async (cmd: string) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'validate_profile') {
-              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } };
-            }
-            if (cmd === 'check_file_exists') return true;
-            if (cmd === 'read_text_file') return '{}';
-            return null;
-          }
-        },
-        event: { listen: async () => () => {} }
-      };
       
       // Deterministic mock engine with run counting
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {

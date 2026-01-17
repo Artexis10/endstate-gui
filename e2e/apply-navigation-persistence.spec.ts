@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, seedProfileSettings } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * E2E Test: Apply -> Navigate Away -> Back -> UI Persistence
@@ -20,28 +21,20 @@ test.describe('Apply Navigation Persistence', () => {
     // Seed profile settings with a test profile
     await seedProfileSettings(page, 'test-profile', false); // dryRunEnabled=false for direct Apply
 
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } }),
+        read_text_file: () => '{}',
+        check_file_exists: () => false,
+      }
+    });
+
     await page.addInitScript(() => {
       // Track apply calls and control timing
       (window as any).__APPLY_STARTED__ = false;
       (window as any).__APPLY_COMPLETE__ = false;
       (window as any).__APPLY_RESOLVER__ = null;
-      
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'validate_profile') {
-              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } };
-            }
-            if (cmd === 'read_text_file') return '{}';
-            if (cmd === 'check_file_exists') return false;
-            return null;
-          }
-        }
-      };
       
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
@@ -304,23 +297,13 @@ test.describe('Apply Completion States', () => {
     await forceAdvancedMode(page);
     await seedProfileSettings(page, 'test-profile', false);
 
-    await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'validate_profile') {
-              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } };
-            }
-            if (cmd === 'read_text_file') return '{}';
-            if (cmd === 'check_file_exists') return false;
-            return null;
-          }
-        }
-      };
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } }),
+        read_text_file: () => '{}',
+        check_file_exists: () => false,
+      }
     });
   });
 

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { forceAdvancedMode, seedProfileSettings, goToApplyPage } from './helpers/ui-mode';
+import { forceAdvancedMode, seedProfileSettings } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * Persistence Boundaries E2E Test
@@ -23,20 +24,15 @@ import { forceAdvancedMode, seedProfileSettings, goToApplyPage } from './helpers
 test.describe('Persistence Boundaries on Reload', () => {
   test.beforeEach(async ({ page }) => {
     // Force Advanced mode (do NOT seed profile settings - tests manage their own localStorage)
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => [],
+      }
+    });
+
     await forceAdvancedMode(page);
 
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            return null;
-          }
-        }
-      };
       
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {

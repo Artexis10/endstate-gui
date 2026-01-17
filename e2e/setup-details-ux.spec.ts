@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, seedProfileSettings, goToApplyPage } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * E2E tests for Setup Details modal UX improvements:
@@ -14,25 +15,17 @@ test.describe('Apply Modal UX - Button Labels', () => {
     await forceAdvancedMode(page);
     await seedProfileSettings(page, 'test-profile', true);
 
+    await installTauriMock(page, {
+      enableEventListeners: true,
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        read_text_file: () => '{"version": 1, "apps": [{"name": "App1"}]}',
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 1 } }),
+        check_file_exists: () => true,
+      }
+    });
+
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'read_text_file') return '{"version": 1, "apps": [{"name": "App1"}]}';
-            if (cmd === 'validate_profile') {
-              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 1 } };
-            }
-            if (cmd === 'check_file_exists') return true;
-            return null;
-          }
-        },
-        event: { listen: async () => () => {} }
-      };
-      
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
@@ -108,25 +101,17 @@ test.describe('Apply Modal UX - Badge Text', () => {
     await forceAdvancedMode(page);
     await seedProfileSettings(page, 'test-profile', true);
 
+    await installTauriMock(page, {
+      enableEventListeners: true,
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        read_text_file: () => '{"version": 1, "apps": [{"name": "TestApp.App"}]}',
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 1 } }),
+        check_file_exists: () => true,
+      }
+    });
+
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'read_text_file') return '{"version": 1, "apps": [{"name": "TestApp.App"}]}';
-            if (cmd === 'validate_profile') {
-              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 1 } };
-            }
-            if (cmd === 'check_file_exists') return true;
-            return null;
-          }
-        },
-        event: { listen: async () => () => {} }
-      };
-      
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
@@ -201,27 +186,19 @@ test.describe('Apply Modal UX - Badge Text', () => {
 test.describe('Apply Modal UX - Failure Status', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', true); // Use preview mode, then test actual apply
+    await seedProfileSettings(page, 'test-profile', true);
+
+    await installTauriMock(page, {
+      enableEventListeners: true,
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        read_text_file: () => '{"version": 1, "apps": [{"name": "FailingApp.App"}]}',
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 1 } }),
+        check_file_exists: () => true,
+      }
+    });
 
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'read_text_file') return '{"version": 1, "apps": [{"name": "FailingApp.App"}]}';
-            if (cmd === 'validate_profile') {
-              return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 1 } };
-            }
-            if (cmd === 'check_file_exists') return true;
-            return null;
-          }
-        },
-        event: { listen: async () => () => {} }
-      };
-      
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {

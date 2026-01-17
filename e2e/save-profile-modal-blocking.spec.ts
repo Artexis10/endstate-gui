@@ -1,30 +1,19 @@
 import { test, expect } from '@playwright/test';
+import { installTauriMock } from './helpers/tauri-mock';
 
 test.describe('Save Profile Modal - Blocking Behavior', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    // Mock Tauri for basic operations
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\profile.jsonc'],
+        write_text_file: () => null,
+        check_file_exists: () => false,
+        rename_file: () => null,
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test', version: 1, appCount: 0 } }),
+      }
+    });
+
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') {
-              return ['C:\\test\\profiles\\profile.jsonc'];
-            }
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'read_text_file') return '{"version": 1, "apps": []}';
-            if (cmd === 'write_text_file') return null;
-            if (cmd === 'check_file_exists') return false; // No collision
-            if (cmd === 'rename_file') return null;
-            if (cmd === 'validate_profile') {
-              return { valid: true, errors: [], summary: { name: 'test', version: 1, appCount: 0 } };
-            }
-            return null;
-          }
-        }
-      };
-      
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {

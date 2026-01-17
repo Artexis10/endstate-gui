@@ -34,6 +34,18 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         copy_file: () => null,
         cleanup_capture_cache: () => null,
         show_file_dialog: () => null,
+        // Plugin-store commands
+        'plugin:store|load': () => ({}),
+        'plugin:store|save': () => null,
+        'plugin:store|get': () => null,
+        'plugin:store|set': () => null,
+        'plugin:store|delete': () => null,
+        'plugin:store|clear': () => null,
+        'plugin:store|keys': () => [],
+        'plugin:store|values': () => [],
+        'plugin:store|entries': () => [],
+        'plugin:store|length': () => 0,
+        'plugin:store|has': () => false,
       };
 
       const invokeImpl = async (cmd: string, args?: any) => {

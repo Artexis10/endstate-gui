@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, goToCapturePage } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 // SKIPPED: These tests expect an ActivityLog component that doesn't exist in the current
 // Overview-centric UI design. The capture flow uses inline progress indicators within
@@ -8,22 +9,17 @@ import { forceAdvancedMode, goToCapturePage } from './helpers/ui-mode';
 test.describe.skip('Capture Live Progress', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     // Force Advanced mode for sidebar navigation tests
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => [],
+        get_capture_cache_directory: () => 'C:\\test\\cache',
+        cleanup_capture_cache: () => null,
+      }
+    });
+
     await forceAdvancedMode(page);
 
     await page.addInitScript(() => {
-      // Mock Tauri FIRST (mock-first approach)
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return [];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            return null;
-          }
-        }
-      };
-      
       // Mock engine with streaming capture
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {

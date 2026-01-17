@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { forceAdvancedMode, goToApplyPage, goToCapturePage, goToVerifyPage } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * Navigation Smoke Test
@@ -14,23 +15,15 @@ import { forceAdvancedMode, goToApplyPage, goToCapturePage, goToVerifyPage } fro
 
 test.describe('Navigation Smoke', () => {
   test.beforeEach(async ({ page }) => {
+    // Install Tauri mock FIRST to ensure __TAURI__ is available when plugin-store loads
+    await installTauriMock(page, {
+      invoke: {
+        list_manifest_files: () => [],
+      }
+    });
+
     // Force Advanced mode for sidebar navigation tests
     await forceAdvancedMode(page);
-
-    // Mock Tauri bridge
-    await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string) => {
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            if (cmd === 'list_manifest_files') return [];
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            return null;
-          }
-        }
-      };
-    });
 
     // Mock endstate engine
     await page.addInitScript(() => {

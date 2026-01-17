@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { seedProfileSettings, forceDefaultMode, forceAdvancedMode, goToApplyPage } from './helpers/ui-mode';
+import { installTauriMock } from './helpers/tauri-mock';
 
 test.describe('UX Hardening - Folder Modal', () => {
   test.beforeEach(async ({ page }) => {
@@ -17,22 +18,17 @@ test.describe('UX Hardening - Folder Modal', () => {
     
     // Set __TAURI__ mock to load profiles. openFolder still returns web fallback because
     // isTauriRuntime() returns false when hasTestMock() is true (test mock detection).
+    await installTauriMock(page, {
+      enableEventListeners: true,
+      allowUnknownInvokes: true,
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        read_text_file: () => '{"version": 1, "apps": []}',
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 0 } }),
+      }
+    });
+
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string) => {
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'read_text_file') return '{"version": 1, "apps": []}';
-            if (cmd === 'validate_profile') return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 0 } };
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            // open_folder is NOT mocked - will fall through to web fallback
-            return undefined;
-          },
-        },
-        event: { listen: async () => () => {}, emit: async () => {} },
-      };
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent?: Function) => {
           if (command === 'capabilities') {
@@ -119,25 +115,18 @@ test.describe('UX Hardening - Card Padding', () => {
     await forceDefaultMode(page);
     await seedProfileSettings(page);
     
+    await installTauriMock(page, {
+      enableEventListeners: true,
+      allowUnknownInvokes: true,
+      invoke: {
+        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
+        read_text_file: () => '{"version": 1, "apps": []}',
+        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 0 } }),
+        discover_profiles: () => [{ name: 'test-profile', path: 'C:\\test\\profiles\\test-profile.jsonc' }],
+      }
+    });
+
     await page.addInitScript(() => {
-      (window as any).__TAURI__ = {
-        core: {
-          invoke: async (cmd: string) => {
-            if (cmd === 'get_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'get_default_profiles_directory') return 'C:\\test\\profiles';
-            if (cmd === 'list_manifest_files') return ['C:\\test\\profiles\\test-profile.jsonc'];
-            if (cmd === 'read_text_file') return '{"version": 1, "apps": []}';
-            if (cmd === 'validate_profile') return { valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 0 } };
-            if (cmd === 'discover_profiles') return [
-              { name: 'test-profile', path: 'C:\\test\\profiles\\test-profile.jsonc' }
-            ];
-            if (cmd === 'ensure_dir') return null;
-            if (cmd === 'read_dir') return [];
-            return undefined;
-          },
-        },
-        event: { listen: async () => () => {}, emit: async () => {} },
-      };
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string) => {
           if (command === 'capabilities') {
