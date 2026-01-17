@@ -5,15 +5,18 @@ export interface TauriMockOptions {
     [command: string]: any;
   };
   enableEventListeners?: boolean;
+  allowUnknownInvokes?: boolean;
 }
 
 export async function installTauriMock(page: Page, options: TauriMockOptions = {}) {
   const customHandlers = options.invoke || {};
   const enableEventListeners = options.enableEventListeners || false;
+  const allowUnknownInvokes = options.allowUnknownInvokes || false;
 
   await page.addInitScript(
-    ({ customHandlers, enableEventListeners }) => {
-      const eventHandlers: Map<string, Function> = new Map();
+    ({ customHandlers, enableEventListeners, allowUnknownInvokes }) => {
+      // Support multiple listeners per event topic
+      const eventListeners: Map<string, Set<Function>> = new Map();
 
       const defaultHandlers: { [key: string]: (args?: any) => any } = {
         ensure_dir: () => null,
@@ -33,36 +36,62 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         show_file_dialog: () => null,
       };
 
+      const invokeImpl = async (cmd: string, args?: any) => {
+        if (customHandlers && customHandlers[cmd] !== undefined) {
+          const handler = customHandlers[cmd];
+          if (typeof handler === 'function') {
+            return handler(args);
+          }
+          return handler;
+        }
+        if (defaultHandlers[cmd]) {
+          return defaultHandlers[cmd](args);
+        }
+        // Fail fast on unknown invokes unless explicitly allowed
+        if (!allowUnknownInvokes) {
+          throw new Error(`TAURI mock: unhandled invoke '${cmd}'`);
+        }
+        return null;
+      };
+
       (window as any).__TAURI__ = {
         core: {
-          invoke: async (cmd: string, args?: any) => {
-            if (customHandlers && customHandlers[cmd] !== undefined) {
-              const handler = customHandlers[cmd];
-              if (typeof handler === 'function') {
-                return handler(args);
-              }
-              return handler;
-            }
-            if (defaultHandlers[cmd]) {
-              return defaultHandlers[cmd](args);
-            }
-            return null;
-          }
+          invoke: invokeImpl
         },
+        // Top-level invoke alias (matches tauri-bridge contract)
+        invoke: invokeImpl,
         ...(enableEventListeners && {
           event: {
             listen: async (event: string, handler: Function) => {
-              eventHandlers.set(event, handler);
-              return () => eventHandlers.delete(event);
+              if (!eventListeners.has(event)) {
+                eventListeners.set(event, new Set());
+              }
+              eventListeners.get(event)!.add(handler);
+              
+              // Return async unlisten function that removes only this specific handler
+              return async () => {
+                const handlers = eventListeners.get(event);
+                if (handlers) {
+                  handlers.delete(handler);
+                  if (handlers.size === 0) {
+                    eventListeners.delete(event);
+                  }
+                }
+              };
             }
           }
-        })
+        }),
+        // Stable test-only emitter API for replay/streaming tests
+        __test: {
+          emit: (event: string, payload: any) => {
+            const handlers = eventListeners.get(event);
+            if (handlers) {
+              handlers.forEach(handler => handler(payload));
+            }
+          }
+        }
       };
-
-      if (enableEventListeners) {
-        (window as any).__test_eventHandlers = eventHandlers;
-      }
     },
-    { customHandlers, enableEventListeners }
+    { customHandlers, enableEventListeners, allowUnknownInvokes }
   );
 }

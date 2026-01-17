@@ -21,21 +21,24 @@ test.describe('Streaming Contract', () => {
         run_endstate_streaming: (args?: any) => {
           const channel = args?.eventChannel;
           setTimeout(() => {
-            const eventHandlers = (window as any).__test_eventHandlers;
-            const handler = eventHandlers?.get(channel);
-            if (handler) {
-              handler({ payload: { type: 'stdout', data: JSON.stringify({
-                schemaVersion: '1.0',
-                cliVersion: '1.0.0',
-                command: args?.args?.[0] || 'capabilities',
-                runId: 'test-run',
-                timestampUtc: new Date().toISOString(),
-                success: true,
-                data: { commands: ['capture', 'apply', 'verify', 'report'] },
-                error: null
-              }) + '\n' }});
-              handler({ payload: { type: 'exit', data: '', exitCode: 0 }});
-            }
+            (window as any).__TAURI__.__test.emit(channel, { 
+              payload: { 
+                type: 'stdout', 
+                data: JSON.stringify({
+                  schemaVersion: '1.0',
+                  cliVersion: '1.0.0',
+                  command: args?.args?.[0] || 'capabilities',
+                  runId: 'test-run',
+                  timestampUtc: new Date().toISOString(),
+                  success: true,
+                  data: { commands: ['capture', 'apply', 'verify', 'report'] },
+                  error: null
+                }) + '\n' 
+              }
+            });
+            (window as any).__TAURI__.__test.emit(channel, { 
+              payload: { type: 'exit', data: '', exitCode: 0 }
+            });
           }, 100);
           return undefined;
         },
