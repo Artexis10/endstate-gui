@@ -27,6 +27,9 @@ test.describe('Navigation Smoke', () => {
 
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    
+    // Regression probe: verify __TAURI__ mock is available (prevents plugin-store init errors)
+    await expect.poll(() => page.evaluate(() => !!(window as any).__TAURI__?.core?.invoke)).toBeTruthy();
   });
 
   test('navigates through all pages and verifies stable landmarks', async ({ page }) => {
