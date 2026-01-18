@@ -1,6 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/tauri';
 import { forceAdvancedMode, seedProfileSettings } from './helpers/ui-mode';
-import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * Persistence Boundaries E2E Test
@@ -22,43 +21,17 @@ import { installTauriMock } from './helpers/tauri-mock';
  */
 
 test.describe('Persistence Boundaries on Reload', () => {
-  test.beforeEach(async ({ page }) => {
-    // Force Advanced mode (do NOT seed profile settings - tests manage their own localStorage)
-    await installTauriMock(page, {
+  test.use({
+    tauriMockOptions: {
       invoke: {
         list_manifest_files: () => [],
       }
-    });
+    }
+  });
 
+  test.beforeEach(async ({ page }) => {
+    // Force Advanced mode (do NOT seed profile settings - tests manage their own localStorage)
     await forceAdvancedMode(page);
-
-    await page.addInitScript(() => {
-      
-      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
-          if (command === 'capabilities') {
-            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
-          }
-          if (command === 'report') {
-            return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
-          }
-          if (command === 'apply') {
-            onEvent({ type: 'stdout', data: '[SKIP] App1 - already installed\n' });
-            return { 
-              exitCode: 0, 
-              envelope: { 
-                success: true, 
-                data: { 
-                  counts: { total: 1, installed: 0, alreadyInstalled: 1, skippedFiltered: 0, failed: 0 },
-                  items: [{ id: 'App1', driver: 'winget', status: 'ok', reason: 'already_installed' }]
-                } 
-              } 
-            };
-          }
-          return { exitCode: 0, envelope: { success: true, data: {} } };
-        }
-      };
-    });
     
     await page.goto('/');
     await page.waitForLoadState('networkidle');

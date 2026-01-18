@@ -1,28 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/tauri';
 import { forceAdvancedMode, goToApplyPage, goToCapturePage } from './helpers/ui-mode';
-import { installTauriMock } from './helpers/tauri-mock';
 
 test.describe('UX Contract Tests', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await forceAdvancedMode(page);
-    await installTauriMock(page);
-
-    await page.addInitScript(() => {
-      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
-          if (command === 'capabilities') {
-            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
-          }
-          if (command === 'report') {
-            return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
-          }
-          if (command === 'verify') {
-            return { exitCode: 0, envelope: { success: true, data: { summary: { total: 0, missingCount: 0, versionMismatchCount: 0 }, results: [] } } };
-          }
-          return { exitCode: 0, envelope: { success: true, data: {} } };
-        }
-      };
-    });
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
   });
