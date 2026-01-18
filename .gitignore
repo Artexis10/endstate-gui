@@ -51,3 +51,8 @@ tmp/
 temp/
 *.tmp
 *~
+
+# Playwright
+test-results/
+playwright-report/
+.last-run.json
