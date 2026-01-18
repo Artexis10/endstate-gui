@@ -49,6 +49,12 @@ export const test = base.extend<TauriFixtures>({
 
   page: async ({ context }, use) => {
     const page = await context.newPage();
+    
+    // Preflight: validate __TAURI__ injection before any app/Vite modules load
+    await page.goto('about:blank');
+    const hasTauriInvoke = await page.evaluate(() => !!(window as any).__TAURI__?.core?.invoke);
+    expect(hasTauriInvoke).toBeTruthy();
+    
     await use(page);
     await page.close();
   },
