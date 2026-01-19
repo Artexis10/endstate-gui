@@ -111,16 +111,20 @@ describe('streaming-runner', () => {
     it('captures stderr separately from stdout', async () => {
       const mockUnlisten = vi.fn();
       let eventCallback: (event: any) => void = () => {};
+      let invokeCallCount = 0;
 
       vi.mocked(listen).mockImplementation(async (_channel, callback) => {
         eventCallback = callback;
         return mockUnlisten;
       });
 
-      vi.mocked(invoke).mockImplementation(async () => {
-        eventCallback({ payload: { type: 'stderr', data: 'Error message\n' } });
-        eventCallback({ payload: { type: 'stdout', data: '{"test": true}' } });
-        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        invokeCallCount++;
+        if (cmd === 'run_endstate_streaming' && invokeCallCount === 1) {
+          eventCallback({ payload: { type: 'stderr', data: 'Error message\n' } });
+          eventCallback({ payload: { type: 'stdout', data: '{"test": true}' } });
+          eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        }
         return true;
       });
 
@@ -134,16 +138,20 @@ describe('streaming-runner', () => {
     it('calls onEvent callback for each stream event', async () => {
       const mockUnlisten = vi.fn();
       let eventCallback: (event: any) => void = () => {};
+      let invokeCallCount = 0;
 
       vi.mocked(listen).mockImplementation(async (_channel, callback) => {
         eventCallback = callback;
         return mockUnlisten;
       });
 
-      vi.mocked(invoke).mockImplementation(async () => {
-        eventCallback({ payload: { type: 'stdout', data: 'line1\n' } });
-        eventCallback({ payload: { type: 'stderr', data: 'error1\n' } });
-        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        invokeCallCount++;
+        if (cmd === 'run_endstate_streaming' && invokeCallCount === 1) {
+          eventCallback({ payload: { type: 'stdout', data: 'line1\n' } });
+          eventCallback({ payload: { type: 'stderr', data: 'error1\n' } });
+          eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        }
         return true;
       });
 
@@ -471,6 +479,7 @@ describe('streaming-runner', () => {
     it('parses NDJSON events from stderr when enableNdjsonEvents is true', async () => {
       const mockUnlisten = vi.fn();
       let eventCallback: (event: any) => void = () => {};
+      let invokeCallCount = 0;
 
       vi.mocked(listen).mockImplementation(async (_channel, callback) => {
         eventCallback = callback;
@@ -484,12 +493,15 @@ describe('streaming-runner', () => {
         '{"version":1,"event":"summary","phase":"apply","total":1,"success":1,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:03.000Z"}',
       ];
 
-      vi.mocked(invoke).mockImplementation(async () => {
-        // Emit NDJSON events to stderr
-        for (const line of ndjsonEvents) {
-          eventCallback({ payload: { type: 'stderr', data: line + '\n' } });
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        invokeCallCount++;
+        if (cmd === 'run_endstate_streaming' && invokeCallCount === 1) {
+          // Emit NDJSON events to stderr
+          for (const line of ndjsonEvents) {
+            eventCallback({ payload: { type: 'stderr', data: line + '\n' } });
+          }
+          eventCallback({ payload: { type: 'exit', exitCode: 0 } });
         }
-        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
         return true;
       });
 
@@ -516,20 +528,24 @@ describe('streaming-runner', () => {
     it('handles chunked NDJSON events split across stderr chunks', async () => {
       const mockUnlisten = vi.fn();
       let eventCallback: (event: any) => void = () => {};
+      let invokeCallCount = 0;
 
       vi.mocked(listen).mockImplementation(async (_channel, callback) => {
         eventCallback = callback;
         return mockUnlisten;
       });
 
-      vi.mocked(invoke).mockImplementation(async () => {
-        // Emit partial JSON line in first chunk
-        eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"phase","phase":"ap' } });
-        // Complete the line in second chunk
-        eventCallback({ payload: { type: 'stderr', data: 'ply","timestamp":"2025-01-01T00:00:00.000Z"}\n' } });
-        // Full event in third chunk
-        eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"summary","phase":"apply","total":1,"success":1,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:01.000Z"}\n' } });
-        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        invokeCallCount++;
+        if (cmd === 'run_endstate_streaming' && invokeCallCount === 1) {
+          // Emit partial JSON line in first chunk
+          eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"phase","phase":"ap' } });
+          // Complete the line in second chunk
+          eventCallback({ payload: { type: 'stderr', data: 'ply","timestamp":"2025-01-01T00:00:00.000Z"}\n' } });
+          // Full event in third chunk
+          eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"summary","phase":"apply","total":1,"success":1,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:01.000Z"}\n' } });
+          eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        }
         return true;
       });
 
@@ -551,17 +567,21 @@ describe('streaming-runner', () => {
     it('handles Windows CRLF line endings in NDJSON events', async () => {
       const mockUnlisten = vi.fn();
       let eventCallback: (event: any) => void = () => {};
+      let invokeCallCount = 0;
 
       vi.mocked(listen).mockImplementation(async (_channel, callback) => {
         eventCallback = callback;
         return mockUnlisten;
       });
 
-      vi.mocked(invoke).mockImplementation(async () => {
-        // Emit NDJSON with CRLF endings
-        eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"phase","phase":"apply","timestamp":"2025-01-01T00:00:00.000Z"}\r\n' } });
-        eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"summary","phase":"apply","total":1,"success":1,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:01.000Z"}\r\n' } });
-        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        invokeCallCount++;
+        if (cmd === 'run_endstate_streaming' && invokeCallCount === 1) {
+          // Emit NDJSON with CRLF endings
+          eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"phase","phase":"apply","timestamp":"2025-01-01T00:00:00.000Z"}\r\n' } });
+          eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"summary","phase":"apply","total":1,"success":1,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:01.000Z"}\r\n' } });
+          eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        }
         return true;
       });
 
@@ -582,20 +602,24 @@ describe('streaming-runner', () => {
     it('ignores non-JSON lines in stderr when parsing NDJSON events', async () => {
       const mockUnlisten = vi.fn();
       let eventCallback: (event: any) => void = () => {};
+      let invokeCallCount = 0;
 
       vi.mocked(listen).mockImplementation(async (_channel, callback) => {
         eventCallback = callback;
         return mockUnlisten;
       });
 
-      vi.mocked(invoke).mockImplementation(async () => {
-        // Mix valid NDJSON with plain text logs
-        eventCallback({ payload: { type: 'stderr', data: '[INFO] Starting apply...\n' } });
-        eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"phase","phase":"apply","timestamp":"2025-01-01T00:00:00.000Z"}\n' } });
-        eventCallback({ payload: { type: 'stderr', data: '[DEBUG] Processing item...\n' } });
-        eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"summary","phase":"apply","total":1,"success":1,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:01.000Z"}\n' } });
-        eventCallback({ payload: { type: 'stderr', data: '[INFO] Apply complete\n' } });
-        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        invokeCallCount++;
+        if (cmd === 'run_endstate_streaming' && invokeCallCount === 1) {
+          // Mix valid NDJSON with plain text logs
+          eventCallback({ payload: { type: 'stderr', data: '[INFO] Starting apply...\n' } });
+          eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"phase","phase":"apply","timestamp":"2025-01-01T00:00:00.000Z"}\n' } });
+          eventCallback({ payload: { type: 'stderr', data: '[DEBUG] Processing item...\n' } });
+          eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"summary","phase":"apply","total":1,"success":1,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:01.000Z"}\n' } });
+          eventCallback({ payload: { type: 'stderr', data: '[INFO] Apply complete\n' } });
+          eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        }
         return true;
       });
 
@@ -621,18 +645,22 @@ describe('streaming-runner', () => {
     it('flushes remaining partial NDJSON event on exit', async () => {
       const mockUnlisten = vi.fn();
       let eventCallback: (event: any) => void = () => {};
+      let invokeCallCount = 0;
 
       vi.mocked(listen).mockImplementation(async (_channel, callback) => {
         eventCallback = callback;
         return mockUnlisten;
       });
 
-      vi.mocked(invoke).mockImplementation(async () => {
-        // Emit complete event
-        eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"phase","phase":"apply","timestamp":"2025-01-01T00:00:00.000Z"}\n' } });
-        // Emit partial event without newline (simulates process killed mid-output)
-        eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"summary","phase":"apply","total":1,"success":1,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:01.000Z"}' } });
-        eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        invokeCallCount++;
+        if (cmd === 'run_endstate_streaming' && invokeCallCount === 1) {
+          // Emit complete event
+          eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"phase","phase":"apply","timestamp":"2025-01-01T00:00:00.000Z"}\n' } });
+          // Emit partial event without newline (simulates process killed mid-output)
+          eventCallback({ payload: { type: 'stderr', data: '{"version":1,"event":"summary","phase":"apply","total":1,"success":1,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:01.000Z"}' } });
+          eventCallback({ payload: { type: 'exit', exitCode: 0 } });
+        }
         return true;
       });
 

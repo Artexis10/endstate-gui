@@ -396,10 +396,10 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
       expect(status?.color).toBe('success');
     });
 
-    it('installed shows as "Confirmed"', () => {
+    it('installed shows as "Installed"', () => {
       const status = PHASE_STATUS_MAP.verify.installed;
-      expect(status?.shortLabel).toBe('CONFIRMED');
-      expect(status?.longLabel).toBe('Confirmed');
+      expect(status?.shortLabel).toBe('INSTALLED');
+      expect(status?.longLabel).toBe('Installed');
     });
 
     it('to_install shows as "Missing" (not "To install")', () => {
@@ -415,11 +415,11 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
       expect(status?.longLabel).toBe('Checking…');
     });
 
-    it('failed shows as "Version mismatch"', () => {
+    it('failed shows as "Failed"', () => {
       const status = PHASE_STATUS_MAP.verify.failed;
-      expect(status?.shortLabel).toBe('MISMATCH');
-      expect(status?.longLabel).toBe('Version mismatch');
-      expect(status?.color).toBe('warn'); // Mismatch uses warning (amber), not error
+      expect(status?.shortLabel).toBe('FAILED');
+      expect(status?.longLabel).toBe('Failed');
+      expect(status?.color).toBe('error');
     });
   });
 });

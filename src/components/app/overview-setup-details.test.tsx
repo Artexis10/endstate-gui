@@ -29,11 +29,23 @@ vi.mock('@/settings', () => ({
  * 2. "Already present" tab in Setup Details modal shows nothing
  * 3. "To install" pill label truncated/cut off
  */
-const defaultPerActionState = {
-  actionStatusByAction: { capture: 'idle' as const, setup: 'idle' as const, check: 'idle' as const },
+const createPerActionState = (overrides?: {
+  setup?: { status: 'idle' | 'running' | 'success' | 'error'; result?: any };
+}) => ({
+  actionStatusByAction: { 
+    capture: 'idle' as const, 
+    setup: (overrides?.setup?.status ?? 'idle') as 'idle' | 'running' | 'success' | 'error', 
+    check: 'idle' as const 
+  },
   actionProgressByAction: { capture: null, setup: null, check: null },
-  actionResultByAction: { capture: null, setup: null, check: null },
-};
+  actionResultByAction: { 
+    capture: null, 
+    setup: overrides?.setup?.result ?? null, 
+    check: null 
+  },
+});
+
+const defaultPerActionState = createPerActionState();
 
 describe('Setup Details Modal - Already Present vs Skipped', () => {
   const mockLifecycleState: LifecycleState = {
@@ -99,7 +111,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
 
     render(
       <OverviewScreen
-        {...defaultPerActionState}
+        {...createPerActionState({ setup: { status: 'success', result: setupResult } })}
         {...defaultProps}
         runningAction="setup"
         actionStatus="success"
@@ -183,7 +195,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
 
     render(
       <OverviewScreen
-        {...defaultPerActionState}
+        {...createPerActionState({ setup: { status: 'success', result: setupResult } })}
         {...defaultProps}
         runningAction="setup"
         actionStatus="success"
@@ -264,7 +276,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
 
     render(
       <OverviewScreen
-        {...defaultPerActionState}
+        {...createPerActionState({ setup: { status: 'success', result: setupResult } })}
         {...defaultProps}
         runningAction="setup"
         actionStatus="success"

@@ -27,11 +27,23 @@ vi.mock('@/settings', () => ({
  * Issue: Capture items showing as "Skipped" instead of "Detected"
  * Root cause: appEvents need statusKey='already_present' and phase='capture' for phase-aware mapping
  */
-const defaultPerActionState = {
-  actionStatusByAction: { capture: 'idle' as const, setup: 'idle' as const, check: 'idle' as const },
+const createPerActionState = (overrides?: {
+  capture?: { status: 'idle' | 'running' | 'success' | 'error'; result?: any };
+}) => ({
+  actionStatusByAction: { 
+    capture: (overrides?.capture?.status ?? 'idle') as 'idle' | 'running' | 'success' | 'error', 
+    setup: 'idle' as const, 
+    check: 'idle' as const 
+  },
   actionProgressByAction: { capture: null, setup: null, check: null },
-  actionResultByAction: { capture: null, setup: null, check: null },
-};
+  actionResultByAction: { 
+    capture: overrides?.capture?.result ?? null, 
+    setup: null, 
+    check: null 
+  },
+});
+
+const defaultPerActionState = createPerActionState();
 
 describe('Capture Details Modal - Detected vs Skipped', () => {
   const mockLifecycleState: LifecycleState = {
@@ -96,7 +108,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
 
     render(
       <OverviewScreen
-        {...defaultPerActionState}
+        {...createPerActionState({ capture: { status: 'success', result: captureResult } })}
         {...defaultProps}
         runningAction="capture"
         actionStatus="success"
@@ -158,7 +170,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
 
     render(
       <OverviewScreen
-        {...defaultPerActionState}
+        {...createPerActionState({ capture: { status: 'success', result: captureResult } })}
         {...defaultProps}
         runningAction="capture"
         actionStatus="success"

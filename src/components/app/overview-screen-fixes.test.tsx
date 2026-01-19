@@ -230,6 +230,16 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
   });
 
   it('should show fatal error for complete failures', () => {
+    const actionResult = {
+      action: 'setup' as const,
+      status: 'error' as const,
+      summary: 'All apps failed',
+      counts: {
+        installed: 0,
+        alreadyPresent: 0,
+        failed: 10,
+      },
+    };
     render(
       <OverviewScreen
         lifecycleState={mockLifecycleState}
@@ -240,17 +250,10 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
         runningAction="setup"
         actionStatus="error"
         actionProgress={{ message: 'Failed to run' }}
-        actionResult={{
-          action: 'setup',
-          status: 'error',
-          summary: 'All apps failed',
-          counts: {
-            installed: 0,
-            alreadyPresent: 0,
-            failed: 10,
-          },
-        }}
-        {...defaultPerActionState}
+        actionResult={actionResult}
+        actionStatusByAction={{ ...defaultPerActionState.actionStatusByAction, setup: 'error' }}
+        actionProgressByAction={{ ...defaultPerActionState.actionProgressByAction, setup: { message: 'Failed to run' } }}
+        actionResultByAction={{ ...defaultPerActionState.actionResultByAction, setup: actionResult }}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 10 }}
         onNavigate={vi.fn()}
@@ -273,6 +276,20 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
   });
 
   it('should NOT show generic error message for partial failures in details modal', () => {
+    const actionResult = {
+      action: 'setup' as const,
+      status: 'error' as const,
+      summary: '60 installed, 1 failed',
+      counts: {
+        installed: 60,
+        alreadyPresent: 5,
+        failed: 1,
+      },
+      appEvents: [
+        { app: 'App1', action: 'Installed' },
+        { app: 'App2', action: 'Failed' },
+      ],
+    };
     render(
       <OverviewScreen
         lifecycleState={mockLifecycleState}
@@ -283,21 +300,10 @@ describe('OverviewScreen - Partial Failures Messaging', () => {
         runningAction="setup"
         actionStatus="error"
         actionProgress={null}
-        actionResult={{
-          action: 'setup',
-          status: 'error',
-          summary: '60 installed, 1 failed',
-          counts: {
-            installed: 60,
-            alreadyPresent: 5,
-            failed: 1,
-          },
-          appEvents: [
-            { app: 'App1', action: 'Installed' },
-            { app: 'App2', action: 'Failed' },
-          ],
-        }}
-        {...defaultPerActionState}
+        actionResult={actionResult}
+        actionStatusByAction={{ ...defaultPerActionState.actionStatusByAction, setup: 'error' }}
+        actionProgressByAction={defaultPerActionState.actionProgressByAction}
+        actionResultByAction={{ ...defaultPerActionState.actionResultByAction, setup: actionResult }}
         liveAppEvents={[]}
         liveCounters={{ installed: 60, alreadyPresent: 5, skipped: 0, failed: 1 }}
         onNavigate={vi.fn()}
@@ -340,7 +346,9 @@ describe('OverviewScreen - Running Action State Cleanup', () => {
         actionStatus="running"
         actionProgress={{ message: 'Evaluating changes' }}
         actionResult={null}
-        {...defaultPerActionState}
+        actionStatusByAction={{ ...defaultPerActionState.actionStatusByAction, setup: 'running' }}
+        actionProgressByAction={{ ...defaultPerActionState.actionProgressByAction, setup: { message: 'Evaluating changes' } }}
+        actionResultByAction={defaultPerActionState.actionResultByAction}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}
@@ -410,7 +418,9 @@ describe('OverviewScreen - Running Action State Cleanup', () => {
         actionStatus="running"
         actionProgress={{ message: 'Checking computer...' }}
         actionResult={null}
-        {...defaultPerActionState}
+        actionStatusByAction={{ ...defaultPerActionState.actionStatusByAction, check: 'running' }}
+        actionProgressByAction={{ ...defaultPerActionState.actionProgressByAction, check: { message: 'Checking computer...' } }}
+        actionResultByAction={defaultPerActionState.actionResultByAction}
         liveAppEvents={[]}
         liveCounters={{ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 }}
         onNavigate={vi.fn()}

@@ -109,6 +109,16 @@ describe('OverviewScreen - Setup Actions', () => {
         runningAction="setup"
         actionStatus="success"
         actionResult={actionResult}
+        actionStatusByAction={{
+          capture: 'idle',
+          setup: 'success',
+          check: 'idle',
+        }}
+        actionResultByAction={{
+          capture: null,
+          setup: actionResult,
+          check: null,
+        }}
       />
     );
 
@@ -139,6 +149,16 @@ describe('OverviewScreen - Setup Actions', () => {
         runningAction="setup"
         actionStatus="success"
         actionResult={actionResult}
+        actionStatusByAction={{
+          capture: 'idle',
+          setup: 'success',
+          check: 'idle',
+        }}
+        actionResultByAction={{
+          capture: null,
+          setup: actionResult,
+          check: null,
+        }}
       />
     );
 

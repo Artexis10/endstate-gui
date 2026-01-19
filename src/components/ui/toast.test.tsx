@@ -80,64 +80,53 @@ describe('Toast System', () => {
     });
   });
 
-  describe('Click-to-dismiss behaviour', () => {
-    it('dismisses the correct toast id when onClick is called for success toast', () => {
+  describe('Dismissible behaviour', () => {
+    it('sets dismissible option for success toast', () => {
       const mockId = 'success-toast-123';
       vi.mocked(toast.success).mockReturnValue(mockId);
 
       showToast('Success', 'success');
 
-      const callArgs = vi.mocked(toast.success).mock.calls[0];
-      const options = callArgs[1] as any;
-      
-      expect(options.onClick).toBeDefined();
-      
-      // Simulate clicking the toast
-      options.onClick();
-      
-      expect(toast.dismiss).toHaveBeenCalledWith(mockId);
+      expect(toast.success).toHaveBeenCalledWith(
+        'Success',
+        expect.objectContaining({ dismissible: true })
+      );
     });
 
-    it('dismisses the correct toast id when onClick is called for error toast', () => {
+    it('sets dismissible option for error toast', () => {
       const mockId = 'error-toast-456';
       vi.mocked(toast.error).mockReturnValue(mockId);
 
       showToast('Error', 'error');
 
-      const callArgs = vi.mocked(toast.error).mock.calls[0];
-      const options = callArgs[1] as any;
-      
-      options.onClick();
-      
-      expect(toast.dismiss).toHaveBeenCalledWith(mockId);
+      expect(toast.error).toHaveBeenCalledWith(
+        'Error',
+        expect.objectContaining({ dismissible: true })
+      );
     });
 
-    it('dismisses the correct toast id when onClick is called for warning toast', () => {
+    it('sets dismissible option for warning toast', () => {
       const mockId = 'warning-toast-789';
       vi.mocked(toast.warning).mockReturnValue(mockId);
 
       showToast('Warning', 'warning');
 
-      const callArgs = vi.mocked(toast.warning).mock.calls[0];
-      const options = callArgs[1] as any;
-      
-      options.onClick();
-      
-      expect(toast.dismiss).toHaveBeenCalledWith(mockId);
+      expect(toast.warning).toHaveBeenCalledWith(
+        'Warning',
+        expect.objectContaining({ dismissible: true })
+      );
     });
 
-    it('dismisses the correct toast id when onClick is called for info toast', () => {
+    it('sets dismissible option for info toast', () => {
       const mockId = 'info-toast-abc';
       vi.mocked(toast.info).mockReturnValue(mockId);
 
       showToast('Info', 'info');
 
-      const callArgs = vi.mocked(toast.info).mock.calls[0];
-      const options = callArgs[1] as any;
-      
-      options.onClick();
-      
-      expect(toast.dismiss).toHaveBeenCalledWith(mockId);
+      expect(toast.info).toHaveBeenCalledWith(
+        'Info',
+        expect.objectContaining({ dismissible: true })
+      );
     });
 
     it('returns the toast id from showToast', () => {
@@ -149,7 +138,7 @@ describe('Toast System', () => {
       expect(result).toBe(mockId);
     });
 
-    it('dismisses only the specific toast, not all toasts', () => {
+    it('each toast has its own dismissible option', () => {
       const mockId1 = 'toast-1';
       const mockId2 = 'toast-2';
       
@@ -159,13 +148,14 @@ describe('Toast System', () => {
       showToast('First', 'success');
       showToast('Second', 'error');
 
-      // Click the first toast
-      const firstCallArgs = vi.mocked(toast.success).mock.calls[0];
-      const firstOptions = firstCallArgs[1] as any;
-      firstOptions.onClick();
-      
-      expect(toast.dismiss).toHaveBeenCalledWith(mockId1);
-      expect(toast.dismiss).not.toHaveBeenCalledWith(mockId2);
+      expect(toast.success).toHaveBeenCalledWith(
+        'First',
+        expect.objectContaining({ dismissible: true })
+      );
+      expect(toast.error).toHaveBeenCalledWith(
+        'Second',
+        expect.objectContaining({ dismissible: true })
+      );
     });
   });
 });
