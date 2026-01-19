@@ -108,7 +108,10 @@ export function ActionCard({
               exit="collapsed"
               className="overflow-hidden"
             >
-              <CardContent className="pt-0 pb-4" data-testid={expandedContentTestId}>
+              <CardContent 
+                className="pt-0 pb-4" 
+                data-testid={expandedContentTestId}
+              >
                 {children}
               </CardContent>
             </motion.div>

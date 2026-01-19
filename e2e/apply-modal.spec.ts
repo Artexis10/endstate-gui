@@ -22,9 +22,7 @@ function createApplyMockEngine(applyResponse: any) {
 
 test.describe('Apply Page - Apply Only Flow', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', true);
-
+    // Install Tauri mock FIRST, before seeding settings
     await installTauriMock(page, {
       invoke: {
         list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
@@ -33,6 +31,10 @@ test.describe('Apply Page - Apply Only Flow', () => {
         read_text_file: () => '{}',
       }
     });
+
+    // Seed settings AFTER Tauri mock is installed
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', true);
 
     await page.addInitScript(() => {
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
@@ -121,10 +123,7 @@ test.describe('Apply Page - Apply Only Flow', () => {
 // Test: All apps already installed => "Your computer is ready"
 test.describe('Apply Modal - All Already Installed', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    // Force Advanced mode and seed profile settings
-    await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', true);
-
+    // Install Tauri mock FIRST, before seeding settings
     await installTauriMock(page, {
       invoke: {
         list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
@@ -133,6 +132,10 @@ test.describe('Apply Modal - All Already Installed', () => {
         read_text_file: () => '{}',
       }
     });
+
+    // Seed settings AFTER Tauri mock is installed
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', true);
 
     await page.addInitScript(() => {
       
@@ -201,10 +204,7 @@ test.describe('Apply Modal - All Already Installed', () => {
 // Test: Some apps failed => "Setup incomplete" + Needs attention
 test.describe('Apply Modal - With Failures', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    // Force Advanced mode and seed profile settings
-    await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', true);
-
+    // Install Tauri mock FIRST, before seeding settings
     await installTauriMock(page, {
       invoke: {
         list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
@@ -213,6 +213,10 @@ test.describe('Apply Modal - With Failures', () => {
         read_text_file: () => '{}',
       }
     });
+
+    // Seed settings AFTER Tauri mock is installed
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', true);
 
     await page.addInitScript(() => {
       
@@ -281,10 +285,7 @@ test.describe('Apply Modal - With Failures', () => {
 // Test: Pending installs from dry-run => "Changes ready to apply" with Install button
 test.describe('Apply Modal - Pending Installs (Dry Run)', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    // Force Advanced mode and seed profile settings
-    await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', true);
-
+    // Install Tauri mock FIRST, before seeding settings
     await installTauriMock(page, {
       invoke: {
         list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
@@ -293,6 +294,10 @@ test.describe('Apply Modal - Pending Installs (Dry Run)', () => {
         read_text_file: () => '{}',
       }
     });
+
+    // Seed settings AFTER Tauri mock is installed
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', true);
 
     await page.addInitScript(() => {
       

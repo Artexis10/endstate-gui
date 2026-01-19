@@ -368,9 +368,11 @@ function AppContent() {
     setShowProfileNameModal(true);
   };
 
-  // E2E test hooks - only installed when VITE_E2E === "1"
+  // E2E test hooks - installed when VITE_E2E === "1" OR runtime flag is set
+  // Runtime flag allows tests to enable hooks even when reusing an existing dev server
   useEffect(() => {
-    if (import.meta.env.VITE_E2E === '1') {
+    const isE2E = import.meta.env.VITE_E2E === '1' || (window as any).__ENDSTATE_E2E_MODE__;
+    if (isE2E) {
       let cleanup: (() => void) | undefined;
       
       import('./e2e/e2e-hooks').then(({ installE2EHooks }) => {
@@ -380,6 +382,9 @@ function AppContent() {
           showToast,
           setActionResultByAction,
           setActionStatusByAction,
+          setProfiles,
+          setSelectedProfile,
+          setSelectedProfilePath,
         });
       });
       

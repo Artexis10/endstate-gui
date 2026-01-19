@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { forceAdvancedMode, seedProfileSettings } from './helpers/ui-mode';
+import { forceAdvancedMode, seedProfileSettings, seedProfilesViaHook } from './helpers/ui-mode';
 import { installTauriMock } from './helpers/tauri-mock';
 
 /**
@@ -16,11 +16,7 @@ import { installTauriMock } from './helpers/tauri-mock';
 
 test.describe('Apply Navigation Persistence', () => {
   test.beforeEach(async ({ page }) => {
-    // Force Advanced mode for sidebar navigation
-    await forceAdvancedMode(page);
-    // Seed profile settings with a test profile
-    await seedProfileSettings(page, 'test-profile', false); // dryRunEnabled=false for direct Apply
-
+    // Install Tauri mock FIRST, before seeding settings
     await installTauriMock(page, {
       invoke: {
         list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
@@ -90,9 +86,16 @@ test.describe('Apply Navigation Persistence', () => {
         }
       };
     });
+
+    // Seed settings AFTER Tauri mock is installed
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', false); // dryRunEnabled=false for direct Apply
     
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    
+    // Seed profiles via E2E hook to ensure hasProfile is true
+    await seedProfilesViaHook(page, 'test-profile');
   });
 
   test('Apply state persists when navigating away and back during run', async ({ page }) => {
@@ -294,9 +297,7 @@ test.describe('Apply Navigation Persistence', () => {
 
 test.describe('Apply Completion States', () => {
   test.beforeEach(async ({ page }) => {
-    await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', false);
-
+    // Install Tauri mock FIRST, before seeding settings
     await installTauriMock(page, {
       invoke: {
         list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
@@ -305,6 +306,10 @@ test.describe('Apply Completion States', () => {
         check_file_exists: () => false,
       }
     });
+
+    // Seed settings AFTER Tauri mock is installed
+    await forceAdvancedMode(page);
+    await seedProfileSettings(page, 'test-profile', false);
   });
 
   test('shows success completion UI after successful apply', async ({ page }) => {
@@ -338,6 +343,9 @@ test.describe('Apply Completion States', () => {
     
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    
+    // Seed profiles via E2E hook to ensure hasProfile is true
+    await seedProfilesViaHook(page, 'test-profile');
     
     // Trigger apply
     await page.locator('[data-testid="overview-card-apply"]').click();
@@ -391,6 +399,9 @@ test.describe('Apply Completion States', () => {
     
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    
+    // Seed profiles via E2E hook to ensure hasProfile is true
+    await seedProfilesViaHook(page, 'test-profile');
     
     // Trigger apply
     await page.locator('[data-testid="overview-card-apply"]').click();

@@ -156,7 +156,7 @@ test.describe('Accordion Navigation Bug', () => {
     
     // Expand the card
     await setupCardAfterNav.click();
-    await expect(page.locator('[data-testid="apply-card-expanded-content"]')).toBeVisible();
+    await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible();
     
     // Verify the success result is still showing (action results persist across navigation)
     await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 3000 });
@@ -205,7 +205,7 @@ test.describe('Accordion Navigation Bug', () => {
     
     // Expand the card
     await setupCardAfterNav.click();
-    await expect(page.locator('[data-testid="apply-card-expanded-content"]')).toBeVisible();
+    await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible();
     
     // Verify the success result is still showing (action results persist across navigation)
     await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 3000 });

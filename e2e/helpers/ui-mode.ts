@@ -35,6 +35,29 @@ export function seedProfileSettings(page: Page, profileName = 'test-profile', dr
 }
 
 /**
+ * Seeds profiles state directly via E2E hook AFTER page loads.
+ * Call this after page.goto() and page.waitForLoadState().
+ * This bypasses profile discovery and ensures hasProfile is true.
+ * Returns true if seeding succeeded, false if E2E hooks not available.
+ */
+export async function seedProfilesViaHook(page: Page, profileName = 'test-profile'): Promise<boolean> {
+  try {
+    await page.waitForFunction(() => (window as any).__endstate_e2e_seedProfiles !== undefined, { timeout: 5000 });
+    await page.evaluate(([name]) => {
+      (window as any).__endstate_e2e_seedProfiles({
+        profiles: [{ name, path: `C:\\test\\profiles\\${name}.jsonc`, displayName: name }],
+        selectedProfile: name,
+        selectedProfilePath: `C:\\test\\profiles\\${name}.jsonc`,
+      });
+    }, [profileName]);
+    return true;
+  } catch {
+    // E2E hooks not available - profile discovery must work via mocks
+    return false;
+  }
+}
+
+/**
  * Force Advanced mode (sidebar navigation visible).
  * App starts on Overview; use goToApplyPage() to navigate.
  */
@@ -63,7 +86,13 @@ export function forceDefaultMode(page: Page): Promise<void> {
  * In the Overview-centric design, this expands the Apply card.
  * Works in both Default and Advanced modes (both use Overview cards).
  */
-export async function goToApplyPage(page: Page): Promise<void> {
+export async function goToApplyPage(page: Page, seedProfiles = true): Promise<void> {
+  // Seed profiles via E2E hook if requested (ensures hasProfile is true)
+  let seeded = false;
+  if (seedProfiles) {
+    seeded = await seedProfilesViaHook(page, 'test-profile');
+  }
+  
   // Navigate to Overview first if not already there
   const overviewNav = page.locator('[data-testid="nav-overview"]');
   if (await overviewNav.isVisible({ timeout: 500 }).catch(() => false)) {
@@ -77,6 +106,13 @@ export async function goToApplyPage(page: Page): Promise<void> {
   
   // Verify expanded content appears
   await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
+  
+  // Wait for Preview/Apply button to be enabled only if we seeded profiles
+  // (tests without E2E hooks must handle button enablement themselves)
+  if (seeded) {
+    const actionButton = page.getByRole('button', { name: /Preview changes|Apply changes/ });
+    await expect(actionButton).toBeEnabled({ timeout: 10000 });
+  }
 }
 
 /**

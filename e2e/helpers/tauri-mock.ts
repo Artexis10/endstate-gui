@@ -13,6 +13,11 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
   const enableEventListeners = options.enableEventListeners || false;
   const allowUnknownInvokes = options.allowUnknownInvokes || false;
 
+  // Enable E2E mode flag so app installs E2E hooks even when reusing dev server
+  await page.addInitScript(() => {
+    (window as any).__ENDSTATE_E2E_MODE__ = true;
+  });
+
   await page.addInitScript(
     ({ customHandlers, enableEventListeners, allowUnknownInvokes }) => {
       // In-memory plugin-store implementation
@@ -156,6 +161,11 @@ export async function installTauriMockOnContext(context: BrowserContext, options
   const customHandlers = options.invoke || {};
   const enableEventListeners = options.enableEventListeners || false;
   const allowUnknownInvokes = options.allowUnknownInvokes || false;
+
+  // Enable E2E mode flag so app installs E2E hooks even when reusing dev server
+  await context.addInitScript(() => {
+    (window as any).__ENDSTATE_E2E_MODE__ = true;
+  });
 
   await context.addInitScript(
     ({ customHandlers, enableEventListeners, allowUnknownInvokes }) => {

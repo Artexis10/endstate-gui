@@ -7,6 +7,12 @@
 
 import type { ActionResult } from '@/components/app/overview/types';
 
+interface DiscoveredProfile {
+  name: string;
+  path: string;
+  displayName?: string;
+}
+
 interface E2EHookDependencies {
   setPendingCaptureDraft: (draft: {
     capturedAppsCount: number;
@@ -23,6 +29,9 @@ interface E2EHookDependencies {
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   setActionResultByAction: React.Dispatch<React.SetStateAction<Record<string, ActionResult | null>>>;
   setActionStatusByAction: React.Dispatch<React.SetStateAction<Record<string, 'idle' | 'running' | 'success' | 'error'>>>;
+  setProfiles: React.Dispatch<React.SetStateAction<DiscoveredProfile[]>>;
+  setSelectedProfile: React.Dispatch<React.SetStateAction<string>>;
+  setSelectedProfilePath: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export function installE2EHooks(deps: E2EHookDependencies): () => void {
@@ -32,6 +41,9 @@ export function installE2EHooks(deps: E2EHookDependencies): () => void {
     showToast,
     setActionResultByAction,
     setActionStatusByAction,
+    setProfiles,
+    setSelectedProfile,
+    setSelectedProfilePath,
   } = deps;
 
   // Hook to open save profile modal with draft
@@ -60,10 +72,26 @@ export function installE2EHooks(deps: E2EHookDependencies): () => void {
     setActionStatusByAction(prev => ({ ...prev, capture: result.status }));
   };
 
+  // Hook to seed profiles state directly (bypasses profile discovery)
+  (window as any).__endstate_e2e_seedProfiles = ({
+    profiles,
+    selectedProfile,
+    selectedProfilePath,
+  }: {
+    profiles: DiscoveredProfile[];
+    selectedProfile: string;
+    selectedProfilePath: string;
+  }) => {
+    setProfiles(profiles);
+    setSelectedProfile(selectedProfile);
+    setSelectedProfilePath(selectedProfilePath);
+  };
+
   // Return cleanup function
   return () => {
     delete (window as any).__endstate_e2e_openSaveProfileModal;
     delete (window as any).__endstate_e2e_showToast;
     delete (window as any).__endstate_e2e_setCaptureResult;
+    delete (window as any).__endstate_e2e_seedProfiles;
   };
 }

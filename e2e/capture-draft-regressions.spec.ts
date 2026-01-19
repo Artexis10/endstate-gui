@@ -22,6 +22,11 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await forceAdvancedMode(page);
     
+    // Enable E2E mode flag so app installs E2E hooks
+    await page.addInitScript(() => {
+      (window as any).__ENDSTATE_E2E_MODE__ = true;
+    });
+    
     await page.addInitScript(() => {
       // In-memory filesystem simulation
       const existingPaths = new Set<string>([
@@ -787,7 +792,7 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     const checkCard = page.locator('[data-testid="overview-card-verify"]');
     await expect(checkCard).toBeVisible();
     await checkCard.click();
-    await expect(page.locator('[data-testid="verify-card-expanded-content"]')).toBeVisible();
+    await expect(page.locator('[data-testid="check-card-expanded-content"]')).toBeVisible();
 
     // Get Check card position
     const checkBox = await checkCard.boundingBox();
