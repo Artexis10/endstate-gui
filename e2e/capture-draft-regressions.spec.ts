@@ -172,12 +172,13 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     }, DRAFT_PATH);
 
     // Trigger capture completion with draft
-    await page.evaluate((draftPath) => {
-      (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        pendingPath: draftPath, 
+    // E2E hook expects draftText (the actual content), not pendingPath
+    await page.evaluate(() => {
+      (window as any).__endstate_e2e_openSaveProfileModal?.({
+        draftText: '{"version": 1, "apps": [{"name": "captured-app"}]}', 
         suggestedName: 'My Captured Setup' 
       });
-    }, DRAFT_PATH);
+    });
 
     // Wait for modal and save
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
@@ -226,9 +227,10 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       expect(finalTitleClasses).toBe(initialTitleClasses);
     } else {
       // If card doesn't appear, verify the save operation succeeded
+      // Save flow uses write_text_file (not rename_file) to write draft content to profiles directory
       const operations = await page.evaluate(() => (window as any).__test_operations);
-      const renameOps = operations.filter((op: any) => op.type === 'rename_file');
-      expect(renameOps.length).toBeGreaterThan(0);
+      const writeOps = operations.filter((op: any) => op.type === 'write_text_file');
+      expect(writeOps.length).toBeGreaterThan(0);
     }
   });
 
@@ -246,12 +248,13 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     }, DRAFT_PATH);
 
     // Open save modal
-    await page.evaluate((draftPath) => {
-      (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        pendingPath: draftPath, 
+    // E2E hook expects draftText (the actual content), not pendingPath
+    await page.evaluate(() => {
+      (window as any).__endstate_e2e_openSaveProfileModal?.({
+        draftText: '{"version": 1, "apps": [{"name": "draft-app"}]}', 
         suggestedName: 'Will Cancel' 
       });
-    }, DRAFT_PATH);
+    });
 
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
     
@@ -271,12 +274,12 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     expect(deleteOps.length).toBe(0);
     
     // Draft can still be saved afterward - open modal again
-    await page.evaluate((draftPath) => {
-      (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        pendingPath: draftPath, 
+    await page.evaluate(() => {
+      (window as any).__endstate_e2e_openSaveProfileModal?.({
+        draftText: '{"version": 1, "apps": [{"name": "draft-app"}]}', 
         suggestedName: 'Now Saving' 
       });
-    }, DRAFT_PATH);
+    });
     
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
     await page.locator('[data-testid="profile-name-input"]').fill('Now Saving');
@@ -285,10 +288,10 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     // Save should succeed
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
     
-    // Verify rename was called (save operation)
+    // Verify write was called (save operation uses write_text_file, not rename_file)
     const finalOps = await page.evaluate(() => (window as any).__test_operations);
-    const renameOps = finalOps.filter((op: any) => op.type === 'rename_file');
-    expect(renameOps.length).toBeGreaterThan(0);
+    const writeOps = finalOps.filter((op: any) => op.type === 'write_text_file');
+    expect(writeOps.length).toBeGreaterThan(0);
   });
 
   test('Discard works: removes draft and returns to neutral state', async ({ page }) => {
@@ -345,13 +348,13 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       fileContents.set(draftPath, '{"version": 1, "apps": [{"name": "stale-app"}]}');
     }, DRAFT_PATH);
 
-    // Open save modal
-    await page.evaluate((draftPath) => {
+    // Open save modal - use draftText for the E2E hook
+    await page.evaluate(() => {
       (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        pendingPath: draftPath, 
+        draftText: '{"version": 1, "apps": [{"name": "stale-app"}]}', 
         suggestedName: 'Stale Draft' 
       });
-    }, DRAFT_PATH);
+    });
 
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
     
@@ -466,13 +469,13 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     }, DRAFT_PATH);
     expect(draftExists).toBe(true);
     
-    // Draft operations should still work
-    await page.evaluate((draftPath) => {
+    // Draft operations should still work - use draftText for the E2E hook
+    await page.evaluate(() => {
       (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        pendingPath: draftPath, 
+        draftText: '{"version": 1, "apps": [{"name": "draft-app"}]}', 
         suggestedName: 'After Delete' 
       });
-    }, DRAFT_PATH);
+    });
     
     const modalVisible = await page.locator('[data-testid="profile-name-modal"]')
       .isVisible({ timeout: 2000 })
@@ -524,13 +527,13 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       fileContents.set(savedPath, '{"version": 1, "apps": [{"name": "saved-app"}]}');
     }, SAVED_PROFILE_PATH);
 
-    // Trigger save completion to show green card
-    await page.evaluate((savedPath) => {
+    // Trigger save completion to show green card - use draftText for the E2E hook
+    await page.evaluate(() => {
       (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        pendingPath: savedPath, 
+        draftText: '{"version": 1, "apps": [{"name": "saved-app"}]}', 
         suggestedName: 'Styling Test' 
       });
-    }, SAVED_PROFILE_PATH);
+    });
 
     const modalVisible = await page.locator('[data-testid="profile-name-modal"]')
       .isVisible({ timeout: 2000 })
@@ -580,9 +583,10 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
         expect(titleClasses).toContain('text-success');
       } else {
         // If card doesn't appear, verify save succeeded
+        // Save flow uses write_text_file (not rename_file) to write draft content
         const operations = await page.evaluate(() => (window as any).__test_operations);
-        const renameOps = operations.filter((op: any) => op.type === 'rename_file');
-        expect(renameOps.length).toBeGreaterThan(0);
+        const writeOps = operations.filter((op: any) => op.type === 'write_text_file');
+        expect(writeOps.length).toBeGreaterThan(0);
       }
     }
   });
@@ -620,13 +624,13 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       fileContents.set(draftPath, '{"version": 1, "apps": [{"name": "first-app"}]}');
     }, DRAFT_PATH);
 
-    // Trigger capture completion with draft
-    await page.evaluate((draftPath) => {
+    // Trigger capture completion with draft - use draftText for the E2E hook
+    await page.evaluate(() => {
       (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        pendingPath: draftPath, 
+        draftText: '{"version": 1, "apps": [{"name": "first-app"}]}', 
         suggestedName: 'First Profile' 
       });
-    }, DRAFT_PATH);
+    });
 
     // Close modal without saving (Cancel)
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
@@ -662,12 +666,12 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       fileContents.set(draftPath, '{"version": 1, "apps": [{"name": "saved-app"}]}');
     }, DRAFT_PATH);
 
-    await page.evaluate((draftPath) => {
+    await page.evaluate(() => {
       (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        pendingPath: draftPath, 
+        draftText: '{"version": 1, "apps": [{"name": "saved-app"}]}', 
         suggestedName: 'Saved Profile' 
       });
-    }, DRAFT_PATH);
+    });
 
     // Save the profile
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
@@ -691,12 +695,12 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       fileContents.set(savedPath, '{"version": 1, "apps": [{"name": "saved-app"}]}');
     }, SAVED_PROFILE_PATH);
 
-    await page.evaluate((savedPath) => {
+    await page.evaluate(() => {
       (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        pendingPath: savedPath, 
+        draftText: '{"version": 1, "apps": [{"name": "saved-app"}]}', 
         suggestedName: 'Test Profile' 
       });
-    }, SAVED_PROFILE_PATH);
+    });
 
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
     await page.locator('[data-testid="profile-name-input"]').fill('Test Profile');

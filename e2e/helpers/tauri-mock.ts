@@ -6,12 +6,15 @@ export interface TauriMockOptions {
   };
   enableEventListeners?: boolean;
   allowUnknownInvokes?: boolean;
+  /** Initial set of profile file paths for list_manifest_files */
+  initialProfileFiles?: string[];
 }
 
 export async function installTauriMock(page: Page, options: TauriMockOptions = {}) {
   const customHandlers = options.invoke || {};
   const enableEventListeners = options.enableEventListeners || false;
   const allowUnknownInvokes = options.allowUnknownInvokes || false;
+  const initialProfileFiles = options.initialProfileFiles || [];
 
   // Enable E2E mode flag so app installs E2E hooks even when reusing dev server
   await page.addInitScript(() => {
@@ -19,7 +22,16 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
   });
 
   await page.addInitScript(
-    ({ customHandlers, enableEventListeners, allowUnknownInvokes }) => {
+    ({ customHandlers, enableEventListeners, allowUnknownInvokes, initialProfileFiles }) => {
+      // Initialize test trackers for file operations
+      // These MUST be initialized before any invoke handlers run
+      (window as any).__test_operations = (window as any).__test_operations || [];
+      (window as any).__test_profileFiles = (window as any).__test_profileFiles || new Set<string>(initialProfileFiles);
+      (window as any).__test_renameFileCalls = (window as any).__test_renameFileCalls || [];
+      (window as any).__test_deleteFileCalls = (window as any).__test_deleteFileCalls || [];
+      (window as any).__test_writeFileCalls = (window as any).__test_writeFileCalls || [];
+      (window as any).__test_fileContents = (window as any).__test_fileContents || new Map<string, string>();
+
       // In-memory plugin-store implementation
       const pluginStoreData = new Map<string, any>();
 
@@ -29,16 +41,70 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       const defaultHandlers: { [key: string]: (args?: any) => any } = {
         ensure_dir: () => null,
         read_dir: () => [],
-        list_manifest_files: () => [],
+        list_manifest_files: () => {
+          const profileFiles = (window as any).__test_profileFiles;
+          return Array.from(profileFiles);
+        },
         get_default_profiles_directory: () => 'C:\\test\\profiles',
         get_capture_cache_directory: () => 'C:\\test\\cache',
-        read_text_file: () => '{"version": 1, "apps": []}',
-        check_file_exists: () => false,
+        read_text_file: (args?: any) => {
+          const fileContents = (window as any).__test_fileContents;
+          const path = args?.path;
+          if (fileContents.has(path)) {
+            return fileContents.get(path);
+          }
+          return '{"version": 1, "apps": []}';
+        },
+        check_file_exists: (args?: any) => {
+          const profileFiles = (window as any).__test_profileFiles;
+          return profileFiles.has(args?.path);
+        },
         validate_profile: () => ({ valid: true, summary: { name: 'test', version: 1, appCount: 0 } }),
-        delete_file: () => null,
-        delete_file_silent: () => null,
-        rename_file: () => null,
-        write_text_file: () => null,
+        delete_file: (args?: any) => {
+          const operations = (window as any).__test_operations;
+          const deleteFileCalls = (window as any).__test_deleteFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          const path = args?.path;
+          operations.push({ type: 'delete_file', path });
+          deleteFileCalls.push(path);
+          profileFiles.delete(path);
+          return null;
+        },
+        delete_file_silent: (args?: any) => {
+          const operations = (window as any).__test_operations;
+          const deleteFileCalls = (window as any).__test_deleteFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          const path = args?.path;
+          operations.push({ type: 'delete_file_silent', path });
+          deleteFileCalls.push(path);
+          profileFiles.delete(path);
+          return null;
+        },
+        rename_file: (args?: any) => {
+          const operations = (window as any).__test_operations;
+          const renameFileCalls = (window as any).__test_renameFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          const oldPath = args?.oldPath;
+          const newPath = args?.newPath;
+          operations.push({ type: 'rename_file', oldPath, newPath });
+          renameFileCalls.push({ oldPath, newPath });
+          profileFiles.delete(oldPath);
+          profileFiles.add(newPath);
+          return null;
+        },
+        write_text_file: (args?: any) => {
+          const operations = (window as any).__test_operations;
+          const writeFileCalls = (window as any).__test_writeFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          const fileContents = (window as any).__test_fileContents;
+          const path = args?.path;
+          const content = args?.content;
+          operations.push({ type: 'write_text_file', path, contentLength: content?.length || 0 });
+          writeFileCalls.push({ path, content });
+          profileFiles.add(path);
+          fileContents.set(path, content);
+          return null;
+        },
         copy_file: () => null,
         cleanup_capture_cache: () => null,
         show_file_dialog: () => null,
@@ -146,7 +212,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         }
       };
     },
-    { customHandlers, enableEventListeners, allowUnknownInvokes }
+    { customHandlers, enableEventListeners, allowUnknownInvokes, initialProfileFiles }
   );
 }
 
@@ -161,6 +227,7 @@ export async function installTauriMockOnContext(context: BrowserContext, options
   const customHandlers = options.invoke || {};
   const enableEventListeners = options.enableEventListeners || false;
   const allowUnknownInvokes = options.allowUnknownInvokes || false;
+  const initialProfileFiles = options.initialProfileFiles || [];
 
   // Enable E2E mode flag so app installs E2E hooks even when reusing dev server
   await context.addInitScript(() => {
@@ -168,7 +235,16 @@ export async function installTauriMockOnContext(context: BrowserContext, options
   });
 
   await context.addInitScript(
-    ({ customHandlers, enableEventListeners, allowUnknownInvokes }) => {
+    ({ customHandlers, enableEventListeners, allowUnknownInvokes, initialProfileFiles }) => {
+      // Initialize test trackers for file operations
+      // These MUST be initialized before any invoke handlers run
+      (window as any).__test_operations = (window as any).__test_operations || [];
+      (window as any).__test_profileFiles = (window as any).__test_profileFiles || new Set<string>(initialProfileFiles);
+      (window as any).__test_renameFileCalls = (window as any).__test_renameFileCalls || [];
+      (window as any).__test_deleteFileCalls = (window as any).__test_deleteFileCalls || [];
+      (window as any).__test_writeFileCalls = (window as any).__test_writeFileCalls || [];
+      (window as any).__test_fileContents = (window as any).__test_fileContents || new Map<string, string>();
+
       // In-memory plugin-store implementation
       const pluginStoreData = new Map<string, any>();
 
@@ -178,16 +254,70 @@ export async function installTauriMockOnContext(context: BrowserContext, options
       const defaultHandlers: { [key: string]: (args?: any) => any } = {
         ensure_dir: () => null,
         read_dir: () => [],
-        list_manifest_files: () => [],
+        list_manifest_files: () => {
+          const profileFiles = (window as any).__test_profileFiles;
+          return Array.from(profileFiles);
+        },
         get_default_profiles_directory: () => 'C:\\test\\profiles',
         get_capture_cache_directory: () => 'C:\\test\\cache',
-        read_text_file: () => '{"version": 1, "apps": []}',
-        check_file_exists: () => false,
+        read_text_file: (args?: any) => {
+          const fileContents = (window as any).__test_fileContents;
+          const path = args?.path;
+          if (fileContents.has(path)) {
+            return fileContents.get(path);
+          }
+          return '{"version": 1, "apps": []}';
+        },
+        check_file_exists: (args?: any) => {
+          const profileFiles = (window as any).__test_profileFiles;
+          return profileFiles.has(args?.path);
+        },
         validate_profile: () => ({ valid: true, summary: { name: 'test', version: 1, appCount: 0 } }),
-        delete_file: () => null,
-        delete_file_silent: () => null,
-        rename_file: () => null,
-        write_text_file: () => null,
+        delete_file: (args?: any) => {
+          const operations = (window as any).__test_operations;
+          const deleteFileCalls = (window as any).__test_deleteFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          const path = args?.path;
+          operations.push({ type: 'delete_file', path });
+          deleteFileCalls.push(path);
+          profileFiles.delete(path);
+          return null;
+        },
+        delete_file_silent: (args?: any) => {
+          const operations = (window as any).__test_operations;
+          const deleteFileCalls = (window as any).__test_deleteFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          const path = args?.path;
+          operations.push({ type: 'delete_file_silent', path });
+          deleteFileCalls.push(path);
+          profileFiles.delete(path);
+          return null;
+        },
+        rename_file: (args?: any) => {
+          const operations = (window as any).__test_operations;
+          const renameFileCalls = (window as any).__test_renameFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          const oldPath = args?.oldPath;
+          const newPath = args?.newPath;
+          operations.push({ type: 'rename_file', oldPath, newPath });
+          renameFileCalls.push({ oldPath, newPath });
+          profileFiles.delete(oldPath);
+          profileFiles.add(newPath);
+          return null;
+        },
+        write_text_file: (args?: any) => {
+          const operations = (window as any).__test_operations;
+          const writeFileCalls = (window as any).__test_writeFileCalls;
+          const profileFiles = (window as any).__test_profileFiles;
+          const fileContents = (window as any).__test_fileContents;
+          const path = args?.path;
+          const content = args?.content;
+          operations.push({ type: 'write_text_file', path, contentLength: content?.length || 0 });
+          writeFileCalls.push({ path, content });
+          profileFiles.add(path);
+          fileContents.set(path, content);
+          return null;
+        },
         copy_file: () => null,
         cleanup_capture_cache: () => null,
         show_file_dialog: () => null,
@@ -295,6 +425,6 @@ export async function installTauriMockOnContext(context: BrowserContext, options
         }
       };
     },
-    { customHandlers, enableEventListeners, allowUnknownInvokes }
+    { customHandlers, enableEventListeners, allowUnknownInvokes, initialProfileFiles }
   );
 }

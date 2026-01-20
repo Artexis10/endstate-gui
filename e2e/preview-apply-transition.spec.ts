@@ -112,8 +112,8 @@ test.describe('Preview to Apply Transition', () => {
     const previewButton = page.getByRole('button', { name: 'Preview changes' });
     await previewButton.dblclick();
     
-    // Wait for completion
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
+    // Wait for completion - use .first() to avoid strict mode violation when both collapsed and expanded views show text
+    await expect(page.locator('text=Completed successfully').first()).toBeVisible({ timeout: 5000 });
     
     // Verify call count = 1 (only ONE preview, not two)
     const finalCount = await page.evaluate(() => (window as any).__APPLY_CALL_COUNT__);
@@ -124,8 +124,8 @@ test.describe('Preview to Apply Transition', () => {
     // Profile is pre-selected via forceAdvancedMode helper (seeds localStorage)
     await page.click('button:has-text("Preview changes")');
     
-    // Wait for completion
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
+    // Wait for completion - use .first() to avoid strict mode violation
+    await expect(page.locator('text=Completed successfully').first()).toBeVisible({ timeout: 5000 });
     
     // Verify result controls are present (this confirms the flow completed)
     await expect(page.getByRole('button', { name: 'Details' })).toBeVisible();

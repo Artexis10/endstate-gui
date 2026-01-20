@@ -18,54 +18,12 @@ test.describe('Save Profile - Opt-in Behavior', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await forceAdvancedMode(page);
     
-    await page.addInitScript(() => {
-      // Track file operations
-      const writeFileCalls: Array<{ path: string; content: string }> = [];
-      const renameFileCalls: Array<{ oldPath: string; newPath: string }> = [];
-      const deleteFileCalls: Array<string> = [];
-      const profileFiles = new Set<string>([EXISTING_PROFILE_PATH]);
-      
-      (window as any).__test_writeFileCalls = writeFileCalls;
-      (window as any).__test_renameFileCalls = renameFileCalls;
-      (window as any).__test_deleteFileCalls = deleteFileCalls;
-      (window as any).__test_profileFiles = profileFiles;
-    });
-
+    // Use the updated Tauri mock with built-in test trackers
+    // The mock now initializes __test_profileFiles, __test_renameFileCalls, etc.
     await installTauriMock(page, {
+      initialProfileFiles: [EXISTING_PROFILE_PATH],
       invoke: {
-        list_manifest_files: () => {
-          const profileFiles = (window as any).__test_profileFiles;
-          return Array.from(profileFiles);
-        },
-        write_text_file: (args?: any) => {
-          const writeFileCalls = (window as any).__test_writeFileCalls;
-          const profileFiles = (window as any).__test_profileFiles;
-          writeFileCalls.push({ path: args?.path, content: args?.content });
-          profileFiles.add(args?.path);
-          return null;
-        },
-        check_file_exists: (args?: any) => {
-          const profileFiles = (window as any).__test_profileFiles;
-          return profileFiles.has(args?.path);
-        },
         validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test', version: 1, appCount: 0 } }),
-        read_text_file: () => '{"version": 1, "apps": []}',
-        rename_file: (args?: any) => {
-          const renameFileCalls = (window as any).__test_renameFileCalls;
-          const profileFiles = (window as any).__test_profileFiles;
-          renameFileCalls.push({ oldPath: args?.oldPath, newPath: args?.newPath });
-          profileFiles.delete(args?.oldPath);
-          profileFiles.add(args?.newPath);
-          return null;
-        },
-        delete_file: (args?: any) => {
-          const deleteFileCalls = (window as any).__test_deleteFileCalls || [];
-          const profileFiles = (window as any).__test_profileFiles;
-          deleteFileCalls.push(args?.path);
-          (window as any).__test_deleteFileCalls = deleteFileCalls;
-          profileFiles.delete(args?.path);
-          return null;
-        },
       }
     });
 
@@ -93,6 +51,12 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     // Old assertion: expected delete_file to be called on Cancel
     // New contract: Cancel closes modal but draft persists for later save (per product spec)
     
+    // Add the pending profile to the mock filesystem (simulates capture creating draft)
+    await page.evaluate((pendingPath) => {
+      (window as any).__test_profileFiles.add(pendingPath);
+      (window as any).__test_fileContents.set(pendingPath, '{"version": 1, "apps": []}');
+    }, PENDING_PROFILE_PATH);
+    
     // Open the Save profile modal with the pending profile path
     await page.evaluate((pendingPath) => {
       (window as any).__endstate_e2e_openSaveProfileModal({ 
@@ -110,19 +74,19 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
 
     // Draft file should still exist (Cancel does NOT delete - user can return later)
-    const profileFiles = await page.evaluate(() => (window as any).__test_profileFiles);
+    const profileFiles = await page.evaluate(() => Array.from((window as any).__test_profileFiles));
     expect(profileFiles).toContain(PENDING_PROFILE_PATH);
     expect(profileFiles).toContain(EXISTING_PROFILE_PATH);
   });
 
   test('Save button renames file to match typed name', async ({ page }) => {
-    // Open the Save profile modal with the pending profile path
-    await page.evaluate((pendingPath) => {
+    // Open the Save profile modal with draft text (E2E hook expects draftText, not pendingPath)
+    await page.evaluate(() => {
       (window as any).__endstate_e2e_openSaveProfileModal({ 
-        pendingPath, 
+        draftText: '{"version": 1, "apps": [{"name": "test-app"}]}',
         suggestedName: 'Default Name' 
       });
-    }, PENDING_PROFILE_PATH);
+    });
 
     await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
 
@@ -137,25 +101,28 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     // Modal should close
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
 
-    // Verify rename_file was called
-    const renameCalls = await page.evaluate(() => (window as any).__test_renameFileCalls);
-    expect(renameCalls.length).toBe(1);
-    expect(renameCalls[0].oldPath).toBe(PENDING_PROFILE_PATH);
-    expect(renameCalls[0].newPath).toContain('Work_Laptop_Setup');
-    expect(renameCalls[0].newPath).toMatch(/\.jsonc$/);
-
-    // Verify delete_file was NOT called
-    const deleteCalls = await page.evaluate(() => (window as any).__test_deleteFileCalls);
-    expect(deleteCalls).not.toContain(PENDING_PROFILE_PATH);
+    // Product behavior: Save mode writes a NEW file (write_text_file), not rename
+    // The filename is derived from the typed name
+    const writeCalls = await page.evaluate(() => (window as any).__test_writeFileCalls);
+    
+    // Should have at least one write for the manifest file
+    const manifestWrite = writeCalls.find((c: any) => c.path.endsWith('.jsonc') && !c.path.endsWith('.meta.json'));
+    expect(manifestWrite).toBeDefined();
+    expect(manifestWrite.path).toContain('Work_Laptop_Setup');
 
     // Verify metadata was written with display name
-    const writeCalls = await page.evaluate(() => (window as any).__test_writeFileCalls);
     const metaWrite = writeCalls.find((c: any) => c.path.endsWith('.meta.json'));
     expect(metaWrite).toBeDefined();
     expect(JSON.parse(metaWrite.content).displayName).toBe('Work Laptop Setup');
   });
 
   test('Save with empty name keeps original filename', async ({ page }) => {
+    // Add the pending profile to the mock filesystem (simulates capture creating draft)
+    await page.evaluate((pendingPath) => {
+      (window as any).__test_profileFiles.add(pendingPath);
+      (window as any).__test_fileContents.set(pendingPath, '{"version": 1, "apps": []}');
+    }, PENDING_PROFILE_PATH);
+    
     // Open the Save profile modal with the pending profile path
     await page.evaluate((pendingPath) => {
       (window as any).__endstate_e2e_openSaveProfileModal({ 
@@ -183,13 +150,19 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     expect(deleteCalls).not.toContain(PENDING_PROFILE_PATH);
 
     // Verify the pending profile is still in the list
-    const profileFiles = await page.evaluate(() => (window as any).__test_profileFiles);
+    const profileFiles = await page.evaluate(() => Array.from((window as any).__test_profileFiles));
     expect(profileFiles).toContain(PENDING_PROFILE_PATH);
   });
 
   test('Escape key triggers cancel behavior without deleting draft', async ({ page }) => {
     // Old assertion: expected delete_file to be called on Escape
     // New contract: Escape triggers Cancel which closes modal but draft persists (per product spec)
+    
+    // Add the pending profile to the mock filesystem (simulates capture creating draft)
+    await page.evaluate((pendingPath) => {
+      (window as any).__test_profileFiles.add(pendingPath);
+      (window as any).__test_fileContents.set(pendingPath, '{"version": 1, "apps": []}');
+    }, PENDING_PROFILE_PATH);
     
     // Open the Save profile modal
     await page.evaluate((pendingPath) => {
@@ -208,7 +181,7 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
 
     // Draft file should still exist (Cancel does NOT delete - user can return later)
-    const profileFiles = await page.evaluate(() => (window as any).__test_profileFiles);
+    const profileFiles = await page.evaluate(() => Array.from((window as any).__test_profileFiles));
     expect(profileFiles).toContain(PENDING_PROFILE_PATH);
   });
 
@@ -216,8 +189,8 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     // Old assertion: expected profile count to decrease by 1 (delete on Cancel)
     // New contract: Cancel does NOT delete draft, so profile count stays the same
     
-    // Get initial profile count
-    const initialProfiles = await page.evaluate(() => (window as any).__test_profileFiles.length);
+    // Get initial profile count (use .size for Set)
+    const initialProfiles = await page.evaluate(() => (window as any).__test_profileFiles.size);
 
     // Open the Save profile modal
     await page.evaluate((pendingPath) => {
@@ -234,11 +207,11 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
 
     // Verify profile count unchanged (Cancel does NOT delete draft)
-    const finalProfiles = await page.evaluate(() => (window as any).__test_profileFiles.length);
+    const finalProfiles = await page.evaluate(() => (window as any).__test_profileFiles.size);
     expect(finalProfiles).toBe(initialProfiles);
 
     // Verify existing profile still exists
-    const profileFiles = await page.evaluate(() => (window as any).__test_profileFiles);
+    const profileFiles = await page.evaluate(() => Array.from((window as any).__test_profileFiles));
     expect(profileFiles).toContain(EXISTING_PROFILE_PATH);
   });
 });

@@ -21,9 +21,8 @@ test.describe('UX Hardening - Folder Modal', () => {
     await installTauriMock(page, {
       enableEventListeners: true,
       allowUnknownInvokes: true,
+      initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
       invoke: {
-        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
-        read_text_file: () => '{"version": 1, "apps": []}',
         validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 0 } }),
       }
     });
@@ -71,7 +70,7 @@ test.describe('UX Hardening - Folder Modal', () => {
     
     // First, open the Manage Profiles modal via the settings/gear button
     // The "Open folder" button is inside ManageProfilesModal
-    const manageProfilesButton = page.locator('[title="Manage profiles"]');
+    const manageProfilesButton = page.locator('[data-testid="manage-profiles-button"]');
     await expect(manageProfilesButton).toBeVisible({ timeout: 3000 });
     await manageProfilesButton.click();
     

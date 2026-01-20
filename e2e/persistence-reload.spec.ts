@@ -23,9 +23,8 @@ import { forceAdvancedMode, seedProfileSettings } from './helpers/ui-mode';
 test.describe('Persistence Boundaries on Reload', () => {
   test.use({
     tauriMockOptions: {
-      invoke: {
-        list_manifest_files: () => [],
-      }
+      // Provide test profiles so selectedProfileName can be resolved
+      initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc', 'C:\\test\\profiles\\profile-v1.jsonc', 'C:\\test\\profiles\\profile-v2.jsonc'],
     }
   });
 
@@ -44,9 +43,9 @@ test.describe('Persistence Boundaries on Reload', () => {
         engineMode: 'script',
         engineScriptPath: 'C:\\test\\endstate.ps1',
         customProfilesDirectory: '',
-        lastSelectedProfile: 'test-profile',
-        lastSelectedProfilePath: 'C:\\test\\profiles\\test-profile.jsonc',
+        selectedProfileName: 'test-profile',
         dryRunEnabled: false,
+        showDetails: false,
       };
       localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
       
@@ -75,7 +74,7 @@ test.describe('Persistence Boundaries on Reload', () => {
       return {
         hasSettings: !!settingsKey,
         hasLastRun: !!lastRunKey,
-        settingsProfile: settings?.lastSelectedProfile,
+        settingsProfile: settings?.selectedProfileName,
         lastRunProfile: lastRun?.profile,
         allKeys: keys,
       };
@@ -152,9 +151,9 @@ test.describe('Persistence Boundaries on Reload', () => {
         engineMode: 'script',
         engineScriptPath: 'C:\\test\\endstate.ps1',
         customProfilesDirectory: '',
-        lastSelectedProfile: 'profile-v1',
-        lastSelectedProfilePath: 'C:\\test\\profiles\\profile-v1.jsonc',
+        selectedProfileName: 'profile-v1',
         dryRunEnabled: true,
+        showDetails: false,
       };
       localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
     });
@@ -169,7 +168,7 @@ test.describe('Persistence Boundaries on Reload', () => {
       return settingsKey ? JSON.parse(localStorage.getItem(settingsKey) || '{}') : null;
     });
     
-    expect(persistedSettings?.lastSelectedProfile).toBe('profile-v1');
+    expect(persistedSettings?.selectedProfileName).toBe('profile-v1');
     expect(persistedSettings?.dryRunEnabled).toBe(true);
     
     // Update preference
@@ -178,9 +177,9 @@ test.describe('Persistence Boundaries on Reload', () => {
         engineMode: 'script',
         engineScriptPath: 'C:\\test\\endstate.ps1',
         customProfilesDirectory: '',
-        lastSelectedProfile: 'profile-v2',
-        lastSelectedProfilePath: 'C:\\test\\profiles\\profile-v2.jsonc',
+        selectedProfileName: 'profile-v2',
         dryRunEnabled: false,
+        showDetails: false,
       };
       localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
     });
@@ -195,7 +194,7 @@ test.describe('Persistence Boundaries on Reload', () => {
       return settingsKey ? JSON.parse(localStorage.getItem(settingsKey) || '{}') : null;
     });
     
-    expect(persistedSettings?.lastSelectedProfile).toBe('profile-v2');
+    expect(persistedSettings?.selectedProfileName).toBe('profile-v2');
     expect(persistedSettings?.dryRunEnabled).toBe(false);
   });
 });
