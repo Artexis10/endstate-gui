@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:tidewave": "cross-env TIDEWAVE_ENABLED=1 vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -57,6 +58,7 @@
     "@vitest/coverage-v8": "^4.0.16",
     "@vitest/ui": "^4.0.16",
     "autoprefixer": "^10.4.23",
+    "cross-env": "^10.1.0",
     "happy-dom": "^20.0.11",
     "jsdom": "^27.3.0",
     "lefthook": "^1.11.0",
