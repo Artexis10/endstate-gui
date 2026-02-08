@@ -146,26 +146,8 @@ export function LiveActivityPanel({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Scroll to the last event element matching current phase
                     if (activityScrollRef.current) {
-                      const currentPhase = actionProgress.phase;
-                      // Find all event elements matching the current phase
-                      const phaseEvents = activityScrollRef.current.querySelectorAll(`div[data-phase="${currentPhase}"]`);
-                      
-                      if (phaseEvents.length > 0) {
-                        // Scroll to the last event of the current phase
-                        const lastPhaseEvent = phaseEvents[phaseEvents.length - 1];
-                        lastPhaseEvent.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                      } else {
-                        // Fallback: scroll to last event element regardless of phase
-                        const allEvents = activityScrollRef.current.querySelectorAll('div[data-event-index]');
-                        if (allEvents.length > 0) {
-                          allEvents[allEvents.length - 1].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                        } else {
-                          // Final fallback to bottom if no events found
-                          activityScrollRef.current.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
-                        }
-                      }
+                      activityScrollRef.current.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
                     }
                     setIsAtBottom(true);
                   }}

@@ -2667,13 +2667,7 @@ function AppContent() {
   // Generate page title based on current page
   const getPageTitle = () => {
     switch (currentPage) {
-      case 'overview': {
-        if (selectedProfile) {
-          const p = profiles.find(pr => pr.name === selectedProfile);
-          return p?.displayName || selectedProfile;
-        }
-        return '';
-      }
+      case 'overview': return '';
       case 'report': return 'Reports';
       case 'settings': return 'Settings';
       default: return '';

@@ -11,7 +11,7 @@
 
 import { type ReactNode, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ScanSearch, PlayCircle, CheckCircle, ArrowLeft, FolderOpen, RefreshCw } from 'lucide-react';
+import { ScanSearch, PlayCircle, ArrowLeft, FolderOpen, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import type { DiscoveredProfile } from '@/file-discovery';
-import type { ActiveFlow, ActionStatus } from '../types';
+import type { ActiveFlow } from '../types';
 
 interface FlowSelectorProps {
   activeFlow: ActiveFlow;
@@ -37,12 +37,8 @@ interface FlowSelectorProps {
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
   onBack: () => void;
-  onCheck?: () => void;
   captureActionSlot?: ReactNode;
   setupActionSlot?: ReactNode;
-  checkActionSlot?: ReactNode;
-  setupStatus?: ActionStatus;
-  checkStatus?: ActionStatus;
 }
 
 export function FlowSelector({
@@ -57,12 +53,8 @@ export function FlowSelector({
   onOpenProfilesFolder,
   onRefreshProfiles,
   onBack,
-  onCheck,
   captureActionSlot,
   setupActionSlot,
-  checkActionSlot,
-  setupStatus,
-  checkStatus,
 }: FlowSelectorProps) {
   const [refreshing, setRefreshing] = useState(false);
   const reduced = prefersReducedMotion();
@@ -338,57 +330,22 @@ export function FlowSelector({
         </>
       ) : (
         /* Profile selected — show setup action content inline */
-        <div className="space-y-4">
-          <Card className="border-l-2 border-l-green-500 border-green-500/50 shadow-md shadow-green-500/5">
-            <CardContent className="py-6 px-6">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <PlayCircle className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold">Set up this machine</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Using profile: {selectedProfileDisplay}
-                  </p>
-                </div>
+        <Card className="border-l-2 border-l-green-500 border-green-500/50 shadow-md shadow-green-500/5">
+          <CardContent className="py-6 px-6">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <PlayCircle className="h-5 w-5 text-green-500" />
               </div>
-              {setupActionSlot}
-            </CardContent>
-          </Card>
-
-          {/* Verify section — shown after setup completes or when check is active */}
-          {(setupStatus === 'success' || setupStatus === 'error' || checkStatus !== 'idle') && (
-            <Card className="border-l-2 border-l-amber-500 border-amber-500/50 shadow-md shadow-amber-500/5" data-testid="flow-verify-card">
-              <CardContent className="py-6 px-6">
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="p-2 rounded-lg bg-amber-500/10">
-                    <CheckCircle className="h-5 w-5 text-amber-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-semibold">Verify setup</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Check that all apps from your profile are installed
-                    </p>
-                  </div>
-                </div>
-                {checkStatus === 'idle' ? (
-                  <div className="border-t border-border mt-2 pt-4">
-                    <Button
-                      size="sm"
-                      className="bg-amber-600 hover:bg-amber-700 text-white ring-1 ring-amber-600/30 hover:ring-amber-600/50"
-                      onClick={() => onCheck?.()}
-                      disabled={isRunning}
-                    >
-                      Check now
-                    </Button>
-                  </div>
-                ) : (
-                  checkActionSlot
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
+              <div>
+                <h3 className="text-base font-semibold">Set up this machine</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Using profile: {selectedProfileDisplay}
+                </p>
+              </div>
+            </div>
+            {setupActionSlot}
+          </CardContent>
+        </Card>
       )}
     </motion.div>
   );

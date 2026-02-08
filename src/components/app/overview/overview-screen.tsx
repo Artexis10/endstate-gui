@@ -184,40 +184,6 @@ export function OverviewScreen({
     />
   );
 
-  const checkActionSlot = (
-    <ActionExpandedContent
-      action="check"
-      lifecycleState={lifecycleState}
-      isRunning={isRunning}
-      runningAction={runningAction}
-      actionStatusByAction={actionStatusByAction}
-      actionProgressByAction={actionProgressByAction}
-      actionResultByAction={actionResultByAction}
-      hasProfile={hasProfile}
-      setupIntent={setupIntent}
-      setSetupIntent={setSetupIntent}
-      liveAppEvents={liveAppEvents}
-      liveCounters={liveCounters}
-      activityExpanded={activityExpanded}
-      setActivityExpanded={setActivityExpanded}
-      isAtBottom={isAtBottom}
-      setIsAtBottom={setIsAtBottom}
-      setUserHasScrolledAway={setUserHasScrolledAway}
-      activityScrollRef={activityScrollRef}
-      liveActivityContainerRef={liveActivityContainerRef}
-      onExecuteAction={handleExecuteAction}
-      onDismiss={() => handleDismiss('check')}
-      onDismissResult={onDismissResult}
-      onSetup={onSetup}
-      onCapture={onCapture}
-      onShowDetails={() => {
-        setDetailsAction('check');
-        setDetailsModalOpen(true);
-      }}
-
-    />
-  );
-
   return (
     <div className="space-y-8">
       {/* Welcome Header - shown only when sidebar is hidden and no flow active */}
@@ -246,10 +212,6 @@ export function OverviewScreen({
           onBack={handleFlowBack}
           captureActionSlot={captureActionSlot}
           setupActionSlot={setupActionSlot}
-          checkActionSlot={checkActionSlot}
-          setupStatus={actionStatusByAction['setup']}
-          checkStatus={actionStatusByAction['check']}
-          onCheck={onCheck}
         />
       </AnimatePresence>
 
