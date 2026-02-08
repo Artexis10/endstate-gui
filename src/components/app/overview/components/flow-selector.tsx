@@ -175,7 +175,7 @@ export function FlowSelector({
                   className="bg-green-600 hover:bg-green-700 text-white"
                   tabIndex={-1}
                 >
-                  Get started
+                  Set up
                 </Button>
                 {profiles.length > 0 && (
                   <span className="text-[11px] text-muted-foreground">

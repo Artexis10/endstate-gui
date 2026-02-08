@@ -56,7 +56,7 @@ export function buildRecentActivity(lifecycleState: LifecycleState) {
   return [
     lifecycleState.lastCapture && {
       type: 'capture' as const,
-      label: 'Captured computer',
+      label: 'Saved computer',
       timestamp: lifecycleState.lastCapture.timestamp,
       success: lifecycleState.lastCapture.success,
       summary: lifecycleState.lastCapture.summary?.total 

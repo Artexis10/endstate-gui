@@ -66,7 +66,7 @@ interface ActionExpandedContentProps {
 
 // Action-specific descriptions (complement the card subtitle, don't repeat it)
 const descriptions: Record<NonNullable<ActionType>, string> = {
-  capture: 'Scan your installed apps and save them as a reusable setup profile.',
+  capture: 'This usually takes about a minute.',
   setup: 'Install or update apps from your saved profile on this machine.',
   check: 'Verify that all apps from your profile are installed on this machine.',
 };
