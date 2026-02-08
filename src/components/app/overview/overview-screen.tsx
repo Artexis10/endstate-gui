@@ -143,7 +143,7 @@ export function OverviewScreen({
         setDetailsAction('capture');
         setDetailsModalOpen(true);
       }}
-      onClose={handleFlowBack}
+
       pendingCaptureDraft={pendingCaptureDraft}
       lastSavedProfileSummary={lastSavedProfileSummary}
       onSaveProfile={onSaveProfile}
@@ -181,7 +181,7 @@ export function OverviewScreen({
         setDetailsAction('setup');
         setDetailsModalOpen(true);
       }}
-      onClose={handleFlowBack}
+
     />
   );
 
@@ -215,7 +215,7 @@ export function OverviewScreen({
         setDetailsAction('check');
         setDetailsModalOpen(true);
       }}
-      onClose={handleFlowBack}
+
     />
   );
 

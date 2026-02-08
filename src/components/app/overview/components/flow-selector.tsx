@@ -131,7 +131,7 @@ export function FlowSelector({
               <div className="space-y-1.5">
                 <h3 className="text-base font-semibold">Save this computer</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Capture what's installed so you can set up another machine later
+                  Scan your installed apps and save them as a profile
                 </p>
               </div>
               <Button
@@ -140,7 +140,7 @@ export function FlowSelector({
                 className="bg-blue-600 hover:bg-blue-700 text-white"
                 tabIndex={-1}
               >
-                Capture
+                Save
               </Button>
             </CardContent>
           </Card>
@@ -165,7 +165,7 @@ export function FlowSelector({
               <div className="space-y-1.5">
                 <h3 className="text-base font-semibold">Set up this machine</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Apply a saved setup profile to install your apps
+                  Install apps from a saved profile
                 </p>
               </div>
               <div className="flex flex-col items-center gap-2">
@@ -219,8 +219,8 @@ export function FlowSelector({
                 <ScanSearch className="h-5 w-5 text-blue-500" />
               </div>
               <div>
-                <h3 className="text-base font-semibold">Capture computer</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Save your current setup as a reusable profile</p>
+                <h3 className="text-base font-semibold">Save this computer</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Scan your installed apps and save them as a profile</p>
               </div>
             </div>
             {captureActionSlot}
@@ -330,7 +330,7 @@ export function FlowSelector({
                   onClick={handleCaptureInstead}
                   className="text-sm text-blue-500 hover:text-blue-400 transition-colors"
                 >
-                  &larr; Capture instead
+                  &larr; Save this computer instead
                 </button>
               </CardContent>
             </Card>
@@ -346,7 +346,7 @@ export function FlowSelector({
                   <PlayCircle className="h-5 w-5 text-green-500" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold">Set up computer</h3>
+                  <h3 className="text-base font-semibold">Set up this machine</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Using profile: {selectedProfileDisplay}
                   </p>

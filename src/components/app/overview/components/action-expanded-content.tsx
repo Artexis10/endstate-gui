@@ -57,7 +57,6 @@ interface ActionExpandedContentProps {
   onSetup: (intent: SetupIntent) => void;
   onCapture: () => void;
   onShowDetails: () => void;
-  onClose: () => void;
   // Capture-specific props
   pendingCaptureDraft?: { capturedAppsCount: number; capturedAt: string; draftText: string; apps: string[] } | null;
   lastSavedProfileSummary?: { appCount: number; finishedAt: string; profileName?: string } | null;
@@ -67,14 +66,14 @@ interface ActionExpandedContentProps {
 
 // Action-specific descriptions (complement the card subtitle, don't repeat it)
 const descriptions: Record<NonNullable<ActionType>, string> = {
-  capture: 'This will scan for all installed applications using winget and save the results.',
-  setup: 'Apps from your profile will be installed or verified on this machine.',
-  check: 'Each app in your profile will be checked against what\'s currently installed.',
+  capture: 'Scan your installed apps and save them as a reusable setup profile.',
+  setup: 'Install or update apps from your saved profile on this machine.',
+  check: 'Verify that all apps from your profile are installed on this machine.',
 };
 
 // Dynamic button labels based on setup intent
 function getButtonLabel(action: NonNullable<ActionType>, running: boolean, setupIntent: SetupIntent): string {
-  if (action === 'capture') return running ? 'Capturing...' : 'Start capture';
+  if (action === 'capture') return running ? 'Saving...' : 'Save now';
   if (action === 'setup') {
     if (running) return setupIntent === 'preview' ? 'Evaluating…' : 'Applying...';
     return setupIntent === 'preview' ? 'Preview changes' : 'Apply changes';
@@ -122,7 +121,6 @@ export function ActionExpandedContent({
   onSetup,
   onCapture,
   onShowDetails,
-  onClose,
   pendingCaptureDraft,
   lastSavedProfileSummary,
   onSaveProfile,
@@ -456,18 +454,6 @@ export function ActionExpandedContent({
                 getButtonLabel(action, false, setupIntent)
               )}
             </Button>
-            {!isThisRunning && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                }}
-              >
-                Close
-              </Button>
-            )}
           </>
         ) : (
           <>
