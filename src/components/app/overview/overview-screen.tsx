@@ -22,7 +22,6 @@ import {
   ActionExpandedContent,
   FlowSelector,
   RecentActivityCard,
-  SelectedProfileCard,
 } from './components';
 import { ManageProfilesModal } from '../manage-profiles-modal';
 import { ViewAppsModal } from '../view-apps-modal';
@@ -223,23 +222,12 @@ export function OverviewScreen({
     <div className="space-y-8">
       {/* Welcome Header - shown only when sidebar is hidden and no flow active */}
       {!sidebarVisible && activeFlow === 'none' && (
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-semibold">Endstate</h1>
-          <p className="text-muted-foreground">
+        <div className="text-center space-y-3">
+          <h1 className="text-3xl font-bold tracking-tight">Endstate</h1>
+          <p className="text-sm text-muted-foreground">
             Save your setup or set up a new machine
           </p>
         </div>
-      )}
-
-      {/* Current Profile Card (when a profile is selected and on home view) */}
-      {hasProfile && activeFlow === 'none' && (
-        <SelectedProfileCard
-          selectedProfile={selectedProfile}
-          profiles={profiles}
-          isRunning={isRunning}
-          onProfileChange={onProfileChange}
-          onManageProfiles={() => setManageProfilesOpen(true)}
-        />
       )}
 
       {/* Flow Selector - always shown as the primary action hub */}

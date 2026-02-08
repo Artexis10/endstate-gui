@@ -125,8 +125,8 @@ export function FlowSelector({
             data-testid="flow-capture"
           >
             <CardContent className="py-8 px-6 flex flex-col items-center text-center gap-4">
-              <div className="p-3 rounded-xl bg-blue-500/10">
-                <ScanSearch className="h-6 w-6 text-blue-500" />
+              <div className="p-4 rounded-2xl bg-blue-500/10">
+                <ScanSearch className="h-7 w-7 text-blue-500" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-semibold">Save this computer</h3>
@@ -159,8 +159,8 @@ export function FlowSelector({
             data-testid="flow-setup"
           >
             <CardContent className="py-8 px-6 flex flex-col items-center text-center gap-4">
-              <div className="p-3 rounded-xl bg-green-500/10">
-                <PlayCircle className="h-6 w-6 text-green-500" />
+              <div className="p-4 rounded-2xl bg-green-500/10">
+                <PlayCircle className="h-7 w-7 text-green-500" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-semibold">Set up this machine</h3>
