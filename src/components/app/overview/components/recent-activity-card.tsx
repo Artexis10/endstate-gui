@@ -32,15 +32,17 @@ export function RecentActivityCard({ activities, onNavigate }: RecentActivityCar
             <Clock className="h-4 w-4 text-muted-foreground" />
             Recent Activity
           </CardTitle>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="text-xs"
-            onClick={() => onNavigate('report')}
-          >
-            View all
-            <ChevronRight className="h-3 w-3 ml-1" />
-          </Button>
+          {activities.length > 1 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              onClick={() => onNavigate('report')}
+            >
+              View all
+              <ChevronRight className="h-3 w-3 ml-1" />
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent>

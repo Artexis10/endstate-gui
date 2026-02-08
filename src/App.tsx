@@ -1673,16 +1673,33 @@ function AppContent() {
 
   if (state.status === 'loading') {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Card className="max-w-md">
-          <CardContent className="pt-6 flex flex-col items-center gap-4">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <div className="text-center">
-              <h2 className="text-lg font-semibold">Loading...</h2>
-              <p className="text-sm text-muted-foreground mt-1">Running: endstate capabilities --json</p>
+      <div className="flex h-screen bg-background overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <header className="h-16 border-b border-border bg-panel px-6 flex items-center">
+            <div className="h-4 w-4 bg-muted rounded animate-pulse" />
+          </header>
+          <main className="flex-1 overflow-auto">
+            <div className="max-w-3xl mx-auto p-6 space-y-8">
+              {/* Skeleton profile bar */}
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg border border-border">
+                <div className="h-4 w-4 bg-muted rounded animate-pulse" />
+                <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+              </div>
+              {/* Skeleton action cards */}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-lg border border-border p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 bg-muted rounded-lg animate-pulse" />
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-36 bg-muted rounded animate-pulse" />
+                      <div className="h-3 w-52 bg-muted/60 rounded animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          </CardContent>
-        </Card>
+          </main>
+        </div>
       </div>
     );
   }
@@ -2479,8 +2496,8 @@ function AppContent() {
             
             {/* Web mode notice */}
             {!isTauriRuntime() && (
-              <div className="text-xs text-muted-foreground text-center py-2">
-                Artifacts not saved in web mode
+              <div className="text-xs text-muted-foreground text-center py-3 px-4 rounded-md border border-dashed border-border">
+                Run artifacts are only persisted in the desktop app
               </div>
             )}
           </div>
@@ -2586,7 +2603,7 @@ function AppContent() {
             <Card>
               <CardHeader>
                 <CardTitle>Advanced</CardTitle>
-                <CardDescription>Additional options</CardDescription>
+                <CardDescription>Developer and troubleshooting options</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -2596,25 +2613,31 @@ function AppContent() {
                       Show IDs, paths, and diagnostic information
                     </p>
                   </div>
-                  <Button
-                    variant={settings.showDetails ? 'primary' : 'secondary'}
-                    size="sm"
+                  <button
                     onClick={() => updateSettings({ showDetails: !settings.showDetails })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      settings.showDetails ? 'bg-primary' : 'bg-muted'
+                    }`}
+                    role="switch"
+                    aria-checked={settings.showDetails}
                   >
-                    {settings.showDetails ? 'On' : 'Off'}
-                  </Button>
+                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                      settings.showDetails ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
                 </div>
                 
-                <div className="flex items-center justify-between pt-2 border-t">
+                <div className="flex items-center justify-between pt-3 border-t border-border/50">
                   <div>
                     <label className="text-sm font-medium">Reset selected profile</label>
                     <p className="text-xs text-muted-foreground">
-                      Clear the currently selected profile
+                      {selectedProfile ? `Currently: ${selectedProfile}` : 'No profile selected'}
                     </p>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
+                    className={selectedProfile ? 'text-warning hover:text-warning' : ''}
                     onClick={() => {
                       clearSelectedProfile();
                       setSelectedProfile('');
@@ -2624,7 +2647,7 @@ function AppContent() {
                     }}
                     disabled={!selectedProfile}
                   >
-                    Reset
+                    Clear
                   </Button>
                 </div>
               </CardContent>
@@ -2644,7 +2667,13 @@ function AppContent() {
   // Generate page title based on current page
   const getPageTitle = () => {
     switch (currentPage) {
-      case 'overview': return '';
+      case 'overview': {
+        if (selectedProfile) {
+          const p = profiles.find(pr => pr.name === selectedProfile);
+          return p?.displayName || selectedProfile;
+        }
+        return '';
+      }
       case 'report': return 'Reports';
       case 'settings': return 'Settings';
       default: return '';

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:tidewave": "cross-env VITE_TIDEWAVE_ENABLED=1 vite",
-    "tauri:dev:tidewave": "cross-env TIDEWAVE_ENABLED=1 VITE_TIDEWAVE_ENABLED=1 tauri dev",
+    "tauri:dev:tidewave": "cross-env TIDEWAVE_ENABLED=1 VITE_TIDEWAVE_ENABLED=1 tauri dev --features dev-server",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",

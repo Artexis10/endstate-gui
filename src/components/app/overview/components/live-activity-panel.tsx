@@ -77,11 +77,10 @@ export function LiveActivityPanel({
           <div className="flex items-center gap-2">
             {liveCounters && (
               <span className="flex items-center gap-1.5">
-                {/* Use semantic colors from UI_STATUS_MAP */}
-                {liveCounters.installed > 0 && <span className={getColorClasses('success').text}>✓{liveCounters.installed}</span>}
-                {liveCounters.alreadyPresent > 0 && <span className={getColorClasses('success').text}>●{liveCounters.alreadyPresent}</span>}
-                {liveCounters.skipped > 0 && <span className={getColorClasses('warn').text}>⊘{liveCounters.skipped}</span>}
-                {liveCounters.failed > 0 && <span className={getColorClasses('error').text}>✗{liveCounters.failed}</span>}
+                {liveCounters.installed > 0 && <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>{liveCounters.installed} installed</span>}
+                {liveCounters.alreadyPresent > 0 && <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>{liveCounters.alreadyPresent} present</span>}
+                {liveCounters.skipped > 0 && <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}>{liveCounters.skipped} skipped</span>}
+                {liveCounters.failed > 0 && <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('error').bg} ${getColorClasses('error').text}`}>{liveCounters.failed} failed</span>}
               </span>
             )}
             {activityExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
