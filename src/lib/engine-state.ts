@@ -8,7 +8,7 @@
  * Events file naming convention: <command>-<YYYYMMDD>-<HHMMSS>-<MACHINE>.events.jsonl
  */
 
-import { invoke, isTauriRuntime } from './tauri-bridge';
+import { invoke, isEngineAvailable } from './tauri-bridge';
 
 /** Engine run derived from log files */
 export interface EngineRun {
@@ -110,7 +110,7 @@ function parseLogFilename(filename: string): {
  * Returns newest first.
  */
 export async function listEngineStates(engineRoot: string): Promise<EngineRun[]> {
-  if (!isTauriRuntime()) return [];
+  if (!isEngineAvailable()) return [];
   
   const logsDir = `${engineRoot}\\logs`;
   
@@ -169,7 +169,7 @@ export async function listEngineStates(engineRoot: string): Promise<EngineRun[]>
  * Read file contents (for log/events viewing).
  */
 export async function readFileContents(path: string): Promise<string | null> {
-  if (!isTauriRuntime()) return null;
+  if (!isEngineAvailable()) return null;
   
   try {
     const content = await invoke<string>('read_text_file', { path });

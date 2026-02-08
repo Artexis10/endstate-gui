@@ -14,7 +14,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::io::{BufRead, BufReader};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::Ordering;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
@@ -95,12 +95,8 @@ fn run_engine_http(
     }
 
     // Spawn the process
-    let mut cmd = Command::new(exe);
-    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
-
-    if exe == "pwsh" || exe == "powershell" {
-        cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
-    }
+    let mut cmd = crate::cmd_impl::build_engine_command(exe, args);
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let mut child = match cmd.spawn() {
         Ok(child) => child,
@@ -256,12 +252,8 @@ fn run_streaming_http(
     event_channel: &str,
     broadcaster: &EventBroadcaster,
 ) -> Result<(), String> {
-    let mut cmd = Command::new(exe);
-    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
-
-    if exe == "pwsh" || exe == "powershell" {
-        cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
-    }
+    let mut cmd = crate::cmd_impl::build_engine_command(exe, args);
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let mut child = cmd
         .spawn()
@@ -666,10 +658,7 @@ pub async fn start(
     };
 
     let cors = CorsLayer::new()
-        .allow_origin([
-            "http://127.0.0.1:1420".parse().unwrap(),
-            "http://localhost:1420".parse().unwrap(),
-        ])
+        .allow_origin(tower_http::cors::Any)
         .allow_methods(tower_http::cors::Any)
         .allow_headers(tower_http::cors::Any);
 

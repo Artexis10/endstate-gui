@@ -4,7 +4,7 @@
  * This module provides typed errors and proper handling for both Tauri and web modes.
  */
 
-import { invoke, isTauriRuntime } from './tauri-bridge';
+import { invoke, isEngineAvailable } from './tauri-bridge';
 import { AppSettings } from '../settings';
 import { validateEngineScriptPath, getRepoRootFromScriptPath } from './engine-path';
 
@@ -129,8 +129,8 @@ export async function runEndstateOnce<T>(
   const engineCmd = buildEngineCommand(settings, fullArgs);
   const commandStr = engineCmd.displayCommand;
   
-  // Check if we're in web mode
-  if (!isTauriRuntime()) {
+  // Check if we're in web mode without engine access
+  if (!isEngineAvailable()) {
     // Web mode - check for mock
     if (hasMockEngine()) {
       // Use mock engine

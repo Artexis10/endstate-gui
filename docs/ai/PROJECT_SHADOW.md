@@ -176,7 +176,9 @@ endstate-gui/
     - **INSTALLED** vs **CONFIRMED**: Installed = installed this run; Confirmed = verified present
     - `user_denied` detection is heuristic and unreliable (no standardized winget exit code)
 
-11. **Cross-repo contract coupling.** Status/phase semantics are coupled between GUI and engine:
+11. **Windows .cmd PATH resolution.** Rust's `std::process::Command` only resolves `.exe` files on Windows PATH. The `endstate.cmd` shim requires `cmd /C` wrapping. All process spawn sites MUST use the shared `build_engine_command()` helper in `cmd_impl.rs`. Never construct `Command::new(exe)` directly for engine invocation — new spawn sites will silently fail in PATH mode.
+
+12. **Cross-repo contract coupling.** Status/phase semantics are coupled between GUI and engine:
     - UI semantics: `docs/ux-language.md`
     - Engine event schema: `../endstate/docs/event-contract.md`
     Changes to status/phase behavior MUST update both repos.

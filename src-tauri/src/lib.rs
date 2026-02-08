@@ -3,6 +3,7 @@
 //! This module provides the Rust backend for Endstate GUI, handling CLI execution
 //! via std::process::Command and exposing results to the frontend via Tauri commands.
 
+#[allow(dead_code)] // Only called from dev_server (feature-gated)
 pub(crate) mod cmd_impl;
 mod engine_adapter;
 mod event_broadcast;
@@ -13,9 +14,10 @@ use engine_adapter::{SharedRunState, create_run_state};
 use event_broadcast::EventBroadcaster;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::process::Command;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
+#[cfg(all(debug_assertions, feature = "dev-server"))]
+use tauri::Manager;
 
 /// Result of CLI execution returned to the frontend.
 #[derive(Debug, Serialize, Deserialize)]
@@ -62,15 +64,7 @@ impl From<std::io::Error> for ExecError {
 /// * `Err(ExecError)` - Execution failed to start (e.g., CLI not found)
 #[tauri::command]
 fn endstate_exec(exe: String, args: Vec<String>) -> Result<ExecResult, ExecError> {
-    let mut cmd = Command::new(&exe);
-    cmd.args(&args);
-    
-    // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode
-    if exe == "pwsh" || exe == "powershell" {
-        cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
-    }
-    
-    let output = cmd.output()?;
+    let output = cmd_impl::build_engine_command(&exe, &args).output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -935,13 +929,15 @@ async fn run_endstate_streaming(
     args: Vec<String>,
     event_channel: String,
 ) -> Result<(), String> {
-    use std::process::{Command, Stdio};
-    use std::io::{BufRead, BufReader, Write};
+    use std::process::Stdio;
+    use std::io::{BufRead, BufReader};
+    #[cfg(debug_assertions)]
+    use std::io::Write;
     use serde_json::json;
 
     let result = tauri::async_runtime::spawn_blocking(move || {
         // Generate run_id for debug artifacts
-        let run_id = format!("{}", std::time::SystemTime::now()
+        let _run_id = format!("{}", std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or(0));
@@ -953,7 +949,7 @@ async fn run_endstate_streaming(
             let dir = std::path::PathBuf::from(&local_app_data)
                 .join("Endstate")
                 .join("debug")
-                .join(&run_id);
+                .join(&_run_id);
             std::fs::create_dir_all(&dir).ok();
             dir
         };
@@ -965,11 +961,11 @@ async fn run_endstate_streaming(
         #[cfg(debug_assertions)]
         let meta_path = debug_dir.join("meta.json");
         
-        let cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_else(|_| "unknown".to_string());
-        let mode = if exe == "endstate" { "bundled/path" } else if exe == "pwsh" || exe == "powershell" { "script" } else { "unknown" };
+        let _cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_else(|_| "unknown".to_string());
+        let _mode = if exe == "endstate" { "bundled/path" } else if exe == "pwsh" || exe == "powershell" { "script" } else { "unknown" };
         
         // Resolve absolute path of executable for bundled/path mode
-        let resolved_exe = if exe == "endstate" {
+        let _resolved_exe = if exe == "endstate" {
             which::which("endstate")
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| format!("{} (NOT FOUND IN PATH)", exe))
@@ -981,27 +977,21 @@ async fn run_endstate_streaming(
         #[cfg(debug_assertions)]
         {
             eprintln!("=== ENGINE INVOCATION (DEV) ===");
-            eprintln!("  run_id: {}", &run_id);
+            eprintln!("  run_id: {}", &_run_id);
             eprintln!("  exe (raw): {}", &exe);
-            eprintln!("  exe (resolved): {}", &resolved_exe);
+            eprintln!("  exe (resolved): {}", &_resolved_exe);
             eprintln!("  args: {:?}", &args);
-            eprintln!("  cwd: {}", &cwd);
-            eprintln!("  mode: {}", mode);
+            eprintln!("  cwd: {}", &_cwd);
+            eprintln!("  mode: {}", _mode);
             eprintln!("  debug_dir: {}", debug_dir.display());
             eprintln!("================================");
         }
         
         let start_time = std::time::Instant::now();
         
-        let mut cmd = Command::new(&exe);
-        cmd.args(&args)
-            .stdout(Stdio::piped())
+        let mut cmd = crate::cmd_impl::build_engine_command(&exe, &args);
+        cmd.stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        
-        // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode
-        if exe == "pwsh" || exe == "powershell" {
-            cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
-        }
         
         let mut child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn process: {}", e))?;
@@ -1100,20 +1090,20 @@ async fn run_endstate_streaming(
         stdout_thread.join().ok();
         stderr_thread.join().ok();
         
-        let elapsed = start_time.elapsed();
+        let _elapsed = start_time.elapsed();
 
         // DEV-ONLY: Write meta.json with run details
         #[cfg(debug_assertions)]
         {
             let meta = json!({
-                "run_id": run_id,
+                "run_id": _run_id,
                 "exe_raw": exe,
-                "exe_resolved": resolved_exe,
+                "exe_resolved": _resolved_exe,
                 "args": args,
-                "cwd": cwd,
-                "mode": mode,
+                "cwd": _cwd,
+                "mode": _mode,
                 "exit_code": exit_code,
-                "elapsed_ms": elapsed.as_millis() as u64,
+                "elapsed_ms": _elapsed.as_millis() as u64,
                 "stdout_bytes": stdout_bytes.load(std::sync::atomic::Ordering::Relaxed),
                 "stdout_lines": stdout_lines.load(std::sync::atomic::Ordering::Relaxed),
                 "stderr_bytes": stderr_bytes.load(std::sync::atomic::Ordering::Relaxed),
@@ -1126,7 +1116,7 @@ async fn run_endstate_streaming(
             }
             
             eprintln!("=== ENGINE COMPLETE (DEV) ===");
-            eprintln!("  run_id: {}", &run_id);
+            eprintln!("  run_id: {}", &_run_id);
             eprintln!("  exit_code: {}", exit_code);
             eprintln!("  stdout_lines: {}", stdout_lines.load(std::sync::atomic::Ordering::Relaxed));
             eprintln!("  stderr_lines: {}", stderr_lines.load(std::sync::atomic::Ordering::Relaxed));
@@ -1156,12 +1146,12 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(create_run_state())
         .manage(EventBroadcaster::new())
-        .setup(|app| {
+        .setup(|_app| {
             #[cfg(all(debug_assertions, feature = "dev-server"))]
             {
                 if std::env::var("TIDEWAVE_ENABLED").unwrap_or_default() == "1" {
-                    let broadcaster = app.state::<EventBroadcaster>().inner().clone();
-                    let run_state = app.state::<SharedRunState>().inner().clone();
+                    let broadcaster = _app.state::<EventBroadcaster>().inner().clone();
+                    let run_state = _app.state::<SharedRunState>().inner().clone();
                     tauri::async_runtime::spawn(async move {
                         if let Err(e) = dev_server::start(run_state, broadcaster).await {
                             eprintln!("Dev server failed: {}", e);

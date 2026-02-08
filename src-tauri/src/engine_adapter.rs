@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -206,6 +206,7 @@ fn extract_command_name(args: &[String]) -> String {
 }
 
 /// Public version of extract_command_name for use by dev_server.
+#[allow(dead_code)] // Called from dev_server (feature-gated)
 pub fn extract_command_name_pub(args: &[String]) -> String {
     args.iter()
         .find(|arg| !arg.starts_with('-'))
@@ -265,15 +266,9 @@ pub fn run_engine(
     }
 
     // Spawn the process with piped stdout/stderr
-    let mut cmd = Command::new(exe);
-    cmd.args(args)
-        .stdout(Stdio::piped())
+    let mut cmd = crate::cmd_impl::build_engine_command(exe, args);
+    cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    
-    // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode
-    if exe == "pwsh" || exe == "powershell" {
-        cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
-    }
     
     let spawn_result = cmd.spawn();
 

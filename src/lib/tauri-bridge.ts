@@ -71,9 +71,18 @@ export function isTauriRuntime(): boolean {
 /**
  * Check if we're in Tidewave dev mode (web browser + bridge available).
  */
-function isTidewaveMode(): boolean {
+export function isTidewaveMode(): boolean {
   if (typeof window === 'undefined') return false;
   return !isTauriRuntime() && import.meta.env.VITE_TIDEWAVE_ENABLED === '1';
+}
+
+/**
+ * Check if an engine backend is available (Tauri runtime OR Tidewave HTTP bridge).
+ * Use this instead of isTauriRuntime() when guarding engine functionality
+ * that should also work in Tidewave mode.
+ */
+export function isEngineAvailable(): boolean {
+  return isTauriRuntime() || isTidewaveMode();
 }
 
 export async function safeInvoke<T = any>(cmd: string, args?: Record<string, any>): Promise<T> {
@@ -162,10 +171,7 @@ export async function ensureDirectory(path: string): Promise<void> {
 }
 
 export async function openFolder(path: string): Promise<{ ok: boolean; reason?: string; path?: string }> {
-  const inTauri = isTauriRuntime();
-  
-  // In web mode, return failure immediately (no Tauri bridge available)
-  if (!inTauri) {
+  if (!isEngineAvailable()) {
     return { ok: false, reason: 'web', path };
   }
   

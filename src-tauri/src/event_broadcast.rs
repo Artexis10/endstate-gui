@@ -31,6 +31,7 @@ impl EventBroadcaster {
     }
 
     /// Create a new receiver for SSE consumption.
+    #[allow(dead_code)] // Called from dev_server (feature-gated)
     pub fn subscribe(&self) -> broadcast::Receiver<String> {
         self.sender.subscribe()
     }

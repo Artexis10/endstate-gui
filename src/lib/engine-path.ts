@@ -10,7 +10,7 @@
  * Handles migration from old root-level endstate.ps1 to bin/endstate.ps1
  */
 
-import { invoke, isTauriRuntime } from './tauri-bridge';
+import { invoke, isEngineAvailable } from './tauri-bridge';
 
 export interface EnginePathResult {
   /** Resolved path to use (null if should use PATH fallback) */
@@ -30,7 +30,7 @@ export interface EnginePathResult {
  * Returns false in web mode or on error.
  */
 export async function fileExists(path: string): Promise<boolean> {
-  if (!isTauriRuntime()) return false;
+  if (!isEngineAvailable()) return false;
   
   try {
     return await invoke<boolean>('check_file_exists', { path });

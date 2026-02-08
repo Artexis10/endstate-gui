@@ -68,13 +68,42 @@ pub struct ProfileSummary {
     pub captured: Option<String>,
 }
 
-pub fn endstate_exec(exe: String, args: Vec<String>) -> Result<ExecResult, ExecError> {
-    let mut cmd = Command::new(&exe);
-    cmd.args(&args);
+/// Build a Command with proper Windows cmd /C wrapping for .cmd/.bat PATH shims.
+///
+/// On Windows, bare command names (no path separators, not .exe, not pwsh/powershell)
+/// are wrapped with `cmd /C` so Rust can resolve .cmd shims on PATH.
+/// Also sets ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode.
+///
+/// All engine process spawn sites MUST use this helper instead of Command::new(exe)
+/// directly. See PROJECT_SHADOW.md Section 6 (Landmines).
+pub fn build_engine_command(exe: &str, args: &[String]) -> Command {
+    let mut cmd = if cfg!(target_os = "windows")
+        && exe != "pwsh"
+        && exe != "powershell"
+        && !exe.ends_with(".exe")
+        && !exe.contains('\\')
+        && !exe.contains('/')
+    {
+        let mut c = Command::new("cmd");
+        c.args(&["/C", exe]);
+        c.args(args);
+        c
+    } else {
+        let mut c = Command::new(exe);
+        c.args(args);
+        c
+    };
+
+    // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode
     if exe == "pwsh" || exe == "powershell" {
         cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
     }
-    let output = cmd.output()?;
+
+    cmd
+}
+
+pub fn endstate_exec(exe: String, args: Vec<String>) -> Result<ExecResult, ExecError> {
+    let output = build_engine_command(&exe, &args).output()?;
     Ok(ExecResult {
         stdout: String::from_utf8_lossy(&output.stdout).to_string(),
         stderr: String::from_utf8_lossy(&output.stderr).to_string(),
