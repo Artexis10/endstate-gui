@@ -19,3 +19,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"
 which = "6"
+tokio = { version = "1", features = ["sync"] }
+axum = { version = "0.8", optional = true }
+tower-http = { version = "0.6", features = ["cors"], optional = true }
+tokio-stream = { version = "0.1", features = ["sync"], optional = true }
+
+[features]
+default = ["dev-server"]
+dev-server = ["axum", "tower-http", "tokio-stream"]

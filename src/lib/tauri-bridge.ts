@@ -6,9 +6,12 @@
  * 
  * Strategy:
  * 1. If test mock exists (window.__TAURI__.core.invoke is a function), use it exclusively
- * 2. Otherwise, if in Tauri runtime, use real @tauri-apps/api/* - errors are fatal
- * 3. Only use web fallbacks when NOT in Tauri runtime (pure web browser)
+ * 2. If in Tidewave mode (web browser + VITE_TIDEWAVE_ENABLED=1), route through HTTP bridge
+ * 3. Otherwise, if in Tauri runtime, use real @tauri-apps/api/* - errors are fatal
+ * 4. Only use web fallbacks when NOT in Tauri runtime (pure web browser)
  */
+
+import { httpInvoke, httpListen } from './http-bridge';
 
 // Commands that have safe web fallbacks (used in web-only E2E tests)
 const WEB_FALLBACK_COMMANDS: Record<string, () => any> = {
@@ -65,10 +68,23 @@ export function isTauriRuntime(): boolean {
   return false;
 }
 
+/**
+ * Check if we're in Tidewave dev mode (web browser + bridge available).
+ */
+function isTidewaveMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !isTauriRuntime() && import.meta.env.VITE_TIDEWAVE_ENABLED === '1';
+}
+
 export async function safeInvoke<T = any>(cmd: string, args?: Record<string, any>): Promise<T> {
   // Mock-first: if test mock exists, use it exclusively
   if (hasTestMock()) {
     return await (window as any).__TAURI__.core.invoke(cmd, args);
+  }
+
+  // Tidewave HTTP bridge: route through dev server
+  if (isTidewaveMode()) {
+    return httpInvoke<T>(cmd, args);
   }
   
   const inTauri = isTauriRuntime();
@@ -101,10 +117,14 @@ export async function safeListen<T = any>(
     if (mock?.event?.listen) {
       return await mock.event.listen(event, handler);
     }
-    // Mock exists but no event.listen - return no-op for tests
     return () => {};
   }
-  
+
+  // Tidewave HTTP bridge: route through SSE
+  if (isTidewaveMode()) {
+    return httpListen<T>(event, handler);
+  }
+
   const inTauri = isTauriRuntime();
   
   // Try real Tauri API (listen is from @tauri-apps/api/event, NOT core)

@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import type { ActionType, SetupIntent, ActionProgress } from './types';
+import type { ActionType, ActiveFlow, SetupIntent, ActionProgress } from './types';
 
 interface UseOverviewStateProps {
   isRunning: boolean;
@@ -19,8 +19,8 @@ interface UseOverviewStateProps {
 
 interface UseOverviewStateReturn {
   // State
-  expandedCard: ActionType;
-  setExpandedCard: (card: ActionType) => void;
+  activeFlow: ActiveFlow;
+  setActiveFlow: (flow: ActiveFlow) => void;
   setupIntent: SetupIntent;
   setSetupIntent: (intent: SetupIntent) => void;
   detailsModalOpen: boolean;
@@ -35,18 +35,20 @@ interface UseOverviewStateReturn {
   setIsAtBottom: (atBottom: boolean) => void;
   userHasScrolledAway: boolean;
   setUserHasScrolledAway: (scrolledAway: boolean) => void;
-  
+
   // Refs
   activityScrollRef: React.RefObject<HTMLDivElement>;
   liveActivityContainerRef: React.RefObject<HTMLDivElement>;
-  captureCardRef: React.RefObject<HTMLDivElement>;
-  setupCardRef: React.RefObject<HTMLDivElement>;
-  checkCardRef: React.RefObject<HTMLDivElement>;
-  
+
   // Handlers
-  handleCardClick: (action: ActionType) => void;
   handleExecuteAction: (action: ActionType) => void;
   handleDismiss: (action: 'capture' | 'setup' | 'check') => void;
+}
+
+function actionToFlow(action: ActionType): ActiveFlow {
+  if (action === 'capture') return 'capture';
+  if (action === 'setup' || action === 'check') return 'setup';
+  return 'none';
 }
 
 export function useOverviewState({
@@ -60,13 +62,12 @@ export function useOverviewState({
   onCheck,
   onDismissResult,
 }: UseOverviewStateProps): UseOverviewStateReturn {
-  // Initialize expandedCard: prioritize active running action, then initialExpandedCard, then null
-  // This ensures returning to Overview during an active run shows the correct expanded card
-  const [expandedCard, setExpandedCard] = useState<ActionType>(() => {
-    if (isRunning && runningAction) return runningAction;
-    return initialExpandedCard ?? null;
+  // Initialize activeFlow: if a run is active or has results (runningAction set), start in the corresponding flow
+  const [activeFlow, setActiveFlow] = useState<ActiveFlow>(() => {
+    if (runningAction) return actionToFlow(runningAction);
+    if (initialExpandedCard) return actionToFlow(initialExpandedCard);
+    return 'none';
   });
-  
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(false);
@@ -75,44 +76,37 @@ export function useOverviewState({
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [lastSeenPhase, setLastSeenPhase] = useState<string | undefined>(undefined);
   const [userHasScrolledAway, setUserHasScrolledAway] = useState(false);
-  
+
   // Refs
   const activityScrollRef = useRef<HTMLDivElement>(null);
   const liveActivityContainerRef = useRef<HTMLDivElement>(null);
-  const captureCardRef = useRef<HTMLDivElement>(null);
-  const setupCardRef = useRef<HTMLDivElement>(null);
-  const checkCardRef = useRef<HTMLDivElement>(null);
-  
+
   // Handle external initialExpandedCard changes (e.g., from redirect)
   useEffect(() => {
     if (initialExpandedCard) {
-      setExpandedCard(initialExpandedCard);
-      // Clear the external state after applying it
+      setActiveFlow(actionToFlow(initialExpandedCard));
       onClearExpandedCard?.();
     }
   }, [initialExpandedCard, onClearExpandedCard]);
-  
-  // Sync expandedCard when returning to Overview during an active run
-  // This handles the case where user navigates away and back while a run is in progress
+
+  // Sync activeFlow when returning to Overview during an active run
   useEffect(() => {
-    if (isRunning && runningAction && expandedCard !== runningAction) {
-      setExpandedCard(runningAction);
+    if (isRunning && runningAction) {
+      setActiveFlow(actionToFlow(runningAction));
     }
   }, [isRunning, runningAction]);
-  
+
   // Reset activity expanded state when a new run starts
   useEffect(() => {
     if (isRunning && runningAction) {
-      // Always start collapsed for calm UI; users can expand to see details
       setActivityExpanded(false);
-      setIsAtBottom(true); // Reset scroll position for new run
-      setUserHasScrolledAway(false); // Reset user scroll tracking for new run
-      setLastSeenPhase(undefined); // Reset phase tracking for new run
+      setIsAtBottom(true);
+      setUserHasScrolledAway(false);
+      setLastSeenPhase(undefined);
     }
   }, [isRunning, runningAction]);
-  
+
   // Auto-scroll Live Activity into view when entering VERIFY phase
-  // Only scroll if: panel is expanded, user hasn't scrolled away, and phase just changed to verify
   useEffect(() => {
     const currentPhase = actionProgress?.phase;
     if (
@@ -122,57 +116,46 @@ export function useOverviewState({
       !userHasScrolledAway &&
       liveActivityContainerRef.current
     ) {
-      // Smooth scroll the Live Activity container into view
       liveActivityContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
     setLastSeenPhase(currentPhase);
   }, [actionProgress?.phase, lastSeenPhase, activityExpanded, userHasScrolledAway]);
-  
-  // Handle card click - always expand in-place
-  const handleCardClick = (action: ActionType) => {
-    if (isRunning) return;
-    
-    // Toggle card expansion
-    if (expandedCard === action) {
-      setExpandedCard(null);
-    } else {
-      setExpandedCard(action);
-    }
-  };
+
+  // Escape key returns to flow selection (when not running)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isRunning) {
+        if (activeFlow !== 'none') {
+          setActiveFlow('none');
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [activeFlow, isRunning]);
 
   // Execute action from expanded card
   const handleExecuteAction = (action: ActionType) => {
     if (!action) return;
-    
-    // Scroll to the relevant card when action starts
-    const scrollToCard = (ref: React.RefObject<HTMLDivElement>) => {
-      if (ref.current && typeof ref.current.scrollIntoView === 'function') {
-        ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    };
-    
+
     if (action === 'capture') {
-      scrollToCard(captureCardRef);
       onCapture();
     } else if (action === 'setup') {
-      scrollToCard(setupCardRef);
       onSetup(setupIntent);
     } else if (action === 'check') {
-      scrollToCard(checkCardRef);
       onCheck();
     }
   };
 
-  // Collapse card and dismiss result
+  // Dismiss result
   const handleDismiss = (action: 'capture' | 'setup' | 'check') => {
-    setExpandedCard(null);
     onDismissResult(action);
   };
 
   return {
     // State
-    expandedCard,
-    setExpandedCard,
+    activeFlow,
+    setActiveFlow,
     setupIntent,
     setSetupIntent,
     detailsModalOpen,
@@ -187,16 +170,12 @@ export function useOverviewState({
     setIsAtBottom,
     userHasScrolledAway,
     setUserHasScrolledAway,
-    
+
     // Refs
     activityScrollRef,
     liveActivityContainerRef,
-    captureCardRef,
-    setupCardRef,
-    checkCardRef,
-    
+
     // Handlers
-    handleCardClick,
     handleExecuteAction,
     handleDismiss,
   };

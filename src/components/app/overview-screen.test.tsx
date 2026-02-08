@@ -58,12 +58,12 @@ describe('OverviewScreen - Setup Actions', () => {
     onRenameFile: vi.fn(),
   };
 
-  it('renders Preview button in Setup card when expanded', async () => {
+  it('renders Preview button in Setup flow when selected', async () => {
     const user = userEvent.setup();
     render(<OverviewScreen {...defaultProps} />);
 
-    // Click to expand Setup card
-    const setupCard = screen.getByTestId('overview-card-apply');
+    // Click to enter setup flow
+    const setupCard = screen.getByTestId('flow-setup');
     await user.click(setupCard);
 
     await waitFor(() => {
@@ -76,8 +76,8 @@ describe('OverviewScreen - Setup Actions', () => {
     const user = userEvent.setup();
     render(<OverviewScreen {...defaultProps} onSetup={onSetup} />);
 
-    // Expand Setup card
-    const setupCard = screen.getByTestId('overview-card-apply');
+    // Enter setup flow
+    const setupCard = screen.getByTestId('flow-setup');
     await user.click(setupCard);
 
     // Click Preview button
@@ -102,7 +102,7 @@ describe('OverviewScreen - Setup Actions', () => {
       wasPreview: false,
     };
 
-    const user = userEvent.setup();
+    // When runningAction is 'setup', activeFlow auto-syncs to 'setup'
     render(
       <OverviewScreen
         {...defaultProps}
@@ -121,10 +121,6 @@ describe('OverviewScreen - Setup Actions', () => {
         }}
       />
     );
-
-    // Expand Setup card
-    const setupCard = screen.getByTestId('overview-card-apply');
-    await user.click(setupCard);
 
     await waitFor(() => {
       expect(screen.getByText('Run again')).toBeInTheDocument();
@@ -142,7 +138,7 @@ describe('OverviewScreen - Setup Actions', () => {
       wasPreview: true,
     };
 
-    const user = userEvent.setup();
+    // When runningAction is 'setup', activeFlow auto-syncs to 'setup'
     render(
       <OverviewScreen
         {...defaultProps}
@@ -162,10 +158,6 @@ describe('OverviewScreen - Setup Actions', () => {
       />
     );
 
-    // Expand Setup card
-    const setupCard = screen.getByTestId('overview-card-apply');
-    await user.click(setupCard);
-
     await waitFor(() => {
       // Should show "Apply changes" instead of "Run again"
       expect(screen.getByText('Apply changes')).toBeInTheDocument();
@@ -173,14 +165,17 @@ describe('OverviewScreen - Setup Actions', () => {
     });
   });
 
-  it('disables Setup and Check when no profile selected', () => {
+  it('shows FlowSelector when no profile selected', () => {
     render(<OverviewScreen {...defaultProps} selectedProfile="" profiles={[]} />);
 
-    const setupCard = screen.getByTestId('overview-card-apply');
-    const checkCard = screen.getByTestId('overview-card-verify');
+    // FlowSelector should be visible
+    expect(screen.getByTestId('flow-selector')).toBeInTheDocument();
+  });
 
-    expect(setupCard).toHaveClass('opacity-50');
-    expect(checkCard).toHaveClass('opacity-50');
+  it('shows FlowSelector when profile is selected', () => {
+    render(<OverviewScreen {...defaultProps} />);
+
+    // FlowSelector is always visible as the primary UI
+    expect(screen.getByTestId('flow-selector')).toBeInTheDocument();
   });
 });
-

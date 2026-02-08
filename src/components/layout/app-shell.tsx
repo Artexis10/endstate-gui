@@ -118,16 +118,8 @@ export function AppShell({
               })}
             </nav>
             
-            {/* Hide sidebar button at bottom */}
-            <div className="p-4 border-t border-border min-w-[256px]">
-              <button
-                onClick={onToggleSidebar}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-muted-foreground hover:bg-accent/10 hover:text-foreground transition-colors"
-              >
-                <PanelLeftClose className="h-3 w-3" />
-                <span>Hide navigation</span>
-              </button>
-            </div>
+            {/* Spacer to keep sidebar layout balanced */}
+            <div className="p-4 min-w-[256px]" />
           </motion.aside>
         )}
       </AnimatePresence>
@@ -190,10 +182,7 @@ export function AppShell({
               variant="ghost"
               size="sm"
               onClick={onOpenCommandPalette}
-              className={cn(
-                "gap-2",
-                !showSidebar && "opacity-50 hover:opacity-100"
-              )}
+              className="gap-2"
               title="Command palette (Ctrl+K)"
             >
               <Command className="h-4 w-4" />

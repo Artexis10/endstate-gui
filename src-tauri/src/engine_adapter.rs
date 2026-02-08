@@ -20,6 +20,16 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
+use crate::event_broadcast::EventBroadcaster;
+
+/// Emit an event to both Tauri and the HTTP bridge broadcaster.
+fn emit_event(app: &AppHandle, broadcaster: &EventBroadcaster, event: &serde_json::Value) {
+    let _ = app.emit(EVENT_CHANNEL, event);
+    if let Ok(json) = serde_json::to_string(event) {
+        broadcaster.send(&json);
+    }
+}
+
 /// Event channel name for all engine events
 pub const EVENT_CHANNEL: &str = "endstate://event";
 
@@ -195,6 +205,14 @@ fn extract_command_name(args: &[String]) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+/// Public version of extract_command_name for use by dev_server.
+pub fn extract_command_name_pub(args: &[String]) -> String {
+    args.iter()
+        .find(|arg| !arg.starts_with('-'))
+        .cloned()
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
 /// Spawn the endstate CLI and stream events to the frontend.
 ///
 /// This function:
@@ -220,6 +238,7 @@ pub fn run_engine(
     exe: &str,
     args: &[String],
     run_state: &SharedRunState,
+    broadcaster: &EventBroadcaster,
 ) -> Result<String, EngineError> {
     // Generate runId and extract command name
     let run_id = generate_run_id();
@@ -331,11 +350,11 @@ pub fn run_engine(
                     received_result = true;
                 }
                 inject_run_id(&mut event, &run_id);
-                let _ = app.emit(EVENT_CHANNEL, &event);
+                emit_event(app, broadcaster, &event);
             }
             StreamMessage::Stderr(line) => {
                 let event = parse_line_with_run_id(&line, true, &run_id);
-                let _ = app.emit(EVENT_CHANNEL, &event);
+                emit_event(app, broadcaster, &event);
             }
         }
     }
@@ -371,10 +390,10 @@ pub fn run_engine(
     if !received_result {
         if was_cancelled {
             let cancelled = create_cancelled_result(&run_id, &command_name, Some(exit_code));
-            let _ = app.emit(EVENT_CHANNEL, &cancelled);
+            emit_event(app, broadcaster, &cancelled);
         } else {
             let fallback = create_fallback_result(exit_code, &run_id, &command_name);
-            let _ = app.emit(EVENT_CHANNEL, &fallback);
+            emit_event(app, broadcaster, &fallback);
         }
     }
 
@@ -390,7 +409,7 @@ pub fn run_engine(
 /// # Returns
 /// * `Ok(())` - Cancellation was initiated
 /// * `Err(EngineError)` - No run is active or failed to cancel
-pub fn cancel_engine(app: &AppHandle, run_state: &SharedRunState) -> Result<(), EngineError> {
+pub fn cancel_engine(app: &AppHandle, run_state: &SharedRunState, broadcaster: &EventBroadcaster) -> Result<(), EngineError> {
     let mut state = run_state.lock().map_err(|_| EngineError {
         code: "LOCK_ERROR".to_string(),
         message: "Failed to acquire run state lock".to_string(),
@@ -419,7 +438,7 @@ pub fn cancel_engine(app: &AppHandle, run_state: &SharedRunState) -> Result<(), 
                     "message": format!("Failed to kill process: {}", e),
                     "runId": run_id
                 });
-                let _ = app.emit(EVENT_CHANNEL, &log_event);
+                emit_event(app, broadcaster, &log_event);
             }
         }
     }

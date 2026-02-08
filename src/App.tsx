@@ -1717,48 +1717,48 @@ function AppContent() {
     );
   };
 
-  // Error banner component (non-blocking)
+  // Error banner component - slim warning bar with expandable details
   const renderErrorBanner = () => {
     if (state.status !== 'error') return null;
-    
+
     return (
-      <Card className="border-destructive bg-destructive/5 mb-6">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="text-destructive text-base">Engine Connection Issue</CardTitle>
-              <CardDescription className="text-destructive/80">
-                {state.errorMessage || 'Unable to connect to the endstate engine'}
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="secondary" onClick={loadInitialData}>
-                Retry
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => {
-                setSafeMode(true);
-                setState(prev => ({ ...prev, status: 'ready' }));
-              }}>
-                Safe Mode
-              </Button>
-            </div>
+      <div className="rounded-lg border border-warning/30 bg-warning/5 mb-4">
+        {/* Compact bar */}
+        <div className="flex items-center justify-between px-4 py-2.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-warning flex-shrink-0" />
+            <span className="text-sm text-foreground font-medium truncate">Engine not connected</span>
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              — {state.errorMessage || 'Run in Tauri or enable mock mode'}
+            </span>
           </div>
-        </CardHeader>
-        <CardContent className="pt-0 space-y-3">
-          {state.errorCommand && (
-            <div className="text-xs">
-              <span className="text-muted-foreground">Command: </span>
-              <code className="bg-muted px-1 rounded">{state.errorCommand}</code>
-            </div>
-          )}
-          
-          {/* Collapsible diagnostics */}
-          <details open={showDiagnostics} onToggle={(e) => setShowDiagnostics((e.target as HTMLDetailsElement).open)}>
-            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
-              {showDiagnostics ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              Diagnostics
-            </summary>
-            <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1 font-mono">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={loadInitialData}>
+              Retry
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => {
+              setSafeMode(true);
+              setState(prev => ({ ...prev, status: 'ready' }));
+            }}>
+              Safe Mode
+            </Button>
+          </div>
+        </div>
+
+        {/* Expandable details */}
+        <details open={showDiagnostics} onToggle={(e) => setShowDiagnostics((e.target as HTMLDetailsElement).open)}>
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground px-4 pb-2 flex items-center gap-1">
+            {showDiagnostics ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            Diagnostics
+          </summary>
+          <div className="px-4 pb-3 space-y-2">
+            {state.errorCommand && (
+              <div className="text-xs">
+                <span className="text-muted-foreground">Command: </span>
+                <code className="bg-muted px-1 rounded">{state.errorCommand}</code>
+              </div>
+            )}
+            <div className="p-2 bg-muted/50 rounded text-xs space-y-1 font-mono">
               {Object.entries(getDiagnostics()).map(([key, value]) => (
                 <div key={key}>
                   <span className="text-muted-foreground">{key}: </span>
@@ -1770,24 +1770,23 @@ function AppContent() {
               ref={diagnosticsCopyFeedback.buttonRef}
               size="sm"
               variant="ghost"
-              className="mt-2 h-7 text-xs relative"
+              className="h-7 text-xs relative"
               onClick={copyDiagnostics}
             >
               <Copy className="h-3 w-3 mr-1" /> Copy Diagnostics
               <InlineFeedbackPopover feedback={diagnosticsCopyFeedback.feedback} />
             </Button>
-          </details>
-          
-          {state.errorStderr && (
-            <details>
-              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                STDERR output
-              </summary>
-              <pre className="mt-2 text-xs bg-muted/50 p-2 rounded overflow-auto max-h-32">{state.errorStderr}</pre>
-            </details>
-          )}
-        </CardContent>
-      </Card>
+            {state.errorStderr && (
+              <details>
+                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                  STDERR output
+                </summary>
+                <pre className="mt-2 text-xs bg-muted/50 p-2 rounded overflow-auto max-h-32">{state.errorStderr}</pre>
+              </details>
+            )}
+          </div>
+        </details>
+      </div>
     );
   };
 
@@ -1803,6 +1802,8 @@ function AppContent() {
           <div className="space-y-6">
             {errorBanner}
             <OverviewScreen
+              sidebarVisible={sidebarVisible}
+              engineConnected={state.status !== 'error'}
               lifecycleState={lifecycleState}
               selectedProfile={selectedProfile}
               profiles={profiles}

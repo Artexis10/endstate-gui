@@ -1,34 +1,31 @@
 /**
  * Overview (Home) Screen - The default landing page for Endstate
- * 
+ *
  * This screen integrates the lifecycle conceptually by surfacing:
- * - Primary actions (Capture, Set up, Check)
+ * - Primary actions via the FlowSelector (Capture, Set up)
  * - Current profile (if any)
  * - Recent lifecycle activity
- * 
+ *
  * Non-technical users should be able to complete core tasks
  * without ever needing to navigate away from this screen.
- * 
- * Action cards expand in-place to execute actions. Power users can
- * access detailed activity via per-section "Show activity" disclosure.
+ *
+ * The FlowSelector is the primary action hub. When a flow is active,
+ * action content renders inline within the flow panel via slots.
  */
 
 import { useEffect, useState } from 'react';
-import { ScanSearch, PlayCircle, CheckCircle } from 'lucide-react';
-import { ManageProfilesModal } from '../manage-profiles-modal';
-import { ViewAppsModal } from '../view-apps-modal';
+import { AnimatePresence } from 'framer-motion';
 import { useOverviewState } from './use-overview-state';
 import { buildRecentActivity } from './selectors';
 import {
-  ActionCard,
   ActionDetailsModal,
   ActionExpandedContent,
-  ActionResultStrip,
-  CaptureStatusStrip,
-  NoProfilePrompt,
+  FlowSelector,
   RecentActivityCard,
   SelectedProfileCard,
 } from './components';
+import { ManageProfilesModal } from '../manage-profiles-modal';
+import { ViewAppsModal } from '../view-apps-modal';
 import type { OverviewScreenProps } from './types';
 
 export function OverviewScreen({
@@ -38,9 +35,7 @@ export function OverviewScreen({
   profilesDirectory,
   isRunning,
   runningAction,
-  actionStatus: _actionStatus,
   actionProgress,
-  actionResult,
   actionStatusByAction,
   actionProgressByAction,
   actionResultByAction,
@@ -63,14 +58,16 @@ export function OverviewScreen({
   onSaveProfile,
   onDiscardDraft,
   pendingCaptureDraft,
+  sidebarVisible,
+  engineConnected = true,
 }: OverviewScreenProps) {
   const hasProfile = !!selectedProfile && profiles.length > 0;
-  
+
   const [detailsAction, setDetailsAction] = useState<'capture' | 'setup' | 'check' | null>(null);
-  
+
   const {
-    expandedCard,
-    setExpandedCard,
+    activeFlow,
+    setActiveFlow,
     setupIntent,
     setSetupIntent,
     detailsModalOpen,
@@ -83,14 +80,9 @@ export function OverviewScreen({
     setViewProfilePath,
     isAtBottom,
     setIsAtBottom,
-    userHasScrolledAway: _userHasScrolledAway,
     setUserHasScrolledAway,
     activityScrollRef,
     liveActivityContainerRef,
-    captureCardRef,
-    setupCardRef,
-    checkCardRef,
-    handleCardClick,
     handleExecuteAction,
     handleDismiss,
   } = useOverviewState({
@@ -112,27 +104,135 @@ export function OverviewScreen({
     }
   }, [liveAppEvents, isAtBottom, activityExpanded]);
 
-  // Check if a card should be disabled (another action is running)
-  const isCardDisabled = (action: 'capture' | 'setup' | 'check') => {
-    if (isRunning && runningAction !== action) return true;
-    if (action !== 'capture' && !hasProfile) return true;
-    return false;
+  const recentActivity = buildRecentActivity(lifecycleState);
+
+  // Handler for "Back" / "Close" from within the flow
+  const handleFlowBack = () => {
+    if (isRunning) return;
+    setActiveFlow('none');
   };
 
-  const recentActivity = buildRecentActivity(lifecycleState);
+  // Build action content slots for FlowSelector
+  const captureActionSlot = (
+    <ActionExpandedContent
+      action="capture"
+      lifecycleState={lifecycleState}
+      isRunning={isRunning}
+      runningAction={runningAction}
+      actionStatusByAction={actionStatusByAction}
+      actionProgressByAction={actionProgressByAction}
+      actionResultByAction={actionResultByAction}
+      hasProfile={hasProfile}
+      setupIntent={setupIntent}
+      setSetupIntent={setSetupIntent}
+      liveAppEvents={liveAppEvents}
+      liveCounters={liveCounters}
+      activityExpanded={activityExpanded}
+      setActivityExpanded={setActivityExpanded}
+      isAtBottom={isAtBottom}
+      setIsAtBottom={setIsAtBottom}
+      setUserHasScrolledAway={setUserHasScrolledAway}
+      activityScrollRef={activityScrollRef}
+      liveActivityContainerRef={liveActivityContainerRef}
+      onExecuteAction={handleExecuteAction}
+      onDismiss={() => handleDismiss('capture')}
+      onDismissResult={onDismissResult}
+      onSetup={onSetup}
+      onCapture={onCapture}
+      onShowDetails={() => {
+        setDetailsAction('capture');
+        setDetailsModalOpen(true);
+      }}
+      onClose={handleFlowBack}
+      pendingCaptureDraft={pendingCaptureDraft}
+      lastSavedProfileSummary={lastSavedProfileSummary}
+      onSaveProfile={onSaveProfile}
+      onDiscardDraft={onDiscardDraft}
+    />
+  );
+
+  const setupActionSlot = (
+    <ActionExpandedContent
+      action="setup"
+      lifecycleState={lifecycleState}
+      isRunning={isRunning}
+      runningAction={runningAction}
+      actionStatusByAction={actionStatusByAction}
+      actionProgressByAction={actionProgressByAction}
+      actionResultByAction={actionResultByAction}
+      hasProfile={hasProfile}
+      setupIntent={setupIntent}
+      setSetupIntent={setSetupIntent}
+      liveAppEvents={liveAppEvents}
+      liveCounters={liveCounters}
+      activityExpanded={activityExpanded}
+      setActivityExpanded={setActivityExpanded}
+      isAtBottom={isAtBottom}
+      setIsAtBottom={setIsAtBottom}
+      setUserHasScrolledAway={setUserHasScrolledAway}
+      activityScrollRef={activityScrollRef}
+      liveActivityContainerRef={liveActivityContainerRef}
+      onExecuteAction={handleExecuteAction}
+      onDismiss={() => handleDismiss('setup')}
+      onDismissResult={onDismissResult}
+      onSetup={onSetup}
+      onCapture={onCapture}
+      onShowDetails={() => {
+        setDetailsAction('setup');
+        setDetailsModalOpen(true);
+      }}
+      onClose={handleFlowBack}
+    />
+  );
+
+  const checkActionSlot = (
+    <ActionExpandedContent
+      action="check"
+      lifecycleState={lifecycleState}
+      isRunning={isRunning}
+      runningAction={runningAction}
+      actionStatusByAction={actionStatusByAction}
+      actionProgressByAction={actionProgressByAction}
+      actionResultByAction={actionResultByAction}
+      hasProfile={hasProfile}
+      setupIntent={setupIntent}
+      setSetupIntent={setSetupIntent}
+      liveAppEvents={liveAppEvents}
+      liveCounters={liveCounters}
+      activityExpanded={activityExpanded}
+      setActivityExpanded={setActivityExpanded}
+      isAtBottom={isAtBottom}
+      setIsAtBottom={setIsAtBottom}
+      setUserHasScrolledAway={setUserHasScrolledAway}
+      activityScrollRef={activityScrollRef}
+      liveActivityContainerRef={liveActivityContainerRef}
+      onExecuteAction={handleExecuteAction}
+      onDismiss={() => handleDismiss('check')}
+      onDismissResult={onDismissResult}
+      onSetup={onSetup}
+      onCapture={onCapture}
+      onShowDetails={() => {
+        setDetailsAction('check');
+        setDetailsModalOpen(true);
+      }}
+      onClose={handleFlowBack}
+    />
+  );
 
   return (
     <div className="space-y-8">
-      {/* Welcome Header */}
-      <div className="text-center space-y-2">
-        <h1 className="text-2xl font-semibold">Endstate</h1>
-        <p className="text-muted-foreground">
-          Capture, apply, and verify your computer setup
-        </p>
-      </div>
+      {/* Welcome Header - shown only when sidebar is hidden and no flow active */}
+      {!sidebarVisible && activeFlow === 'none' && (
+        <div className="text-center space-y-2">
+          <h1 className="text-2xl font-semibold">Endstate</h1>
+          <p className="text-muted-foreground">
+            Save your setup or set up a new machine
+          </p>
+        </div>
+      )}
 
-      {/* Current Profile Card (if any) */}
-      {hasProfile && (
+      {/* Current Profile Card (when a profile is selected and on home view) */}
+      {hasProfile && activeFlow === 'none' && (
         <SelectedProfileCard
           selectedProfile={selectedProfile}
           profiles={profiles}
@@ -142,220 +242,34 @@ export function OverviewScreen({
         />
       )}
 
-      {/* No Profile Prompt - appears BEFORE Primary Actions */}
-      {!hasProfile && profiles.length === 0 && (
-        <NoProfilePrompt isRunning={isRunning} onCapture={onCapture} />
-      )}
-
-      {/* Primary Actions - Expandable Cards */}
-      <div className="space-y-6">
-        {/* Primary Portal Cards */}
-        <div className="space-y-4">
-          {/* Capture Card - PRIMARY */}
-          <ActionCard
-            action="capture"
-            expanded={expandedCard === 'capture'}
-            disabled={isCardDisabled('capture')}
-            title="Capture computer"
-            description="Save your current setup as a reusable profile"
-            icon={<ScanSearch className="h-5 w-5 text-blue-500" />}
-            accentColor="blue"
-            testId="overview-card-capture"
-            cardRef={captureCardRef}
-            expandedContentTestId="capture-card-expanded-content"
-            onToggle={() => handleCardClick('capture')}
-            collapsedStatusSlot={
-              <CaptureStatusStrip
-                variant="collapsed"
-                pendingCaptureDraft={pendingCaptureDraft}
-                lastSavedProfileSummary={lastSavedProfileSummary}
-                appCount={actionResult?.counts?.total}
-                onSaveProfile={onSaveProfile}
-                onDiscardDraft={onDiscardDraft}
-                onDismiss={() => handleDismiss('capture')}
-                onShowDetails={() => {
-                  setDetailsAction('capture');
-                  setDetailsModalOpen(true);
-                }}
-              />
-            }
-          >
-            <ActionExpandedContent
-              action="capture"
-              lifecycleState={lifecycleState}
-              isRunning={isRunning}
-              runningAction={runningAction}
-              actionStatusByAction={actionStatusByAction}
-              actionProgressByAction={actionProgressByAction}
-              actionResultByAction={actionResultByAction}
-              hasProfile={hasProfile}
-              setupIntent={setupIntent}
-              setSetupIntent={setSetupIntent}
-              liveAppEvents={liveAppEvents}
-              liveCounters={liveCounters}
-              activityExpanded={activityExpanded}
-              setActivityExpanded={setActivityExpanded}
-              isAtBottom={isAtBottom}
-              setIsAtBottom={setIsAtBottom}
-              setUserHasScrolledAway={setUserHasScrolledAway}
-              activityScrollRef={activityScrollRef}
-              liveActivityContainerRef={liveActivityContainerRef}
-              onExecuteAction={handleExecuteAction}
-              onDismiss={() => handleDismiss('capture')}
-              onDismissResult={onDismissResult}
-              onSetup={onSetup}
-              onCapture={onCapture}
-              onShowDetails={() => {
-                setDetailsAction('capture');
-                setDetailsModalOpen(true);
-              }}
-              setExpandedCard={setExpandedCard}
-              pendingCaptureDraft={pendingCaptureDraft}
-              lastSavedProfileSummary={lastSavedProfileSummary}
-              onSaveProfile={onSaveProfile}
-              onDiscardDraft={onDiscardDraft}
-            />
-          </ActionCard>
-
-          {/* Setup Card - PRIMARY */}
-          <ActionCard
-            action="setup"
-            expanded={expandedCard === 'setup'}
-            disabled={isCardDisabled('setup')}
-            title="Set up computer"
-            description={hasProfile 
-              ? 'Install apps from your saved profile'
-              : 'Capture a profile first to get started'
-            }
-            icon={<PlayCircle className="h-5 w-5 text-green-500" />}
-            accentColor="green"
-            testId="overview-card-apply"
-            cardRef={setupCardRef}
-            expandedContentTestId="setup-card-expanded-content"
-            onToggle={() => handleCardClick('setup')}
-            collapsedStatusSlot={
-              <ActionResultStrip
-                action="setup"
-                actionStatusByAction={actionStatusByAction}
-                actionProgressByAction={actionProgressByAction}
-                actionResultByAction={actionResultByAction}
-                isRunning={isRunning}
-                onDismiss={() => handleDismiss('setup')}
-                onShowDetails={() => {
-                  setDetailsAction('setup');
-                  setDetailsModalOpen(true);
-                }}
-              />
-            }
-          >
-            <ActionExpandedContent
-              action="setup"
-              lifecycleState={lifecycleState}
-              isRunning={isRunning}
-              runningAction={runningAction}
-              actionStatusByAction={actionStatusByAction}
-              actionProgressByAction={actionProgressByAction}
-              actionResultByAction={actionResultByAction}
-              hasProfile={hasProfile}
-              setupIntent={setupIntent}
-              setSetupIntent={setSetupIntent}
-              liveAppEvents={liveAppEvents}
-              liveCounters={liveCounters}
-              activityExpanded={activityExpanded}
-              setActivityExpanded={setActivityExpanded}
-              isAtBottom={isAtBottom}
-              setIsAtBottom={setIsAtBottom}
-              setUserHasScrolledAway={setUserHasScrolledAway}
-              activityScrollRef={activityScrollRef}
-              liveActivityContainerRef={liveActivityContainerRef}
-              onExecuteAction={handleExecuteAction}
-              onDismiss={() => handleDismiss('setup')}
-              onDismissResult={onDismissResult}
-              onSetup={onSetup}
-              onCapture={onCapture}
-              onShowDetails={() => {
-                setDetailsAction('setup');
-                setDetailsModalOpen(true);
-              }}
-              setExpandedCard={setExpandedCard}
-            />
-          </ActionCard>
-        </div>
-
-        {/* Secondary Validation Section */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">Validation</h3>
-          {/* Check Card - SECONDARY */}
-          <ActionCard
-            action="check"
-            expanded={expandedCard === 'check'}
-            disabled={isCardDisabled('check')}
-            title="Check computer"
-            description={hasProfile 
-              ? 'Verify your setup matches the profile'
-              : 'Capture a profile first to get started'
-            }
-            icon={<CheckCircle className="h-5 w-5 text-amber-500" />}
-            accentColor="amber"
-            testId="overview-card-verify"
-            cardRef={checkCardRef}
-            expandedContentTestId="check-card-expanded-content"
-            onToggle={() => handleCardClick('check')}
-            collapsedStatusSlot={
-              <ActionResultStrip
-                action="check"
-                actionStatusByAction={actionStatusByAction}
-                actionProgressByAction={actionProgressByAction}
-                actionResultByAction={actionResultByAction}
-                isRunning={isRunning}
-                onDismiss={() => handleDismiss('check')}
-                onShowDetails={() => {
-                  setDetailsAction('check');
-                  setDetailsModalOpen(true);
-                }}
-              />
-            }
-          >
-            <ActionExpandedContent
-              action="check"
-              lifecycleState={lifecycleState}
-              isRunning={isRunning}
-              runningAction={runningAction}
-              actionStatusByAction={actionStatusByAction}
-              actionProgressByAction={actionProgressByAction}
-              actionResultByAction={actionResultByAction}
-              hasProfile={hasProfile}
-              setupIntent={setupIntent}
-              setSetupIntent={setSetupIntent}
-              liveAppEvents={liveAppEvents}
-              liveCounters={liveCounters}
-              activityExpanded={activityExpanded}
-              setActivityExpanded={setActivityExpanded}
-              isAtBottom={isAtBottom}
-              setIsAtBottom={setIsAtBottom}
-              setUserHasScrolledAway={setUserHasScrolledAway}
-              activityScrollRef={activityScrollRef}
-              liveActivityContainerRef={liveActivityContainerRef}
-              onExecuteAction={handleExecuteAction}
-              onDismiss={() => handleDismiss('check')}
-              onDismissResult={onDismissResult}
-              onSetup={onSetup}
-              onCapture={onCapture}
-              onShowDetails={() => {
-                setDetailsAction('check');
-                setDetailsModalOpen(true);
-              }}
-              setExpandedCard={setExpandedCard}
-            />
-          </ActionCard>
-        </div>
-      </div>
+      {/* Flow Selector - always shown as the primary action hub */}
+      <AnimatePresence mode="wait">
+        <FlowSelector
+          activeFlow={activeFlow}
+          setActiveFlow={setActiveFlow}
+          profiles={profiles}
+          selectedProfile={selectedProfile}
+          hasProfile={hasProfile}
+          engineConnected={engineConnected}
+          isRunning={isRunning}
+          onProfileChange={onProfileChange}
+          onOpenProfilesFolder={onOpenProfilesFolder}
+          onRefreshProfiles={onRefreshProfiles}
+          onBack={handleFlowBack}
+          captureActionSlot={captureActionSlot}
+          setupActionSlot={setupActionSlot}
+          checkActionSlot={checkActionSlot}
+          setupStatus={actionStatusByAction['setup']}
+          checkStatus={actionStatusByAction['check']}
+          onCheck={onCheck}
+        />
+      </AnimatePresence>
 
       {/* Recent Activity */}
       {recentActivity.length > 0 && (
-        <RecentActivityCard 
-          activities={recentActivity as any} 
-          onNavigate={onNavigate} 
+        <RecentActivityCard
+          activities={recentActivity as any}
+          onNavigate={onNavigate}
         />
       )}
 

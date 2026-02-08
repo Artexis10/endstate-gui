@@ -16,36 +16,27 @@ vi.mock('@/settings', () => ({
     lastSelectedProfile: '',
     lastSelectedProfilePath: '',
     dryRunEnabled: true,
-    showDetails: true, // Enable showDetails for tests
+    showDetails: true,
   }),
   saveSettings: vi.fn(),
 }));
 
-/**
- * REGRESSION TEST: Setup Details modal bugs
- * 
- * Issues to fix:
- * 1. "Already present" apps showing as "SKIPPED" in live activity
- * 2. "Already present" tab in Setup Details modal shows nothing
- * 3. "To install" pill label truncated/cut off
- */
 const createPerActionState = (overrides?: {
   setup?: { status: 'idle' | 'running' | 'success' | 'error'; result?: any };
 }) => ({
-  actionStatusByAction: { 
-    capture: 'idle' as const, 
-    setup: (overrides?.setup?.status ?? 'idle') as 'idle' | 'running' | 'success' | 'error', 
-    check: 'idle' as const 
+  actionStatusByAction: {
+    capture: 'idle' as const,
+    setup: (overrides?.setup?.status ?? 'idle') as 'idle' | 'running' | 'success' | 'error',
+    check: 'idle' as const
   },
   actionProgressByAction: { capture: null, setup: null, check: null },
-  actionResultByAction: { 
-    capture: null, 
-    setup: overrides?.setup?.result ?? null, 
-    check: null 
+  actionResultByAction: {
+    capture: null,
+    setup: overrides?.setup?.result ?? null,
+    check: null
   },
 });
 
-const defaultPerActionState = createPerActionState();
 
 describe('Setup Details Modal - Already Present vs Skipped', () => {
   const mockLifecycleState: LifecycleState = {
@@ -86,7 +77,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
 
   it('REGRESSION: "Already present" tab shows apps with action="OK"', async () => {
     const user = userEvent.setup();
-    
+
     const appEvents: AppEvent[] = [
       { app: 'Git.Git', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
       { app: 'VSCode', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
@@ -109,6 +100,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
       wasPreview: true,
     };
 
+    // runningAction="setup" auto-syncs activeFlow to 'setup'
     render(
       <OverviewScreen
         {...createPerActionState({ setup: { status: 'success', result: setupResult } })}
@@ -119,15 +111,11 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
       />
     );
 
-    // Expand Setup card
-    const setupCard = screen.getByTestId('overview-card-apply');
-    await user.click(setupCard);
-
-    // Click "Details" button
+    // Click "Details" button (auto-synced to setup flow, content visible)
     await waitFor(() => {
       expect(screen.getByText('Details')).toBeInTheDocument();
     });
-    
+
     const viewDetailsButton = screen.getByText('Details');
     await user.click(viewDetailsButton);
 
@@ -155,26 +143,20 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     expect(screen.queryByText('Git.Git')).not.toBeInTheDocument();
     expect(screen.queryByText('VSCode')).not.toBeInTheDocument();
 
-    // Apps should show "Already present" label, not "OK"
+    // Apps should show "Already present" label
     const labels = screen.getAllByText('Already present');
     expect(labels.length).toBeGreaterThan(0);
   });
 
   it('REGRESSION: apps skipped due to "already installed" show as "Already present" not "SKIPPED"', async () => {
     const user = userEvent.setup();
-    
-    // Simulate the bug: engine outputs [SKIP] with "already installed" reason
-    // Live activity should show "PRESENT" (not "SKIPPED")
-    // Modal should show under "Already present" tab (not "Skipped")
+
     const appEvents: AppEvent[] = [
       { app: 'Git.Git', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
       { app: 'VSCode', action: 'To install', statusKey: 'to_install', phase: 'apply', timestamp: Date.now() },
-      // These were parsed from [SKIP] ... - already installed
-      // After fix, parseApplyProgressLine returns action='OK' not 'Skipped'
       { app: 'Chrome', action: 'OK', statusKey: 'present', phase: 'apply', timestamp: Date.now() },
       { app: 'Firefox', action: 'OK', statusKey: 'present', phase: 'apply', timestamp: Date.now() },
       { app: 'Notepad++', action: 'OK', statusKey: 'present', phase: 'apply', timestamp: Date.now() },
-      // This is a true skip (filtered)
       { app: 'BlockedApp', action: 'Skipped', statusKey: 'skipped', phase: 'apply', timestamp: Date.now() },
     ];
 
@@ -193,6 +175,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
       wasPreview: true,
     };
 
+    // runningAction="setup" auto-syncs activeFlow to 'setup'
     render(
       <OverviewScreen
         {...createPerActionState({ setup: { status: 'success', result: setupResult } })}
@@ -203,15 +186,11 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
       />
     );
 
-    // Expand Setup card
-    const setupCard = screen.getByTestId('overview-card-apply');
-    await user.click(setupCard);
-
-    // Click "Details" button
+    // Click "Details" button (auto-synced to setup flow, content visible)
     await waitFor(() => {
       expect(screen.getByText('Details')).toBeInTheDocument();
     });
-    
+
     const viewDetailsButton = screen.getByText('Details');
     await user.click(viewDetailsButton);
 
@@ -225,25 +204,22 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
     expect(screen.getByText(/Already present: 3/i)).toBeInTheDocument();
     expect(screen.getByText(/Skipped: 1/i)).toBeInTheDocument();
 
-    // Click "Already present" pill to filter
+    // Click "Already present" pill
     const alreadyPresentPill = screen.getByText(/Already present: 3/i);
     await user.click(alreadyPresentPill);
 
-    // Should show 3 apps (Chrome, Firefox, Notepad++) - NOT BlockedApp
     await waitFor(() => {
       expect(screen.getByText('Chrome')).toBeInTheDocument();
       expect(screen.getByText('Firefox')).toBeInTheDocument();
       expect(screen.getByText('Notepad++')).toBeInTheDocument();
     });
 
-    // BlockedApp should NOT appear under "Already present"
     expect(screen.queryByText('BlockedApp')).not.toBeInTheDocument();
 
-    // Apps should show "Already present" label
     const labels = screen.getAllByText('Already present');
     expect(labels.length).toBeGreaterThan(0);
 
-    // Click "Skipped" pill to verify BlockedApp is there
+    // Click "Skipped" pill
     const skippedPill = screen.getByText(/Skipped: 1/i);
     await user.click(skippedPill);
 
@@ -251,7 +227,6 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
       expect(screen.getByText('BlockedApp')).toBeInTheDocument();
     });
 
-    // Chrome/Firefox/Notepad++ should NOT appear under "Skipped"
     expect(screen.queryByText('Chrome')).not.toBeInTheDocument();
     expect(screen.queryByText('Firefox')).not.toBeInTheDocument();
     expect(screen.queryByText('Notepad++')).not.toBeInTheDocument();
@@ -259,7 +234,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
 
   it('REGRESSION: "To install" pill label is not truncated', async () => {
     const user = userEvent.setup();
-    
+
     const setupResult = {
       action: 'setup' as const,
       status: 'success' as const,
@@ -274,6 +249,7 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
       wasPreview: true,
     };
 
+    // runningAction="setup" auto-syncs activeFlow to 'setup'
     render(
       <OverviewScreen
         {...createPerActionState({ setup: { status: 'success', result: setupResult } })}
@@ -284,15 +260,11 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
       />
     );
 
-    // Expand Setup card
-    const setupCard = screen.getByTestId('overview-card-apply');
-    await user.click(setupCard);
-
-    // Click "Details"
+    // Click "Details" (auto-synced to setup flow, content visible)
     await waitFor(() => {
       expect(screen.getByText('Details')).toBeInTheDocument();
     });
-    
+
     const viewDetailsButton = screen.getByText('Details');
     await user.click(viewDetailsButton);
 
@@ -301,16 +273,12 @@ describe('Setup Details Modal - Already Present vs Skipped', () => {
       expect(screen.getByText('Setup Details')).toBeInTheDocument();
     });
 
-    // "To install" pill should show full text including count
+    // "To install" pill should show full text
     const toInstallPill = screen.getByText(/To install: 50/i);
     expect(toInstallPill).toBeInTheDocument();
     expect(toInstallPill).toBeVisible();
-    
-    // Text should not be truncated (check that both label and number are present)
+
     expect(toInstallPill.textContent).toContain('To install');
     expect(toInstallPill.textContent).toContain('50');
   });
-
 });
-
-

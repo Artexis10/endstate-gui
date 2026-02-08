@@ -3,14 +3,19 @@
 //! This module provides the Rust backend for Endstate GUI, handling CLI execution
 //! via std::process::Command and exposing results to the frontend via Tauri commands.
 
+pub(crate) mod cmd_impl;
 mod engine_adapter;
+mod event_broadcast;
+#[cfg(all(debug_assertions, feature = "dev-server"))]
+mod dev_server;
 
 use engine_adapter::{SharedRunState, create_run_state};
+use event_broadcast::EventBroadcaster;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::process::Command;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Result of CLI execution returned to the frontend.
 #[derive(Debug, Serialize, Deserialize)]
@@ -107,12 +112,14 @@ async fn engine_run(
     exe: String,
     args: Vec<String>,
     run_state: State<'_, SharedRunState>,
+    broadcaster: State<'_, EventBroadcaster>,
 ) -> Result<String, String> {
     let run_state = Arc::clone(&run_state);
+    let broadcaster = broadcaster.inner().clone();
     
     // Run in a blocking task to avoid blocking the async runtime
     let result = tauri::async_runtime::spawn_blocking(move || {
-        engine_adapter::run_engine(&app, &exe, &args, &run_state)
+        engine_adapter::run_engine(&app, &exe, &args, &run_state, &broadcaster)
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?;
@@ -136,8 +143,9 @@ async fn engine_run(
 async fn engine_cancel(
     app: AppHandle,
     run_state: State<'_, SharedRunState>,
+    broadcaster: State<'_, EventBroadcaster>,
 ) -> Result<(), String> {
-    engine_adapter::cancel_engine(&app, &run_state).map_err(|e| e.to_string())
+    engine_adapter::cancel_engine(&app, &run_state, &broadcaster.inner()).map_err(|e| e.to_string())
 }
 
 /// Check if an engine run is currently active.
@@ -1147,6 +1155,22 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(create_run_state())
+        .manage(EventBroadcaster::new())
+        .setup(|app| {
+            #[cfg(all(debug_assertions, feature = "dev-server"))]
+            {
+                if std::env::var("TIDEWAVE_ENABLED").unwrap_or_default() == "1" {
+                    let broadcaster = app.state::<EventBroadcaster>().inner().clone();
+                    let run_state = app.state::<SharedRunState>().inner().clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = dev_server::start(run_state, broadcaster).await {
+                            eprintln!("Dev server failed: {}", e);
+                        }
+                    });
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             endstate_exec,
             engine_run,

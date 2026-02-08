@@ -57,7 +57,7 @@ interface ActionExpandedContentProps {
   onSetup: (intent: SetupIntent) => void;
   onCapture: () => void;
   onShowDetails: () => void;
-  setExpandedCard: (card: ActionType) => void;
+  onClose: () => void;
   // Capture-specific props
   pendingCaptureDraft?: { capturedAppsCount: number; capturedAt: string; draftText: string; apps: string[] } | null;
   lastSavedProfileSummary?: { appCount: number; finishedAt: string; profileName?: string } | null;
@@ -65,11 +65,11 @@ interface ActionExpandedContentProps {
   onDiscardDraft?: () => void;
 }
 
-// Action-specific descriptions
+// Action-specific descriptions (complement the card subtitle, don't repeat it)
 const descriptions: Record<NonNullable<ActionType>, string> = {
-  capture: 'Scan your computer for installed applications and save them as a reusable setup profile.',
-  setup: 'Install applications from your selected profile.',
-  check: 'This computer will be compared against the selected profile.',
+  capture: 'This will scan for all installed applications using winget and save the results.',
+  setup: 'Apps from your profile will be installed or verified on this machine.',
+  check: 'Each app in your profile will be checked against what\'s currently installed.',
 };
 
 // Dynamic button labels based on setup intent
@@ -122,7 +122,7 @@ export function ActionExpandedContent({
   onSetup,
   onCapture,
   onShowDetails,
-  setExpandedCard,
+  onClose,
   pendingCaptureDraft,
   lastSavedProfileSummary,
   onSaveProfile,
@@ -395,13 +395,17 @@ export function ActionExpandedContent({
                 <Loader2 className={`h-4 w-4 animate-spin ${colorClasses.text}`} />
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-medium truncate ${colorClasses.text}`}>
-                    {/* Phase indicator: show current phase for clarity */}
                     {actionProgress.phase === 'verify' ? 'Verifying installation…' : actionProgress.message}
                   </p>
                   {actionProgress.detail && (
                     <p className="text-xs text-muted-foreground truncate">{actionProgress.detail}</p>
                   )}
                 </div>
+                {liveAppEvents.length > 0 && (
+                  <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                    {liveAppEvents.length} checked
+                  </span>
+                )}
               </div>
             );
           })()}
@@ -458,24 +462,27 @@ export function ActionExpandedContent({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setExpandedCard(null);
+                  onClose();
                 }}
               >
-                Cancel
+                Close
               </Button>
             )}
           </>
         ) : (
           <>
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDismiss(action);
-              }}
-              size="sm"
-            >
-              Dismiss
-            </Button>
+            {/* Hide Dismiss when capture status strip already shows one */}
+            {!(action === 'capture' && (pendingCaptureDraft || lastSavedProfileSummary)) && (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDismiss(action);
+                }}
+                size="sm"
+              >
+                Dismiss
+              </Button>
+            )}
             {/* Show "Apply changes" button after successful Preview */}
             {action === 'setup' && actionResult?.wasPreview && actionStatus === 'success' && (
               <Button

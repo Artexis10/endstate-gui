@@ -4,7 +4,7 @@ import path from 'path';
 
 const isTidewaveEnabled =
   process.env.NODE_ENV === 'development' &&
-  process.env.TIDEWAVE_ENABLED === '1';
+  (process.env.TIDEWAVE_ENABLED === '1' || process.env.VITE_TIDEWAVE_ENABLED === '1');
 
 export default defineConfig(async () => ({
   plugins: [

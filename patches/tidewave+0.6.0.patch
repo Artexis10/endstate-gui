@@ -1,0 +1,25 @@
+diff --git a/node_modules/tidewave/dist/evaluation/eval_worker.js b/node_modules/tidewave/dist/evaluation/eval_worker.js
+index 240cdd5..73dff96 100644
+--- a/node_modules/tidewave/dist/evaluation/eval_worker.js
++++ b/node_modules/tidewave/dist/evaluation/eval_worker.js
+@@ -1,4 +1,11 @@
+ // src/evaluation/eval_worker.ts
++import { pathToFileURL } from "url";
++function fixWindowsImportPaths(code) {
++  return code.replace(
++    /\bimport\s*\(\s*(['"])([A-Za-z]:\\[^'"]+)\1/g,
++    (_, quote, winPath) => `import(${quote}${pathToFileURL(winPath).href}${quote}`
++  );
++}
+ process.on("message", async (message) => {
+   if (!process.send) {
+     console.error("[Tidewave] Unable to establish communication channel with code-executor.");
+@@ -8,7 +15,7 @@ process.on("message", async (message) => {
+     const { code, args } = message.request;
+     try {
+       const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+-      const fn = new AsyncFunction(code);
++      const fn = new AsyncFunction(fixWindowsImportPaths(code));
+       const result = await fn(...args);
+       process.send({
+         type: "result",

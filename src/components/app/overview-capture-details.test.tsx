@@ -43,7 +43,6 @@ const createPerActionState = (overrides?: {
   },
 });
 
-const defaultPerActionState = createPerActionState();
 
 describe('Capture Details Modal - Detected vs Skipped', () => {
   const mockLifecycleState: LifecycleState = {

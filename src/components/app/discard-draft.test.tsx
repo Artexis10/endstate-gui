@@ -9,18 +9,8 @@ import type { DiscoveredProfile } from '@/file-discovery';
 
 // Mock useShowDetails to control Details visibility in tests
 vi.mock('@/lib/use-show-details', () => ({
-  useShowDetails: vi.fn(() => false), // Default to false for simpler UI
+  useShowDetails: vi.fn(() => false),
 }));
-
-/**
- * Discard Draft UX Tests
- * 
- * These tests enforce the UX contracts for the discard draft functionality:
- * 1. Discard draft button appears when pendingCaptureDraft exists
- * 2. Clicking discard draft calls onDiscardDraft handler
- * 3. Cancel/close of Save Profile modal does NOT clear draft
- * 4. Save success clears draft and shows green card
- */
 
 const defaultPerActionState = {
   actionStatusByAction: { capture: 'idle' as const, setup: 'idle' as const, check: 'idle' as const },
@@ -58,6 +48,7 @@ describe('Discard Draft UX Contracts', () => {
         apps: ['app1', 'app2', 'app3', 'app4', 'app5'],
       };
 
+      // runningAction="capture" auto-syncs activeFlow to 'capture'
       renderWithProviders(
         <OverviewScreen
           {...defaultPerActionState}
@@ -89,7 +80,7 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Verify discard draft button is present (card should be auto-expanded)
+      // Verify discard draft button is present (auto-synced to capture flow)
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /discard draft/i })).toBeInTheDocument();
       });
@@ -97,7 +88,7 @@ describe('Discard Draft UX Contracts', () => {
 
     it('does not show discard draft button when no pending draft', async () => {
       const user = userEvent.setup();
-      
+
       renderWithProviders(
         <OverviewScreen
           {...defaultPerActionState}
@@ -124,8 +115,8 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Expand capture card
-      const captureCard = screen.getByTestId('overview-card-capture');
+      // Enter capture flow
+      const captureCard = screen.getByTestId('flow-capture');
       await user.click(captureCard);
 
       // Verify discard draft button is NOT present
@@ -144,6 +135,7 @@ describe('Discard Draft UX Contracts', () => {
         apps: ['app1', 'app2', 'app3', 'app4', 'app5'],
       };
 
+      // runningAction="capture" auto-syncs activeFlow to 'capture'
       renderWithProviders(
         <OverviewScreen
           {...defaultPerActionState}
@@ -175,11 +167,10 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Click discard draft button (card should be auto-expanded)
+      // Click discard draft button (auto-synced to capture flow)
       const discardButton = await screen.findByRole('button', { name: /discard draft/i });
       await user.click(discardButton);
 
-      // Verify handler was called
       expect(onDiscardDraft).toHaveBeenCalledTimes(1);
     });
   });
@@ -193,6 +184,7 @@ describe('Discard Draft UX Contracts', () => {
         apps: ['app1', 'app2', 'app3', 'app4', 'app5'],
       };
 
+      // runningAction="capture" auto-syncs activeFlow to 'capture'
       renderWithProviders(
         <OverviewScreen
           {...defaultPerActionState}
@@ -224,7 +216,7 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Verify amber warning state (card should be auto-expanded)
+      // Verify amber warning state (auto-synced to capture flow)
       await waitFor(() => {
         expect(screen.getByText('Capture finished')).toBeInTheDocument();
         expect(screen.getByText(/not saved yet/i)).toBeInTheDocument();
@@ -234,13 +226,6 @@ describe('Discard Draft UX Contracts', () => {
 
   describe('Contract 4: Capture success card persists after save', () => {
     it('shows capture success card after profile is saved (not after capture)', () => {
-      const captureResult = {
-        action: 'capture' as const,
-        status: 'success' as const,
-        summary: '63 apps captured',
-        counts: { total: 63 },
-      };
-
       renderWithProviders(
         <OverviewScreen
           {...defaultPerActionState}
@@ -252,7 +237,12 @@ describe('Discard Draft UX Contracts', () => {
           runningAction={null}
           actionStatus="success"
           actionProgress={null}
-          actionResult={captureResult}
+          actionResult={{
+            action: 'capture',
+            status: 'success',
+            summary: '63 apps captured',
+            counts: { total: 63 },
+          }}
           lastSavedProfileSummary={{
             appCount: 63,
             finishedAt: new Date().toISOString(),
@@ -272,22 +262,15 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Expand Capture card to see status strip
-      const captureCard = screen.getByTestId('overview-card-capture');
+      // Enter capture flow to see the status strip
+      const captureCard = screen.getByTestId('flow-capture');
       fireEvent.click(captureCard);
 
-      // Verify capture success card shows "Completed successfully" ONLY after save
+      // Verify capture success card shows "Completed successfully"
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
     });
 
     it('draft warning card shows when there is a pending draft (takes precedence over success)', () => {
-      const captureResult = {
-        action: 'capture' as const,
-        status: 'success' as const,
-        summary: '63 apps captured',
-        counts: { total: 63 },
-      };
-
       const pendingDraft = {
         capturedAppsCount: 63,
         capturedAt: new Date().toISOString(),
@@ -295,6 +278,7 @@ describe('Discard Draft UX Contracts', () => {
         apps: Array.from({ length: 63 }, (_, i) => `app${i + 1}`),
       };
 
+      // initialExpandedCard="capture" auto-syncs activeFlow to 'capture'
       renderWithProviders(
         <OverviewScreen
           {...defaultPerActionState}
@@ -306,7 +290,12 @@ describe('Discard Draft UX Contracts', () => {
           runningAction={null}
           actionStatus="success"
           actionProgress={null}
-          actionResult={captureResult}
+          actionResult={{
+            action: 'capture',
+            status: 'success',
+            summary: '63 apps captured',
+            counts: { total: 63 },
+          }}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
           onSetup={vi.fn()}
@@ -322,22 +311,15 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // When there's a pending draft, draft warning takes precedence (more urgent)
+      // When there's a pending draft, draft warning takes precedence
       expect(screen.getByText('Capture finished')).toBeInTheDocument();
       expect(screen.getByText(/not saved yet/i)).toBeInTheDocument();
-      
+
       // Success card should NOT be shown while draft exists
       expect(screen.queryByText('Completed successfully')).not.toBeInTheDocument();
     });
 
     it('saved profile success card persists across navigation', () => {
-      const captureResult = {
-        action: 'capture' as const,
-        status: 'success' as const,
-        summary: '63 apps captured',
-        counts: { total: 63 },
-      };
-
       const lastSavedProfileSummary = {
         appCount: 63,
         finishedAt: new Date().toISOString(),
@@ -355,7 +337,12 @@ describe('Discard Draft UX Contracts', () => {
           runningAction={null}
           actionStatus="success"
           actionProgress={null}
-          actionResult={captureResult}
+          actionResult={{
+            action: 'capture',
+            status: 'success',
+            summary: '63 apps captured',
+            counts: { total: 63 },
+          }}
           lastSavedProfileSummary={lastSavedProfileSummary}
           onNavigate={vi.fn()}
           onCapture={vi.fn()}
@@ -371,15 +358,14 @@ describe('Discard Draft UX Contracts', () => {
         />
       );
 
-      // Expand Capture card to see status strip
-      const captureCard = screen.getByTestId('overview-card-capture');
+      // Enter capture flow to see status strip
+      const captureCard = screen.getByTestId('flow-capture');
       fireEvent.click(captureCard);
 
       // Verify capture success card is shown initially
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
 
-      // Simulate navigation by re-rendering (component remount)
-      // Key point: lastSavedProfileSummary persists, even if actionResult is cleared
+      // Simulate navigation by re-rendering with initialExpandedCard to re-sync
       rerender(
         <OverviewScreen
           {...defaultPerActionState}
@@ -409,10 +395,7 @@ describe('Discard Draft UX Contracts', () => {
       );
 
       // Verify saved profile success card still shows after re-render
-      // This proves lastSavedProfileSummary is persistent, not ephemeral like actionResult
       expect(screen.getByText('Completed successfully')).toBeInTheDocument();
     });
   });
 });
-
-

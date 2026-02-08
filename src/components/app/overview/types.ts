@@ -9,6 +9,7 @@ import type { DiscoveredProfile } from '@/file-discovery';
 export type ActionType = 'capture' | 'setup' | 'check' | null;
 export type ActionStatus = 'idle' | 'running' | 'success' | 'error';
 export type SetupIntent = 'preview' | 'apply';
+export type ActiveFlow = 'none' | 'capture' | 'setup';
 
 export interface ActionProgress {
   message: string;
@@ -45,6 +46,8 @@ export interface LiveCounters {
 }
 
 export interface OverviewScreenProps {
+  sidebarVisible?: boolean;
+  engineConnected?: boolean;
   lifecycleState: LifecycleState;
   selectedProfile: string;
   profiles: DiscoveredProfile[];
