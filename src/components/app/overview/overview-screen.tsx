@@ -96,12 +96,24 @@ export function OverviewScreen({
     onDismissResult,
   });
 
-  // Auto-scroll to bottom when new events arrive, but only if user is at bottom
+  // Auto-scroll to latest phase event when new events arrive, but only if user is following
   useEffect(() => {
     if (isAtBottom && activityScrollRef.current && activityExpanded) {
-      activityScrollRef.current.scrollTop = activityScrollRef.current.scrollHeight;
+      const container = activityScrollRef.current;
+      const phase = runningAction ? actionProgressByAction[runningAction]?.phase : undefined;
+      if (phase) {
+        const phaseEvents = container.querySelectorAll(`div[data-phase="${phase}"]`);
+        if (phaseEvents.length > 0) {
+          const lastEvent = phaseEvents[phaseEvents.length - 1] as HTMLElement;
+          const eventRect = lastEvent.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          container.scrollTop += eventRect.bottom - containerRect.bottom;
+          return;
+        }
+      }
+      container.scrollTop = container.scrollHeight;
     }
-  }, [liveAppEvents, isAtBottom, activityExpanded]);
+  }, [liveAppEvents, isAtBottom, activityExpanded, runningAction, actionProgressByAction]);
 
   const recentActivity = buildRecentActivity(lifecycleState);
 

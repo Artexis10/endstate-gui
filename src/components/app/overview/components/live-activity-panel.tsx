@@ -93,10 +93,19 @@ export function LiveActivityPanel({
               className="px-3 pb-3 space-y-1 max-h-64 overflow-y-auto scrollbar-thin"
               onScroll={(e) => {
                 const target = e.currentTarget;
-                const atBottom = Math.abs(target.scrollHeight - target.scrollTop - target.clientHeight) < 5;
-                setIsAtBottom(atBottom);
-                // Track if user has scrolled away (not at bottom) to prevent auto-scroll on phase change
-                if (!atBottom) {
+                const containerRect = target.getBoundingClientRect();
+                // Check if last event of the current phase is visible (phase-aware "at bottom")
+                const phaseEvents = target.querySelectorAll(`div[data-phase="${actionProgress.phase}"]`);
+                let atLatest: boolean;
+                if (phaseEvents.length > 0) {
+                  const lastPhaseEvent = phaseEvents[phaseEvents.length - 1];
+                  const eventRect = lastPhaseEvent.getBoundingClientRect();
+                  atLatest = eventRect.bottom <= containerRect.bottom + 5;
+                } else {
+                  atLatest = Math.abs(target.scrollHeight - target.scrollTop - target.clientHeight) < 5;
+                }
+                setIsAtBottom(atLatest);
+                if (!atLatest) {
                   setUserHasScrolledAway(true);
                 }
               }}
@@ -147,7 +156,17 @@ export function LiveActivityPanel({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (activityScrollRef.current) {
-                      activityScrollRef.current.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: 'smooth' });
+                      const container = activityScrollRef.current;
+                      const phaseEvents = container.querySelectorAll(`div[data-phase="${actionProgress.phase}"]`);
+                      if (phaseEvents.length > 0) {
+                        const lastEvent = phaseEvents[phaseEvents.length - 1] as HTMLElement;
+                        const eventRect = lastEvent.getBoundingClientRect();
+                        const containerRect = container.getBoundingClientRect();
+                        const targetTop = container.scrollTop + (eventRect.bottom - containerRect.bottom);
+                        container.scrollTo({ top: targetTop, behavior: 'smooth' });
+                      } else {
+                        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                      }
                     }
                     setIsAtBottom(true);
                   }}
