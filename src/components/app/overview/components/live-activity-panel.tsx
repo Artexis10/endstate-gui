@@ -93,15 +93,20 @@ export function LiveActivityPanel({
               className="px-3 pb-3 space-y-1 max-h-64 overflow-y-auto scrollbar-thin"
               onScroll={(e) => {
                 const target = e.currentTarget;
-                const containerRect = target.getBoundingClientRect();
-                // Check if last event of the current phase is visible (phase-aware "at bottom")
-                const phaseEvents = target.querySelectorAll(`div[data-phase="${actionProgress.phase}"]`);
                 let atLatest: boolean;
-                if (phaseEvents.length > 0) {
-                  const lastPhaseEvent = phaseEvents[phaseEvents.length - 1];
-                  const eventRect = lastPhaseEvent.getBoundingClientRect();
-                  atLatest = eventRect.bottom <= containerRect.bottom + 5;
+                if (actionProgress.phase === 'verify') {
+                  // During verify, check if last verify event is visible (mid-list tracking)
+                  const containerRect = target.getBoundingClientRect();
+                  const verifyEvents = target.querySelectorAll('div[data-phase="verify"]');
+                  if (verifyEvents.length > 0) {
+                    const lastEvent = verifyEvents[verifyEvents.length - 1];
+                    const eventRect = lastEvent.getBoundingClientRect();
+                    atLatest = eventRect.bottom <= containerRect.bottom + 5;
+                  } else {
+                    atLatest = Math.abs(target.scrollHeight - target.scrollTop - target.clientHeight) < 5;
+                  }
                 } else {
+                  // Default: check absolute bottom
                   atLatest = Math.abs(target.scrollHeight - target.scrollTop - target.clientHeight) < 5;
                 }
                 setIsAtBottom(atLatest);
@@ -157,14 +162,20 @@ export function LiveActivityPanel({
                     e.stopPropagation();
                     if (activityScrollRef.current) {
                       const container = activityScrollRef.current;
-                      const phaseEvents = container.querySelectorAll(`div[data-phase="${actionProgress.phase}"]`);
-                      if (phaseEvents.length > 0) {
-                        const lastEvent = phaseEvents[phaseEvents.length - 1] as HTMLElement;
-                        const eventRect = lastEvent.getBoundingClientRect();
-                        const containerRect = container.getBoundingClientRect();
-                        const targetTop = container.scrollTop + (eventRect.bottom - containerRect.bottom);
-                        container.scrollTo({ top: targetTop, behavior: 'smooth' });
+                      if (actionProgress.phase === 'verify') {
+                        // During verify, scroll to last verified event (mid-list)
+                        const verifyEvents = container.querySelectorAll('div[data-phase="verify"]');
+                        if (verifyEvents.length > 0) {
+                          const lastEvent = verifyEvents[verifyEvents.length - 1] as HTMLElement;
+                          const eventRect = lastEvent.getBoundingClientRect();
+                          const containerRect = container.getBoundingClientRect();
+                          const targetTop = container.scrollTop + (eventRect.bottom - containerRect.bottom);
+                          container.scrollTo({ top: targetTop, behavior: 'smooth' });
+                        } else {
+                          container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                        }
                       } else {
+                        // Default: scroll to absolute bottom
                         container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
                       }
                     }

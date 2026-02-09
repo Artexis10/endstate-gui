@@ -96,28 +96,29 @@ export function OverviewScreen({
     onDismissResult,
   });
 
-  // Auto-scroll to latest phase event when new events arrive, but only if user is following
+  // Auto-scroll when new events arrive, but only if user is following
+  const currentPhase = runningAction ? actionProgressByAction[runningAction]?.phase : undefined;
   useEffect(() => {
     if (isAtBottom && activityScrollRef.current && activityExpanded) {
       const container = activityScrollRef.current;
-      const phase = runningAction ? actionProgressByAction[runningAction]?.phase : undefined;
-      if (phase) {
-        const phaseEvents = container.querySelectorAll(`div[data-phase="${phase}"]`);
-        if (phaseEvents.length > 0) {
-          const lastEvent = phaseEvents[phaseEvents.length - 1] as HTMLElement;
+      // During verify, track the last verified event (mid-list, not absolute bottom)
+      if (currentPhase === 'verify') {
+        const verifyEvents = container.querySelectorAll('div[data-phase="verify"]');
+        if (verifyEvents.length > 0) {
+          const lastEvent = verifyEvents[verifyEvents.length - 1] as HTMLElement;
           const eventRect = lastEvent.getBoundingClientRect();
           const containerRect = container.getBoundingClientRect();
           const diff = eventRect.bottom - containerRect.bottom;
-          // Only scroll down to new events — never drift upward
           if (diff > 0) {
             container.scrollTop += diff;
           }
           return;
         }
       }
+      // Default (apply, capture, etc.): pin to absolute bottom
       container.scrollTop = container.scrollHeight;
     }
-  }, [liveAppEvents, isAtBottom, activityExpanded, runningAction, actionProgressByAction]);
+  }, [liveAppEvents, isAtBottom, activityExpanded, currentPhase]);
 
   const recentActivity = buildRecentActivity(lifecycleState);
 
