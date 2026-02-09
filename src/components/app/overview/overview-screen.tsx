@@ -107,7 +107,11 @@ export function OverviewScreen({
           const lastEvent = phaseEvents[phaseEvents.length - 1] as HTMLElement;
           const eventRect = lastEvent.getBoundingClientRect();
           const containerRect = container.getBoundingClientRect();
-          container.scrollTop += eventRect.bottom - containerRect.bottom;
+          const diff = eventRect.bottom - containerRect.bottom;
+          // Only scroll down to new events — never drift upward
+          if (diff > 0) {
+            container.scrollTop += diff;
+          }
           return;
         }
       }
