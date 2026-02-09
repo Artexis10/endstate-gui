@@ -1,3 +1,8 @@
+## Purpose
+Ensure ESM dynamic imports work on Windows by converting backslash paths to file:// URLs in the Tidewave eval worker.
+
+## Requirements
+
 ### Requirement: Windows ESM import path conversion
 The eval worker SHALL convert Windows absolute paths in dynamic `import()` calls to `file://` URLs before executing evaluated code, so that ESM module resolution succeeds on Windows.
 
