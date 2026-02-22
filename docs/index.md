@@ -30,6 +30,7 @@ Navigation index for Endstate GUI documentation.
 
 ## Contracts
 
+- [Config Integration Design](config-integration-design.md) — Full config management integration plan
 - [Config Export/Restore UX](config-export-restore-ux.md) — Export/restore UX specification
 - [Profile Contract](profile-contract.md) — Profile format specification
 - [UX Engine Contract](ux-engine-contract.md) — Engine integration contract
