@@ -27,6 +27,10 @@ If engine output changes, this document MUST be updated to match.
 | `data.captureWarnings` | Treat as empty array | No warning toast |
 | `data.outputPath` | N/A (GUI reads draft from temp) | No impact |
 | `error.hint` | Show message only | Omit hint from toast |
+| `data.outputFormat` | Treat as `'jsonc'` (no bundle) | No config section shown |
+| `data.configsIncluded` | Treat as empty array | No config count in summary |
+| `data.configsSkipped` | Treat as empty array | No skipped section |
+| `data.configsCaptureErrors` | Treat as empty array | No errors section |
 
 ## Engine Envelope Shape {#envelope-shape}
 
@@ -169,7 +173,7 @@ The GUI explicitly does NOT:
 
 See `src/types.ts`:
 - `EndstateEnvelope<T>` - Generic envelope wrapper
-- `EndstateCaptureData` - Capture-specific data shape
+- `EndstateCaptureData` - Capture-specific data shape (includes `outputFormat`, `configsIncluded`, `configsSkipped`, `configsCaptureErrors`)
 - `CapturedApp` - App entry in `appsIncluded`
 - `CaptureCounts` - Counts object shape
 - `EndstateError` - Error object shape

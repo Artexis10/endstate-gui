@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getCaptureAppsFromEnvelope,
   getCapturedCount,
+  getCapturedConfigCount,
   validateContinuityInvariant,
   capturedAppsToAppEvents,
   isCleanAppId,
@@ -651,19 +652,151 @@ describe('Capture Continuity Invariants', () => {
         { id: 'Docker.DockerDesktop', source: 'winget' },
       ];
       const result = buildCaptureActionResult(appsIncluded, '2 apps captured');
-      
+
       expect(result.counts.total).toBe(2);
       expect(result.appEvents.length).toBe(2);
-      
+
       // Modal should NOT show "No applications were detected"
-      const shouldShowNoAppsMessage = 
-        result.appEvents.length === 0 && 
+      const shouldShowNoAppsMessage =
+        result.appEvents.length === 0 &&
         result.counts.total === 0;
       expect(shouldShowNoAppsMessage).toBe(false);
-      
+
       // Modal should render the app list
       expect(result.appEvents[0].app).toBe('Git.Git');
       expect(result.appEvents[1].app).toBe('Docker.DockerDesktop');
+    });
+  });
+
+  describe('Config module capture visibility', () => {
+    describe('getCapturedConfigCount', () => {
+      it('returns 0 when envelopeData is undefined', () => {
+        expect(getCapturedConfigCount(undefined)).toBe(0);
+      });
+
+      it('returns 0 when configsIncluded is undefined', () => {
+        expect(getCapturedConfigCount({})).toBe(0);
+      });
+
+      it('returns 0 when configsIncluded is empty', () => {
+        expect(getCapturedConfigCount({ configsIncluded: [] })).toBe(0);
+      });
+
+      it('returns count when configsIncluded is populated', () => {
+        expect(getCapturedConfigCount({
+          configsIncluded: ['vscode-extensions', 'terminal-settings', 'git-config'],
+        })).toBe(3);
+      });
+    });
+
+    describe('deriveCaptureSummaryText with config count', () => {
+      it('returns apps-only text when configCount is undefined', () => {
+        expect(deriveCaptureSummaryText(67)).toBe('67 apps captured');
+      });
+
+      it('returns apps-only text when configCount is 0', () => {
+        expect(deriveCaptureSummaryText(67, 0)).toBe('67 apps captured');
+      });
+
+      it('includes config count when configCount > 0', () => {
+        expect(deriveCaptureSummaryText(67, 12)).toBe('67 apps captured · 12 configs included');
+      });
+
+      it('includes config count even when app count is 0', () => {
+        expect(deriveCaptureSummaryText(0, 3)).toBe('No apps detected · 3 configs included');
+      });
+    });
+
+    describe('buildCaptureActionResult with config data', () => {
+      it('populates config counts from configData', () => {
+        const apps: CapturedApp[] = [{ id: 'Git.Git', source: 'winget' }];
+        const result = buildCaptureActionResult(apps, '1 apps captured · 2 configs included', {
+          outputFormat: 'zip',
+          configsIncluded: ['vscode-extensions', 'terminal-settings'],
+          configsSkipped: ['browser-data'],
+          configsCaptureErrors: [],
+        });
+
+        expect(result.counts.configsCaptured).toBe(2);
+        expect(result.counts.configsSkipped).toBe(1);
+        expect(result.counts.configsErrored).toBe(0);
+      });
+
+      it('passes through config arrays and outputFormat', () => {
+        const apps: CapturedApp[] = [{ id: 'Git.Git', source: 'winget' }];
+        const result = buildCaptureActionResult(apps, '1 apps captured', {
+          outputFormat: 'zip',
+          configsIncluded: ['vscode-extensions'],
+          configsSkipped: ['browser-data'],
+          configsCaptureErrors: ['git-config'],
+        });
+
+        expect(result.outputFormat).toBe('zip');
+        expect(result.configsIncluded).toEqual(['vscode-extensions']);
+        expect(result.configsSkipped).toEqual(['browser-data']);
+        expect(result.configsCaptureErrors).toEqual(['git-config']);
+      });
+
+      it('omits config counts when no configData provided', () => {
+        const apps: CapturedApp[] = [{ id: 'Git.Git', source: 'winget' }];
+        const result = buildCaptureActionResult(apps, '1 apps captured');
+
+        expect(result.counts.configsCaptured).toBeUndefined();
+        expect(result.counts.configsSkipped).toBeUndefined();
+        expect(result.counts.configsErrored).toBeUndefined();
+        expect(result.outputFormat).toBeUndefined();
+        expect(result.configsIncluded).toBeUndefined();
+        expect(result.configsSkipped).toBeUndefined();
+        expect(result.configsCaptureErrors).toBeUndefined();
+      });
+
+      it('handles jsonc outputFormat (no config section expected)', () => {
+        const apps: CapturedApp[] = [{ id: 'Git.Git', source: 'winget' }];
+        const result = buildCaptureActionResult(apps, '1 apps captured', {
+          outputFormat: 'jsonc',
+        });
+
+        expect(result.outputFormat).toBe('jsonc');
+        expect(result.configsIncluded).toBeUndefined();
+      });
+    });
+
+    describe('EndstateCaptureData with config fields', () => {
+      it('accepts envelope data with all config fields', () => {
+        const data: EndstateCaptureData = {
+          outputPath: 'C:\\path\\to\\bundle.zip',
+          outputFormat: 'zip',
+          configsIncluded: ['vscode-extensions', 'terminal-settings'],
+          configsSkipped: ['browser-data'],
+          configsCaptureErrors: ['git-config'],
+          appsIncluded: [{ id: 'Git.Git', source: 'winget' }],
+          counts: {
+            totalFound: 1,
+            included: 1,
+            skipped: 0,
+            filteredRuntimes: 0,
+            filteredStoreApps: 0,
+            sensitiveExcludedCount: 0,
+          },
+        };
+
+        expect(data.outputFormat).toBe('zip');
+        expect(data.configsIncluded).toHaveLength(2);
+        expect(data.configsSkipped).toHaveLength(1);
+        expect(data.configsCaptureErrors).toHaveLength(1);
+      });
+
+      it('accepts envelope data without config fields (backward compat)', () => {
+        const data: EndstateCaptureData = {
+          outputPath: 'C:\\path\\to\\manifest.jsonc',
+          appsIncluded: [{ id: 'Git.Git', source: 'winget' }],
+        };
+
+        expect(data.outputFormat).toBeUndefined();
+        expect(data.configsIncluded).toBeUndefined();
+        expect(data.configsSkipped).toBeUndefined();
+        expect(data.configsCaptureErrors).toBeUndefined();
+      });
     });
   });
 });

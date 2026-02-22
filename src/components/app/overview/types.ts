@@ -32,10 +32,21 @@ export interface ActionResult {
     missing?: number;
     total?: number;
     manifestTotal?: number; // Total apps in profile manifest (source of truth)
+    configsCaptured?: number;
+    configsSkipped?: number;
+    configsErrored?: number;
   };
   profile?: string;
   timestamp?: string;
   wasPreview?: boolean; // Track if this was a preview (for showing Apply button)
+  /** Capture bundle format — 'zip' means config modules may be present */
+  outputFormat?: 'jsonc' | 'zip';
+  /** Config module IDs successfully captured */
+  configsIncluded?: string[];
+  /** Config module IDs skipped (no files found) */
+  configsSkipped?: string[];
+  /** Config module IDs with capture errors */
+  configsCaptureErrors?: string[];
 }
 
 export interface LiveCounters {

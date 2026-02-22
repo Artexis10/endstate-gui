@@ -140,6 +140,14 @@ export interface EndstateCaptureData {
   appsIncluded?: CapturedApp[];
   /** Warning codes from capture (e.g., WINGET_EXPORT_FAILED_FALLBACK_USED) */
   captureWarnings?: string[];
+  /** Output format: 'jsonc' (manifest only) or 'zip' (bundle with configs) */
+  outputFormat?: 'jsonc' | 'zip';
+  /** Config module IDs successfully captured into the bundle */
+  configsIncluded?: string[];
+  /** Config module IDs skipped (no files found) */
+  configsSkipped?: string[];
+  /** Config module IDs with capture errors */
+  configsCaptureErrors?: string[];
 }
 
 export interface ApplyItem {

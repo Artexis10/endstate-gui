@@ -95,13 +95,35 @@ export function filterCleanApps(apps: CapturedApp[]): CapturedApp[] {
 }
 
 /**
+ * Get count of captured config modules from envelope data.
+ * @param envelopeData - Capture envelope data from engine
+ * @returns Number of config modules successfully captured
+ */
+export function getCapturedConfigCount(envelopeData: EndstateCaptureData | undefined): number {
+  return envelopeData?.configsIncluded?.length ?? 0;
+}
+
+/**
  * Derive capture summary text from count.
  * Used for Overview card subtitle and modal summary.
  * @param count - Number of captured apps
- * @returns Summary text like "67 apps captured" or "No apps detected"
+ * @param configCount - Number of captured config modules (optional)
+ * @returns Summary text like "67 apps captured · 12 configs included" or "No apps detected"
  */
-export function deriveCaptureSummaryText(count: number): string {
-  return count === 0 ? 'No apps detected' : `${count} apps captured`;
+export function deriveCaptureSummaryText(count: number, configCount?: number): string {
+  const appText = count === 0 ? 'No apps detected' : `${count} apps captured`;
+  if (configCount && configCount > 0) {
+    return `${appText} · ${configCount} configs included`;
+  }
+  return appText;
+}
+
+/** Config data for building capture action result */
+export interface CaptureConfigData {
+  outputFormat?: 'jsonc' | 'zip';
+  configsIncluded?: string[];
+  configsSkipped?: string[];
+  configsCaptureErrors?: string[];
 }
 
 /**
@@ -111,27 +133,48 @@ export function deriveCaptureSummaryText(count: number): string {
  */
 export function buildCaptureActionResult(
   capturedApps: CapturedApp[],
-  summary: string
+  summary: string,
+  configData?: CaptureConfigData
 ): {
   action: 'capture';
   status: 'success';
   summary: string;
   timestamp: string;
-  counts: { total: number };
+  counts: { total: number; configsCaptured?: number; configsSkipped?: number; configsErrored?: number };
   appEvents: AppEvent[];
+  outputFormat?: 'jsonc' | 'zip';
+  configsIncluded?: string[];
+  configsSkipped?: string[];
+  configsCaptureErrors?: string[];
 } {
   // Convert CapturedApp[] to AppEvents for modal display (INV-DETAILS-1)
   const appEvents = capturedAppsToAppEvents(capturedApps);
-  
+
   // Count derived from list length for consistency (INV-CONTINUITY-1)
   const count = appEvents.length;
-  
+
+  // Build counts with optional config fields
+  const counts: { total: number; configsCaptured?: number; configsSkipped?: number; configsErrored?: number } = { total: count };
+  if (configData?.configsIncluded !== undefined) {
+    counts.configsCaptured = configData.configsIncluded.length;
+  }
+  if (configData?.configsSkipped !== undefined) {
+    counts.configsSkipped = configData.configsSkipped.length;
+  }
+  if (configData?.configsCaptureErrors !== undefined) {
+    counts.configsErrored = configData.configsCaptureErrors.length;
+  }
+
   return {
     action: 'capture',
     status: 'success',
     summary,
     timestamp: new Date().toISOString(),
-    counts: { total: count },
+    counts,
     appEvents,
+    outputFormat: configData?.outputFormat,
+    configsIncluded: configData?.configsIncluded,
+    configsSkipped: configData?.configsSkipped,
+    configsCaptureErrors: configData?.configsCaptureErrors,
   };
 }

@@ -20,6 +20,7 @@ import {
   getPhaseAwareStatusForEvent,
 } from '@/lib/apply-utils';
 import type { ActionResult, ActionProgress } from '../types';
+import { CaptureConfigSummary } from './capture-config-summary';
 
 interface ActionDetailsModalProps {
   open: boolean;
@@ -232,6 +233,11 @@ export function ActionDetailsModal({
             </div>
           );
         })()}
+
+        {/* Config module summary for capture results */}
+        {actionResult?.action === 'capture' && actionResult.outputFormat === 'zip' && (
+          <CaptureConfigSummary actionResult={actionResult} />
+        )}
 
         {/* Fallback if no app events */}
         {(!actionResult?.appEvents || actionResult.appEvents.length === 0) && actionResult?.status === 'success' && (

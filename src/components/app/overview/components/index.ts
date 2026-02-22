@@ -4,6 +4,7 @@
 
 export { ActionDetailsModal } from './action-details-modal';
 export { ActionExpandedContent } from './action-expanded-content';
+export { CaptureConfigSummary } from './capture-config-summary';
 export { CaptureStatusStrip } from './capture-status-strip';
 export { FlowSelector } from './flow-selector';
 export { LiveActivityPanel } from './live-activity-panel';

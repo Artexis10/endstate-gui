@@ -28,7 +28,7 @@ import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engi
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
-import { buildCaptureActionResult } from './lib/capture-continuity';
+import { buildCaptureActionResult, getCapturedConfigCount, deriveCaptureSummaryText } from './lib/capture-continuity';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
@@ -1138,7 +1138,7 @@ function AppContent() {
     
     // Return structured result with draft text and canonical app list for modal
     // INVARIANT: count, apps, and appsIncluded ALL derive from envelope.data.appsIncluded
-    return { count: capturedCount, draftText, apps: appsList, appsIncluded };
+    return { count: capturedCount, draftText, apps: appsList, appsIncluded, envelopeData };
   };
 
   const handlePreviewFromOverview = async () => {
@@ -1865,11 +1865,10 @@ function AppContent() {
                 try {
                   const result = await handleCaptureFromOverview();
                   setOverviewActionStatus('capture', 'success');
-                  const countText = result.count === 0 
-                    ? 'No apps detected' 
-                    : `${result.count} apps captured`;
+                  const configCount = getCapturedConfigCount(result.envelopeData);
+                  const countText = deriveCaptureSummaryText(result.count, configCount);
                   setOverviewActionProgress('capture', { message: countText });
-                  
+
                   // Store draft in memory and localStorage
                   const draft = {
                     capturedAppsCount: result.count,
@@ -1878,19 +1877,24 @@ function AppContent() {
                     apps: result.apps,
                   };
                   setPendingCaptureDraft(draft);
-                  
+
                   // Persist draft to Tauri Store for reload survival
                   await saveDraft({
                     text: result.draftText,
                     createdAt: draft.capturedAt,
                     appCount: result.count,
                   });
-                  
+
                   // DO NOT set lastSavedProfileSummary here
                   // Green success only appears after Save Profile (in handleSaveProfileName)
-                  
+
                   // Use helper with canonical CapturedApp[] to build modal model (INV-DETAILS-1)
-                  setOverviewActionResult('capture', buildCaptureActionResult(result.appsIncluded, countText));
+                  setOverviewActionResult('capture', buildCaptureActionResult(result.appsIncluded, countText, {
+                    outputFormat: result.envelopeData?.outputFormat,
+                    configsIncluded: result.envelopeData?.configsIncluded,
+                    configsSkipped: result.envelopeData?.configsSkipped,
+                    configsCaptureErrors: result.envelopeData?.configsCaptureErrors,
+                  }));
                   
                   // Prompt for profile name after state is set
                   await promptForProfileName('');
