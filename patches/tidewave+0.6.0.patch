@@ -1,10 +1,29 @@
 diff --git a/node_modules/tidewave/dist/evaluation/eval_worker.js b/node_modules/tidewave/dist/evaluation/eval_worker.js
-index 240cdd5..8a0f935 100644
+index 240cdd5..dd40564 100644
 --- a/node_modules/tidewave/dist/evaluation/eval_worker.js
 +++ b/node_modules/tidewave/dist/evaluation/eval_worker.js
-@@ -1,4 +1,11 @@
+@@ -1,4 +1,30 @@
  // src/evaluation/eval_worker.ts
 +import { pathToFileURL } from "url";
++import { register } from "node:module";
++
++// Register a custom ESM resolve hook that converts bare Windows absolute
++// paths (C:\... or C:/...) to file:// URLs before Node's ESM loader sees
++// them. This fixes ERR_UNSUPPORTED_ESM_URL_SCHEME for dynamic imports
++// where the path is computed at runtime (e.g. import(path.join(cwd, ...))).
++if (process.platform === "win32") {
++  register("data:text/javascript," + encodeURIComponent(`
++    export function resolve(specifier, context, next) {
++      if (/^[A-Za-z]:[\\\\\/]/.test(specifier)) {
++        const fileUrl = "file:///" + specifier.replace(/\\\\/g, "/");
++        return next(fileUrl, context);
++      }
++      return next(specifier, context);
++    }
++  `));
++}
++
++// Belt-and-suspenders: also fix string-literal Windows paths in code text
 +function fixWindowsImportPaths(code) {
 +  return code.replace(
 +    /\bimport\s*\(\s*(['"])([A-Za-z]:[\\\/][^'"]+)\1/g,
@@ -14,7 +33,7 @@ index 240cdd5..8a0f935 100644
  process.on("message", async (message) => {
    if (!process.send) {
      console.error("[Tidewave] Unable to establish communication channel with code-executor.");
-@@ -8,7 +15,7 @@ process.on("message", async (message) => {
+@@ -8,7 +34,7 @@ process.on("message", async (message) => {
      const { code, args } = message.request;
      try {
        const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
