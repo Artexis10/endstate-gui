@@ -117,6 +117,11 @@ These govern AI behavior in this repo, in precedence order:
 - **Phase transitions within single spawn** — Apply + Verify run in one CLI call. Activity list must NOT reset between phases.
 - **Status semantic rules** — `verify` + `failed` + `missing` → MISSING (warn), not FAILED. `apply` + `skipped` + `already_installed` → "Already present" (success). See `PROJECT_SHADOW.md` §6 items 8-10.
 - **Cross-repo contract coupling** — Status/phase semantics are coupled between GUI (`docs/ux-language.md`) and engine (`../endstate/docs/event-contract.md`). Changes must update both.
+- **Tidewave Windows path bug** — `patches/tidewave+0.6.0.patch` fixes `eval_worker.js` where `fixWindowsImportPaths()` only handled backslash paths (`C:\...`), missing forward-slash paths (`C:/...`) that the Tidewave desktop app generates. On Windows, `import('C:/...')` causes `ERR_UNSUPPORTED_ESM_URL_SCHEME` because Node's ESM loader interprets `C:` as a URL protocol. **When upgrading tidewave**, check if the upstream `eval_worker.js` handles both slash styles; if so, remove the patch. If not, regenerate: edit `node_modules/tidewave/dist/evaluation/eval_worker.js`, change the regex from `[A-Za-z]:\\` to `[A-Za-z]:[\\\/]`, then run `npx patch-package tidewave`.
+
+## Patches
+
+- **`patches/tidewave+0.6.0.patch`** — Windows ESM path fix for `eval_worker.js`. Applied automatically via `postinstall: "patch-package"`. See Critical Landmines above.
 
 ## OpenSpec
 
