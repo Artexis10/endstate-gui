@@ -16,7 +16,7 @@ export const STREAMING_EVENT_VERSION = 1;
 /**
  * Engine execution phases
  */
-export type EnginePhase = 'plan' | 'apply' | 'verify' | 'capture';
+export type EnginePhase = 'plan' | 'apply' | 'verify' | 'capture' | 'restore';
 
 /**
  * Item status values from the engine
@@ -106,9 +106,36 @@ export interface ArtifactEvent extends BaseStreamingEvent {
 }
 
 /**
+ * Restore item status values from the engine
+ */
+export type RestoreItemStatus =
+  | 'restoring'
+  | 'restored'
+  | 'skipped_up_to_date'
+  | 'skipped_missing_source'
+  | 'failed';
+
+/**
+ * Restore item progress event
+ */
+export interface RestoreItemEvent extends BaseStreamingEvent {
+  event: 'restore-item';
+  id: string;
+  module: string;
+  restorer: string;
+  source: string;
+  target: string;
+  status: RestoreItemStatus;
+  reason: string | null;
+  backupPath: string | null;
+  targetExisted: boolean;
+  message?: string;
+}
+
+/**
  * Union type for all streaming events
  */
-export type StreamingEvent = PhaseEvent | ItemEvent | SummaryEvent | ErrorEvent | ArtifactEvent;
+export type StreamingEvent = PhaseEvent | ItemEvent | SummaryEvent | ErrorEvent | ArtifactEvent | RestoreItemEvent;
 
 /**
  * Type guards for event types
@@ -131,6 +158,10 @@ export function isErrorEvent(event: StreamingEvent): event is ErrorEvent {
 
 export function isArtifactEvent(event: StreamingEvent): event is ArtifactEvent {
   return event.event === 'artifact';
+}
+
+export function isRestoreItemEvent(event: StreamingEvent): event is RestoreItemEvent {
+  return event.event === 'restore-item';
 }
 
 /**
@@ -163,7 +194,7 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
     }
 
     // Validate event type
-    const validEventTypes = ['phase', 'item', 'summary', 'error', 'artifact'];
+    const validEventTypes = ['phase', 'item', 'summary', 'error', 'artifact', 'restore-item'];
     if (!validEventTypes.includes(parsed.event)) {
       return null;
     }
@@ -261,6 +292,7 @@ export class StreamingEventBuffer {
 export interface StreamingState {
   currentPhase: EnginePhase | null;
   items: Map<string, ItemEvent>;
+  restoreItems: Map<string, RestoreItemEvent>;
   summaries: Map<EnginePhase, SummaryEvent>;
   errors: ErrorEvent[];
 }
@@ -272,6 +304,7 @@ export function createStreamingState(): StreamingState {
   return {
     currentPhase: null,
     items: new Map(),
+    restoreItems: new Map(),
     summaries: new Map(),
     errors: [],
   };
@@ -297,6 +330,11 @@ export function applyStreamingEvent(
 
   if (isSummaryEvent(event)) {
     state.summaries.set(event.phase, event);
+    return true;
+  }
+
+  if (isRestoreItemEvent(event)) {
+    state.restoreItems.set(event.id, event);
     return true;
   }
 

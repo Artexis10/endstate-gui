@@ -1007,3 +1007,50 @@ export function getFailedItemMessage(item: ApplyItem): string {
   }
   return 'Install failed (no details returned)';
 }
+
+/**
+ * Restore-specific status keys.
+ * Parallel to StatusKey but for config restore operations.
+ */
+export type RestoreStatusKey =
+  | 'restoring'
+  | 'restored'
+  | 'skipped_up_to_date'
+  | 'skipped_missing_source'
+  | 'failed';
+
+/** Restore status UI mapping */
+export const RESTORE_STATUS_MAP: Record<RestoreStatusKey, UiStatusConfig> = {
+  restoring: {
+    shortLabel: 'RESTORING',
+    longLabel: 'Restoring\u2026',
+    color: 'info',
+  },
+  restored: {
+    shortLabel: 'RESTORED',
+    longLabel: 'Restored',
+    color: 'success',
+  },
+  skipped_up_to_date: {
+    shortLabel: 'UP TO DATE',
+    longLabel: 'Already up to date',
+    color: 'muted',
+  },
+  skipped_missing_source: {
+    shortLabel: 'MISSING',
+    longLabel: 'Source missing',
+    color: 'warn',
+  },
+  failed: {
+    shortLabel: 'FAILED',
+    longLabel: 'Failed',
+    color: 'error',
+  },
+} as const;
+
+/**
+ * Get UI status config for a restore status key.
+ */
+export function getRestoreUiStatus(status: RestoreStatusKey): UiStatusConfig {
+  return RESTORE_STATUS_MAP[status] ?? RESTORE_STATUS_MAP.failed;
+}

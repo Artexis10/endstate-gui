@@ -10,6 +10,7 @@ import {
   isSummaryEvent,
   isErrorEvent,
   isArtifactEvent,
+  isRestoreItemEvent,
   STREAMING_EVENT_VERSION,
   type StreamingEvent,
   type PhaseEvent,
@@ -17,6 +18,7 @@ import {
   type SummaryEvent,
   type ErrorEvent,
   type ArtifactEvent,
+  type RestoreItemEvent,
 } from './streaming-events';
 
 describe('streaming-events', () => {
@@ -482,6 +484,119 @@ describe('streaming-events', () => {
 
       expect(isArtifactEvent(artifactEvent)).toBe(true);
       expect(isArtifactEvent(phaseEvent)).toBe(false);
+    });
+  });
+
+  describe('Restore item events', () => {
+    it('should parse restore-item event', () => {
+      const line = '{"version":1,"event":"restore-item","id":"settings.json","module":"vscode","restorer":"copy","source":"C:\\\\profiles\\\\vscode\\\\settings.json","target":"C:\\\\Users\\\\test\\\\AppData\\\\Roaming\\\\Code\\\\User\\\\settings.json","status":"restored","reason":null,"backupPath":"C:\\\\backups\\\\settings.json.bak","targetExisted":true,"timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+
+      expect(event).not.toBeNull();
+      expect(isRestoreItemEvent(event!)).toBe(true);
+      const restoreEvent = event as RestoreItemEvent;
+      expect(restoreEvent.id).toBe('settings.json');
+      expect(restoreEvent.module).toBe('vscode');
+      expect(restoreEvent.restorer).toBe('copy');
+      expect(restoreEvent.status).toBe('restored');
+      expect(restoreEvent.backupPath).toBe('C:\\backups\\settings.json.bak');
+      expect(restoreEvent.targetExisted).toBe(true);
+    });
+
+    it('should parse restore-item event with failed status', () => {
+      const line = '{"version":1,"event":"restore-item","id":"config.ini","module":"git","restorer":"merge-ini","source":"C:\\\\profiles\\\\git\\\\config.ini","target":"C:\\\\Users\\\\test\\\\.gitconfig","status":"failed","reason":"merge_conflict","backupPath":null,"targetExisted":true,"timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+
+      expect(event).not.toBeNull();
+      const restoreEvent = event as RestoreItemEvent;
+      expect(restoreEvent.status).toBe('failed');
+      expect(restoreEvent.reason).toBe('merge_conflict');
+      expect(restoreEvent.backupPath).toBeNull();
+    });
+
+    it('should parse restore-item event with skipped_up_to_date status', () => {
+      const line = '{"version":1,"event":"restore-item","id":"keybindings.json","module":"vscode","restorer":"copy","source":"C:\\\\profiles\\\\vscode\\\\keybindings.json","target":"C:\\\\Users\\\\test\\\\AppData\\\\Roaming\\\\Code\\\\User\\\\keybindings.json","status":"skipped_up_to_date","reason":"identical","backupPath":null,"targetExisted":true,"timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+
+      expect(event).not.toBeNull();
+      const restoreEvent = event as RestoreItemEvent;
+      expect(restoreEvent.status).toBe('skipped_up_to_date');
+      expect(restoreEvent.reason).toBe('identical');
+    });
+
+    it('isRestoreItemEvent returns false for non-restore events', () => {
+      const itemEvent: StreamingEvent = {
+        version: 1,
+        runId: 'test-run-1',
+        event: 'item',
+        id: 'App',
+        driver: 'winget',
+        status: 'installed',
+        reason: null,
+        timestamp: '2025-01-01T00:00:00.000Z',
+      };
+
+      expect(isRestoreItemEvent(itemEvent)).toBe(false);
+    });
+
+    it('should apply restore-item event to streaming state', () => {
+      const state = createStreamingState();
+      expect(state.restoreItems.size).toBe(0);
+
+      const event: RestoreItemEvent = {
+        version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
+        event: 'restore-item',
+        id: 'settings.json',
+        module: 'vscode',
+        restorer: 'copy',
+        source: 'C:\\profiles\\vscode\\settings.json',
+        target: 'C:\\Users\\test\\settings.json',
+        status: 'restored',
+        reason: null,
+        backupPath: 'C:\\backups\\settings.json.bak',
+        targetExisted: true,
+        timestamp: '2025-01-01T00:00:00.000Z',
+      };
+
+      const modified = applyStreamingEvent(state, event);
+
+      expect(modified).toBe(true);
+      expect(state.restoreItems.size).toBe(1);
+      expect(state.restoreItems.get('settings.json')).toEqual(event);
+    });
+
+    it('should update restore item on subsequent events', () => {
+      const state = createStreamingState();
+
+      const event1: RestoreItemEvent = {
+        version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
+        event: 'restore-item',
+        id: 'settings.json',
+        module: 'vscode',
+        restorer: 'copy',
+        source: 'src',
+        target: 'dst',
+        status: 'restoring',
+        reason: null,
+        backupPath: null,
+        targetExisted: false,
+        timestamp: '2025-01-01T00:00:00.000Z',
+      };
+
+      const event2: RestoreItemEvent = {
+        ...event1,
+        status: 'restored',
+        backupPath: 'C:\\backups\\settings.json.bak',
+        timestamp: '2025-01-01T00:00:01.000Z',
+      };
+
+      applyStreamingEvent(state, event1);
+      applyStreamingEvent(state, event2);
+
+      expect(state.restoreItems.size).toBe(1);
+      expect(state.restoreItems.get('settings.json')?.status).toBe('restored');
     });
   });
 

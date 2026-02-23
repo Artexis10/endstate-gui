@@ -11,7 +11,10 @@ import {
   reconcileLiveActivity,
   reasonToAction,
   getFailedItemMessage,
+  RESTORE_STATUS_MAP,
+  getRestoreUiStatus,
   type AppEvent,
+  type RestoreStatusKey,
 } from './apply-utils';
 import type { ApplyItem } from '../types';
 
@@ -740,6 +743,54 @@ describe('apply-utils', () => {
       expect(result).toHaveLength(2);
       expect(result.map(e => e.app)).toContain('App5');
       expect(result.map(e => e.app)).toContain('App6');
+    });
+  });
+
+  describe('RESTORE_STATUS_MAP', () => {
+    it('maps all expected restore statuses', () => {
+      const keys: RestoreStatusKey[] = ['restoring', 'restored', 'skipped_up_to_date', 'skipped_missing_source', 'failed'];
+      for (const key of keys) {
+        expect(RESTORE_STATUS_MAP[key]).toBeDefined();
+        expect(RESTORE_STATUS_MAP[key].shortLabel).toBeTruthy();
+        expect(RESTORE_STATUS_MAP[key].longLabel).toBeTruthy();
+        expect(RESTORE_STATUS_MAP[key].color).toBeTruthy();
+      }
+    });
+
+    it('restored maps to success color', () => {
+      expect(RESTORE_STATUS_MAP.restored.color).toBe('success');
+    });
+
+    it('failed maps to error color', () => {
+      expect(RESTORE_STATUS_MAP.failed.color).toBe('error');
+    });
+
+    it('skipped_up_to_date maps to muted color', () => {
+      expect(RESTORE_STATUS_MAP.skipped_up_to_date.color).toBe('muted');
+    });
+
+    it('skipped_missing_source maps to warn color', () => {
+      expect(RESTORE_STATUS_MAP.skipped_missing_source.color).toBe('warn');
+    });
+
+    it('restoring maps to info color', () => {
+      expect(RESTORE_STATUS_MAP.restoring.color).toBe('info');
+    });
+  });
+
+  describe('getRestoreUiStatus', () => {
+    it('returns correct config for each restore status', () => {
+      expect(getRestoreUiStatus('restored').shortLabel).toBe('RESTORED');
+      expect(getRestoreUiStatus('restoring').shortLabel).toBe('RESTORING');
+      expect(getRestoreUiStatus('skipped_up_to_date').shortLabel).toBe('UP TO DATE');
+      expect(getRestoreUiStatus('skipped_missing_source').shortLabel).toBe('MISSING');
+      expect(getRestoreUiStatus('failed').shortLabel).toBe('FAILED');
+    });
+
+    it('falls back to failed for unknown status', () => {
+      const result = getRestoreUiStatus('unknown_status' as RestoreStatusKey);
+      expect(result.shortLabel).toBe('FAILED');
+      expect(result.color).toBe('error');
     });
   });
 });
