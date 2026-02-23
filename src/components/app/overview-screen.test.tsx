@@ -87,7 +87,7 @@ describe('OverviewScreen - Setup Actions', () => {
     });
 
     await waitFor(() => {
-      expect(onSetup).toHaveBeenCalledWith('preview');
+      expect(onSetup).toHaveBeenCalledWith('preview', undefined);
     });
   });
 

@@ -7,7 +7,7 @@
  * @see openspec/specs/engine-capture-contract.md#invariants
  */
 
-import type { EndstateCaptureData, CapturedApp } from '../types';
+import type { EndstateCaptureData, CapturedApp, CaptureConfigModule } from '../types';
 import type { AppEvent } from './apply-utils';
 
 /**
@@ -124,6 +124,7 @@ export interface CaptureConfigData {
   configsIncluded?: string[];
   configsSkipped?: string[];
   configsCaptureErrors?: string[];
+  configModules?: CaptureConfigModule[];
 }
 
 /**
@@ -146,6 +147,7 @@ export function buildCaptureActionResult(
   configsIncluded?: string[];
   configsSkipped?: string[];
   configsCaptureErrors?: string[];
+  configModules?: CaptureConfigModule[];
 } {
   // Convert CapturedApp[] to AppEvents for modal display (INV-DETAILS-1)
   const appEvents = capturedAppsToAppEvents(capturedApps);
@@ -176,5 +178,6 @@ export function buildCaptureActionResult(
     configsIncluded: configData?.configsIncluded,
     configsSkipped: configData?.configsSkipped,
     configsCaptureErrors: configData?.configsCaptureErrors,
+    configModules: configData?.configModules,
   };
 }

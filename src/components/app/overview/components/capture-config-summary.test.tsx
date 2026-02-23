@@ -39,41 +39,44 @@ describe('CaptureConfigSummary', () => {
     expect(screen.getByTestId('config-none')).toHaveTextContent('No app settings captured');
   });
 
-  it('shows included configs with "Settings captured" heading', () => {
+  it('shows included configs as rows with "Captured" badge', () => {
     render(
       <CaptureConfigSummary actionResult={makeResult({
         outputFormat: 'zip',
         configsIncluded: ['vscode-extensions', 'terminal-settings'],
       })} />
     );
-    const section = screen.getByTestId('config-included');
-    expect(section).toHaveTextContent('Settings captured');
-    expect(section).toHaveTextContent('vscode-extensions');
-    expect(section).toHaveTextContent('terminal-settings');
+    const rows = screen.getAllByTestId('config-included');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('vscode-extensions');
+    expect(rows[0]).toHaveTextContent('Captured');
+    expect(rows[1]).toHaveTextContent('terminal-settings');
   });
 
-  it('shows skipped configs with "Settings skipped" heading', () => {
+  it('shows skipped configs as rows with "Skipped" badge', () => {
     render(
       <CaptureConfigSummary actionResult={makeResult({
         outputFormat: 'zip',
         configsSkipped: ['browser-data'],
       })} />
     );
-    const section = screen.getByTestId('config-skipped');
-    expect(section).toHaveTextContent('Settings skipped');
-    expect(section).toHaveTextContent('browser-data');
+    const rows = screen.getAllByTestId('config-skipped');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('browser-data');
+    expect(rows[0]).toHaveTextContent('Skipped');
   });
 
-  it('shows errored configs with "Settings errors" heading', () => {
+  it('shows errored configs as rows with "Error" badge', () => {
     render(
       <CaptureConfigSummary actionResult={makeResult({
         outputFormat: 'zip',
         configsCaptureErrors: ['git-config'],
       })} />
     );
-    const section = screen.getByTestId('config-errored');
-    expect(section).toHaveTextContent('Settings errors');
-    expect(section).toHaveTextContent('git-config');
+    const rows = screen.getAllByTestId('config-errored');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('git-config');
+    expect(rows[0]).toHaveTextContent('Error');
   });
 
   it('shows all three sections when mixed results', () => {
@@ -85,9 +88,9 @@ describe('CaptureConfigSummary', () => {
         configsCaptureErrors: ['git-config'],
       })} />
     );
-    expect(screen.getByTestId('config-included')).toBeInTheDocument();
-    expect(screen.getByTestId('config-skipped')).toBeInTheDocument();
-    expect(screen.getByTestId('config-errored')).toBeInTheDocument();
+    expect(screen.getAllByTestId('config-included')).toHaveLength(1);
+    expect(screen.getAllByTestId('config-skipped')).toHaveLength(1);
+    expect(screen.getAllByTestId('config-errored')).toHaveLength(1);
     expect(screen.queryByTestId('config-none')).not.toBeInTheDocument();
   });
 

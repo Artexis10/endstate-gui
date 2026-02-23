@@ -8,6 +8,8 @@ import {
   EndstateApplyData,
   EndstateCaptureData,
   EndstateApplyResultData,
+  type RestoreItem,
+  type RestoreSummary,
 } from './types';
 import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration, clearSelectedProfile } from './settings';
 import { saveDraft, loadDraft, clearDraft } from './lib/draft-store';
@@ -18,7 +20,7 @@ import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, type AppEvent, type UiPhase } from './lib/apply-utils';
-import { isItemEvent, isArtifactEvent, isPhaseEvent, type EnginePhase } from './lib/streaming-events';
+import { isItemEvent, isArtifactEvent, isPhaseEvent, isRestoreItemEvent, type EnginePhase } from './lib/streaming-events';
 import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
@@ -135,10 +137,18 @@ function AppContent() {
       missing?: number;
       total?: number;
       manifestTotal?: number; // Total apps in profile manifest (source of truth)
+      configsCaptured?: number;
+      configsSkipped?: number;
+      configsErrored?: number;
+      configsRestored?: number;
     };
     profile?: string;
     timestamp?: string;
     wasPreview?: boolean; // Track if this was a preview (for showing Apply button)
+    restoreItems?: RestoreItem[];
+    restoreSummary?: RestoreSummary;
+    restoreJournalFile?: string;
+    restoreModulesAvailable?: string[];
   }
   
   // Live counters during apply/preview
@@ -152,6 +162,9 @@ function AppContent() {
     alreadyPresent: number;
     skipped: number;
     failed: number;
+    configsRestored?: number;
+    configsSkipped?: number;
+    configsFailed?: number;
   }
   
   const [overviewRunningAction, setOverviewRunningAction] = useState<OverviewActionType>(null);
@@ -285,7 +298,7 @@ function AppContent() {
     // Clear live events/counters only if dismissing the currently running action
     if (actionToDismiss === overviewRunningAction) {
       setLiveAppEvents([]);
-      setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+      setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 });
     }
     
     // Also clear lastSavedProfileSummary for capture card dismissal
@@ -1095,38 +1108,49 @@ function AppContent() {
     const appsList = appsIncluded.map(a => a.id);
     
     // Read manifest content from temp file
+    // The engine may write to a different path than --out (e.g. ZIP format in Profiles dir),
+    // so we try multiple sources: --out path, envelope outputPath, then construct from envelope data.
     let draftText = '';
+    const envelopeOutputPath = envelopeData?.outputPath;
+
+    // Try 1: Read from the GUI-specified --out path (.jsonc)
     try {
       draftText = await invoke<string>('read_text_file', { path: outputPath });
-    } catch (err) {
-      console.error('Failed to read capture output:', err);
-      throw new Error('Failed to read capture output file. Please try again.');
+    } catch {
+      // File not found at --out path - try envelope's outputPath if different and is .jsonc
+      if (envelopeOutputPath && envelopeOutputPath !== outputPath && envelopeOutputPath.endsWith('.jsonc')) {
+        try {
+          draftText = await invoke<string>('read_text_file', { path: envelopeOutputPath });
+        } catch {
+          // Also not readable
+        }
+      }
     }
-    
+
+    // Try 2: If still empty and engine output is ZIP (bundle with configs), construct manifest from envelope data
+    if (!draftText && appsIncluded.length > 0) {
+      if (import.meta.env.DEV) {
+        console.log('[CAPTURE] Output file not readable, constructing manifest from envelope data');
+      }
+      const manifest = {
+        version: '1.0',
+        apps: appsIncluded.map(a => ({ source: a.source, id: a.id })),
+      };
+      draftText = JSON.stringify(manifest, null, 2);
+    }
+
     // Validate draft content is non-empty and contains manifest structure
     if (!draftText || draftText.trim() === '' || draftText.trim() === '{}') {
       throw new Error('Capture output is empty or invalid. Please try again.');
     }
-    
+
     // DEV INVESTIGATION: Log draftText to see if manifest contains apps
     if (import.meta.env.DEV) {
       console.log('[CAPTURE] draftText length:', draftText.length);
-      console.log(
-        '[CAPTURE] draftText contains apps key:',
-        /"apps"\s*:/.test(draftText)
-      );
-      console.log('[CAPTURE] draftText head:', draftText.slice(0, 300));
-      // Parse manifest to count apps directly from file
-      try {
-        const manifestJson = draftText.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-        const manifest = JSON.parse(manifestJson);
-        console.log('[CAPTURE] manifest.apps count from file:', manifest.apps?.length ?? 0);
-        console.log('[CAPTURE] outputPath (preserved for inspection):', outputPath);
-      } catch (e) {
-        console.warn('[CAPTURE] Failed to parse manifest for DEV inspection:', e);
-      }
+      console.log('[CAPTURE] outputPath:', outputPath);
+      console.log('[CAPTURE] envelope outputPath:', envelopeOutputPath);
     }
-    
+
     // Delete temp file immediately after reading (skip in DEV to allow inspection)
     if (!import.meta.env.DEV) {
       try {
@@ -1289,7 +1313,7 @@ function AppContent() {
     
     // Clear previous live events for fresh check run
     setLiveAppEvents([]);
-    setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+    setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 });
     
     // Use apply --dry-run for checking (same as preview)
     const checkResult = await runEngineStreaming<EndstateApplyData>(
@@ -1324,11 +1348,14 @@ function AppContent() {
             // Update live events for UI streaming
             setLiveAppEvents(checkAppEvents.length > 2000 ? checkAppEvents.slice(-2000) : [...checkAppEvents]);
             // Map verify counters to the existing counter structure
-            setLiveCounters({ 
-              installed: 0, 
-              alreadyPresent: counters.confirmed, 
-              skipped: counters.skipped, 
-              failed: counters.missing 
+            setLiveCounters({
+              installed: 0,
+              alreadyPresent: counters.confirmed,
+              skipped: counters.skipped,
+              failed: counters.missing,
+              configsRestored: 0,
+              configsSkipped: 0,
+              configsFailed: 0,
             });
             
             const uiStatus = getPhaseAwareStatusForEvent({
@@ -1387,7 +1414,7 @@ function AppContent() {
     return { missing, present, profile: selectedProfile, appEvents: collectedEvents };
   };
 
-  const handleApplyFromOverview = async () => {
+  const handleApplyFromOverview = async (restoreOptions?: { restoreIntent?: import('./types').RestoreIntent; selectedModules?: string[] }) => {
     if (!selectedProfile) {
       throw new Error('Please select a setup profile');
     }
@@ -1413,16 +1440,25 @@ function AppContent() {
     // Track apply live activity via NDJSON events
     const appEventList: AppEvent[] = [];
     const appEventIndex = new Map<string, number>();
-    const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 };
+    const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 };
     const verifyCounters = { confirmed: 0, missing: 0, total: 0 };
     let currentPhase: EnginePhase = 'apply';
     let hasInsertedApplyHeader = false;
     let hasInsertedVerifyHeader = false;
     
+    // Build apply command args with optional restore flags
+    const applyArgs = ['--profile', selectedProfilePath];
+    if (restoreOptions?.restoreIntent === 'apps-and-settings') {
+      applyArgs.push('--enable-restore');
+      if (restoreOptions.selectedModules && restoreOptions.selectedModules.length > 0) {
+        applyArgs.push('--restore-filter', restoreOptions.selectedModules.join(','));
+      }
+    }
+
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
       'apply',
-      ['--profile', selectedProfilePath],
+      applyArgs,
       (event: StreamEvent) => {
         // Collect raw output for Technical Details only
         if (event.type === 'stdout' || event.type === 'stderr') {
@@ -1537,6 +1573,43 @@ function AppContent() {
               });
             }
           }
+          // Handle restore-item events
+          else if (isRestoreItemEvent(ndjsonEvent)) {
+            // Map restore status to a display-friendly AppEvent
+            const statusLabel = ndjsonEvent.status === 'restored' ? 'RESTORED'
+              : ndjsonEvent.status === 'restoring' ? 'RESTORING'
+              : ndjsonEvent.status === 'skipped_up_to_date' ? 'UP TO DATE'
+              : ndjsonEvent.status === 'skipped_missing_source' ? 'MISSING'
+              : 'FAILED';
+            const restoreAppEvent: AppEvent = {
+              app: `\u2699 ${ndjsonEvent.module}/${ndjsonEvent.id}`,
+              action: statusLabel,
+              timestamp: Date.now(),
+              statusKey: ndjsonEvent.status === 'restored' ? 'installed'
+                : ndjsonEvent.status === 'restoring' ? 'installing'
+                : ndjsonEvent.status === 'failed' ? 'failed'
+                : 'skipped',
+              phase: 'apply',
+              reason: ndjsonEvent.reason,
+            };
+
+            // Always append (don't deduplicate restore items by id)
+            appEventList.push(restoreAppEvent);
+            setLiveAppEvents(appEventList.length > 2000 ? appEventList.slice(-2000) : [...appEventList]);
+
+            // Update restore counters
+            if (ndjsonEvent.status === 'restored') counters.configsRestored++;
+            else if (ndjsonEvent.status === 'skipped_up_to_date' || ndjsonEvent.status === 'skipped_missing_source') counters.configsSkipped++;
+            else if (ndjsonEvent.status === 'failed') counters.configsFailed++;
+            setLiveCounters({ ...counters });
+
+            // Update progress message
+            setOverviewActionProgress('setup', {
+              message: `Restoring: ${ndjsonEvent.module}`,
+              detail: `${counters.configsRestored} restored`,
+              phase: 'apply',
+            });
+          }
         },
       }
     );
@@ -1561,7 +1634,14 @@ function AppContent() {
     const failed = envelopeData?.counts?.failed ?? 0;
     const skipped = envelopeData?.counts?.skippedFiltered ?? 0;
     
-    setLiveCounters({ installed, alreadyPresent, skipped, failed });
+    // Extract restore counters from envelope
+    const restoreSummary = envelopeData?.restoreSummary;
+    setLiveCounters({
+      installed, alreadyPresent, skipped, failed,
+      configsRestored: restoreSummary?.restored ?? 0,
+      configsSkipped: restoreSummary?.skipped ?? 0,
+      configsFailed: restoreSummary?.failed ?? 0,
+    });
 
     // Determine success: envelope.success is authoritative
     // Partial failure = success:false but error:null with failed > 0
@@ -1633,7 +1713,15 @@ function AppContent() {
       });
     }
     
-    return { installed, alreadyPresent, failed, skipped, profile: selectedProfile, appEvents: reconciledEvents };
+    return {
+      installed, alreadyPresent, failed, skipped,
+      profile: selectedProfile,
+      appEvents: reconciledEvents,
+      restoreItems: envelopeData?.restoreItems,
+      restoreSummary,
+      restoreJournalFile: envelopeData?.restoreJournalFile,
+      restoreModulesAvailable: envelopeData?.restoreModulesAvailable,
+    };
   };
 
   useEffect(() => {
@@ -1894,16 +1982,17 @@ function AppContent() {
                     configsIncluded: result.envelopeData?.configsIncluded,
                     configsSkipped: result.envelopeData?.configsSkipped,
                     configsCaptureErrors: result.envelopeData?.configsCaptureErrors,
+                    configModules: result.envelopeData?.configModules,
                   }));
                   
                   // Prompt for profile name after state is set
                   await promptForProfileName('');
                 } catch (err) {
                   setOverviewActionStatus('capture', 'error');
-                  setOverviewActionResult('capture', { 
-                    action: 'capture', 
-                    status: 'error', 
-                    summary: err instanceof Error ? err.message : 'Capture failed' 
+                  setOverviewActionResult('capture', {
+                    action: 'capture',
+                    status: 'error',
+                    summary: err instanceof Error ? err.message : 'Capture failed'
                   });
                 } finally {
                   if (import.meta.env.DEV) {
@@ -1916,7 +2005,7 @@ function AppContent() {
                   setOverviewRunningAction(null);
                 }
               }}
-              onSetup={async (intent: 'preview' | 'apply') => {
+              onSetup={async (intent: 'preview' | 'apply', restoreOptions?: import('./components/app/overview/types').RestoreOptions) => {
                 // Double-run guard with runId
                 const runId = `setup-${intent}-${Date.now()}`;
                 if (isRunning || isRunningRef.current || activeRunIdRef.current) {
@@ -1933,7 +2022,7 @@ function AppContent() {
                   console.log(`[RUN START] Setup ${intent} runId=${runId}`);
                 }
                 setLiveAppEvents([]);
-                setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+                setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 });
                 
                 // CRITICAL: Set runningAction BEFORE calling helper functions
                 // The helpers check if overviewRunningAction exists before updating state
@@ -1947,16 +2036,23 @@ function AppContent() {
                 });
                 try {
                   if (isApply) {
-                    const result = await handleApplyFromOverview();
+                    const result = await handleApplyFromOverview(restoreOptions);
                     // Set status based on whether there were failures
                     const hasFailures = result.failed > 0;
                     setOverviewActionStatus('setup', hasFailures ? 'error' : 'success');
-                    setOverviewActionResult('setup', { 
-                      action: 'setup', 
-                      status: hasFailures ? 'error' : 'success', 
-                      summary: hasFailures 
-                        ? `${result.installed} installed, ${result.failed} failed`
-                        : `${result.installed} installed, ${result.alreadyPresent} already present`,
+                    // Build summary including restore info if present
+                    const restoreCount = result.restoreSummary?.restored ?? 0;
+                    const baseSummary = hasFailures
+                      ? `${result.installed} installed, ${result.failed} failed`
+                      : `${result.installed} installed, ${result.alreadyPresent} already present`;
+                    const fullSummary = restoreCount > 0
+                      ? `${baseSummary}, ${restoreCount} settings restored`
+                      : baseSummary;
+
+                    setOverviewActionResult('setup', {
+                      action: 'setup',
+                      status: hasFailures ? 'error' : 'success',
+                      summary: fullSummary,
                       profile: result.profile,
                       timestamp: new Date().toISOString(),
                       counts: {
@@ -1965,8 +2061,15 @@ function AppContent() {
                         skipped: result.skipped,
                         failed: result.failed,
                         manifestTotal: result.installed + result.alreadyPresent + result.skipped + result.failed,
+                        configsRestored: result.restoreSummary?.restored,
+                        configsSkipped: result.restoreSummary?.skipped,
+                        configsErrored: result.restoreSummary?.failed,
                       },
                       appEvents: result.appEvents,
+                      restoreItems: result.restoreItems,
+                      restoreSummary: result.restoreSummary,
+                      restoreJournalFile: result.restoreJournalFile,
+                      restoreModulesAvailable: result.restoreModulesAvailable,
                     });
                   } else {
                     const result = await handlePreviewFromOverview();
@@ -2803,10 +2906,9 @@ function AppContent() {
                 </DialogDescription>
               </DialogHeader>
               <div className="py-4 space-y-3">
-            {/* Draft info in save mode - drafts are store-based, no file path */}
+            {/* Capture summary in save mode */}
             {profileNameModalMode === 'save' && pendingCaptureDraft && settings.showDetails && (
               <div className="p-2 bg-muted/30 rounded text-xs">
-                <span className="text-muted-foreground">Draft: </span>
                 <span className="font-mono">{pendingCaptureDraft.capturedAppsCount} apps captured</span>
               </div>
             )}

@@ -148,6 +148,8 @@ export interface EndstateCaptureData {
   configsSkipped?: string[];
   /** Config module IDs with capture errors */
   configsCaptureErrors?: string[];
+  /** Structured config module metadata (engine-provided appId associations) */
+  configModules?: CaptureConfigModule[];
 }
 
 export interface ApplyItem {
@@ -175,4 +177,59 @@ export interface EndstateApplyResultData {
   dryRun?: boolean;
   counts?: ApplyCounts;
   items?: ApplyItem[];
+  restoreItems?: RestoreItem[];
+  restoreSummary?: RestoreSummary;
+  restoreJournalFile?: string;
+  restoreFilter?: string[];
+  restoreModulesAvailable?: string[];
 }
+
+/** Restore item from NDJSON events and JSON envelope */
+export interface RestoreItem {
+  id: string;
+  module: string;
+  restorer: 'copy' | 'merge-json' | 'merge-ini' | 'append';
+  source: string;
+  target: string;
+  status: RestoreItemStatus;
+  reason: string | null;
+  backupPath: string | null;
+  targetExisted: boolean;
+  message: string | null;
+}
+
+export type RestoreItemStatus =
+  | 'restoring'
+  | 'restored'
+  | 'skipped_up_to_date'
+  | 'skipped_missing_source'
+  | 'failed';
+
+/** Restore summary from JSON envelope */
+export interface RestoreSummary {
+  total: number;
+  restored: number;
+  skipped: number;
+  failed: number;
+  backupLocation: string | null;
+}
+
+/** Config module metadata from capture envelope */
+export interface ConfigModuleInfo {
+  id: string;
+  displayName: string;
+  entries: number;
+  files: string[];
+}
+
+/** Structured config module metadata from capture envelope (when --WithConfig used) */
+export interface CaptureConfigModule {
+  id: string;
+  appId: string;
+  displayName: string;
+  status: 'captured' | 'skipped' | 'error';
+  filesCaptured: number;
+}
+
+/** Restore intent — controls --EnableRestore flag */
+export type RestoreIntent = 'apps-only' | 'apps-and-settings';

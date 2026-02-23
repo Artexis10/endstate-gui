@@ -22,12 +22,13 @@ import {
 import { getLastEvent, formatLastEventSummary } from '../selectors';
 import { LiveActivityPanel } from './live-activity-panel';
 import { CaptureStatusStrip } from './capture-status-strip';
-import type { 
-  ActionType, 
-  ActionStatus, 
-  ActionProgress, 
-  ActionResult, 
+import type {
+  ActionType,
+  ActionStatus,
+  ActionProgress,
+  ActionResult,
   SetupIntent,
+  RestoreOptions,
   LiveCounters,
 } from '../types';
 
@@ -42,6 +43,7 @@ interface ActionExpandedContentProps {
   hasProfile: boolean;
   setupIntent: SetupIntent;
   setSetupIntent: (intent: SetupIntent) => void;
+  restoreIntent?: import('@/types').RestoreIntent;
   liveAppEvents: AppEvent[];
   liveCounters?: LiveCounters;
   activityExpanded: boolean;
@@ -54,7 +56,7 @@ interface ActionExpandedContentProps {
   onExecuteAction: (action: ActionType) => void;
   onDismiss: (action: 'capture' | 'setup' | 'check') => void;
   onDismissResult: (action?: 'capture' | 'setup' | 'check') => void;
-  onSetup: (intent: SetupIntent) => void;
+  onSetup: (intent: SetupIntent, restoreOptions?: RestoreOptions) => void;
   onCapture: () => void;
   onShowDetails: () => void;
   // Capture-specific props
@@ -106,6 +108,7 @@ export function ActionExpandedContent({
   hasProfile,
   setupIntent,
   setSetupIntent,
+  restoreIntent,
   liveAppEvents,
   liveCounters,
   activityExpanded,
@@ -436,7 +439,7 @@ export function ActionExpandedContent({
                 e.stopPropagation();
                 // For setup, call onSetup directly to pass intent; otherwise use onExecuteAction
                 if (action === 'setup') {
-                  onSetup(setupIntent);
+                  onSetup(setupIntent, restoreIntent ? { restoreIntent } : undefined);
                 } else {
                   onExecuteAction(action);
                 }
@@ -480,7 +483,7 @@ export function ActionExpandedContent({
                   onDismissResult();
                   setSetupIntent('apply');
                   // Small delay to ensure state is reset before triggering
-                  setTimeout(() => onSetup('apply'), 50);
+                  setTimeout(() => onSetup('apply', restoreIntent ? { restoreIntent } : undefined), 50);
                 }}
               >
                 <Zap className="h-3 w-3 mr-1.5" />
@@ -511,7 +514,7 @@ export function ActionExpandedContent({
                   e.stopPropagation();
                   onDismissResult();
                   // Small delay to ensure state is reset before triggering
-                  setTimeout(() => onSetup(setupIntent), 50);
+                  setTimeout(() => onSetup(setupIntent, restoreIntent ? { restoreIntent } : undefined), 50);
                 }}
               >
                 Run again

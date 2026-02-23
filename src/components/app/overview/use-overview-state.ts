@@ -3,7 +3,8 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import type { ActionType, ActiveFlow, SetupIntent, ActionProgress } from './types';
+import type { RestoreIntent } from '@/types';
+import type { ActionType, ActiveFlow, SetupIntent, RestoreOptions, ActionProgress } from './types';
 
 interface UseOverviewStateProps {
   isRunning: boolean;
@@ -12,7 +13,7 @@ interface UseOverviewStateProps {
   actionProgress: ActionProgress | null;
   onClearExpandedCard?: () => void;
   onCapture: () => void;
-  onSetup: (intent: SetupIntent) => void;
+  onSetup: (intent: SetupIntent, restoreOptions?: RestoreOptions) => void;
   onCheck: () => void;
   onDismissResult: (action?: 'capture' | 'setup' | 'check') => void;
 }
@@ -23,6 +24,8 @@ interface UseOverviewStateReturn {
   setActiveFlow: (flow: ActiveFlow) => void;
   setupIntent: SetupIntent;
   setSetupIntent: (intent: SetupIntent) => void;
+  restoreIntent: RestoreIntent;
+  setRestoreIntent: (intent: RestoreIntent) => void;
   detailsModalOpen: boolean;
   setDetailsModalOpen: (open: boolean) => void;
   activityExpanded: boolean;
@@ -69,6 +72,7 @@ export function useOverviewState({
     return 'none';
   });
   const [setupIntent, setSetupIntent] = useState<SetupIntent>('preview');
+  const [restoreIntent, setRestoreIntent] = useState<RestoreIntent>('apps-only');
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(false);
   const [manageProfilesOpen, setManageProfilesOpen] = useState(false);
@@ -141,7 +145,7 @@ export function useOverviewState({
     if (action === 'capture') {
       onCapture();
     } else if (action === 'setup') {
-      onSetup(setupIntent);
+      onSetup(setupIntent, { restoreIntent });
     } else if (action === 'check') {
       onCheck();
     }
@@ -158,6 +162,8 @@ export function useOverviewState({
     setActiveFlow,
     setupIntent,
     setSetupIntent,
+    restoreIntent,
+    setRestoreIntent,
     detailsModalOpen,
     setDetailsModalOpen,
     activityExpanded,

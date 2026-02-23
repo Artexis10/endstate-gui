@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProviders, screen, waitFor } from '../../test/test-utils';
 import { seedLocalStorage } from '../../test/localStorage-helpers';
 import { ApplyResultModal } from './apply-result-modal';
-import type { ApplyItem, ApplyCounts } from '../../types';
+import type { ApplyItem, ApplyCounts, RestoreSummary } from '../../types';
 
 // Mock useShowDetails to control Details visibility in tests
 vi.mock('@/lib/use-show-details', () => ({
@@ -226,6 +226,77 @@ describe('ApplyResultModal', () => {
 
       const applyButton = screen.getByRole('button', { name: /applying/i });
       expect(applyButton).toBeDisabled();
+    });
+  });
+
+  describe('Restore section', () => {
+    const restoreSummary: RestoreSummary = {
+      total: 5,
+      restored: 3,
+      skipped: 1,
+      failed: 1,
+      backupLocation: 'C:\\backups\\2025-01-01',
+    };
+
+    const applyProps = {
+      ...defaultProps,
+      isDryRun: false,
+      counts: { total: 2, installed: 1, alreadyInstalled: 1, skippedFiltered: 0, failed: 0 },
+      items: [
+        { id: 'App1', driver: 'winget', status: 'ok' as const, reason: 'installed' },
+        { id: 'App2', driver: 'winget', status: 'skipped' as const, reason: 'already_installed' },
+      ],
+    };
+
+    it('shows restore summary when restoreSummary is provided', () => {
+      renderWithProviders(
+        <ApplyResultModal {...applyProps} restoreSummary={restoreSummary} />
+      );
+
+      expect(screen.getByText('Settings')).toBeInTheDocument();
+      expect(screen.getByText('3')).toBeInTheDocument(); // restored count
+    });
+
+    it('shows backup location', () => {
+      renderWithProviders(
+        <ApplyResultModal {...applyProps} restoreSummary={restoreSummary} />
+      );
+
+      expect(screen.getByText(/C:\\backups\\2025-01-01/)).toBeInTheDocument();
+    });
+
+    it('does not show restore section when restoreSummary is absent', () => {
+      renderWithProviders(<ApplyResultModal {...applyProps} />);
+
+      expect(screen.queryByText('Settings')).not.toBeInTheDocument();
+    });
+
+    it('shows revert button when restoreSummary has restorations and onRevertSettings is provided', () => {
+      const onRevert = vi.fn();
+      renderWithProviders(
+        <ApplyResultModal
+          {...applyProps}
+          restoreSummary={restoreSummary}
+          onRevertSettings={onRevert}
+        />
+      );
+
+      const revertBtn = screen.getByRole('button', { name: /revert settings/i });
+      expect(revertBtn).toBeInTheDocument();
+      revertBtn.click();
+      expect(onRevert).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not show revert button in preview mode', () => {
+      renderWithProviders(
+        <ApplyResultModal
+          {...defaultProps}
+          restoreSummary={restoreSummary}
+          onRevertSettings={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByRole('button', { name: /revert settings/i })).not.toBeInTheDocument();
     });
   });
 });

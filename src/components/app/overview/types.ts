@@ -5,11 +5,18 @@
 import type { UiPhase, AppEvent } from '@/lib/apply-utils';
 import type { LifecycleState } from '@/lib/lifecycle-state';
 import type { DiscoveredProfile } from '@/file-discovery';
+import type { RestoreItem, RestoreSummary, RestoreIntent, CaptureConfigModule } from '@/types';
 
 export type ActionType = 'capture' | 'setup' | 'check' | null;
 export type ActionStatus = 'idle' | 'running' | 'success' | 'error';
 export type SetupIntent = 'preview' | 'apply';
 export type ActiveFlow = 'none' | 'capture' | 'setup';
+
+/** Options for config restore during apply */
+export interface RestoreOptions {
+  restoreIntent: RestoreIntent;
+  selectedModules?: string[];
+}
 
 export interface ActionProgress {
   message: string;
@@ -35,6 +42,7 @@ export interface ActionResult {
     configsCaptured?: number;
     configsSkipped?: number;
     configsErrored?: number;
+    configsRestored?: number;
   };
   profile?: string;
   timestamp?: string;
@@ -47,6 +55,16 @@ export interface ActionResult {
   configsSkipped?: string[];
   /** Config module IDs with capture errors */
   configsCaptureErrors?: string[];
+  /** Restore items from apply envelope (when --EnableRestore was active) */
+  restoreItems?: RestoreItem[];
+  /** Restore summary from apply envelope */
+  restoreSummary?: RestoreSummary;
+  /** Path to restore journal file for revert */
+  restoreJournalFile?: string;
+  /** Available config modules in the profile */
+  restoreModulesAvailable?: string[];
+  /** Structured config module metadata from capture envelope */
+  configModules?: CaptureConfigModule[];
 }
 
 export interface LiveCounters {
@@ -54,6 +72,9 @@ export interface LiveCounters {
   alreadyPresent: number;
   skipped: number;
   failed: number;
+  configsRestored?: number;
+  configsSkipped?: number;
+  configsFailed?: number;
 }
 
 export interface OverviewScreenProps {
@@ -81,7 +102,7 @@ export interface OverviewScreenProps {
   } | null;
   onNavigate: (page: 'report' | 'settings') => void;
   onCapture: () => void;
-  onSetup: (intent: SetupIntent) => void;
+  onSetup: (intent: SetupIntent, restoreOptions?: RestoreOptions) => void;
   onCheck: () => void;
   onProfileChange: (profile: string, path: string) => void;
   onDismissResult: () => void;
