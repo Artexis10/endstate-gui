@@ -13,14 +13,99 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { formatRelativeTime } from '@/lib/lifecycle-state';
-import { 
-  type AppEvent, 
+import {
+  type AppEvent,
   type StatusKey,
   getColorClasses,
   getPhaseAwareStatusForEvent,
 } from '@/lib/apply-utils';
 import type { ActionResult, ActionProgress } from '../types';
-import { CaptureConfigSummary } from './capture-config-summary';
+
+type ConfigStatus = 'captured' | 'errored';
+
+type FilterValue = StatusKey | 'config' | null;
+
+/**
+ * Legacy heuristic: match a config module ID to an app ID by substring.
+ * Used as fallback when engine does not provide configModules with appId.
+ */
+function configMatchesAppLegacy(configId: string, appId: string): boolean {
+  const configWords = configId.toLowerCase().split('-');
+  const appSegments = appId.split('.').map(s => s.toLowerCase());
+
+  for (const word of configWords) {
+    if (word.length < 3) continue;
+    for (const segment of appSegments) {
+      if (segment.includes(word) || word.includes(segment)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Build a map of appId → config statuses.
+ * Prefers engine-provided configModules (with explicit appId) when available.
+ * Falls back to legacy substring heuristic for older engines.
+ */
+function buildConfigMap(
+  actionResult: ActionResult,
+  appIds: string[],
+): { matched: Map<string, { configId: string; status: ConfigStatus }[]>; unmatched: { id: string; status: ConfigStatus }[] } {
+  const matched = new Map<string, { configId: string; status: ConfigStatus }[]>();
+  const unmatched: { id: string; status: ConfigStatus }[] = [];
+
+  // Prefer structured configModules (engine-provided appId)
+  if (actionResult.configModules && actionResult.configModules.length > 0) {
+    for (const mod of actionResult.configModules) {
+      if (mod.status === 'skipped') continue;
+
+      const configStatus: ConfigStatus = mod.status === 'error' ? 'errored' : 'captured';
+
+      // Prefer exact match via wingetRefs, fallback to appId substring heuristic
+      const matchedApp = (
+        mod.wingetRefs?.length
+          ? appIds.find(aid => mod.wingetRefs!.some(ref => ref.toLowerCase() === aid.toLowerCase()))
+          : null
+      ) ?? appIds.find(aid => {
+        const segments = aid.toLowerCase().split('.');
+        const modAppId = mod.appId.toLowerCase();
+        return segments.some(seg => seg === modAppId || modAppId.includes(seg) || seg.includes(modAppId));
+      });
+
+      if (matchedApp) {
+        const existing = matched.get(matchedApp) ?? [];
+        existing.push({ configId: mod.id, status: configStatus });
+        matched.set(matchedApp, existing);
+      } else {
+        unmatched.push({ id: mod.displayName || mod.id, status: configStatus });
+      }
+    }
+    return { matched, unmatched };
+  }
+
+  // Fallback: legacy heuristic for engines without configModules
+  const configsIncluded = actionResult.configsIncluded ?? [];
+  const configsErrored = actionResult.configsCaptureErrors ?? [];
+  const allConfigs: { id: string; status: ConfigStatus }[] = [
+    ...configsIncluded.map(id => ({ id, status: 'captured' as const })),
+    ...configsErrored.map(id => ({ id, status: 'errored' as const })),
+  ];
+
+  for (const config of allConfigs) {
+    const matchedApp = appIds.find(appId => configMatchesAppLegacy(config.id, appId));
+    if (matchedApp) {
+      const existing = matched.get(matchedApp) ?? [];
+      existing.push({ configId: config.id, status: config.status });
+      matched.set(matchedApp, existing);
+    } else {
+      unmatched.push(config);
+    }
+  }
+
+  return { matched, unmatched };
+}
 
 interface ActionDetailsModalProps {
   open: boolean;
@@ -35,7 +120,7 @@ export function ActionDetailsModal({
   actionResult,
   actionProgress,
 }: ActionDetailsModalProps) {
-  const [detailsFilter, setDetailsFilter] = useState<StatusKey | 'all' | null>(null);
+  const [detailsFilter, setDetailsFilter] = useState<FilterValue>(null);
 
   const handleOpenChange = (newOpen: boolean) => {
     onOpenChange(newOpen);
@@ -160,23 +245,43 @@ export function ActionDetailsModal({
                     Missing: {actionResult.counts.missing}
                   </button>
                 )}
+                {actionResult.counts.configsCaptured !== undefined && actionResult.counts.configsCaptured > 0 && (
+                  <button
+                    role="tab"
+                    aria-selected={detailsFilter === 'config'}
+                    onClick={() => setDetailsFilter(detailsFilter === 'config' ? null : 'config')}
+                    className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                      detailsFilter === 'config' ? 'ring-2 ring-violet-500/40' : ''
+                    } ${detailsFilter && detailsFilter !== 'config' ? 'opacity-50' : ''} bg-violet-500/10 text-violet-600 dark:text-violet-400`}
+                  >
+                    Settings: {actionResult.counts.configsCaptured}
+                  </button>
+                )}
               </div>
             )}
           </div>
         )}
         
-        {/* App events list - scrollable section with proper constraints */}
+        {/* Unified list: app events with inline config badges */}
         {actionResult?.appEvents && actionResult.appEvents.length > 0 && (() => {
           // Filter out phase header events from the list
-          const itemEvents = actionResult.appEvents.filter(e => 
+          const itemEvents = actionResult.appEvents.filter(e =>
             e.app !== '── APPLY ──' && e.app !== '── VERIFY ──'
           );
-          
-          // Filter events based on selected filter (using canonical statusKey)
-          const filteredEvents = detailsFilter
+
+          // Build config → app matching map for capture results
+          const hasConfigs = actionResult.action === 'capture' && actionResult.outputFormat === 'zip';
+          const configMap = hasConfigs
+            ? buildConfigMap(actionResult, itemEvents.map(e => e.app))
+            : { matched: new Map<string, { configId: string; status: ConfigStatus }[]>(), unmatched: [] as { id: string; status: ConfigStatus }[] };
+
+          // When filtering to config only, show only apps that have matched configs + unmatched
+          const filteredEvents = (detailsFilter && detailsFilter !== 'config')
             ? itemEvents.filter(e => deriveStatusKey(e) === detailsFilter)
-            : itemEvents;
-          
+            : detailsFilter === 'config'
+              ? itemEvents.filter(e => configMap.matched.has(e.app))
+              : itemEvents;
+
           // Sort: failed/missing first, then to_install, then installed, then OK/skipped/others
           const sortedEvents = [
             ...filteredEvents.filter(e => e.statusKey === 'failed' || e.action === 'Failed'),
@@ -186,58 +291,82 @@ export function ActionDetailsModal({
             ...filteredEvents.filter(e => e.statusKey === 'present' || e.action === 'OK'),
             ...filteredEvents.filter(e => !['failed', 'to_install', 'installed', 'present'].includes(e.statusKey || '') && !['Failed', 'Missing', 'Installed', 'OK'].includes(e.action)),
           ];
-          
-          // Deduplicate sorted events (in case of overlapping filters)
+
+          // Deduplicate sorted events
           const seenApps = new Set<string>();
           const uniqueSortedEvents = sortedEvents.filter(e => {
             if (seenApps.has(e.app)) return false;
             seenApps.add(e.app);
             return true;
           });
-          
-          // Calculate totals: use manifestTotal if available, otherwise show count only
+
+          // Unmatched configs shown as standalone rows (only when not filtering to a non-config status)
+          const showUnmatched = !detailsFilter || detailsFilter === 'config';
+
+          // Calculate totals
           const manifestTotal = actionResult.counts?.manifestTotal;
-          const shownCount = uniqueSortedEvents.length;
-          
-          
+          const appCount = uniqueSortedEvents.length;
+
           return (
             <div className="flex-1 min-h-0 flex flex-col">
               <div className="flex-shrink-0 mb-2">
                 <p className="text-xs text-muted-foreground">
-                  {manifestTotal !== undefined 
-                    ? `Apps (${shownCount} of ${manifestTotal})`
-                    : `Apps (${shownCount})`}
+                  {manifestTotal !== undefined
+                    ? `Apps (${appCount} of ${manifestTotal})`
+                    : `Apps (${appCount})`}
                 </p>
               </div>
               <div className="flex-1 min-h-0 max-h-[55vh] overflow-y-auto rounded-md border border-border" data-testid="action-details-apps-list">
                 <div className="divide-y divide-border">
                   {uniqueSortedEvents.map((event, i) => {
-                    // Use canonical statusKey derivation (same as filter logic)
                     const statusKey = deriveStatusKey(event);
-                    // Use phase-aware status with reason for correct labels per phase
                     const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: event.phase, reason: event.reason });
                     const colors = getColorClasses(uiStatus.color);
-                    
+                    const appConfigs = configMap.matched.get(event.app);
+
                     return (
-                      <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
+                      <div key={`app-${i}`} className="flex items-center justify-between px-3 py-2 text-xs">
                         <span className="font-mono truncate flex-1">{event.app}</span>
-                        <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap min-w-fit ${colors.bg} ${colors.text}`}>
-                          {/* Use long label for modal display */}
-                          {uiStatus.longLabel}
-                        </span>
+                        <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                          {appConfigs?.map(cfg => (
+                            <span
+                              key={cfg.configId}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${
+                                cfg.status === 'captured'
+                                  ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                                  : 'bg-danger/10 text-danger'
+                              }`}
+                              data-testid={`config-${cfg.status}`}
+                              title={cfg.configId}
+                            >
+                              {cfg.status === 'captured' ? 'Settings' : 'Settings error'}
+                            </span>
+                          ))}
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap min-w-fit ${colors.bg} ${colors.text}`}>
+                            {uiStatus.longLabel}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
+                  {/* Unmatched config modules (no app match found) */}
+                  {showUnmatched && configMap.unmatched.map(cfg => (
+                    <div key={`cfg-${cfg.id}`} className="flex items-center justify-between px-3 py-2 text-xs" data-testid={`config-${cfg.status}`}>
+                      <span className="font-mono truncate flex-1">{cfg.id}</span>
+                      <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap min-w-fit ${
+                        cfg.status === 'captured'
+                          ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                          : 'bg-danger/10 text-danger'
+                      }`}>
+                        {cfg.status === 'captured' ? 'Settings' : 'Settings error'}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           );
         })()}
-
-        {/* Config module summary for capture results */}
-        {actionResult?.action === 'capture' && actionResult.outputFormat === 'zip' && (
-          <CaptureConfigSummary actionResult={actionResult} />
-        )}
 
         {/* Fallback if no app events */}
         {(!actionResult?.appEvents || actionResult.appEvents.length === 0) && actionResult?.status === 'success' && (

@@ -229,6 +229,8 @@ export interface CaptureConfigModule {
   displayName: string;
   status: 'captured' | 'skipped' | 'error';
   filesCaptured: number;
+  /** Winget package IDs for exact matching against app events (e.g., ["Microsoft.VisualStudioCode"]) */
+  wingetRefs?: string[];
 }
 
 /** Restore intent — controls --EnableRestore flag */
