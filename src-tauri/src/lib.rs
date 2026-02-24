@@ -332,6 +332,175 @@ fn ensure_dir(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Extract a zip file into the profiles directory.
+///
+/// Creates a subfolder named after the zip file (without extension),
+/// extracts all contents into it, and returns the folder path.
+///
+/// # Arguments
+/// * `zip_path` - Path to the zip file to extract
+/// * `profiles_dir` - Destination profiles directory
+///
+/// # Returns
+/// * `Ok(String)` - Path to the extracted folder
+/// * `Err(String)` - Failed to extract
+#[tauri::command]
+fn extract_zip_profile(zip_path: String, profiles_dir: String) -> Result<String, String> {
+    use std::path::Path;
+    use std::io::Read;
+
+    let source = Path::new(&zip_path);
+    let dest_dir = Path::new(&profiles_dir);
+
+    if !source.exists() || !source.is_file() {
+        return Err("Zip file does not exist".to_string());
+    }
+
+    // Derive folder name from zip filename (without extension)
+    let stem = source
+        .file_stem()
+        .ok_or_else(|| "Invalid zip file name".to_string())?
+        .to_str()
+        .ok_or_else(|| "Invalid file name encoding".to_string())?;
+
+    let extract_dir = dest_dir.join(stem);
+
+    // Collision avoidance: if folder exists, add suffix
+    let mut final_dir = extract_dir.clone();
+    let mut suffix = 1u32;
+    while final_dir.exists() {
+        final_dir = dest_dir.join(format!("{}_{}", stem, suffix));
+        suffix += 1;
+        if suffix > 100 {
+            return Err("Too many collisions for folder name".to_string());
+        }
+    }
+
+    fs::create_dir_all(&final_dir)
+        .map_err(|e| format!("Failed to create extraction directory: {}", e))?;
+
+    // Open and extract the zip
+    let file = fs::File::open(source)
+        .map_err(|e| format!("Failed to open zip file: {}", e))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("Failed to read zip archive: {}", e))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)
+            .map_err(|e| format!("Failed to read zip entry: {}", e))?;
+
+        let entry_name = entry.name().to_string();
+
+        // Security: reject entries with path traversal
+        if entry_name.contains("..") {
+            continue;
+        }
+
+        let out_path = final_dir.join(&entry_name);
+
+        if entry.is_dir() {
+            fs::create_dir_all(&out_path)
+                .map_err(|e| format!("Failed to create directory {}: {}", entry_name, e))?;
+        } else {
+            // Ensure parent directory exists
+            if let Some(parent) = out_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create parent dir: {}", e))?;
+            }
+            let mut buf = Vec::new();
+            entry.read_to_end(&mut buf)
+                .map_err(|e| format!("Failed to read zip entry {}: {}", entry_name, e))?;
+            fs::write(&out_path, &buf)
+                .map_err(|e| format!("Failed to write {}: {}", entry_name, e))?;
+        }
+    }
+
+    final_dir
+        .to_str()
+        .ok_or_else(|| "Invalid path encoding".to_string())
+        .map(|s| s.to_string())
+}
+
+/// Import a zip file from base64-encoded data.
+///
+/// Decodes base64 data, writes to a temp file, extracts to the profiles
+/// directory, and cleans up the temp file.
+///
+/// # Arguments
+/// * `data` - Base64-encoded zip file content
+/// * `file_name` - Original file name (used for folder naming)
+/// * `profiles_dir` - Destination profiles directory
+///
+/// # Returns
+/// * `Ok(String)` - Path to the extracted folder
+/// * `Err(String)` - Failed to import
+#[tauri::command]
+fn import_zip_from_base64(data: String, file_name: String, profiles_dir: String) -> Result<String, String> {
+    use base64::Engine;
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&data)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+    // Write to temp file
+    let local_data = dirs::data_local_dir()
+        .ok_or_else(|| "Cannot determine local data directory".to_string())?;
+    let temp_dir = local_data.join("Endstate").join("cache").join("imports");
+    fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
+    let temp_path = temp_dir.join(&file_name);
+    fs::write(&temp_path, &bytes)
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    // Extract using existing function
+    let result = extract_zip_profile(
+        temp_path.to_str().unwrap_or_default().to_string(),
+        profiles_dir,
+    );
+
+    // Clean up temp file
+    let _ = fs::remove_file(&temp_path);
+
+    result
+}
+
+/// Show a file save dialog for choosing where to save a file.
+///
+/// # Arguments
+/// * `default_name` - Default file name suggestion
+/// * `filter_name` - Display name for the file type filter
+/// * `filter_ext` - File extension for the filter (e.g., "jsonc")
+///
+/// # Returns
+/// * `Ok(Some(String))` - Selected save path
+/// * `Ok(None)` - User cancelled
+#[tauri::command]
+fn show_save_dialog(default_name: String, filter_name: String, filter_ext: String) -> Result<Option<String>, String> {
+    use std::process::Command;
+
+    // Use PowerShell SaveFileDialog
+    let script = format!(
+        r#"Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.SaveFileDialog; $d.FileName = '{}'; $d.Filter = '{} (*.{})|*.{}|All files (*.*)|*.*'; $d.Title = 'Save File'; if ($d.ShowDialog() -eq 'OK') {{ $d.FileName }} else {{ '' }}"#,
+        default_name.replace("'", "''"),
+        filter_name.replace("'", "''"),
+        filter_ext,
+        filter_ext
+    );
+
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+        .map_err(|e| format!("Failed to run PowerShell: {}", e))?;
+
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    if path.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(path))
+    }
+}
+
 /// Copy a file to the profiles directory.
 ///
 /// # Arguments
@@ -1174,7 +1343,10 @@ pub fn run() {
             get_capture_cache_directory,
             ensure_dir,
             import_profile,
+            extract_zip_profile,
+            import_zip_from_base64,
             show_file_dialog,
+            show_save_dialog,
             open_folder,
             read_text_file,
             write_text_file,

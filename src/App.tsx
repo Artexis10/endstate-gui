@@ -87,6 +87,16 @@ function AppContent() {
   const [profilesDirectory, setProfilesDirectory] = useState('');
   const [selectedProfile, setSelectedProfile] = useState('');
   const [selectedProfilePath, setSelectedProfilePath] = useState('');
+  // Refs for immediate access in async callbacks (avoid stale closures)
+  const selectedProfileRef = useRef(selectedProfile);
+  const selectedProfilePathRef = useRef(selectedProfilePath);
+  // Helper: update profile state + refs atomically
+  const setProfileSelection = (name: string, path: string) => {
+    selectedProfileRef.current = name;
+    selectedProfilePathRef.current = path;
+    setSelectedProfile(name);
+    setSelectedProfilePath(path);
+  };
   
   const [state, setState] = useState<AppState>({
     status: 'loading',
@@ -426,6 +436,51 @@ function AppContent() {
         console.error('Failed to open folder:', err);
       }
     }
+  };
+
+  // Handle file drops from the Setup flow drop zone (ADR-001)
+  const handleFileDrop = async (files: File[]) => {
+    if (!profilesDirectory) {
+      showToast('Profiles directory not available', 'error');
+      return;
+    }
+
+    await ensureDirectory(profilesDirectory);
+
+    for (const file of files) {
+      const fileName = file.name.toLowerCase();
+      try {
+        if (fileName.endsWith('.zip')) {
+          // Zip files: encode as base64, send to Rust for extraction
+          const arrayBuf = await file.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuf);
+          // Convert to base64
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const base64Data = btoa(binary);
+          await invoke<string>('import_zip_from_base64', {
+            data: base64Data,
+            fileName: file.name,
+            profilesDir: profilesDirectory,
+          });
+          showToast(`Imported ${file.name}`, 'success');
+        } else if (fileName.endsWith('.jsonc') || fileName.endsWith('.json') || fileName.endsWith('.json5')) {
+          // Manifest files: read text and write to profiles directory
+          const text = await file.text();
+          const destPath = `${profilesDirectory}\\${file.name}`;
+          await invoke('write_text_file', { path: destPath, content: text });
+          showToast(`Imported ${file.name}`, 'success');
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        showToast(`Failed to import ${file.name}: ${msg}`, 'error');
+      }
+    }
+
+    // Refresh profiles after import
+    await refreshProfiles();
   };
 
   const openProfileNameModal = (profilePath: string, existingName: string = '', mode: 'save' | 'rename' = 'save', suggestedName: string = '') => {
@@ -1227,7 +1282,10 @@ function AppContent() {
   };
 
   const handlePreviewFromOverview = async () => {
-    if (!selectedProfile) {
+    // Use refs for immediate access (state may not have settled in async callbacks)
+    const profileName = selectedProfileRef.current || selectedProfile;
+    const profilePath = selectedProfilePathRef.current || selectedProfilePath;
+    if (!profileName) {
       throw new Error('Please select a setup profile');
     }
 
@@ -1256,7 +1314,7 @@ function AppContent() {
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
       'apply',
-      ['--profile', selectedProfilePath, '--dry-run'],
+      ['--profile', profilePath, '--dry-run'],
       (event: StreamEvent) => {
         // Collect raw output for Technical Details only
         if (event.type === 'stdout' || event.type === 'stderr') {
@@ -1286,7 +1344,7 @@ function AppContent() {
         },
       }
     );
-    
+
     // Flush any pending throttled updates before processing result
     flushLiveUpdates();
 
@@ -1301,18 +1359,18 @@ function AppContent() {
     const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
     const installed = envelopeData?.counts?.installed ?? 0;
     const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? 0;
-    
+
     // Persist run artifacts (logs, diagnostics, summary)
     if (runBundle) {
       const durationMs = Date.now() - runStartTime;
       const logContent = applyResult.stdout + '\n\n=== STDERR ===\n\n' + applyResult.stderr;
       await writeLog(runBundle, logContent);
-      
+
       const diagnostics = generateDiagnosticsText({
         command: 'apply',
         mode: 'preview',
-        profileName: selectedProfile,
-        profilePath: selectedProfilePath,
+        profileName: profileName,
+        profilePath: profilePath,
         counts: { installed, alreadyPresent },
       });
       await writeDiagnostics(runBundle, diagnostics);
@@ -1322,8 +1380,8 @@ function AppContent() {
         command: 'apply',
         mode: 'preview',
         timestamp: new Date().toISOString(),
-        profileName: selectedProfile,
-        profilePath: selectedProfilePath,
+        profileName: profileName,
+        profilePath: profilePath,
         outcome: 'success',
         counts: { installed, alreadyPresent },
         durationMs,
@@ -1333,12 +1391,12 @@ function AppContent() {
         },
       });
     }
-    
+
     // Record lifecycle event
     const previewEvent: LifecycleEvent = {
       timestamp: new Date().toISOString(),
-      profile: selectedProfile,
-      profilePath: selectedProfilePath,
+      profile: profileName,
+      profilePath: profilePath,
       success: true,
       summary: { installed, alreadyPresent },
       artifactPaths: runBundle ? {
@@ -1349,16 +1407,18 @@ function AppContent() {
     };
     const newState = recordLifecycleEvent('preview', previewEvent);
     setLifecycleState(newState);
-    
-    setOverviewActionProgress('setup', { 
-      message: `${installed} to install, ${alreadyPresent} already present` 
+
+    setOverviewActionProgress('setup', {
+      message: `${installed} to install, ${alreadyPresent} already present`
     });
-    
-    return { installed, alreadyPresent, profile: selectedProfile, appEvents: collectedEvents };
+
+    return { installed, alreadyPresent, profile: profileName, appEvents: collectedEvents };
   };
 
   const handleCheckFromOverview = async () => {
-    if (!selectedProfile) {
+    const profileName = selectedProfileRef.current || selectedProfile;
+    const profilePath = selectedProfilePathRef.current || selectedProfilePath;
+    if (!profileName) {
       throw new Error('Please select a setup profile');
     }
 
@@ -1383,7 +1443,7 @@ function AppContent() {
     const checkResult = await runEngineStreaming<EndstateApplyData>(
       settings,
       'apply',
-      ['--profile', selectedProfilePath, '--dry-run'],
+      ['--profile', profilePath, '--dry-run'],
       (event: StreamEvent) => {
         // Collect raw output for Technical Details only
         if (event.type === 'stdout' || event.type === 'stderr') {
@@ -1465,25 +1525,28 @@ function AppContent() {
     // Note: verify/check doesn't create a run bundle currently
     const verifyEvent: LifecycleEvent = {
       timestamp: new Date().toISOString(),
-      profile: selectedProfile,
-      profilePath: selectedProfilePath,
+      profile: profileName,
+      profilePath: profilePath,
       success: true,
       summary: { missing, alreadyPresent: present },
     };
     const newState = recordLifecycleEvent('verify', verifyEvent);
     setLifecycleState(newState);
-    
+
     if (missing > 0) {
       setOverviewActionProgress('check', { message: `${formatCount(missing, 'app')} missing, ${formatCount(present, 'app')} present` });
     } else {
       setOverviewActionProgress('check', { message: `All ${formatCount(present, 'app')} present` });
     }
-    
-    return { missing, present, profile: selectedProfile, appEvents: collectedEvents };
+
+    return { missing, present, profile: profileName, appEvents: collectedEvents };
   };
 
   const handleApplyFromOverview = async (restoreOptions?: { restoreIntent?: import('./types').RestoreIntent; selectedModules?: string[] }) => {
-    if (!selectedProfile) {
+    // Use refs for immediate access (state may not have settled in async callbacks)
+    const profileName = selectedProfileRef.current || selectedProfile;
+    const profilePath = selectedProfilePathRef.current || selectedProfilePath;
+    if (!profileName) {
       throw new Error('Please select a setup profile');
     }
 
@@ -1515,7 +1578,7 @@ function AppContent() {
     let hasInsertedVerifyHeader = false;
     
     // Build apply command args with optional restore flags
-    const applyArgs = ['--profile', selectedProfilePath];
+    const applyArgs = ['--profile', profilePath];
     if (restoreOptions?.restoreIntent === 'apps-and-settings') {
       applyArgs.push('--enable-restore');
       if (restoreOptions.selectedModules && restoreOptions.selectedModules.length > 0) {
@@ -1737,19 +1800,19 @@ function AppContent() {
       const diagnostics = generateDiagnosticsText({
         command: 'apply',
         mode: 'apply',
-        profileName: selectedProfile,
-        profilePath: selectedProfilePath,
+        profileName: profileName,
+        profilePath: profilePath,
         counts: { installed, alreadyPresent, skipped, failed },
       });
       await writeDiagnostics(runBundle, diagnostics);
-      
+
       await writeSummary(runBundle, {
         runId,
         command: 'apply',
         mode: 'apply',
         timestamp: new Date().toISOString(),
-        profileName: selectedProfile,
-        profilePath: selectedProfilePath,
+        profileName: profileName,
+        profilePath: profilePath,
         outcome: isSuccess ? (failed > 0 ? 'partial' : 'success') : 'failed',
         counts: { installed, alreadyPresent, skipped, failed },
         durationMs,
@@ -1763,8 +1826,8 @@ function AppContent() {
     // Record lifecycle event
     const applyEvent: LifecycleEvent = {
       timestamp: new Date().toISOString(),
-      profile: selectedProfile,
-      profilePath: selectedProfilePath,
+      profile: profileName,
+      profilePath: profilePath,
       success: isSuccess,
       summary: { installed, alreadyPresent, failed },
       artifactPaths: runBundle ? {
@@ -1790,7 +1853,7 @@ function AppContent() {
     
     return {
       installed, alreadyPresent, failed, skipped,
-      profile: selectedProfile,
+      profile: profileName,
       appEvents: reconciledEvents,
       restoreItems: envelopeData?.restoreItems,
       restoreSummary,
@@ -1993,7 +2056,39 @@ function AppContent() {
         return (
           <div className="space-y-6">
             {errorBanner}
-            <SaveFlow onBack={() => setCurrentPage('landing')} />
+            <SaveFlow
+              onBack={() => setCurrentPage('landing')}
+              engineConnected={state.status !== 'error'}
+              isRunning={isRunning}
+              captureProgress={actionProgressByAction['capture'] ?? null}
+              liveAppEvents={liveAppEvents}
+              onStartCapture={async () => {
+                setIsRunning(true);
+                setLiveAppEvents([]);
+                setOverviewRunningAction('capture');
+                setOverviewActionStatus('capture', 'running');
+                setOverviewActionProgress('capture', { message: 'Scanning installed applications...' });
+                try {
+                  const result = await handleCaptureFromOverview();
+                  setOverviewActionStatus('capture', 'success');
+                  return { count: result.count, draftText: result.draftText, apps: result.apps };
+                } finally {
+                  setIsRunning(false);
+                  setOverviewRunningAction(null);
+                }
+              }}
+              onSaveToFile={async (draftText: string) => {
+                const savePath = await invoke<string | null>('show_save_dialog', {
+                  defaultName: `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.jsonc`,
+                  filterName: 'Endstate Profile',
+                  filterExt: 'jsonc',
+                });
+                if (!savePath) return false;
+                await invoke('write_text_file', { path: savePath, content: draftText });
+                showToast('File saved', 'success');
+                return true;
+              }}
+            />
           </div>
         );
 
@@ -2005,15 +2100,50 @@ function AppContent() {
               profiles={profiles}
               onBack={() => setCurrentPage('landing')}
               onProfileSelect={(profile) => {
-                setSelectedProfile(profile.name);
-                setSelectedProfilePath(profile.path);
+                setProfileSelection(profile.name, profile.path);
                 updateSettings({ selectedProfileName: profile.name });
               }}
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
-              onFileDrop={() => {
-                // TODO: Implement zip/manifest import (ADR-001)
-                showToast('File import not yet implemented', 'info');
+              onFileDrop={handleFileDrop}
+              isRunning={isRunning}
+              setupProgress={actionProgressByAction['setup'] ?? null}
+              liveAppEvents={liveAppEvents}
+              onPreview={async (profile) => {
+                setProfileSelection(profile.name, profile.path);
+                updateSettings({ selectedProfileName: profile.name });
+                setIsRunning(true);
+                setLiveAppEvents([]);
+                setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+                setOverviewRunningAction('setup');
+                setOverviewActionStatus('setup', 'running');
+                setOverviewActionProgress('setup', { message: 'Evaluating changes' });
+                try {
+                  const result = await handlePreviewFromOverview();
+                  setOverviewActionStatus('setup', 'success');
+                  return result;
+                } finally {
+                  setIsRunning(false);
+                  setOverviewRunningAction(null);
+                }
+              }}
+              onApply={async (profile) => {
+                setProfileSelection(profile.name, profile.path);
+                updateSettings({ selectedProfileName: profile.name });
+                setIsRunning(true);
+                setLiveAppEvents([]);
+                setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+                setOverviewRunningAction('setup');
+                setOverviewActionStatus('setup', 'running');
+                setOverviewActionProgress('setup', { message: 'Installing applications...' });
+                try {
+                  const result = await handleApplyFromOverview();
+                  setOverviewActionStatus('setup', result.failed > 0 ? 'error' : 'success');
+                  return result;
+                } finally {
+                  setIsRunning(false);
+                  setOverviewRunningAction(null);
+                }
               }}
             />
           </div>

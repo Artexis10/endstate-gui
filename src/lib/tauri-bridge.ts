@@ -26,6 +26,9 @@ const WEB_FALLBACK_COMMANDS: Record<string, () => any> = {
   'delete_file_silent': () => null,
   'copy_file': () => null,
   'cleanup_capture_cache': () => null,
+  'extract_zip_profile': () => '',
+  'import_zip_from_base64': () => '',
+  'show_save_dialog': () => null,
 };
 
 /**
