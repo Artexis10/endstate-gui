@@ -2071,21 +2071,47 @@ function AppContent() {
                 try {
                   const result = await handleCaptureFromOverview();
                   setOverviewActionStatus('capture', 'success');
-                  return { count: result.count, draftText: result.draftText, apps: result.apps };
+                  return {
+                    count: result.count,
+                    draftText: result.draftText,
+                    apps: result.apps,
+                    outputPath: result.envelopeData?.outputPath,
+                    outputFormat: result.envelopeData?.outputFormat,
+                  };
                 } finally {
                   setIsRunning(false);
                   setOverviewRunningAction(null);
                 }
               }}
-              onSaveToFile={async (draftText: string) => {
-                const { save } = await import('@tauri-apps/plugin-dialog');
-                const savePath = await save({
-                  defaultPath: `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.jsonc`,
-                  filters: [{ name: 'Endstate Profile', extensions: ['jsonc'] }],
-                  title: 'Save Capture File',
-                });
-                if (!savePath) return false;
-                await invoke('write_text_file', { path: savePath, content: draftText });
+              onSaveToFile={async (captureResult) => {
+                const isZip = captureResult.outputFormat === 'zip' && captureResult.outputPath;
+                const ext = isZip ? 'zip' : 'jsonc';
+                const defaultName = `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`;
+                if (isTauriRuntime()) {
+                  const { save } = await import('@tauri-apps/plugin-dialog');
+                  const savePath = await save({
+                    defaultPath: defaultName,
+                    filters: isZip
+                      ? [{ name: 'Endstate Bundle', extensions: ['zip'] }]
+                      : [{ name: 'Endstate Profile', extensions: ['jsonc'] }],
+                    title: 'Save Capture File',
+                  });
+                  if (!savePath) return false;
+                  if (isZip) {
+                    await invoke('copy_file', { sourcePath: captureResult.outputPath, destPath: savePath });
+                  } else {
+                    await invoke('write_text_file', { path: savePath, content: captureResult.draftText });
+                  }
+                } else {
+                  // Web/Tidewave: browser download (manifest text only, zip requires Tauri)
+                  const blob = new Blob([captureResult.draftText], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = defaultName.replace('.zip', '.jsonc');
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }
                 showToast('File saved', 'success');
                 return true;
               }}

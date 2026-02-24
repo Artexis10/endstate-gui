@@ -25,6 +25,10 @@ interface CaptureResult {
   count: number;
   draftText: string;
   apps: string[];
+  /** Engine output path (zip or jsonc) - used for file copy on save */
+  outputPath?: string;
+  /** Engine output format: 'zip' or 'jsonc' */
+  outputFormat?: 'zip' | 'jsonc';
 }
 
 export interface SaveFlowProps {
@@ -34,7 +38,7 @@ export interface SaveFlowProps {
   captureProgress: { message: string; detail?: string } | null;
   liveAppEvents: AppEvent[];
   onStartCapture: () => Promise<CaptureResult>;
-  onSaveToFile: (draftText: string) => Promise<boolean>;
+  onSaveToFile: (result: CaptureResult) => Promise<boolean>;
 }
 
 export function SaveFlow({
@@ -69,10 +73,10 @@ export function SaveFlow({
   };
 
   const handleSave = async () => {
-    if (!result?.draftText) return;
+    if (!result) return;
     setPhase('saving');
     try {
-      const saved = await onSaveToFile(result.draftText);
+      const saved = await onSaveToFile(result);
       if (saved) {
         // Reset for another capture
         setPhase('idle');
