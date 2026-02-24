@@ -412,11 +412,16 @@ export function ActionExpandedContent({
                     <p className="text-xs text-muted-foreground truncate">{actionProgress.detail}</p>
                   )}
                 </div>
-                {visibleEvents.length > 0 && (
-                  <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
-                    {visibleEvents.length} checked
-                  </span>
-                )}
+                {visibleEvents.length > 0 && (() => {
+                  const total = visibleCounters.installed + visibleCounters.alreadyPresent
+                    + visibleCounters.skipped + visibleCounters.failed
+                    + (visibleCounters.configsRestored ?? 0) + (visibleCounters.configsSkipped ?? 0) + (visibleCounters.configsFailed ?? 0);
+                  return total > 0 ? (
+                    <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                      {total} checked
+                    </span>
+                  ) : null;
+                })()}
               </div>
             );
           })()}
