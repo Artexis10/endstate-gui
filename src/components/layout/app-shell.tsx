@@ -17,7 +17,7 @@ interface NavIndicator {
   tooltip?: string;
 }
 
-type PageType = 'overview' | 'report' | 'settings';
+type PageType = 'landing' | 'save' | 'setup' | 'overview' | 'report' | 'settings';
 
 interface AppShellProps {
   children: ReactNode;
@@ -48,8 +48,10 @@ export function AppShell({
   previousPage,
   onBack,
 }: AppShellProps) {
-  const showSidebar = sidebarVisible;
-  
+  // ADR-001: Intent pages (landing, save, setup) use full viewport — no sidebar or navigation chrome
+  const isIntentPage = currentPage === 'landing' || currentPage === 'save' || currentPage === 'setup';
+  const showSidebar = sidebarVisible && !isIntentPage;
+
   const navItems = [
     { id: 'overview' as const, label: 'Overview', icon: Home },
     { id: 'report' as const, label: 'Reports', icon: FileText },
@@ -126,76 +128,90 @@ export function AppShell({
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Topbar */}
-        <header className="h-16 border-b border-border bg-panel px-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            {/* Back button - shown when navigated from Overview */}
-            {!showSidebar && previousPage && onBack && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onBack}
-                className="gap-2"
-                title="Back to Overview"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="text-sm">Back</span>
-              </Button>
-            )}
-            {/* Sidebar toggle - only show if no back button */}
-            {!showSidebar && !previousPage && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onToggleSidebar}
-                className="gap-2"
-                title="Show navigation"
-              >
-                <PanelLeftOpen className="h-4 w-4" />
-              </Button>
-            )}
-            {showSidebar && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onToggleSidebar}
-                className="gap-2"
-                title="Hide navigation"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </Button>
-            )}
-            <div>
-              {pageTitle && (
-                <h2 className="text-lg font-semibold">{pageTitle}</h2>
+        {/* Topbar - hidden on landing page (ADR-001: full viewport, no chrome) */}
+        {currentPage !== 'landing' && (
+          <header className="h-16 border-b border-border bg-panel px-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Back button - shown when navigated from Overview */}
+              {!showSidebar && !isIntentPage && previousPage && onBack && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onBack}
+                  className="gap-2"
+                  title="Back to Overview"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span className="text-sm">Back</span>
+                </Button>
               )}
-              {pageSubtitle && (
-                <p className="text-xs text-muted-foreground">{pageSubtitle}</p>
+              {/* Sidebar toggle - only show for non-intent pages */}
+              {!showSidebar && !isIntentPage && !previousPage && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleSidebar}
+                  className="gap-2"
+                  title="Show navigation"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </Button>
               )}
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {actions}
-            {/* Command palette button - de-emphasized in Default mode */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onOpenCommandPalette}
-              className="gap-2"
-              title="Command palette (Ctrl+K)"
-            >
-              <Command className="h-4 w-4" />
               {showSidebar && (
-                <span className="text-xs text-muted-foreground">Ctrl+K</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleSidebar}
+                  className="gap-2"
+                  title="Hide navigation"
+                >
+                  <PanelLeftClose className="h-4 w-4" />
+                </Button>
               )}
-            </Button>
-          </div>
-        </header>
+              <div>
+                {pageTitle && (
+                  <h2 className="text-lg font-semibold">{pageTitle}</h2>
+                )}
+                {pageSubtitle && (
+                  <p className="text-xs text-muted-foreground">{pageSubtitle}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {actions}
+              {/* Settings access on intent flow pages */}
+              {isIntentPage && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onNavigate('settings')}
+                  className="gap-2"
+                  title="Settings"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              )}
+              {/* Command palette button - de-emphasized in Default mode */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onOpenCommandPalette}
+                className="gap-2"
+                title="Command palette (Ctrl+K)"
+              >
+                <Command className="h-4 w-4" />
+                {showSidebar && (
+                  <span className="text-xs text-muted-foreground">Ctrl+K</span>
+                )}
+              </Button>
+            </div>
+          </header>
+        )}
 
         {/* Content Area */}
         <main className="flex-1 overflow-auto">
-          <div className="max-w-3xl mx-auto p-6">
+          <div className={isIntentPage ? 'max-w-4xl mx-auto p-6' : 'max-w-3xl mx-auto p-6'}>
             <motion.div
               key={currentPage}
               initial={{ opacity: 0, y: 8 }}

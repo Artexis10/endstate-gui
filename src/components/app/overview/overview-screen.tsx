@@ -1,16 +1,13 @@
 /**
- * Overview (Home) Screen - The default landing page for Endstate
+ * Overview (Home) Screen
  *
- * This screen integrates the lifecycle conceptually by surfacing:
- * - Primary actions via the FlowSelector (Capture, Set up)
- * - Current profile (if any)
- * - Recent lifecycle activity
+ * ADR-001 ARCHIVE NOTE: This screen is no longer the default entry point.
+ * The app now opens to IntentLanding (src/components/app/intent/intent-landing.tsx).
+ * This component is retained for backward compatibility with existing tests
+ * and may be reintroduced for advanced/power-user workflows.
  *
- * Non-technical users should be able to complete core tasks
- * without ever needing to navigate away from this screen.
- *
- * The FlowSelector is the primary action hub. When a flow is active,
- * action content renders inline within the flow panel via slots.
+ * Previously: The default landing page surfacing primary actions via
+ * FlowSelector (Capture, Set up), current profile, and recent activity.
  */
 
 import { useEffect, useState } from 'react';

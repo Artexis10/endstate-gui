@@ -1,6 +1,10 @@
 /**
  * FlowSelector - Dual-flow primary UI for the Overview
  *
+ * ADR-001 ARCHIVE NOTE: This component is superseded by IntentLanding
+ * (src/components/app/intent/intent-landing.tsx) as the primary entry point.
+ * Retained for backward compatibility with the overview screen and tests.
+ *
  * Presents two user journeys side by side:
  *   A) "Save this computer" → Capture flow
  *   B) "Set up this machine" → Apply flow (select a profile)

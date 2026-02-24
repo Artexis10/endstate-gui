@@ -25,6 +25,7 @@ import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from '.
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
 import { OverviewScreen } from './components/app/overview-screen';
+import { IntentLanding, SaveFlow, SetupFlow } from './components/app/intent';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
@@ -49,7 +50,7 @@ import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
 import { copyText } from './lib/clipboard';
 
 type AppStatus = 'loading' | 'ready' | 'error';
-type PageType = 'overview' | 'report' | 'settings';
+type PageType = 'landing' | 'save' | 'setup' | 'overview' | 'report' | 'settings';
 
 interface AppState {
   status: AppStatus;
@@ -64,7 +65,7 @@ interface AppState {
 function AppContent() {
   const { showToast } = useToast();
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
-  const [currentPage, setCurrentPage] = useState<PageType>('overview');
+  const [currentPage, setCurrentPage] = useState<PageType>('landing');
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
   // Track which Overview card to auto-expand
   const [overviewExpandedCard, setOverviewExpandedCard] = useState<'capture' | 'setup' | 'check' | null>(null);
@@ -1974,8 +1975,50 @@ function AppContent() {
   const renderPage = () => {
     // Show error banner at top of any page when in error state
     const errorBanner = renderErrorBanner();
-    
+
     switch (currentPage) {
+      case 'landing':
+        return (
+          <div>
+            {errorBanner}
+            <IntentLanding
+              onSelectSave={() => setCurrentPage('save')}
+              onSelectSetup={() => setCurrentPage('setup')}
+              engineConnected={state.status !== 'error'}
+            />
+          </div>
+        );
+
+      case 'save':
+        return (
+          <div className="space-y-6">
+            {errorBanner}
+            <SaveFlow onBack={() => setCurrentPage('landing')} />
+          </div>
+        );
+
+      case 'setup':
+        return (
+          <div className="space-y-6">
+            {errorBanner}
+            <SetupFlow
+              profiles={profiles}
+              onBack={() => setCurrentPage('landing')}
+              onProfileSelect={(profile) => {
+                setSelectedProfile(profile.name);
+                setSelectedProfilePath(profile.path);
+                updateSettings({ selectedProfileName: profile.name });
+              }}
+              onOpenProfilesFolder={handleOpenProfilesFolder}
+              onRefreshProfiles={refreshProfiles}
+              onFileDrop={() => {
+                // TODO: Implement zip/manifest import (ADR-001)
+                showToast('File import not yet implemented', 'info');
+              }}
+            />
+          </div>
+        );
+
       case 'overview':
         return (
           <div className="space-y-6">
@@ -2848,6 +2891,9 @@ function AppContent() {
   // Generate page title based on current page
   const getPageTitle = () => {
     switch (currentPage) {
+      case 'landing': return '';
+      case 'save': return '';
+      case 'setup': return '';
       case 'overview': return '';
       case 'report': return 'Reports';
       case 'settings': return 'Settings';

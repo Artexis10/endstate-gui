@@ -1,8 +1,11 @@
 /**
  * Overview (Home) Screen - Re-export from refactored module
- * 
- * This file maintains backward compatibility for existing imports.
- * The actual implementation is now in ./overview/overview-screen.tsx
+ *
+ * ADR-001 ARCHIVE NOTE: The overview screen is no longer the default entry point.
+ * The app now opens to IntentLanding. This re-export is maintained for
+ * backward compatibility with existing tests and imports.
+ *
+ * The actual implementation is in ./overview/overview-screen.tsx
  */
 
 export { OverviewScreen } from './overview';
