@@ -143,8 +143,14 @@ export function ActionExpandedContent({
   const lastSummary = formatLastEventSummary(lifecycleState, action);
 
   // ── Visual drip buffer (~5 events/sec) ──────────────────────────────
-  const { visibleEvents } = useVisualEventBuffer({ allEvents: liveAppEvents });
+  const { visibleEvents, isDripping } = useVisualEventBuffer({ allEvents: liveAppEvents });
   const visibleCounters = useMemo(() => deriveCountersFromEvents(visibleEvents), [visibleEvents]);
+
+  // Defer showing the result card until the drip finishes revealing all events.
+  // This prevents "Completed successfully" from appearing while the live activity
+  // panel is still counting up — which would look contradictory.
+  const dripPending = isDripping && liveAppEvents.length > 0;
+  const showResult = isThisComplete && !dripPending;
 
   return (
     <div className="border-t border-border mt-2 pt-4 space-y-3 pb-4" data-testid="card-divider">
@@ -170,7 +176,7 @@ export function ActionExpandedContent({
       <AnimatePresence mode="wait">
 
         {/* Setup: success */}
-        {action === 'setup' && isThisComplete && actionStatus === 'success' && (
+        {action === 'setup' && showResult && actionStatus === 'success' && (
           <motion.div
             key="setup-success"
             variants={fadeSlideVariants}
@@ -203,7 +209,7 @@ export function ActionExpandedContent({
         )}
 
         {/* Setup: error (partial or fatal) */}
-        {action === 'setup' && isThisComplete && actionStatus === 'error' && (
+        {action === 'setup' && showResult && actionStatus === 'error' && (
           <motion.div
             key="setup-error"
             variants={fadeSlideVariants}
@@ -263,7 +269,7 @@ export function ActionExpandedContent({
         )}
 
         {/* Check: success */}
-        {action === 'check' && isThisComplete && actionStatus === 'success' && (
+        {action === 'check' && showResult && actionStatus === 'success' && (
           <motion.div
             key="check-success"
             variants={fadeSlideVariants}
@@ -296,7 +302,7 @@ export function ActionExpandedContent({
         )}
 
         {/* Check: error */}
-        {action === 'check' && isThisComplete && actionStatus === 'error' && (
+        {action === 'check' && showResult && actionStatus === 'error' && (
           <motion.div
             key="check-error"
             variants={fadeSlideVariants}
@@ -377,9 +383,9 @@ export function ActionExpandedContent({
         </div>
       )}
 
-      {/* Running state - animated swap with result */}
+      {/* Running state - shown during execution and while drip is still revealing events */}
       <AnimatePresence mode="wait">
-      {isThisRunning && actionProgress && (
+      {(isThisRunning || dripPending) && actionProgress && (
         <motion.div
           key="running"
           variants={fadeSlideVariants}
@@ -437,7 +443,7 @@ export function ActionExpandedContent({
 
       {/* Action buttons */}
       <div className="flex items-center gap-2 pt-3">
-        {!isThisComplete ? (
+        {!showResult ? (
           <>
             <Button
               onClick={(e) => {
@@ -449,11 +455,11 @@ export function ActionExpandedContent({
                   onExecuteAction(action);
                 }
               }}
-              disabled={isRunning || (action !== 'capture' && !hasProfile)}
+              disabled={isRunning || dripPending || (action !== 'capture' && !hasProfile)}
               size="sm"
               className={getPhaseButtonClasses(action)}
             >
-              {isThisRunning ? (
+              {(isThisRunning || dripPending) ? (
                 <>
                   <Loader2 className="h-3 w-3 mr-2 animate-spin" />
                   {getButtonLabel(action, true, setupIntent)}
