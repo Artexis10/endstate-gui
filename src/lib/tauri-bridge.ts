@@ -25,6 +25,7 @@ const WEB_FALLBACK_COMMANDS: Record<string, () => any> = {
   'run_endstate_streaming': () => null,
   'delete_file_silent': () => null,
   'copy_file': () => null,
+  'read_file_base64': () => '',
   'cleanup_capture_cache': () => null,
   'extract_zip_profile': () => '',
   'import_zip_from_base64': () => '',

@@ -58,12 +58,15 @@ export function validateContinuityInvariant(envelopeData: EndstateCaptureData | 
  */
 export function capturedAppsToAppEvents(apps: CapturedApp[] | string[]): AppEvent[] {
   return apps.map(app => {
-    const appId = typeof app === 'string' ? app : app.id;
+    const isString = typeof app === 'string';
+    const appId = isString ? app : app.id;
+    const appName = isString ? undefined : app.name;
     return {
       app: appId,
       action: 'Captured',
       statusKey: 'detected' as const,
       phase: 'capture' as const,
+      ...(appName ? { name: appName } : {}),
     };
   });
 }

@@ -1054,7 +1054,7 @@ function AppContent() {
     await ensureDirectory(tempDir);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
-    const filename = `capture_${timestamp}.jsonc`;
+    const filename = `capture_${timestamp}.zip`;
     const outputPath = `${tempDir}\\${filename}`;
 
     // Get profiles directory for run artifacts (separate from cache)
@@ -1072,7 +1072,7 @@ function AppContent() {
     const captureResult = await runEngineStreaming(
       settings,
       'capture',
-      ['--out', outputPath],
+      ['--WithConfig', '--out', outputPath],
       (event: StreamEvent) => {
         // Collect raw output for Technical Details only
         if (event.type === 'stdout' || event.type === 'stderr') {
@@ -2074,9 +2074,11 @@ function AppContent() {
                   return {
                     count: result.count,
                     draftText: result.draftText,
-                    apps: result.apps,
+                    apps: (result.appsIncluded ?? []).map(a => ({ id: a.id, name: a.name })),
                     outputPath: result.envelopeData?.outputPath,
                     outputFormat: result.envelopeData?.outputFormat,
+                    configsIncluded: result.envelopeData?.configsIncluded,
+                    configModules: result.envelopeData?.configModules,
                   };
                 } finally {
                   setIsRunning(false);
@@ -2088,6 +2090,7 @@ function AppContent() {
                 const ext = isZip ? 'zip' : 'jsonc';
                 const defaultName = `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`;
                 if (isTauriRuntime()) {
+                  // Native Tauri: use OS save dialog
                   const { save } = await import('@tauri-apps/plugin-dialog');
                   const savePath = await save({
                     defaultPath: defaultName,
@@ -2102,13 +2105,24 @@ function AppContent() {
                   } else {
                     await invoke('write_text_file', { path: savePath, content: captureResult.draftText });
                   }
+                } else if (isZip) {
+                  // Tidewave: zip exists on disk — read as base64, trigger browser download
+                  const base64 = await invoke<string>('read_file_base64', { path: captureResult.outputPath });
+                  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+                  const blob = new Blob([bytes], { type: 'application/zip' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = defaultName;
+                  a.click();
+                  URL.revokeObjectURL(url);
                 } else {
-                  // Web/Tidewave: browser download (manifest text only, zip requires Tauri)
+                  // Web fallback: browser download for jsonc manifest
                   const blob = new Blob([captureResult.draftText], { type: 'application/json' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = defaultName.replace('.zip', '.jsonc');
+                  a.download = defaultName;
                   a.click();
                   URL.revokeObjectURL(url);
                 }

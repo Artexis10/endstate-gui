@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save } from 'lucide-react';
+import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
@@ -18,17 +18,27 @@ import {
   getPhaseAwareStatusForEvent,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
+import type { CaptureConfigModule } from '@/types';
 
 type CapturePhase = 'idle' | 'scanning' | 'done' | 'error' | 'saving';
+
+interface CaptureAppEntry {
+  id: string;
+  name?: string;
+}
 
 interface CaptureResult {
   count: number;
   draftText: string;
-  apps: string[];
+  apps: CaptureAppEntry[];
   /** Engine output path (zip or jsonc) - used for file copy on save */
   outputPath?: string;
   /** Engine output format: 'zip' or 'jsonc' */
   outputFormat?: 'zip' | 'jsonc';
+  /** Config module IDs successfully captured into the bundle */
+  configsIncluded?: string[];
+  /** Structured config module metadata */
+  configModules?: CaptureConfigModule[];
 }
 
 export interface SaveFlowProps {
@@ -99,6 +109,32 @@ export function SaveFlow({
 
   // Tail of live events for activity display
   const recentEvents = liveAppEvents.slice(-8);
+
+  // Config modules with "captured" status (settings bundled into the zip).
+  // Fall back to configsIncluded IDs when structured configModules aren't available.
+  const capturedConfigs = (result?.configModules ?? []).filter(m => m.status === 'captured');
+  const settingsToShow: { id: string; displayName: string; filesCaptured?: number; wingetRefs?: string[] }[] =
+    capturedConfigs.length > 0
+      ? capturedConfigs
+      : (result?.configsIncluded ?? []).map(id => ({ id, displayName: id }));
+  const settingsCount = settingsToShow.length;
+
+  // Build lookup: winget ID → has captured settings (for inline icon on app row)
+  const settingsByApp = new Set<string>();
+  for (const mod of settingsToShow) {
+    for (const ref of mod.wingetRefs ?? []) {
+      settingsByApp.add(ref);
+    }
+  }
+
+  // Build name lookup: winget ID → friendly display name
+  // Sources: configModules (all, not just captured) provide displayName via wingetRefs
+  const nameByAppId = new Map<string, string>();
+  for (const mod of result?.configModules ?? []) {
+    for (const ref of mod.wingetRefs ?? []) {
+      nameByAppId.set(ref, mod.displayName);
+    }
+  }
 
   return (
     <motion.div
@@ -208,7 +244,12 @@ export function SaveFlow({
                           <span className={`w-16 text-right font-medium ${colors.text}`}>
                             {uiStatus.shortLabel}
                           </span>
-                          <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                          <span className="truncate flex-1">
+                            {event.name || formatAppIdentity(event.app)}
+                            {event.name && (
+                              <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
+                            )}
+                          </span>
                         </div>
                       );
                     })}
@@ -237,33 +278,48 @@ export function SaveFlow({
                     <p className="text-sm font-medium">Scan complete</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Found {result.count} {result.count === 1 ? 'app' : 'apps'}
+                      {(result.configsIncluded?.length ?? 0) > 0 && (
+                        <> &middot; {result.configsIncluded!.length} {result.configsIncluded!.length === 1 ? 'setting' : 'settings'} captured</>
+                      )}
                     </p>
                   </div>
                 </div>
 
-                {/* App list preview */}
+                {/* Unified app + settings list */}
                 {result.apps.length > 0 && (
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}>
-                        {result.apps.length} detected
+                        {result.apps.length} apps
                       </span>
+                      {settingsCount > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
+                          {settingsCount} settings
+                        </span>
+                      )}
                     </div>
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {result.apps.slice(0, 30).map((app) => {
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {result.apps.map((app) => {
                         const colors = getColorClasses('detected');
+                        const hasSettings = settingsByApp.has(app.id);
+                        const displayLabel = app.name || nameByAppId.get(app.id) || formatAppIdentity(app.id);
                         return (
-                          <div key={app} className="flex items-center gap-2 text-xs pt-0.5">
-                            <span className={`w-16 text-right font-medium ${colors.text}`}>DETECTED</span>
-                            <span className="font-mono truncate flex-1">{formatAppIdentity(app)}</span>
+                          <div key={app.id} className="flex items-center gap-2 text-xs pt-0.5">
+                            <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>DETECTED</span>
+                            <span className="w-4 flex-shrink-0 flex justify-center">
+                              {hasSettings && (
+                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
+                              )}
+                            </span>
+                            <span className="truncate">
+                              <span>{displayLabel}</span>
+                              {(app.name || nameByAppId.has(app.id)) && (
+                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{app.id}</span>
+                              )}
+                            </span>
                           </div>
                         );
                       })}
-                      {result.apps.length > 30 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          ...and {result.apps.length - 30} more
-                        </p>
-                      )}
                     </div>
                   </div>
                 )}

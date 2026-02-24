@@ -121,6 +121,8 @@ export interface EndstateApplyData {
 export interface CapturedApp {
   id: string;
   source?: string;
+  /** Friendly display name from engine (e.g., "Visual Studio Code") */
+  name?: string;
 }
 
 export interface CaptureCounts {

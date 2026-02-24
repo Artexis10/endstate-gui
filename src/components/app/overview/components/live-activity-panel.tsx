@@ -147,7 +147,12 @@ export function LiveActivityPanel({
                     <span className={`w-16 text-right font-medium ${colors.text}`}>
                       {uiStatus.shortLabel}
                     </span>
-                    <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                    <span className="truncate flex-1">
+                      {event.name || formatAppIdentity(event.app)}
+                      {event.name && (
+                        <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
+                      )}
+                    </span>
                   </div>
                 );
               })}

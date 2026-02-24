@@ -591,6 +591,19 @@ fn read_text_file(path: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to read file: {}", e))
 }
 
+/// Read a binary file and return its contents as base64.
+#[tauri::command]
+fn read_file_base64(path: String) -> Result<String, String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let file_path = std::path::Path::new(&path);
+    if !file_path.exists() || !file_path.is_file() {
+        return Err("File does not exist".to_string());
+    }
+    let bytes = fs::read(file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+    Ok(STANDARD.encode(&bytes))
+}
+
 /// Write a text file to disk.
 ///
 /// # Arguments
@@ -1312,6 +1325,7 @@ pub fn run() {
             show_file_dialog,
             open_folder,
             read_text_file,
+            read_file_base64,
             write_text_file,
             write_text_file_debug,
             delete_file,

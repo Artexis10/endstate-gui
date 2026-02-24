@@ -71,6 +71,8 @@ export interface ItemEvent extends BaseStreamingEvent {
   status: EngineItemStatus;
   reason: EngineItemReason;
   message?: string;
+  /** Friendly display name from engine (e.g., "Visual Studio Code") */
+  name?: string;
 }
 
 /**

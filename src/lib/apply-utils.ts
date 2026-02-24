@@ -383,6 +383,7 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     statusKey,
     phase: uiPhase,
     reason: event.reason,
+    name: event.name,
   };
 }
 
@@ -522,6 +523,8 @@ export interface AppEvent {
   statusKey?: StatusKey;  // Canonical status for consistent display
   phase?: UiPhase;        // Which phase this event occurred in (UI-relevant only)
   reason?: string | null; // Engine reason for status discrimination (e.g., 'filtered', 'sensitive', 'already_installed')
+  /** Friendly display name from engine (e.g., "Visual Studio Code") */
+  name?: string;
 }
 
 /**

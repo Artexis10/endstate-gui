@@ -303,7 +303,12 @@ export function SetupFlow({
                           <span className={`w-16 text-right font-medium ${colors.text}`}>
                             {uiStatus.shortLabel}
                           </span>
-                          <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                          <span className="truncate flex-1">
+                              {event.name || formatAppIdentity(event.app)}
+                              {event.name && (
+                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
+                              )}
+                            </span>
                         </div>
                       );
                     })}
@@ -365,7 +370,12 @@ export function SetupFlow({
                         return (
                           <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
                             <span className={`w-16 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
-                            <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                            <span className="truncate flex-1">
+                              {event.name || formatAppIdentity(event.app)}
+                              {event.name && (
+                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
+                              )}
+                            </span>
                           </div>
                         );
                       })}
@@ -443,7 +453,12 @@ export function SetupFlow({
                           <span className={`w-16 text-right font-medium ${colors.text}`}>
                             {uiStatus.shortLabel}
                           </span>
-                          <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                          <span className="truncate flex-1">
+                              {event.name || formatAppIdentity(event.app)}
+                              {event.name && (
+                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
+                              )}
+                            </span>
                         </div>
                       );
                     })}
@@ -521,7 +536,12 @@ export function SetupFlow({
                         return (
                           <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
                             <span className={`w-16 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
-                            <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                            <span className="truncate flex-1">
+                              {event.name || formatAppIdentity(event.app)}
+                              {event.name && (
+                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
+                              )}
+                            </span>
                           </div>
                         );
                       })}
