@@ -2,24 +2,27 @@
  * ActionExpandedContent - Expanded content for action cards
  */
 
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Clock, 
-  Loader2, 
-  CheckCircle2, 
-  XCircle, 
-  Eye, 
-  Zap 
+import {
+  Clock,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  Zap
 } from 'lucide-react';
 import { getFadeSlideVariants } from '@/lib/motion';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime, type LifecycleState } from '@/lib/lifecycle-state';
-import { 
+import {
   type AppEvent,
+  deriveCountersFromEvents,
   getColorClasses,
   getPhaseColor,
 } from '@/lib/apply-utils';
 import { getLastEvent, formatLastEventSummary } from '../selectors';
+import { useVisualEventBuffer } from '../use-visual-event-buffer';
 import { LiveActivityPanel } from './live-activity-panel';
 import { CaptureStatusStrip } from './capture-status-strip';
 import type {
@@ -29,7 +32,6 @@ import type {
   ActionResult,
   SetupIntent,
   RestoreOptions,
-  LiveCounters,
 } from '../types';
 
 interface ActionExpandedContentProps {
@@ -45,7 +47,6 @@ interface ActionExpandedContentProps {
   setSetupIntent: (intent: SetupIntent) => void;
   restoreIntent?: import('@/types').RestoreIntent;
   liveAppEvents: AppEvent[];
-  liveCounters?: LiveCounters;
   activityExpanded: boolean;
   setActivityExpanded: (expanded: boolean) => void;
   isAtBottom: boolean;
@@ -110,7 +111,6 @@ export function ActionExpandedContent({
   setSetupIntent,
   restoreIntent,
   liveAppEvents,
-  liveCounters,
   activityExpanded,
   setActivityExpanded,
   isAtBottom,
@@ -130,17 +130,21 @@ export function ActionExpandedContent({
   onDiscardDraft,
 }: ActionExpandedContentProps) {
   const fadeSlideVariants = getFadeSlideVariants('up');
-  
+
   // Extract per-action state for this specific action
   const actionStatus = actionStatusByAction[action];
   const actionProgress = actionProgressByAction[action];
   const actionResult = actionResultByAction[action];
-  
+
   // Determine state based on per-action status
   const isThisRunning = actionStatus === 'running' && isRunning;
   const isThisComplete = actionStatus !== 'idle' && actionStatus !== 'running';
   const lastEvent = getLastEvent(lifecycleState, action);
   const lastSummary = formatLastEventSummary(lifecycleState, action);
+
+  // ── Visual drip buffer (~5 events/sec) ──────────────────────────────
+  const { visibleEvents } = useVisualEventBuffer({ allEvents: liveAppEvents });
+  const visibleCounters = useMemo(() => deriveCountersFromEvents(visibleEvents), [visibleEvents]);
 
   return (
     <div className="border-t border-border mt-2 pt-4 space-y-3 pb-4" data-testid="card-divider">
@@ -402,33 +406,34 @@ export function ActionExpandedContent({
                     <p className="text-xs text-muted-foreground truncate">{actionProgress.detail}</p>
                   )}
                 </div>
-                {liveAppEvents.length > 0 && (
+                {visibleEvents.length > 0 && (
                   <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
-                    {liveAppEvents.length} checked
+                    {visibleEvents.length} checked
                   </span>
                 )}
               </div>
             );
           })()}
           
-          {/* Collapsible live activity for Setup card */}
-          {action === 'setup' && liveAppEvents.length > 0 && (
-            <LiveActivityPanel
-              liveAppEvents={liveAppEvents}
-              liveCounters={liveCounters}
-              actionProgress={actionProgress}
-              activityExpanded={activityExpanded}
-              setActivityExpanded={setActivityExpanded}
-              isAtBottom={isAtBottom}
-              setIsAtBottom={setIsAtBottom}
-              setUserHasScrolledAway={setUserHasScrolledAway}
-              activityScrollRef={activityScrollRef}
-              liveActivityContainerRef={liveActivityContainerRef}
-            />
-          )}
         </motion.div>
       )}
       </AnimatePresence>
+
+      {/* Collapsible live activity — persists after completion so drip continues */}
+      {action === 'setup' && visibleEvents.length > 0 && actionProgress && (
+        <LiveActivityPanel
+          liveAppEvents={visibleEvents}
+          liveCounters={visibleCounters}
+          actionProgress={actionProgress}
+          activityExpanded={activityExpanded}
+          setActivityExpanded={setActivityExpanded}
+          isAtBottom={isAtBottom}
+          setIsAtBottom={setIsAtBottom}
+          setUserHasScrolledAway={setUserHasScrolledAway}
+          activityScrollRef={activityScrollRef}
+          liveActivityContainerRef={liveActivityContainerRef}
+        />
+      )}
 
       {/* Action buttons */}
       <div className="flex items-center gap-2 pt-3">

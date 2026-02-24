@@ -39,7 +39,7 @@ export function OverviewScreen({
   actionProgressByAction,
   actionResultByAction,
   liveAppEvents = [],
-  liveCounters,
+  liveCounters: _liveCounters,
   initialExpandedCard,
   lastSavedProfileSummary,
   onNavigate,
@@ -96,7 +96,7 @@ export function OverviewScreen({
     onDismissResult,
   });
 
-  // Auto-scroll when new events arrive, but only if user is following
+  // Auto-scroll when new events are revealed, but only if user is following
   const currentPhase = runningAction ? actionProgressByAction[runningAction]?.phase : undefined;
   useEffect(() => {
     if (isAtBottom && activityScrollRef.current && activityExpanded) {
@@ -142,7 +142,6 @@ export function OverviewScreen({
       setupIntent={setupIntent}
       setSetupIntent={setSetupIntent}
       liveAppEvents={liveAppEvents}
-      liveCounters={liveCounters}
       activityExpanded={activityExpanded}
       setActivityExpanded={setActivityExpanded}
       isAtBottom={isAtBottom}
@@ -180,7 +179,6 @@ export function OverviewScreen({
       setupIntent={setupIntent}
       setSetupIntent={setSetupIntent}
       liveAppEvents={liveAppEvents}
-      liveCounters={liveCounters}
       activityExpanded={activityExpanded}
       setActivityExpanded={setActivityExpanded}
       isAtBottom={isAtBottom}
@@ -226,6 +224,7 @@ export function OverviewScreen({
           onProfileChange={onProfileChange}
           onOpenProfilesFolder={onOpenProfilesFolder}
           onRefreshProfiles={onRefreshProfiles}
+          onManageProfiles={() => setManageProfilesOpen(true)}
           onBack={handleFlowBack}
           captureActionSlot={captureActionSlot}
           setupActionSlot={setupActionSlot}

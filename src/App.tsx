@@ -190,6 +190,65 @@ function AppContent() {
   const overviewActionResult = overviewRunningAction ? actionResultByAction[overviewRunningAction] : null;
   const [liveAppEvents, setLiveAppEvents] = useState<AppEvent[]>([]);
   const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+
+  // Throttled streaming updates: during engine runs, events arrive faster than
+  // useful re-render rate. Buffer all streaming state and flush at ~5/sec.
+  const pendingEventsRef = useRef<AppEvent[] | null>(null);
+  const pendingCountersRef = useRef<LiveCounters | null>(null);
+  const pendingProgressRef = useRef<{ action: string; progress: { message: string; detail?: string; phase?: import('./lib/apply-utils').UiPhase } } | null>(null);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function doFlush() {
+    if (pendingEventsRef.current !== null) {
+      setLiveAppEvents(pendingEventsRef.current);
+      pendingEventsRef.current = null;
+    }
+    if (pendingCountersRef.current !== null) {
+      setLiveCounters(pendingCountersRef.current);
+      pendingCountersRef.current = null;
+    }
+    if (pendingProgressRef.current !== null) {
+      const { action, progress } = pendingProgressRef.current;
+      setActionProgressByAction(prev => ({ ...prev, [action]: progress }));
+      pendingProgressRef.current = null;
+    }
+  }
+
+  /**
+   * Queue streaming state updates. Flushes at most once every 200ms.
+   * Call flushLiveUpdates() for immediate final flush (e.g., on completion).
+   */
+  function throttledSetLiveAppEvents(events: AppEvent[], counters?: LiveCounters) {
+    pendingEventsRef.current = events;
+    if (counters !== undefined) pendingCountersRef.current = counters;
+    if (flushTimerRef.current === null) {
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null;
+        doFlush();
+      }, 200);
+    }
+  }
+
+  /** Queue a progress update (batched with event/counter updates). */
+  function throttledSetProgress(action: string, progress: { message: string; detail?: string; phase?: import('./lib/apply-utils').UiPhase }) {
+    pendingProgressRef.current = { action, progress };
+    if (flushTimerRef.current === null) {
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null;
+        doFlush();
+      }, 200);
+    }
+  }
+
+  /** Immediately flush any pending streaming updates. */
+  function flushLiveUpdates() {
+    if (flushTimerRef.current !== null) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    doFlush();
+  }
+
   const isRunningRef = useRef(false); // Robust guard against double-run
   const activeRunIdRef = useRef<string | null>(null); // Track active run ID for double-run prevention
   const [activeRunId, setActiveRunId] = useState<string | null>(null); // App-level active run ID for UI awareness
@@ -972,15 +1031,15 @@ function AppContent() {
           } else if (isItemEvent(ndjsonEvent)) {
             const appEvent = itemEventToAppEvent(ndjsonEvent, overviewCapturePhase);
             overviewCaptureEvents.push(appEvent);
-            setLiveAppEvents([...overviewCaptureEvents]);
+            throttledSetLiveAppEvents([...overviewCaptureEvents]);
             const uiStatus = getPhaseAwareStatusForEvent({ 
               statusKey: appEvent.statusKey || 'skipped', 
               phase: 'capture', 
               reason: appEvent.reason 
             });
-            setOverviewActionProgress('capture', { 
-              message: 'Scanning applications...', 
-              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}` 
+            throttledSetProgress('capture', {
+              message: 'Scanning applications...',
+              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}`
             });
           } else if (isArtifactEvent(ndjsonEvent)) {
             const artifactEvent: AppEvent = {
@@ -991,12 +1050,13 @@ function AppContent() {
               phase: 'capture',
             };
             overviewCaptureEvents.push(artifactEvent);
-            setLiveAppEvents([...overviewCaptureEvents]);
+            throttledSetLiveAppEvents([...overviewCaptureEvents]);
           }
         },
       }
     );
 
+    flushLiveUpdates();
     logBufferRef.current?.flush();
     setIsRunning(false);
 
@@ -1211,21 +1271,24 @@ function AppContent() {
             const appEvent = itemEventToAppEvent(ndjsonEvent, previewPhase);
             previewAppEvents.push(appEvent);
             // Bounded buffer: keep up to 2000 events for scrollback
-            setLiveAppEvents(previewAppEvents.length > 2000 ? previewAppEvents.slice(-2000) : [...previewAppEvents]);
+            throttledSetLiveAppEvents(previewAppEvents.length > 2000 ? previewAppEvents.slice(-2000) : [...previewAppEvents]);
             const uiStatus = getPhaseAwareStatusForEvent({
               statusKey: appEvent.statusKey || 'skipped',
               phase: 'apply',
               reason: appEvent.reason,
             });
-            setOverviewActionProgress('setup', { 
-              message: 'Evaluating changes', 
-              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}` 
+            throttledSetProgress('setup', {
+              message: 'Evaluating changes',
+              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}`
             });
           }
         },
       }
     );
     
+    // Flush any pending throttled updates before processing result
+    flushLiveUpdates();
+
     // Use collected events from NDJSON streaming
     const collectedEvents = [...previewAppEvents];
 
@@ -1345,18 +1408,19 @@ function AppContent() {
               counters.skipped++;
             }
             
-            // Update live events for UI streaming
-            setLiveAppEvents(checkAppEvents.length > 2000 ? checkAppEvents.slice(-2000) : [...checkAppEvents]);
-            // Map verify counters to the existing counter structure
-            setLiveCounters({
-              installed: 0,
-              alreadyPresent: counters.confirmed,
-              skipped: counters.skipped,
-              failed: counters.missing,
-              configsRestored: 0,
-              configsSkipped: 0,
-              configsFailed: 0,
-            });
+            // Update live events for UI streaming (throttled for smooth drip)
+            throttledSetLiveAppEvents(
+              checkAppEvents.length > 2000 ? checkAppEvents.slice(-2000) : [...checkAppEvents],
+              {
+                installed: 0,
+                alreadyPresent: counters.confirmed,
+                skipped: counters.skipped,
+                failed: counters.missing,
+                configsRestored: 0,
+                configsSkipped: 0,
+                configsFailed: 0,
+              }
+            );
             
             const uiStatus = getPhaseAwareStatusForEvent({
               statusKey,
@@ -1371,8 +1435,8 @@ function AppContent() {
             if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
             const counterText = parts.join(' · ') || 'Checking…';
             
-            setOverviewActionProgress('check', { 
-              message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`, 
+            throttledSetProgress('check', {
+              message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
               detail: counterText,
               phase: 'verify'
             });
@@ -1382,6 +1446,9 @@ function AppContent() {
     );
     
     // Use collected events from NDJSON streaming
+    // Flush any pending throttled updates before processing result
+    flushLiveUpdates();
+
     const collectedEvents = [...checkAppEvents];
 
     logBufferRef.current?.flush();
@@ -1481,22 +1548,22 @@ function AppContent() {
                 phase: 'apply'
               };
               appEventList.push(applyHeaderEvent);
-              setLiveAppEvents([...appEventList]);
+              throttledSetLiveAppEvents([...appEventList]);
             }
             // Insert VERIFY phase header when transitioning to verify phase
             if (currentPhase === 'apply' && newPhase === 'verify' && !hasInsertedVerifyHeader) {
               hasInsertedVerifyHeader = true;
-              const verifyHeaderEvent: AppEvent = { 
-                app: '── VERIFY ──', 
-                action: '', 
+              const verifyHeaderEvent: AppEvent = {
+                app: '── VERIFY ──',
+                action: '',
                 timestamp: Date.now(),
                 phase: 'verify'
               };
               appEventList.push(verifyHeaderEvent);
-              setLiveAppEvents([...appEventList]);
-              setOverviewActionProgress('setup', { 
+              throttledSetLiveAppEvents([...appEventList]);
+              throttledSetProgress('setup', {
                 message: 'Verifying installation…',
-                detail: undefined, // Don't show counts until we know the total
+                detail: undefined,
                 phase: 'verify'
               });
             }
@@ -1535,9 +1602,11 @@ function AppContent() {
               }
             }
             
-            // Update live events for UI
-            setLiveAppEvents(appEventList.length > 2000 ? appEventList.slice(-2000) : [...appEventList]);
-            setLiveCounters({ ...counters });
+            // Update live events for UI (throttled for smooth drip)
+            throttledSetLiveAppEvents(
+              appEventList.length > 2000 ? appEventList.slice(-2000) : [...appEventList],
+              { ...counters }
+            );
             
             // Build progress message based on current phase
             const uiStatus = getPhaseAwareStatusForEvent({
@@ -1552,7 +1621,7 @@ function AppContent() {
               const verifyProgress = manifestTotal > 0 
                 ? `Verifying… ${verifyCounters.total}/${manifestTotal}`
                 : `Verifying… (${verifyCounters.total} checked)`;
-              setOverviewActionProgress('setup', { 
+              throttledSetProgress('setup', {
                 message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
                 detail: verifyProgress,
                 phase: 'verify'
@@ -1565,8 +1634,8 @@ function AppContent() {
               if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
               if (counters.failed > 0) parts.push(`${counters.failed} failed`);
               const counterText = parts.join(' · ') || 'Working…';
-              
-              setOverviewActionProgress('setup', { 
+
+              throttledSetProgress('setup', {
                 message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
                 detail: counterText,
                 phase: 'apply'
@@ -1595,16 +1664,18 @@ function AppContent() {
 
             // Always append (don't deduplicate restore items by id)
             appEventList.push(restoreAppEvent);
-            setLiveAppEvents(appEventList.length > 2000 ? appEventList.slice(-2000) : [...appEventList]);
 
             // Update restore counters
             if (ndjsonEvent.status === 'restored') counters.configsRestored++;
             else if (ndjsonEvent.status === 'skipped_up_to_date' || ndjsonEvent.status === 'skipped_missing_source') counters.configsSkipped++;
             else if (ndjsonEvent.status === 'failed') counters.configsFailed++;
-            setLiveCounters({ ...counters });
+            throttledSetLiveAppEvents(
+              appEventList.length > 2000 ? appEventList.slice(-2000) : [...appEventList],
+              { ...counters }
+            );
 
             // Update progress message
-            setOverviewActionProgress('setup', {
+            throttledSetProgress('setup', {
               message: `Restoring: ${ndjsonEvent.module}`,
               detail: `${counters.configsRestored} restored`,
               phase: 'apply',
@@ -1613,6 +1684,9 @@ function AppContent() {
         },
       }
     );
+
+    // Flush any pending throttled updates before processing result
+    flushLiveUpdates();
 
     logBufferRef.current?.flush();
     applyLineBufferRef.current?.clear();

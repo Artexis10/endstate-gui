@@ -1054,3 +1054,43 @@ export const RESTORE_STATUS_MAP: Record<RestoreStatusKey, UiStatusConfig> = {
 export function getRestoreUiStatus(status: RestoreStatusKey): UiStatusConfig {
   return RESTORE_STATUS_MAP[status] ?? RESTORE_STATUS_MAP.failed;
 }
+
+/**
+ * Derive LiveCounters from a slice of visible AppEvents.
+ * Used by the visual event buffer to keep counter badges in sync with
+ * the revealed (visible) events rather than the full event list.
+ */
+export function deriveCountersFromEvents(events: AppEvent[]): import('../components/app/overview/types').LiveCounters {
+  const counters = {
+    installed: 0,
+    alreadyPresent: 0,
+    skipped: 0,
+    failed: 0,
+    configsRestored: 0,
+    configsSkipped: 0,
+    configsFailed: 0,
+  };
+
+  for (const event of events) {
+    // Skip phase header events
+    if (event.app === '── APPLY ──' || event.app === '── VERIFY ──') continue;
+
+    const isRestore = event.app.startsWith('\u2699');
+    const sk = event.statusKey;
+
+    if (isRestore) {
+      if (sk === 'installed') counters.configsRestored++;
+      else if (sk === 'skipped') counters.configsSkipped++;
+      else if (sk === 'failed') counters.configsFailed++;
+    } else {
+      // Skip intermediate statuses — only count final outcomes
+      if (sk === 'installing' || sk === 'to_install') continue;
+      if (sk === 'installed') counters.installed++;
+      else if (sk === 'present') counters.alreadyPresent++;
+      else if (sk === 'skipped') counters.skipped++;
+      else if (sk === 'failed') counters.failed++;
+    }
+  }
+
+  return counters;
+}

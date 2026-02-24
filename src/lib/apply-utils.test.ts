@@ -13,6 +13,7 @@ import {
   getFailedItemMessage,
   RESTORE_STATUS_MAP,
   getRestoreUiStatus,
+  deriveCountersFromEvents,
   type AppEvent,
   type RestoreStatusKey,
 } from './apply-utils';
@@ -791,6 +792,77 @@ describe('apply-utils', () => {
       const result = getRestoreUiStatus('unknown_status' as RestoreStatusKey);
       expect(result.shortLabel).toBe('FAILED');
       expect(result.color).toBe('error');
+    });
+  });
+
+  describe('deriveCountersFromEvents', () => {
+    it('returns all zeros for empty events', () => {
+      expect(deriveCountersFromEvents([])).toEqual({
+        installed: 0, alreadyPresent: 0, skipped: 0, failed: 0,
+        configsRestored: 0, configsSkipped: 0, configsFailed: 0,
+      });
+    });
+
+    it('counts final statuses correctly', () => {
+      const events: AppEvent[] = [
+        { app: 'git', action: 'Installed', statusKey: 'installed' },
+        { app: 'node', action: 'OK', statusKey: 'present' },
+        { app: 'ruby', action: 'Skipped', statusKey: 'skipped' },
+        { app: 'python', action: 'Failed', statusKey: 'failed' },
+        { app: 'vim', action: 'OK', statusKey: 'present' },
+      ];
+      const counters = deriveCountersFromEvents(events);
+      expect(counters.installed).toBe(1);
+      expect(counters.alreadyPresent).toBe(2);
+      expect(counters.skipped).toBe(1);
+      expect(counters.failed).toBe(1);
+    });
+
+    it('skips phase header events', () => {
+      const events: AppEvent[] = [
+        { app: '── APPLY ──', action: '', phase: 'apply' },
+        { app: 'git', action: 'Installed', statusKey: 'installed' },
+        { app: '── VERIFY ──', action: '', phase: 'verify' },
+        { app: 'git', action: 'OK', statusKey: 'present' },
+      ];
+      const counters = deriveCountersFromEvents(events);
+      expect(counters.installed).toBe(1);
+      expect(counters.alreadyPresent).toBe(1);
+    });
+
+    it('skips intermediate statuses (installing, to_install)', () => {
+      const events: AppEvent[] = [
+        { app: 'git', action: 'Installing', statusKey: 'installing' },
+        { app: 'node', action: 'To install', statusKey: 'to_install' },
+        { app: 'vim', action: 'Installed', statusKey: 'installed' },
+      ];
+      const counters = deriveCountersFromEvents(events);
+      expect(counters.installed).toBe(1);
+      expect(counters.alreadyPresent).toBe(0);
+    });
+
+    it('counts restore events separately via gear prefix', () => {
+      const events: AppEvent[] = [
+        { app: 'git', action: 'Installed', statusKey: 'installed' },
+        { app: '\u2699 vscode/settings', action: 'RESTORED', statusKey: 'installed', phase: 'apply' },
+        { app: '\u2699 git/config', action: 'UP TO DATE', statusKey: 'skipped', phase: 'apply' },
+        { app: '\u2699 terminal/config', action: 'FAILED', statusKey: 'failed', phase: 'apply' },
+      ];
+      const counters = deriveCountersFromEvents(events);
+      expect(counters.installed).toBe(1);
+      expect(counters.configsRestored).toBe(1);
+      expect(counters.configsSkipped).toBe(1);
+      expect(counters.configsFailed).toBe(1);
+    });
+
+    it('skips events without statusKey', () => {
+      const events: AppEvent[] = [
+        { app: 'git', action: 'Unknown' },
+        { app: 'node', action: 'Installed', statusKey: 'installed' },
+      ];
+      const counters = deriveCountersFromEvents(events);
+      expect(counters.installed).toBe(1);
+      expect(counters.alreadyPresent).toBe(0);
     });
   });
 });

@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
+import { SelectedProfileCard } from './selected-profile-card';
 import type { DiscoveredProfile } from '@/file-discovery';
 import type { ActiveFlow } from '../types';
 
@@ -36,6 +37,7 @@ interface FlowSelectorProps {
   onProfileChange: (profile: string, path: string) => void;
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
+  onManageProfiles: () => void;
   onBack: () => void;
   captureActionSlot?: ReactNode;
   setupActionSlot?: ReactNode;
@@ -52,6 +54,7 @@ export function FlowSelector({
   onProfileChange,
   onOpenProfilesFolder,
   onRefreshProfiles,
+  onManageProfiles,
   onBack,
   captureActionSlot,
   setupActionSlot,
@@ -86,10 +89,6 @@ export function FlowSelector({
   const transition = reduced
     ? { duration: 0.01 }
     : { duration: DURATIONS.normal, ease: EASING.easeInOut };
-
-  const selectedProfileDisplay = hasProfile
-    ? profiles.find(p => p.name === selectedProfile)?.displayName || selectedProfile
-    : '';
 
   // ── Split view (default) ──────────────────────────────────────────────
   if (activeFlow === 'none') {
@@ -272,6 +271,7 @@ export function FlowSelector({
                       onProfileChange(selected.name, selected.path);
                     }
                   }}
+                  disabled={isRunning}
                 >
                   <SelectTrigger className="w-full" data-testid="flow-profile-select">
                     <SelectValue placeholder="Select a profile..." />
@@ -336,12 +336,16 @@ export function FlowSelector({
               <div className="p-2 rounded-lg bg-green-500/10">
                 <PlayCircle className="h-5 w-5 text-green-500" />
               </div>
-              <div>
-                <h3 className="text-base font-semibold">Set up this machine</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Using profile: {selectedProfileDisplay}
-                </p>
-              </div>
+              <h3 className="text-base font-semibold">Set up this machine</h3>
+            </div>
+            <div className="mt-3 mb-2">
+              <SelectedProfileCard
+                selectedProfile={selectedProfile}
+                profiles={profiles}
+                isRunning={isRunning}
+                onProfileChange={onProfileChange}
+                onManageProfiles={onManageProfiles}
+              />
             </div>
             {setupActionSlot}
           </CardContent>
