@@ -11,7 +11,13 @@ import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save } from 'luci
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
-import type { AppEvent } from '@/lib/apply-utils';
+import {
+  type AppEvent,
+  type StatusKey,
+  getColorClasses,
+  getPhaseAwareStatusForEvent,
+} from '@/lib/apply-utils';
+import { formatAppIdentity } from '@/lib/app-identity';
 
 type CapturePhase = 'idle' | 'scanning' | 'done' | 'error' | 'saving';
 
@@ -186,14 +192,22 @@ export function SaveFlow({
                 {/* Live activity tail */}
                 {recentEvents.length > 0 && (
                   <div className="mt-3 space-y-1 border-t pt-3">
-                    {recentEvents.map((event, i) => (
-                      <div
-                        key={`${event.app}-${event.timestamp}-${i}`}
-                        className="text-xs text-muted-foreground font-mono truncate"
-                      >
-                        {event.app}
-                      </div>
-                    ))}
+                    {recentEvents.map((event, i) => {
+                      const statusKey: StatusKey = event.statusKey || 'detected';
+                      const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'capture', reason: event.reason });
+                      const colors = getColorClasses(uiStatus.color);
+                      return (
+                        <div
+                          key={`${event.app}-${event.timestamp}-${i}`}
+                          className="flex items-center gap-2 text-xs pt-0.5"
+                        >
+                          <span className={`w-16 text-right font-medium ${colors.text}`}>
+                            {uiStatus.shortLabel}
+                          </span>
+                          <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -225,20 +239,28 @@ export function SaveFlow({
 
                 {/* App list preview */}
                 {result.apps.length > 0 && (
-                  <div className="mt-3 space-y-1 border-t pt-3 max-h-48 overflow-y-auto">
-                    {result.apps.slice(0, 30).map((app) => (
-                      <div
-                        key={app}
-                        className="text-xs text-muted-foreground font-mono truncate"
-                      >
-                        {app}
-                      </div>
-                    ))}
-                    {result.apps.length > 30 && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        ...and {result.apps.length - 30} more
-                      </p>
-                    )}
+                  <div className="mt-3 border-t pt-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}>
+                        {result.apps.length} detected
+                      </span>
+                    </div>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {result.apps.slice(0, 30).map((app) => {
+                        const colors = getColorClasses('detected');
+                        return (
+                          <div key={app} className="flex items-center gap-2 text-xs pt-0.5">
+                            <span className={`w-16 text-right font-medium ${colors.text}`}>DETECTED</span>
+                            <span className="font-mono truncate flex-1">{formatAppIdentity(app)}</span>
+                          </div>
+                        );
+                      })}
+                      {result.apps.length > 30 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ...and {result.apps.length - 30} more
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
 

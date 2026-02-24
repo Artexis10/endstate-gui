@@ -13,7 +13,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DropZone } from './drop-zone';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import type { DiscoveredProfile } from '@/file-discovery';
-import type { AppEvent } from '@/lib/apply-utils';
+import {
+  type AppEvent,
+  type StatusKey,
+  getColorClasses,
+  getPhaseAwareStatusForEvent,
+} from '@/lib/apply-utils';
+import { formatAppIdentity } from '@/lib/app-identity';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error';
 
@@ -280,14 +286,27 @@ export function SetupFlow({
 
                 {recentEvents.length > 0 && (
                   <div className="mt-3 space-y-1 border-t pt-3">
-                    {recentEvents.map((event, i) => (
-                      <div
-                        key={`${event.app}-${event.timestamp}-${i}`}
-                        className="text-xs text-muted-foreground font-mono truncate"
-                      >
-                        {event.app} — {event.action}
-                      </div>
-                    ))}
+                    {recentEvents.map((event, i) => {
+                      const statusKey: StatusKey = event.statusKey || (
+                        event.action === 'OK' ? 'present' :
+                        event.action === 'To install' ? 'to_install' :
+                        event.action === 'Processing' ? 'installing' :
+                        'skipped'
+                      );
+                      const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'preview', reason: event.reason });
+                      const colors = getColorClasses(uiStatus.color);
+                      return (
+                        <div
+                          key={`${event.app}-${event.timestamp}-${i}`}
+                          className="flex items-center gap-2 text-xs pt-0.5"
+                        >
+                          <span className={`w-16 text-right font-medium ${colors.text}`}>
+                            {uiStatus.shortLabel}
+                          </span>
+                          <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -321,20 +340,41 @@ export function SetupFlow({
 
                 {/* Activity summary */}
                 {previewResult.appEvents.length > 0 && (
-                  <div className="mt-3 space-y-1 border-t pt-3 max-h-48 overflow-y-auto">
-                    {previewResult.appEvents.slice(0, 30).map((event, i) => (
-                      <div
-                        key={`${event.app}-${i}`}
-                        className="text-xs text-muted-foreground font-mono truncate"
-                      >
-                        {event.app} — {event.action}
-                      </div>
-                    ))}
-                    {previewResult.appEvents.length > 30 && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        ...and {previewResult.appEvents.length - 30} more
-                      </p>
-                    )}
+                  <div className="mt-3 border-t pt-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      {previewResult.installed > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('action').bg} ${getColorClasses('action').text}`}>
+                          {previewResult.installed} to install
+                        </span>
+                      )}
+                      {previewResult.alreadyPresent > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
+                          {previewResult.alreadyPresent} present
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {previewResult.appEvents.slice(0, 30).map((event, i) => {
+                        const statusKey: StatusKey = event.statusKey || (
+                          event.action === 'OK' ? 'present' :
+                          event.action === 'To install' ? 'to_install' :
+                          'skipped'
+                        );
+                        const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'preview', reason: event.reason });
+                        const colors = getColorClasses(uiStatus.color);
+                        return (
+                          <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
+                            <span className={`w-16 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
+                            <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                          </div>
+                        );
+                      })}
+                      {previewResult.appEvents.length > 30 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ...and {previewResult.appEvents.length - 30} more
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -384,14 +424,29 @@ export function SetupFlow({
 
                 {recentEvents.length > 0 && (
                   <div className="mt-3 space-y-1 border-t pt-3">
-                    {recentEvents.map((event, i) => (
-                      <div
-                        key={`${event.app}-${event.timestamp}-${i}`}
-                        className="text-xs text-muted-foreground font-mono truncate"
-                      >
-                        {event.app} — {event.action}
-                      </div>
-                    ))}
+                    {recentEvents.map((event, i) => {
+                      const statusKey: StatusKey = event.statusKey || (
+                        event.action === 'OK' ? 'present' :
+                        event.action === 'Installed' ? 'installed' :
+                        event.action === 'Failed' ? 'failed' :
+                        event.action === 'Processing' ? 'installing' :
+                        event.action === 'Skipped' ? 'skipped' :
+                        'installing'
+                      );
+                      const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'apply', reason: event.reason });
+                      const colors = getColorClasses(uiStatus.color);
+                      return (
+                        <div
+                          key={`${event.app}-${event.timestamp}-${i}`}
+                          className="flex items-center gap-2 text-xs pt-0.5"
+                        >
+                          <span className={`w-16 text-right font-medium ${colors.text}`}>
+                            {uiStatus.shortLabel}
+                          </span>
+                          <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -429,20 +484,53 @@ export function SetupFlow({
 
                 {/* Activity summary */}
                 {applyResult.appEvents.length > 0 && (
-                  <div className="mt-3 space-y-1 border-t pt-3 max-h-48 overflow-y-auto">
-                    {applyResult.appEvents.slice(0, 30).map((event, i) => (
-                      <div
-                        key={`${event.app}-${i}`}
-                        className="text-xs text-muted-foreground font-mono truncate"
-                      >
-                        {event.app} — {event.action}
-                      </div>
-                    ))}
-                    {applyResult.appEvents.length > 30 && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        ...and {applyResult.appEvents.length - 30} more
-                      </p>
-                    )}
+                  <div className="mt-3 border-t pt-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      {applyResult.installed > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
+                          {applyResult.installed} installed
+                        </span>
+                      )}
+                      {applyResult.alreadyPresent > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
+                          {applyResult.alreadyPresent} present
+                        </span>
+                      )}
+                      {applyResult.skipped > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}>
+                          {applyResult.skipped} skipped
+                        </span>
+                      )}
+                      {applyResult.failed > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('error').bg} ${getColorClasses('error').text}`}>
+                          {applyResult.failed} failed
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {applyResult.appEvents.slice(0, 30).map((event, i) => {
+                        const statusKey: StatusKey = event.statusKey || (
+                          event.action === 'OK' ? 'present' :
+                          event.action === 'Installed' ? 'installed' :
+                          event.action === 'Failed' ? 'failed' :
+                          event.action === 'Skipped' ? 'skipped' :
+                          'installed'
+                        );
+                        const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'apply', reason: event.reason });
+                        const colors = getColorClasses(uiStatus.color);
+                        return (
+                          <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
+                            <span className={`w-16 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
+                            <span className="font-mono truncate flex-1">{formatAppIdentity(event.app)}</span>
+                          </div>
+                        );
+                      })}
+                      {applyResult.appEvents.length > 30 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ...and {applyResult.appEvents.length - 30} more
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
 

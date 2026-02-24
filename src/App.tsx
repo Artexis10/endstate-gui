@@ -2078,10 +2078,11 @@ function AppContent() {
                 }
               }}
               onSaveToFile={async (draftText: string) => {
-                const savePath = await invoke<string | null>('show_save_dialog', {
-                  defaultName: `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.jsonc`,
-                  filterName: 'Endstate Profile',
-                  filterExt: 'jsonc',
+                const { save } = await import('@tauri-apps/plugin-dialog');
+                const savePath = await save({
+                  defaultPath: `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.jsonc`,
+                  filters: [{ name: 'Endstate Profile', extensions: ['jsonc'] }],
+                  title: 'Save Capture File',
                 });
                 if (!savePath) return false;
                 await invoke('write_text_file', { path: savePath, content: draftText });

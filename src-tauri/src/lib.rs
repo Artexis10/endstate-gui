@@ -464,43 +464,6 @@ fn import_zip_from_base64(data: String, file_name: String, profiles_dir: String)
     result
 }
 
-/// Show a file save dialog for choosing where to save a file.
-///
-/// # Arguments
-/// * `default_name` - Default file name suggestion
-/// * `filter_name` - Display name for the file type filter
-/// * `filter_ext` - File extension for the filter (e.g., "jsonc")
-///
-/// # Returns
-/// * `Ok(Some(String))` - Selected save path
-/// * `Ok(None)` - User cancelled
-#[tauri::command]
-fn show_save_dialog(default_name: String, filter_name: String, filter_ext: String) -> Result<Option<String>, String> {
-    use std::process::Command;
-
-    // Use PowerShell SaveFileDialog
-    let script = format!(
-        r#"Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.SaveFileDialog; $d.FileName = '{}'; $d.Filter = '{} (*.{})|*.{}|All files (*.*)|*.*'; $d.Title = 'Save File'; if ($d.ShowDialog() -eq 'OK') {{ $d.FileName }} else {{ '' }}"#,
-        default_name.replace("'", "''"),
-        filter_name.replace("'", "''"),
-        filter_ext,
-        filter_ext
-    );
-
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
-        .output()
-        .map_err(|e| format!("Failed to run PowerShell: {}", e))?;
-
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    if path.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(path))
-    }
-}
-
 /// Copy a file to the profiles directory.
 ///
 /// # Arguments
@@ -1313,6 +1276,7 @@ async fn run_endstate_streaming(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(create_run_state())
         .manage(EventBroadcaster::new())
         .setup(|_app| {
@@ -1346,7 +1310,6 @@ pub fn run() {
             extract_zip_profile,
             import_zip_from_base64,
             show_file_dialog,
-            show_save_dialog,
             open_folder,
             read_text_file,
             write_text_file,
