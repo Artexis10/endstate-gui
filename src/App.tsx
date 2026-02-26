@@ -62,6 +62,59 @@ interface AppState {
   verify: EndstateEnvelope<EndstateVerifyData> | null;
 }
 
+/**
+ * Read bundle metadata.json from a profile's parent directory.
+ * Returns config module info if the profile is inside a bundle (subdirectory with metadata.json).
+ */
+async function readBundleMetadata(profilePath: string): Promise<{
+  configModulesIncluded?: string[];
+  configModuleMap?: Record<string, string>;
+} | null> {
+  try {
+    // Get the directory containing the manifest
+    const dir = profilePath.replace(/[\\/][^\\/]+$/, '');
+    const metadataPath = `${dir}\\metadata.json`;
+    const exists = await invoke<boolean>('check_file_exists', { path: metadataPath });
+    if (!exists) return null;
+    const content = await invoke<string>('read_text_file', { path: metadataPath });
+    const metadata = JSON.parse(content);
+    const configModulesIncluded: string[] | undefined = metadata.configModulesIncluded;
+    if (!configModulesIncluded?.length) return null;
+
+    // Try to build configModuleMap by reading the manifest and matching config modules to winget IDs
+    let configModuleMap: Record<string, string> | undefined;
+    try {
+      const manifestContent = await invoke<string>('read_text_file', { path: profilePath });
+      // Strip JSONC comments for parsing
+      const { parseJsonc } = await import('./lib/jsonc-parse');
+      const manifest = parseJsonc(manifestContent) as { apps?: Array<{ id?: string; refs?: { windows?: string } }> };
+      if (manifest?.apps && Array.isArray(manifest.apps)) {
+        configModuleMap = {};
+        const configSet = new Set(configModulesIncluded.map(m => m.toLowerCase()));
+        for (const app of manifest.apps) {
+          const wingetId: string = app.refs?.windows || app.id || '';
+          const appId: string = (app.id || '').toLowerCase();
+          // Match: config module name appears in app id, or vice versa
+          for (const mod of configSet) {
+            const normMod = mod.replace(/[^a-z0-9]/g, '');
+            const normAppId = appId.replace(/[^a-z0-9]/g, '');
+            if (normAppId.includes(normMod) || normMod.includes(normAppId)) {
+              configModuleMap[wingetId] = mod;
+              break;
+            }
+          }
+        }
+      }
+    } catch {
+      // Manifest parsing failed — still return the module list
+    }
+
+    return { configModulesIncluded, configModuleMap };
+  } catch {
+    return null;
+  }
+}
+
 function AppContent() {
   const { showToast } = useToast();
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
@@ -156,6 +209,7 @@ function AppContent() {
     profile?: string;
     timestamp?: string;
     wasPreview?: boolean; // Track if this was a preview (for showing Apply button)
+    configModuleMap?: Record<string, string>;
     restoreItems?: RestoreItem[];
     restoreSummary?: RestoreSummary;
     restoreJournalFile?: string;
@@ -730,16 +784,7 @@ function AppContent() {
 
   const handleDeleteProfile = async () => {
     if (!deleteProfilePath) return;
-    
-    // Safety check: prevent deleting the currently selected profile
-    if (deleteProfilePath === selectedProfilePath) {
-      console.error('Cannot delete the currently selected profile');
-      setShowDeleteProfileModal(false);
-      setDeleteProfilePath('');
-      setDeleteProfileName('');
-      return;
-    }
-    
+
     try {
       // Delete both setup and metadata files
       await deleteProfileFiles(deleteProfilePath);
@@ -1355,10 +1400,12 @@ function AppContent() {
     applyLineBufferRef.current?.clear();
     setIsRunning(false);
 
-    // Process result
+    // Process result — envelope counts are source of truth, fall back to event counting
     const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
-    const installed = envelopeData?.counts?.installed ?? 0;
-    const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? 0;
+    const installed = envelopeData?.counts?.installed
+      ?? collectedEvents.filter(e => e.statusKey === 'to_install').length;
+    const alreadyPresent = envelopeData?.counts?.alreadyInstalled
+      ?? collectedEvents.filter(e => e.statusKey === 'present').length;
 
     // Persist run artifacts (logs, diagnostics, summary)
     if (runBundle) {
@@ -1412,7 +1459,29 @@ function AppContent() {
       message: `${installed} to install, ${alreadyPresent} already present`
     });
 
-    return { installed, alreadyPresent, profile: profileName, appEvents: collectedEvents };
+    // If engine didn't provide config module info, try reading bundle metadata
+    let restoreModulesAvailable = envelopeData?.restoreModulesAvailable;
+    let configModuleMap = envelopeData?.configModuleMap;
+    if (!restoreModulesAvailable || !configModuleMap) {
+      const bundleMeta = await readBundleMetadata(profilePath);
+      if (bundleMeta) {
+        if (!restoreModulesAvailable) {
+          restoreModulesAvailable = bundleMeta.configModulesIncluded;
+        }
+        if (!configModuleMap && bundleMeta.configModuleMap) {
+          configModuleMap = bundleMeta.configModuleMap;
+        }
+      }
+    }
+
+    return {
+      installed,
+      alreadyPresent,
+      profile: profileName,
+      appEvents: collectedEvents,
+      restoreModulesAvailable,
+      configModuleMap,
+    };
   };
 
   const handleCheckFromOverview = async () => {
@@ -1766,11 +1835,11 @@ function AppContent() {
     // Bounded buffer: keep up to 2000 events for scrollback
     setLiveAppEvents(reconciledEvents.length > 2000 ? reconciledEvents.slice(-2000) : reconciledEvents);
     
-    // Update counters from envelope (source of truth)
-    const installed = envelopeData?.counts?.installed ?? 0;
-    const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? 0;
-    const failed = envelopeData?.counts?.failed ?? 0;
-    const skipped = envelopeData?.counts?.skippedFiltered ?? 0;
+    // Update counters from envelope (source of truth), fall back to event-derived counters
+    const installed = envelopeData?.counts?.installed ?? counters.installed;
+    const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? counters.alreadyPresent;
+    const failed = envelopeData?.counts?.failed ?? counters.failed;
+    const skipped = envelopeData?.counts?.skippedFiltered ?? counters.skipped;
     
     // Extract restore counters from envelope
     const restoreSummary = envelopeData?.restoreSummary;
@@ -1851,14 +1920,30 @@ function AppContent() {
       });
     }
     
+    // If engine didn't provide config module info, try reading bundle metadata
+    let configModuleMapResult = envelopeData?.configModuleMap;
+    let restoreModulesAvailableResult = envelopeData?.restoreModulesAvailable;
+    if (!configModuleMapResult || !restoreModulesAvailableResult) {
+      const bundleMeta = await readBundleMetadata(profilePath);
+      if (bundleMeta) {
+        if (!restoreModulesAvailableResult) {
+          restoreModulesAvailableResult = bundleMeta.configModulesIncluded;
+        }
+        if (!configModuleMapResult && bundleMeta.configModuleMap) {
+          configModuleMapResult = bundleMeta.configModuleMap;
+        }
+      }
+    }
+
     return {
       installed, alreadyPresent, failed, skipped,
       profile: profileName,
       appEvents: reconciledEvents,
+      configModuleMap: configModuleMapResult,
       restoreItems: envelopeData?.restoreItems,
       restoreSummary,
       restoreJournalFile: envelopeData?.restoreJournalFile,
-      restoreModulesAvailable: envelopeData?.restoreModulesAvailable,
+      restoreModulesAvailable: restoreModulesAvailableResult,
     };
   };
 
@@ -2105,24 +2190,27 @@ function AppContent() {
                   } else {
                     await invoke('write_text_file', { path: savePath, content: captureResult.draftText });
                   }
-                } else if (isZip) {
-                  // Tidewave: zip exists on disk — read as base64, trigger browser download
-                  const base64 = await invoke<string>('read_file_base64', { path: captureResult.outputPath });
-                  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-                  const blob = new Blob([bytes], { type: 'application/zip' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = defaultName;
-                  a.click();
-                  URL.revokeObjectURL(url);
                 } else {
-                  // Web fallback: browser download for jsonc manifest
-                  const blob = new Blob([captureResult.draftText], { type: 'application/json' });
+                  // Web/Tidewave: browser download
+                  let blob: Blob;
+                  let downloadName = defaultName;
+                  if (isZip) {
+                    try {
+                      const base64 = await invoke<string>('read_file_base64', { path: captureResult.outputPath });
+                      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+                      blob = new Blob([bytes], { type: 'application/zip' });
+                    } catch {
+                      // read_file_base64 unavailable — fall back to jsonc text
+                      blob = new Blob([captureResult.draftText], { type: 'application/json' });
+                      downloadName = defaultName.replace('.zip', '.jsonc');
+                    }
+                  } else {
+                    blob = new Blob([captureResult.draftText], { type: 'application/json' });
+                  }
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = defaultName;
+                  a.download = downloadName;
                   a.click();
                   URL.revokeObjectURL(url);
                 }
@@ -2147,6 +2235,11 @@ function AppContent() {
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
               onFileDrop={handleFileDrop}
+              onDeleteProfile={(path: string, displayName: string) => {
+                setDeleteProfilePath(path);
+                setDeleteProfileName(displayName);
+                setShowDeleteProfileModal(true);
+              }}
               isRunning={isRunning}
               setupProgress={actionProgressByAction['setup'] ?? null}
               liveAppEvents={liveAppEvents}
@@ -2180,7 +2273,12 @@ function AppContent() {
                 try {
                   const result = await handleApplyFromOverview();
                   setOverviewActionStatus('setup', result.failed > 0 ? 'error' : 'success');
-                  return result;
+                  return {
+                    ...result,
+                    configsRestored: result.restoreSummary?.restored,
+                    configsSkipped: result.restoreSummary?.skipped,
+                    configsFailed: result.restoreSummary?.failed,
+                  };
                 } finally {
                   setIsRunning(false);
                   setOverviewRunningAction(null);
@@ -2354,6 +2452,7 @@ function AppContent() {
                         configsErrored: result.restoreSummary?.failed,
                       },
                       appEvents: result.appEvents,
+                      configModuleMap: result.configModuleMap,
                       restoreItems: result.restoreItems,
                       restoreSummary: result.restoreSummary,
                       restoreJournalFile: result.restoreJournalFile,
@@ -3278,22 +3377,16 @@ function AppContent() {
             <DialogTitle>Delete profile</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete <strong>{deleteProfileName}</strong>?
-              {deleteProfilePath === selectedProfilePath && (
-                <span className="block mt-2 text-warning">
-                  You cannot delete the active profile. Please select a different profile first.
-                </span>
-              )}
+              This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="secondary" onClick={() => setShowDeleteProfileModal(false)}>
               Cancel
             </Button>
-            {deleteProfilePath !== selectedProfilePath && (
-              <Button variant="danger" onClick={handleDeleteProfile}>
-                Delete
-              </Button>
-            )}
+            <Button variant="danger" onClick={handleDeleteProfile}>
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

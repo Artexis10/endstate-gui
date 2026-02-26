@@ -126,8 +126,15 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
     // Validate each candidate and only include valid profiles
     const profileResults = await Promise.all(
       candidateFiles.map(async (setupPath) => {
-        const filename = setupPath.split(/[/\\]/).pop() || '';
-        const id = filename.replace(/\.(jsonc?|json5)$/i, '');
+        const segments = setupPath.split(/[/\\]/);
+        const filename = segments.pop() || '';
+        const parentDir = segments.pop() || '';
+        const bareFilename = filename.replace(/\.(jsonc?|json5)$/i, '');
+        // For extracted zip bundles (e.g. Setups/hugo-desktop/manifest.jsonc),
+        // use the parent directory name as the profile ID instead of "manifest"
+        const dirBasename = directory.split(/[/\\]/).pop() || '';
+        const isNestedInSubdir = parentDir !== '' && parentDir.toLowerCase() !== dirBasename.toLowerCase();
+        const id = isNestedInSubdir ? parentDir : bareFilename;
         const metaPath = getMetaPath(setupPath);
         
         // Validate against profile contract

@@ -65,6 +65,8 @@ export interface ActionResult {
   restoreModulesAvailable?: string[];
   /** Structured config module metadata from capture envelope */
   configModules?: CaptureConfigModule[];
+  /** Maps winget ID → config module name (from apply/preview envelope) */
+  configModuleMap?: Record<string, string>;
 }
 
 export interface LiveCounters {

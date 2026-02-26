@@ -6,7 +6,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye } from 'lucide-react';
+import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,6 +27,9 @@ interface PreviewResult {
   installed: number;
   alreadyPresent: number;
   appEvents: AppEvent[];
+  restoreModulesAvailable?: string[];
+  /** Maps winget ID → config module name for apps with settings */
+  configModuleMap?: Record<string, string>;
 }
 
 interface ApplyResult {
@@ -35,6 +38,11 @@ interface ApplyResult {
   failed: number;
   skipped: number;
   appEvents: AppEvent[];
+  /** Maps winget ID → config module name for apps with settings */
+  configModuleMap?: Record<string, string>;
+  configsRestored?: number;
+  configsSkipped?: number;
+  configsFailed?: number;
 }
 
 export interface SetupFlowProps {
@@ -44,6 +52,7 @@ export interface SetupFlowProps {
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
   onFileDrop: (files: File[]) => void;
+  onDeleteProfile: (path: string, displayName: string) => void;
   // Apply flow props
   isRunning: boolean;
   setupProgress: { message: string; detail?: string } | null;
@@ -59,6 +68,7 @@ export function SetupFlow({
   onOpenProfilesFolder,
   onRefreshProfiles,
   onFileDrop,
+  onDeleteProfile,
   isRunning,
   setupProgress,
   liveAppEvents,
@@ -226,17 +236,33 @@ export function SetupFlow({
                             <p className="text-sm font-medium">
                               {profile.displayName || profile.name}
                             </p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {profile.name}
-                            </p>
+                            {profile.displayName && profile.displayName !== profile.name && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {profile.name}
+                              </p>
+                            )}
                           </div>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            tabIndex={-1}
-                          >
-                            Select
-                          </Button>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              tabIndex={-1}
+                              className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 px-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteProfile(profile.path, profile.displayName || profile.name);
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              tabIndex={-1}
+                            >
+                              Select
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -304,11 +330,11 @@ export function SetupFlow({
                             {uiStatus.shortLabel}
                           </span>
                           <span className="truncate flex-1">
-                              {event.name || formatAppIdentity(event.app)}
-                              {event.name && (
-                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
-                              )}
-                            </span>
+                            {event.name || formatAppIdentity(event.app)}
+                            {event.name && (
+                              <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
+                            )}
+                          </span>
                         </div>
                       );
                     })}
@@ -320,7 +346,11 @@ export function SetupFlow({
         )}
 
         {/* Preview done: Show results + Apply button */}
-        {phase === 'preview-done' && previewResult && (
+        {phase === 'preview-done' && previewResult && (() => {
+          const configMap = previewResult.configModuleMap ?? {};
+          const settingsCount = previewResult.restoreModulesAvailable?.length ?? Object.keys(configMap).length;
+          const totalApps = previewResult.installed + previewResult.alreadyPresent;
+          return (
           <motion.div
             key="preview-done"
             initial={{ opacity: 0, y: 8 }}
@@ -338,7 +368,8 @@ export function SetupFlow({
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {previewResult.installed > 0
                         ? `${previewResult.installed} to install, ${previewResult.alreadyPresent} already present`
-                        : `All ${previewResult.alreadyPresent} apps already present`}
+                        : `All ${totalApps} apps already present`}
+                      {settingsCount > 0 && ` · ${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'} included`}
                     </p>
                   </div>
                 </div>
@@ -347,6 +378,11 @@ export function SetupFlow({
                 {previewResult.appEvents.length > 0 && (
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
+                      {totalApps > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}>
+                          {totalApps} {totalApps === 1 ? 'app' : 'apps'}
+                        </span>
+                      )}
                       {previewResult.installed > 0 && (
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('action').bg} ${getColorClasses('action').text}`}>
                           {previewResult.installed} to install
@@ -357,9 +393,14 @@ export function SetupFlow({
                           {previewResult.alreadyPresent} present
                         </span>
                       )}
+                      {settingsCount > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
+                          {settingsCount} {settingsCount === 1 ? 'setting' : 'settings'}
+                        </span>
+                      )}
                     </div>
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {previewResult.appEvents.slice(0, 30).map((event, i) => {
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {previewResult.appEvents.map((event, i) => {
                         const statusKey: StatusKey = event.statusKey || (
                           event.action === 'OK' ? 'present' :
                           event.action === 'To install' ? 'to_install' :
@@ -367,10 +408,16 @@ export function SetupFlow({
                         );
                         const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'preview', reason: event.reason });
                         const colors = getColorClasses(uiStatus.color);
+                        const hasSettings = event.app in configMap;
                         return (
                           <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                            <span className={`w-16 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
-                            <span className="truncate flex-1">
+                            <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
+                            <span className="w-4 flex-shrink-0 flex justify-center">
+                              {hasSettings && (
+                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
+                              )}
+                            </span>
+                            <span className="truncate">
                               {event.name || formatAppIdentity(event.app)}
                               {event.name && (
                                 <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
@@ -379,18 +426,17 @@ export function SetupFlow({
                           </div>
                         );
                       })}
-                      {previewResult.appEvents.length > 30 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          ...and {previewResult.appEvents.length - 30} more
-                        </p>
-                      )}
                     </div>
                   </div>
                 )}
 
                 <div className="flex items-center gap-3 mt-6">
                   {previewResult.installed > 0 && (
-                    <Button onClick={handleApply} data-testid="setup-flow-apply">
+                    <Button
+                      onClick={handleApply}
+                      data-testid="setup-flow-apply"
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
                       <Play className="h-4 w-4 mr-2" />
                       Apply changes
                     </Button>
@@ -402,7 +448,8 @@ export function SetupFlow({
               </CardContent>
             </Card>
           </motion.div>
-        )}
+          );
+        })()}
 
         {/* Applying: Progress display */}
         {phase === 'applying' && (
@@ -454,11 +501,11 @@ export function SetupFlow({
                             {uiStatus.shortLabel}
                           </span>
                           <span className="truncate flex-1">
-                              {event.name || formatAppIdentity(event.app)}
-                              {event.name && (
-                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
-                              )}
-                            </span>
+                            {event.name || formatAppIdentity(event.app)}
+                            {event.name && (
+                              <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
+                            )}
+                          </span>
                         </div>
                       );
                     })}
@@ -493,6 +540,9 @@ export function SetupFlow({
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {applyResult.installed} installed, {applyResult.alreadyPresent} already present
                       {applyResult.failed > 0 ? `, ${applyResult.failed} failed` : ''}
+                      {(applyResult.configsRestored ?? 0) > 0 && (
+                        <> &middot; {applyResult.configsRestored} {applyResult.configsRestored === 1 ? 'setting' : 'settings'} restored</>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -521,9 +571,14 @@ export function SetupFlow({
                           {applyResult.failed} failed
                         </span>
                       )}
+                      {(applyResult.configsRestored ?? 0) > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
+                          {applyResult.configsRestored} settings
+                        </span>
+                      )}
                     </div>
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {applyResult.appEvents.slice(0, 30).map((event, i) => {
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {applyResult.appEvents.map((event, i) => {
                         const statusKey: StatusKey = event.statusKey || (
                           event.action === 'OK' ? 'present' :
                           event.action === 'Installed' ? 'installed' :
@@ -533,10 +588,17 @@ export function SetupFlow({
                         );
                         const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'apply', reason: event.reason });
                         const colors = getColorClasses(uiStatus.color);
+                        const applyConfigMap = applyResult.configModuleMap ?? {};
+                        const hasSettings = event.app in applyConfigMap || event.app.startsWith('\u2699');
                         return (
                           <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                            <span className={`w-16 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
-                            <span className="truncate flex-1">
+                            <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
+                            <span className="w-4 flex-shrink-0 flex justify-center">
+                              {hasSettings && (
+                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
+                              )}
+                            </span>
+                            <span className="truncate">
                               {event.name || formatAppIdentity(event.app)}
                               {event.name && (
                                 <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
@@ -545,11 +607,6 @@ export function SetupFlow({
                           </div>
                         );
                       })}
-                      {applyResult.appEvents.length > 30 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          ...and {applyResult.appEvents.length - 30} more
-                        </p>
-                      )}
                     </div>
                   </div>
                 )}
