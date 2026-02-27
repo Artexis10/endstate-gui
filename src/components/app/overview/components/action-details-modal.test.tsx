@@ -23,9 +23,9 @@ const noop = () => {};
 
 describe('ActionDetailsModal config matching', () => {
   describe('configModules path (engine-provided appId)', () => {
-    it('matches config module to app via appId', () => {
+    it('matches config module to app via wingetRefs', () => {
       const configModules: CaptureConfigModule[] = [
-        { id: 'apps.vscode', appId: 'vscode', displayName: 'Visual Studio Code', status: 'captured', filesCaptured: 5 },
+        { id: 'apps.vscode', appId: 'vscode', displayName: 'Visual Studio Code', status: 'captured', filesCaptured: 5, wingetRefs: ['Microsoft.VisualStudioCode'] },
       ];
       render(
         <ActionDetailsModal
@@ -131,7 +131,7 @@ describe('ActionDetailsModal config matching', () => {
       expect(badges.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('falls back to appId when wingetRefs present but no match', () => {
+    it('shows unmatched when wingetRefs has no match', () => {
       const configModules: CaptureConfigModule[] = [
         { id: 'apps.vscode', appId: 'vscode', displayName: 'Visual Studio Code', status: 'captured', filesCaptured: 5, wingetRefs: ['Some.Other.Id'] },
       ];
@@ -144,12 +144,11 @@ describe('ActionDetailsModal config matching', () => {
         />
       );
 
-      // wingetRefs has no match, but appId "vscode" matches "Microsoft.VisualStudioCode" via fallback
-      const badges = screen.getAllByTestId('config-captured');
-      expect(badges.length).toBeGreaterThanOrEqual(1);
+      // No wingetRefs match — shows as unmatched standalone row
+      expect(screen.getByText('Visual Studio Code')).toBeInTheDocument();
     });
 
-    it('falls back to appId when wingetRefs is empty array', () => {
+    it('shows unmatched when wingetRefs is empty array', () => {
       const configModules: CaptureConfigModule[] = [
         { id: 'apps.vscode', appId: 'vscode', displayName: 'Visual Studio Code', status: 'captured', filesCaptured: 5, wingetRefs: [] },
       ];
@@ -162,66 +161,56 @@ describe('ActionDetailsModal config matching', () => {
         />
       );
 
-      // Empty wingetRefs, falls back to appId "vscode" matching "Microsoft.VisualStudioCode"
-      const badges = screen.getAllByTestId('config-captured');
-      expect(badges.length).toBeGreaterThanOrEqual(1);
+      // Empty wingetRefs — shows as unmatched standalone row
+      expect(screen.getByText('Visual Studio Code')).toBeInTheDocument();
     });
   });
 
-  describe('legacy fallback (no configModules)', () => {
-    it('falls back to heuristic when configModules is absent', () => {
+  describe('configModuleMap path (setup/preview results)', () => {
+    function makeSetupResult(overrides: Partial<ActionResult> = {}): ActionResult {
+      return {
+        action: 'setup',
+        status: 'success',
+        summary: '2 to install, 1 already present',
+        appEvents: [
+          { app: 'Microsoft.VisualStudioCode', action: 'To install', statusKey: 'to_install', phase: 'apply' as never },
+          { app: 'Git.Git', action: 'OK', statusKey: 'present', phase: 'apply' as never },
+        ],
+        counts: { toInstall: 2, alreadyPresent: 1, manifestTotal: 3 },
+        wasPreview: true,
+        ...overrides,
+      };
+    }
+
+    it('shows settings badge when configModuleMap maps winget ID to module name', () => {
       render(
         <ActionDetailsModal
           open={true}
           onOpenChange={noop}
-          actionResult={makeResult({
-            configModules: undefined,
-            configsIncluded: ['vscode-extensions'],
-            configsCaptureErrors: [],
+          actionResult={makeSetupResult({
+            configModuleMap: { 'Microsoft.VisualStudioCode': 'vscode' },
           })}
           actionProgress={null}
         />
       );
 
-      // Legacy heuristic: "vscode" matches "Microsoft.VisualStudioCode"
+      // The VS Code row should have a "Settings" badge via configModuleMap
       const badges = screen.getAllByTestId('config-captured');
       expect(badges.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('falls back to heuristic when configModules is empty array', () => {
+    it('does not show settings badge when configModuleMap is absent', () => {
       render(
         <ActionDetailsModal
           open={true}
           onOpenChange={noop}
-          actionResult={makeResult({
-            configModules: [],
-            configsIncluded: ['obsidian'],
-            configsCaptureErrors: [],
-          })}
+          actionResult={makeSetupResult()}
           actionProgress={null}
         />
       );
 
-      // Legacy heuristic: "obsidian" matches "Obsidian.Obsidian"
-      const badges = screen.getAllByTestId('config-captured');
-      expect(badges.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('shows unmatched legacy configs by raw ID', () => {
-      render(
-        <ActionDetailsModal
-          open={true}
-          onOpenChange={noop}
-          actionResult={makeResult({
-            configModules: undefined,
-            configsIncluded: ['some-unknown-config'],
-            configsCaptureErrors: [],
-          })}
-          actionProgress={null}
-        />
-      );
-
-      expect(screen.getByText('some-unknown-config')).toBeInTheDocument();
+      const badges = screen.queryAllByTestId('config-captured');
+      expect(badges).toHaveLength(0);
     });
   });
 });

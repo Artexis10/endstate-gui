@@ -66,12 +66,15 @@ interface AppState {
  * Read bundle metadata.json from a profile's parent directory.
  * Returns config module info if the profile is inside a bundle (subdirectory with metadata.json).
  */
+/**
+ * Read bundle metadata.json to get the list of included config modules.
+ * The per-app mapping (configModuleMap) comes from the engine — we don't
+ * attempt to reconstruct it here.
+ */
 async function readBundleMetadata(profilePath: string): Promise<{
   configModulesIncluded?: string[];
-  configModuleMap?: Record<string, string>;
 } | null> {
   try {
-    // Get the directory containing the manifest
     const dir = profilePath.replace(/[\\/][^\\/]+$/, '');
     const metadataPath = `${dir}\\metadata.json`;
     const exists = await invoke<boolean>('check_file_exists', { path: metadataPath });
@@ -80,36 +83,7 @@ async function readBundleMetadata(profilePath: string): Promise<{
     const metadata = JSON.parse(content);
     const configModulesIncluded: string[] | undefined = metadata.configModulesIncluded;
     if (!configModulesIncluded?.length) return null;
-
-    // Try to build configModuleMap by reading the manifest and matching config modules to winget IDs
-    let configModuleMap: Record<string, string> | undefined;
-    try {
-      const manifestContent = await invoke<string>('read_text_file', { path: profilePath });
-      // Strip JSONC comments for parsing
-      const { parseJsonc } = await import('./lib/jsonc-parse');
-      const manifest = parseJsonc(manifestContent) as { apps?: Array<{ id?: string; refs?: { windows?: string } }> };
-      if (manifest?.apps && Array.isArray(manifest.apps)) {
-        configModuleMap = {};
-        const configSet = new Set(configModulesIncluded.map(m => m.toLowerCase()));
-        for (const app of manifest.apps) {
-          const wingetId: string = app.refs?.windows || app.id || '';
-          const appId: string = (app.id || '').toLowerCase();
-          // Match: config module name appears in app id, or vice versa
-          for (const mod of configSet) {
-            const normMod = mod.replace(/[^a-z0-9]/g, '');
-            const normAppId = appId.replace(/[^a-z0-9]/g, '');
-            if (normAppId.includes(normMod) || normMod.includes(normAppId)) {
-              configModuleMap[wingetId] = mod;
-              break;
-            }
-          }
-        }
-      }
-    } catch {
-      // Manifest parsing failed — still return the module list
-    }
-
-    return { configModulesIncluded, configModuleMap };
+    return { configModulesIncluded };
   } catch {
     return null;
   }
@@ -1461,16 +1435,11 @@ function AppContent() {
 
     // If engine didn't provide config module info, try reading bundle metadata
     let restoreModulesAvailable = envelopeData?.restoreModulesAvailable;
-    let configModuleMap = envelopeData?.configModuleMap;
-    if (!restoreModulesAvailable || !configModuleMap) {
+    const configModuleMap = envelopeData?.configModuleMap;
+    if (!restoreModulesAvailable) {
       const bundleMeta = await readBundleMetadata(profilePath);
-      if (bundleMeta) {
-        if (!restoreModulesAvailable) {
-          restoreModulesAvailable = bundleMeta.configModulesIncluded;
-        }
-        if (!configModuleMap && bundleMeta.configModuleMap) {
-          configModuleMap = bundleMeta.configModuleMap;
-        }
+      if (bundleMeta?.configModulesIncluded) {
+        restoreModulesAvailable = bundleMeta.configModulesIncluded;
       }
     }
 
@@ -1920,18 +1889,13 @@ function AppContent() {
       });
     }
     
-    // If engine didn't provide config module info, try reading bundle metadata
-    let configModuleMapResult = envelopeData?.configModuleMap;
+    // If engine didn't provide config module info, try reading bundle metadata for the count
+    const configModuleMapResult = envelopeData?.configModuleMap;
     let restoreModulesAvailableResult = envelopeData?.restoreModulesAvailable;
-    if (!configModuleMapResult || !restoreModulesAvailableResult) {
+    if (!restoreModulesAvailableResult) {
       const bundleMeta = await readBundleMetadata(profilePath);
-      if (bundleMeta) {
-        if (!restoreModulesAvailableResult) {
-          restoreModulesAvailableResult = bundleMeta.configModulesIncluded;
-        }
-        if (!configModuleMapResult && bundleMeta.configModuleMap) {
-          configModuleMapResult = bundleMeta.configModuleMap;
-        }
+      if (bundleMeta?.configModulesIncluded) {
+        restoreModulesAvailableResult = bundleMeta.configModulesIncluded;
       }
     }
 
@@ -2473,6 +2437,8 @@ function AppContent() {
                         manifestTotal: result.installed + result.alreadyPresent,
                       },
                       appEvents: result.appEvents,
+                      configModuleMap: result.configModuleMap,
+                      restoreModulesAvailable: result.restoreModulesAvailable,
                       wasPreview: true, // Flag for showing "Apply changes" button
                     });
                   }
