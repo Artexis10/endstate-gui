@@ -66,11 +66,6 @@ interface AppState {
  * Read bundle metadata.json from a profile's parent directory.
  * Returns config module info if the profile is inside a bundle (subdirectory with metadata.json).
  */
-/**
- * Read bundle metadata.json to get the list of included config modules.
- * The per-app mapping (configModuleMap) comes from the engine — we don't
- * attempt to reconstruct it here.
- */
 async function readBundleMetadata(profilePath: string): Promise<{
   configModulesIncluded?: string[];
 } | null> {
@@ -1000,6 +995,20 @@ function AppContent() {
         return;
       }
 
+      // Dev-mode: log engine version info for staleness detection
+      if (import.meta.env.DEV) {
+        const capData = capResult.envelope.data;
+        if (capData.gitCommit) {
+          console.log(
+            `[ENGINE] gitCommit=${capData.gitCommit} dirty=${capData.gitDirty ?? 'unknown'} bootstrapped=${capData.bootstrapTimestamp ?? 'unknown'}`
+          );
+        } else {
+          console.warn(
+            '[ENGINE WARNING] No gitCommit in capabilities — likely running stale bootstrapped copy. Consider using script mode or re-bootstrapping.'
+          );
+        }
+      }
+
       // Capabilities succeeded - continue with report (also non-streaming)
       const reportResult = await runEndstateOnce<EndstateEnvelope<EndstateReportData>>(
         settings,
@@ -1433,7 +1442,7 @@ function AppContent() {
       message: `${installed} to install, ${alreadyPresent} already present`
     });
 
-    // If engine didn't provide config module info, try reading bundle metadata
+    // If engine didn't provide restoreModulesAvailable, try reading bundle metadata
     let restoreModulesAvailable = envelopeData?.restoreModulesAvailable;
     const configModuleMap = envelopeData?.configModuleMap;
     if (!restoreModulesAvailable) {
@@ -1889,7 +1898,7 @@ function AppContent() {
       });
     }
     
-    // If engine didn't provide config module info, try reading bundle metadata for the count
+    // If engine didn't provide restoreModulesAvailable, try reading bundle metadata
     const configModuleMapResult = envelopeData?.configModuleMap;
     let restoreModulesAvailableResult = envelopeData?.restoreModulesAvailable;
     if (!restoreModulesAvailableResult) {

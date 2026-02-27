@@ -34,6 +34,9 @@ export interface EndstateCapabilitiesData {
     os: string;
     drivers: string[];
   };
+  gitCommit?: string | null;
+  gitDirty?: boolean;
+  bootstrapTimestamp?: string | null;
 }
 
 export interface VerifyItem {
@@ -184,6 +187,8 @@ export interface EndstateApplyResultData {
   restoreJournalFile?: string;
   restoreFilter?: string[];
   restoreModulesAvailable?: string[];
+  /** Maps winget ID → config module name for apps that have settings in the profile */
+  configModuleMap?: Record<string, string>;
 }
 
 /** Restore item from NDJSON events and JSON envelope */
