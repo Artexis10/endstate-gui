@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "predev": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& '../endstate/bin/endstate.ps1' bootstrap -RepoRoot '../endstate' 2>&1 | Out-Null; Write-Host 'Engine bootstrapped.'\"",
+    "predev": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ENDSTATE_ALLOW_DIRECT='1'; & '../endstate/bin/endstate.ps1' bootstrap -RepoRoot '../endstate'; if ($LASTEXITCODE -eq 0) { Write-Host 'Engine bootstrapped.' } else { Write-Host 'WARNING: Engine bootstrap failed (non-fatal).' }\"",
     "dev": "vite",
     "dev:tidewave": "cross-env VITE_TIDEWAVE_ENABLED=1 vite",
     "tauri:dev:tidewave": "cross-env TIDEWAVE_ENABLED=1 VITE_TIDEWAVE_ENABLED=1 tauri dev --features dev-server",
