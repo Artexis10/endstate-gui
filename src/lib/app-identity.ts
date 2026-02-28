@@ -26,7 +26,7 @@ export function formatAppIdentity(app: string): string {
 /**
  * Extract display name and Winget ID from app identifier.
  * Returns both parts if available for rich display.
- * 
+ *
  * @param app - App identifier string
  * @returns Object with displayName and wingetId (if available)
  */
@@ -38,7 +38,7 @@ export function parseAppIdentity(app: string): { displayName: string; wingetId?:
       wingetId: app,
     };
   }
-  
+
   // Otherwise, just the internal key
   return {
     displayName: app,

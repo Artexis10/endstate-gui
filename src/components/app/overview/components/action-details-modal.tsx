@@ -26,28 +26,8 @@ type ConfigStatus = 'captured' | 'errored';
 type FilterValue = StatusKey | 'config' | null;
 
 /**
- * Legacy heuristic: match a config module ID to an app ID by substring.
- * Used as fallback when engine does not provide configModules with appId.
- */
-function configMatchesAppLegacy(configId: string, appId: string): boolean {
-  const configWords = configId.toLowerCase().split('-');
-  const appSegments = appId.split('.').map(s => s.toLowerCase());
-
-  for (const word of configWords) {
-    if (word.length < 3) continue;
-    for (const segment of appSegments) {
-      if (segment.includes(word) || word.includes(segment)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-/**
- * Build a map of appId → config statuses.
- * Prefers engine-provided configModules (with explicit appId) when available.
- * Falls back to legacy substring heuristic for older engines.
+ * Build a map of appId → config statuses from engine-provided configModules.
+ * Uses wingetRefs for exact matching only — no heuristics.
  */
 function buildConfigMap(
   actionResult: ActionResult,
@@ -56,51 +36,23 @@ function buildConfigMap(
   const matched = new Map<string, { configId: string; status: ConfigStatus }[]>();
   const unmatched: { id: string; status: ConfigStatus }[] = [];
 
-  // Prefer structured configModules (engine-provided appId)
-  if (actionResult.configModules && actionResult.configModules.length > 0) {
-    for (const mod of actionResult.configModules) {
-      if (mod.status === 'skipped') continue;
+  if (!actionResult.configModules?.length) return { matched, unmatched };
 
-      const configStatus: ConfigStatus = mod.status === 'error' ? 'errored' : 'captured';
+  for (const mod of actionResult.configModules) {
+    if (mod.status === 'skipped') continue;
 
-      // Prefer exact match via wingetRefs, fallback to appId substring heuristic
-      const matchedApp = (
-        mod.wingetRefs?.length
-          ? appIds.find(aid => mod.wingetRefs!.some(ref => ref.toLowerCase() === aid.toLowerCase()))
-          : null
-      ) ?? appIds.find(aid => {
-        const segments = aid.toLowerCase().split('.');
-        const modAppId = mod.appId.toLowerCase();
-        return segments.some(seg => seg === modAppId || modAppId.includes(seg) || seg.includes(modAppId));
-      });
+    const configStatus: ConfigStatus = mod.status === 'error' ? 'errored' : 'captured';
 
-      if (matchedApp) {
-        const existing = matched.get(matchedApp) ?? [];
-        existing.push({ configId: mod.id, status: configStatus });
-        matched.set(matchedApp, existing);
-      } else {
-        unmatched.push({ id: mod.displayName || mod.id, status: configStatus });
-      }
-    }
-    return { matched, unmatched };
-  }
+    const matchedApp = mod.wingetRefs?.length
+      ? appIds.find(aid => mod.wingetRefs!.some(ref => ref.toLowerCase() === aid.toLowerCase()))
+      : null;
 
-  // Fallback: legacy heuristic for engines without configModules
-  const configsIncluded = actionResult.configsIncluded ?? [];
-  const configsErrored = actionResult.configsCaptureErrors ?? [];
-  const allConfigs: { id: string; status: ConfigStatus }[] = [
-    ...configsIncluded.map(id => ({ id, status: 'captured' as const })),
-    ...configsErrored.map(id => ({ id, status: 'errored' as const })),
-  ];
-
-  for (const config of allConfigs) {
-    const matchedApp = appIds.find(appId => configMatchesAppLegacy(config.id, appId));
     if (matchedApp) {
       const existing = matched.get(matchedApp) ?? [];
-      existing.push({ configId: config.id, status: config.status });
+      existing.push({ configId: mod.id, status: configStatus });
       matched.set(matchedApp, existing);
     } else {
-      unmatched.push(config);
+      unmatched.push({ id: mod.displayName || mod.id, status: configStatus });
     }
   }
 
@@ -274,6 +226,13 @@ export function ActionDetailsModal({
           const configMap = hasConfigs
             ? buildConfigMap(actionResult, itemEvents.map(e => e.app))
             : { matched: new Map<string, { configId: string; status: ConfigStatus }[]>(), unmatched: [] as { id: string; status: ConfigStatus }[] };
+
+          // For setup/check, use configModuleMap from envelope
+          if (!hasConfigs && actionResult.configModuleMap) {
+            for (const [wingetId, moduleName] of Object.entries(actionResult.configModuleMap)) {
+              configMap.matched.set(wingetId, [{ configId: moduleName, status: 'captured' }]);
+            }
+          }
 
           // When filtering to config only, show only apps that have matched configs + unmatched
           const filteredEvents = (detailsFilter && detailsFilter !== 'config')

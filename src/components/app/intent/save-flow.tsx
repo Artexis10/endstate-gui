@@ -63,15 +63,40 @@ export function SaveFlow({
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const reduced = prefersReducedMotion();
   const transition = reduced
     ? { duration: 0.01 }
     : { duration: DURATIONS.normal, ease: EASING.easeInOut };
 
+  const toggleFilter = (key: string) => {
+    setActiveFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const clearFilters = () => setActiveFilters(new Set());
+
+  /** Filter captured apps based on active filter set (OR logic). */
+  const filterApps = (apps: CaptureAppEntry[]) => {
+    if (activeFilters.size === 0) return apps;
+    return apps.filter(app => {
+      for (const f of activeFilters) {
+        if (f === 'settings' && settingsByApp.has(app.id)) return true;
+        if (f === 'detected') return true;
+      }
+      return false;
+    });
+  };
+
   const handleStartScan = async () => {
     setPhase('scanning');
     setResult(null);
     setErrorMessage('');
+    setActiveFilters(new Set());
     try {
       const captureResult = await onStartCapture();
       setResult(captureResult);
@@ -289,17 +314,25 @@ export function SaveFlow({
                 {result.apps.length > 0 && (
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}>
+                      <button
+                        onClick={clearFilters}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('detected').bg} ${getColorClasses('detected').text} ${activeFilters.size > 0 ? 'opacity-50' : ''}`}
+                        aria-pressed={activeFilters.size === 0}
+                      >
                         {result.apps.length} apps
-                      </span>
+                      </button>
                       {settingsCount > 0 && (
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
+                        <button
+                          onClick={() => toggleFilter('settings')}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
+                          aria-pressed={activeFilters.has('settings')}
+                        >
                           {settingsCount} settings
-                        </span>
+                        </button>
                       )}
                     </div>
                     <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {result.apps.map((app) => {
+                      {filterApps(result.apps).map((app) => {
                         const colors = getColorClasses('detected');
                         const hasSettings = settingsByApp.has(app.id);
                         const displayLabel = app.name || nameByAppId.get(app.id) || formatAppIdentity(app.id);

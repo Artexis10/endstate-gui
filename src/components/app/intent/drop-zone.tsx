@@ -5,12 +5,13 @@
  * Renders as a prominent drop area within the Set up flow.
  */
 
-import { useState, useCallback, type DragEvent } from 'react';
+import { useState, useCallback, useRef, type DragEvent } from 'react';
 import { motion } from 'framer-motion';
 import { Upload } from 'lucide-react';
 import { prefersReducedMotion } from '@/lib/motion';
 
 const ACCEPTED_EXTENSIONS = ['.zip', '.json', '.jsonc', '.json5'];
+const ACCEPTED_INPUT = ACCEPTED_EXTENSIONS.join(',');
 
 interface DropZoneProps {
   onFileDrop: (files: File[]) => void;
@@ -20,6 +21,7 @@ interface DropZoneProps {
 export function DropZone({ onFileDrop, disabled = false }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const reduced = prefersReducedMotion();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAcceptedFile = useCallback((file: File) => {
     const name = file.name.toLowerCase();
@@ -53,8 +55,24 @@ export function DropZone({ onFileDrop, disabled = false }: DropZoneProps) {
     }
   }, [disabled, isAcceptedFile, onFileDrop]);
 
+  const handleClick = useCallback(() => {
+    if (!disabled) {
+      fileInputRef.current?.click();
+    }
+  }, [disabled]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(isAcceptedFile);
+    if (files.length > 0) {
+      onFileDrop(files);
+    }
+    // Reset so the same file can be selected again
+    e.target.value = '';
+  }, [isAcceptedFile, onFileDrop]);
+
   return (
     <motion.div
+      onClick={handleClick}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -83,12 +101,22 @@ export function DropZone({ onFileDrop, disabled = false }: DropZoneProps) {
         <p className={`text-sm font-medium ${
           isDragOver ? 'text-green-500' : 'text-foreground'
         }`}>
-          {isDragOver ? 'Drop to import' : 'Drop a file to import'}
+          {isDragOver ? 'Drop to import' : 'Click to browse or drop a file'}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           Accepts .zip bundles or .jsonc manifest files
         </p>
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_INPUT}
+        onChange={handleFileInput}
+        className="hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
     </motion.div>
   );
 }

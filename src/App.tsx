@@ -1385,6 +1385,16 @@ function AppContent() {
 
     // Process result — envelope counts are source of truth, fall back to event counting
     const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
+    // TEMP DIAGNOSTIC — remove after debugging configModuleMap
+    (window as any).__DIAG_ENVELOPE__ = {
+      envelopeKeys: applyResult.envelope ? Object.keys(applyResult.envelope) : 'no envelope',
+      dataKeys: envelopeData ? Object.keys(envelopeData) : 'no data',
+      configModuleMap: envelopeData?.configModuleMap,
+      restoreModulesAvailable: envelopeData?.restoreModulesAvailable,
+      rawEnvelope: applyResult.envelope,
+      ndjsonEvents: applyResult.ndjsonEvents,
+      ndjsonCount: applyResult.ndjsonEvents?.length,
+    };
     const installed = envelopeData?.counts?.installed
       ?? collectedEvents.filter(e => e.statusKey === 'to_install').length;
     const alreadyPresent = envelopeData?.counts?.alreadyInstalled

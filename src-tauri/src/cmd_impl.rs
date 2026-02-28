@@ -228,18 +228,45 @@ pub fn list_manifest_files(directory: &str) -> Result<Vec<String>, String> {
     if !dir_path.exists() || !dir_path.is_dir() {
         return Err(format!("Directory does not exist: {}", directory));
     }
+
+    fn is_manifest(path: &Path) -> bool {
+        path.is_file()
+            && path
+                .extension()
+                .map(|ext| {
+                    let e = ext.to_string_lossy().to_lowercase();
+                    e == "json" || e == "jsonc" || e == "json5"
+                })
+                .unwrap_or(false)
+    }
+
     let entries =
         fs::read_dir(dir_path).map_err(|e| format!("Failed to read directory: {}", e))?;
     let mut manifest_files = Vec::new();
     for entry in entries {
         if let Ok(entry) = entry {
             let path = entry.path();
-            if path.is_file() {
-                if let Some(ext) = path.extension() {
-                    let ext_str = ext.to_string_lossy().to_lowercase();
-                    if ext_str == "json" || ext_str == "jsonc" || ext_str == "json5" {
-                        if let Some(path_str) = path.to_str() {
-                            manifest_files.push(path_str.to_string());
+            if is_manifest(&path) {
+                if let Some(path_str) = path.to_str() {
+                    manifest_files.push(path_str.to_string());
+                }
+            } else if path.is_dir() {
+                // Look one level into subdirectories for extracted zip bundles
+                // (e.g. Setups/my-capture/manifest.jsonc)
+                // Skip known non-profile directories
+                let dir_name = entry.file_name().to_string_lossy().to_lowercase();
+                if dir_name == "runs" {
+                    continue;
+                }
+                if let Ok(sub_entries) = fs::read_dir(&path) {
+                    for sub_entry in sub_entries {
+                        if let Ok(sub_entry) = sub_entry {
+                            let sub_path = sub_entry.path();
+                            if is_manifest(&sub_path) {
+                                if let Some(path_str) = sub_path.to_str() {
+                                    manifest_files.push(path_str.to_string());
+                                }
+                            }
                         }
                     }
                 }

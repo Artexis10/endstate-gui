@@ -98,3 +98,4 @@ export interface ProfileApp {
     windows?: string;
   };
 }
+

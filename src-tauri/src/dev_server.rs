@@ -617,6 +617,72 @@ async fn handle_invoke(
             Ok(()) => ok_response(serde_json::json!(null)),
             Err(e) => err_response(e),
         },
+        "extract_zip_profile" => {
+            let zip_path = req
+                .args
+                .get("zipPath")
+                .or_else(|| req.args.get("zip_path"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let profiles_dir = req
+                .args
+                .get("profilesDir")
+                .or_else(|| req.args.get("profiles_dir"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            match extract_zip_to_profiles(&zip_path, &profiles_dir) {
+                Ok(path) => ok_response(serde_json::json!(path)),
+                Err(e) => err_response(e),
+            }
+        }
+        "import_zip_from_base64" => {
+            let data = req
+                .args
+                .get("data")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let file_name = req
+                .args
+                .get("fileName")
+                .or_else(|| req.args.get("file_name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let profiles_dir = req
+                .args
+                .get("profilesDir")
+                .or_else(|| req.args.get("profiles_dir"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            match import_zip_base64(&data, &file_name, &profiles_dir) {
+                Ok(path) => ok_response(serde_json::json!(path)),
+                Err(e) => err_response(e),
+            }
+        }
+        "read_file_base64" => {
+            let path = req
+                .args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let file_path = std::path::Path::new(&path);
+            if !file_path.exists() || !file_path.is_file() {
+                err_response("File does not exist")
+            } else {
+                match std::fs::read(file_path) {
+                    Ok(bytes) => {
+                        use base64::{Engine as _, engine::general_purpose::STANDARD};
+                        ok_response(serde_json::json!(STANDARD.encode(&bytes)))
+                    }
+                    Err(e) => err_response(format!("Failed to read file: {}", e)),
+                }
+            }
+        }
         "write_text_file_debug" => {
             let filename = req
                 .args
@@ -637,6 +703,103 @@ async fn handle_invoke(
         }
         _ => err_response(format!("Unknown command: {}", req.cmd)),
     }
+}
+
+/// Extract a zip file into the profiles directory.
+fn extract_zip_to_profiles(zip_path: &str, profiles_dir: &str) -> Result<String, String> {
+    use std::io::Read;
+
+    let source = std::path::Path::new(zip_path);
+    let dest_dir = std::path::Path::new(profiles_dir);
+
+    if !source.exists() || !source.is_file() {
+        return Err("Zip file does not exist".to_string());
+    }
+
+    let stem = source
+        .file_stem()
+        .ok_or_else(|| "Invalid zip file name".to_string())?
+        .to_str()
+        .ok_or_else(|| "Invalid file name encoding".to_string())?;
+
+    let extract_dir = dest_dir.join(stem);
+    let mut final_dir = extract_dir.clone();
+    let mut suffix = 1u32;
+    while final_dir.exists() {
+        final_dir = dest_dir.join(format!("{}_{}", stem, suffix));
+        suffix += 1;
+        if suffix > 100 {
+            return Err("Too many collisions for folder name".to_string());
+        }
+    }
+
+    std::fs::create_dir_all(&final_dir)
+        .map_err(|e| format!("Failed to create extraction directory: {}", e))?;
+
+    let file = std::fs::File::open(source)
+        .map_err(|e| format!("Failed to open zip file: {}", e))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Failed to read zip archive: {}", e))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Failed to read zip entry: {}", e))?;
+        let entry_name = entry.name().to_string();
+        if entry_name.contains("..") {
+            continue;
+        }
+        let out_path = final_dir.join(&entry_name);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&out_path)
+                .map_err(|e| format!("Failed to create directory {}: {}", entry_name, e))?;
+        } else {
+            if let Some(parent) = out_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create parent dir: {}", e))?;
+            }
+            let mut buf = Vec::new();
+            entry
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("Failed to read zip entry {}: {}", entry_name, e))?;
+            std::fs::write(&out_path, &buf)
+                .map_err(|e| format!("Failed to write {}: {}", entry_name, e))?;
+        }
+    }
+
+    final_dir
+        .to_str()
+        .ok_or_else(|| "Invalid path encoding".to_string())
+        .map(|s| s.to_string())
+}
+
+/// Import a zip from base64-encoded data into the profiles directory.
+fn import_zip_base64(data: &str, file_name: &str, profiles_dir: &str) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let bytes = STANDARD
+        .decode(data)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+    let local_data =
+        dirs::data_local_dir().ok_or_else(|| "Cannot determine local data directory".to_string())?;
+    let temp_dir = local_data
+        .join("Endstate")
+        .join("cache")
+        .join("imports");
+    std::fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
+    let temp_path = temp_dir.join(file_name);
+    std::fs::write(&temp_path, &bytes)
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    let result = extract_zip_to_profiles(
+        temp_path.to_str().unwrap_or_default(),
+        profiles_dir,
+    );
+
+    let _ = std::fs::remove_file(&temp_path);
+    result
 }
 
 async fn handle_events(
