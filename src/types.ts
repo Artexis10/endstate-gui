@@ -119,6 +119,7 @@ export interface EndstateApplyData {
   stateFile?: string;
   logFile?: string;
   eventsFile?: string;
+  configModuleMap?: Record<string, string>;
 }
 
 export interface CapturedApp {
