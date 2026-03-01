@@ -149,9 +149,6 @@ export function LiveActivityPanel({
                     </span>
                     <span className="truncate flex-1">
                       {event.name || formatAppIdentity(event.app)}
-                      {event.name && (
-                        <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
-                      )}
                     </span>
                   </div>
                 );

@@ -132,8 +132,10 @@ export function SaveFlow({
     setErrorMessage('');
   };
 
-  // Tail of live events for activity display
-  const recentEvents = liveAppEvents.slice(-8);
+  // Tail of live events for activity display (filter out phase separator headers)
+  const recentEvents = liveAppEvents
+    .filter((e) => e.app !== '── APPLY ──' && e.app !== '── VERIFY ──')
+    .slice(-8);
 
   // Config modules with "captured" status (settings bundled into the zip).
   // Fall back to configsIncluded IDs when structured configModules aren't available.
@@ -271,9 +273,6 @@ export function SaveFlow({
                           </span>
                           <span className="truncate flex-1">
                             {event.name || formatAppIdentity(event.app)}
-                            {event.name && (
-                              <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
-                            )}
                           </span>
                         </div>
                       );
@@ -346,9 +345,6 @@ export function SaveFlow({
                             </span>
                             <span className="truncate">
                               <span>{displayLabel}</span>
-                              {(app.name || nameByAppId.has(app.id)) && (
-                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{app.id}</span>
-                              )}
                             </span>
                           </div>
                         );

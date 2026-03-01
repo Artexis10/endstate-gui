@@ -6,13 +6,17 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2 } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 import { DropZone } from './drop-zone';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import type { DiscoveredProfile } from '@/file-discovery';
+import type { EndstateEnvelope, EndstateRevertData, RestoreIntent } from '@/types';
+import type { EngineExecResult } from '@/lib/engine-exec';
+import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
 import {
   type AppEvent,
   type StatusKey,
@@ -21,7 +25,8 @@ import {
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
 
-type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error';
+type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
+  | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
 
 interface PreviewResult {
   installed: number;
@@ -58,7 +63,13 @@ export interface SetupFlowProps {
   setupProgress: { message: string; detail?: string } | null;
   liveAppEvents: AppEvent[];
   onPreview: (profile: DiscoveredProfile) => Promise<PreviewResult>;
-  onApply: (profile: DiscoveredProfile) => Promise<ApplyResult>;
+  onApply: (profile: DiscoveredProfile, restoreOptions?: { restoreIntent: RestoreIntent }) => Promise<ApplyResult>;
+  // Undo settings flow
+  onUndoDryRun?: () => Promise<EngineExecResult<EndstateEnvelope<EndstateRevertData>>>;
+  onUndoExecute?: () => Promise<EngineExecResult<EndstateEnvelope<EndstateRevertData>>>;
+  onUndoComplete?: (data: EndstateRevertData) => void;
+  pendingUndo?: boolean;
+  onPendingUndoConsumed?: () => void;
 }
 
 export function SetupFlow({
@@ -74,6 +85,11 @@ export function SetupFlow({
   liveAppEvents,
   onPreview,
   onApply,
+  onUndoDryRun,
+  onUndoExecute,
+  onUndoComplete,
+  pendingUndo,
+  onPendingUndoConsumed,
 }: SetupFlowProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<SetupPhase>('browse');
@@ -82,6 +98,11 @@ export function SetupFlow({
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const [restoreIntent, setRestoreIntent] = useState<RestoreIntent>('apps-only');
+  // Undo flow state
+  const [undoDryRunData, setUndoDryRunData] = useState<EndstateRevertData | null>(null);
+  const [undoExecuteData, setUndoExecuteData] = useState<EndstateRevertData | null>(null);
+  const [undoError, setUndoError] = useState('');
   const reduced = prefersReducedMotion();
   const transition = reduced
     ? { duration: 0.01 }
@@ -100,8 +121,10 @@ export function SetupFlow({
 
   /** Filter events based on active filter set (OR logic). */
   const filterEvents = (events: AppEvent[], configMap: Record<string, string>) => {
-    if (activeFilters.size === 0) return events;
-    return events.filter(event => {
+    // Always exclude phase separator headers
+    const filtered = events.filter(e => e.app !== '── APPLY ──' && e.app !== '── VERIFY ──');
+    if (activeFilters.size === 0) return filtered;
+    return filtered.filter(event => {
       const statusKey: StatusKey = event.statusKey || 'skipped';
       for (const f of activeFilters) {
         if (f === 'settings' && event.app in configMap) return true;
@@ -133,6 +156,7 @@ export function SetupFlow({
     setApplyResult(null);
     setErrorMessage('');
     setActiveFilters(new Set());
+    setRestoreIntent('apps-only');
     try {
       const result = await onPreview(profile);
       setPreviewResult(result);
@@ -145,12 +169,13 @@ export function SetupFlow({
 
   const handleApply = async () => {
     if (!selectedProfile) return;
+    const settingsCount = previewResult?.restoreModulesAvailable?.length ?? Object.keys(previewResult?.configModuleMap ?? {}).length;
     setPhase('applying');
     setApplyResult(null);
     setErrorMessage('');
     setActiveFilters(new Set());
     try {
-      const result = await onApply(selectedProfile);
+      const result = await onApply(selectedProfile, settingsCount > 0 ? { restoreIntent } : undefined);
       setApplyResult(result);
       setPhase('apply-done');
     } catch (err) {
@@ -165,10 +190,85 @@ export function SetupFlow({
     setPreviewResult(null);
     setApplyResult(null);
     setErrorMessage('');
+    setRestoreIntent('apps-only');
+    setUndoDryRunData(null);
+    setUndoExecuteData(null);
+    setUndoError('');
   };
 
-  // Tail of live events for activity display
-  const recentEvents = liveAppEvents.slice(-8);
+  /** Start the undo checking flow — fires dry-run and transitions based on result */
+  const handleStartUndo = async () => {
+    if (!onUndoDryRun) return;
+    setPhase('undo-checking');
+    setUndoDryRunData(null);
+    setUndoExecuteData(null);
+    setUndoError('');
+    try {
+      const result = await onUndoDryRun();
+      if (!result.success) {
+        const combinedOutput = `${result.stdout ?? ''} ${result.stderr ?? ''} ${result.error.stderr ?? ''}`;
+        if (/unknown command/i.test(combinedOutput)) {
+          setUndoError('The installed CLI does not support undo. Please update or re-bootstrap endstate.');
+        } else {
+          const stderr = (result.stderr || result.error.stderr || '').trim();
+          setUndoError(stderr || result.error.message);
+        }
+        setPhase('undo-error');
+        return;
+      }
+      const envelope = result.envelope as EndstateEnvelope<EndstateRevertData>;
+      const data = envelope.data;
+      if (!data.revertedRestoreRunId) {
+        setPhase('undo-empty');
+        return;
+      }
+      setUndoDryRunData(data);
+      setPhase('undo-confirm');
+    } catch (err) {
+      setUndoError(err instanceof Error ? err.message : String(err));
+      setPhase('undo-error');
+    }
+  };
+
+  /** Execute the undo operation */
+  const handleExecuteUndo = async () => {
+    if (!onUndoExecute) return;
+    setPhase('undo-running');
+    try {
+      const result = await onUndoExecute();
+      if (!result.success) {
+        setUndoError(result.error.message);
+        setPhase('undo-error');
+        return;
+      }
+      const envelope = result.envelope as EndstateEnvelope<EndstateRevertData>;
+      setUndoExecuteData(envelope.data);
+      if (envelope.data.failCount > 0) {
+        setUndoError(`Failed to undo ${envelope.data.failCount} of ${envelope.data.revertCount + envelope.data.skipCount + envelope.data.failCount} settings`);
+        setPhase('undo-error');
+      } else {
+        setPhase('undo-done');
+        onUndoComplete?.(envelope.data);
+      }
+    } catch (err) {
+      setUndoError(err instanceof Error ? err.message : String(err));
+      setPhase('undo-error');
+    }
+  };
+
+  // Auto-start undo when triggered from Command Palette
+  useEffect(() => {
+    if (pendingUndo && onUndoDryRun) {
+      handleStartUndo();
+      onPendingUndoConsumed?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingUndo]);
+
+  // Tail of live events for activity display (filter out phase separator headers)
+  const recentEvents = liveAppEvents
+    .filter((e) => e.app !== '── APPLY ──' && e.app !== '── VERIFY ──')
+    .slice(-8);
 
   return (
     <motion.div
@@ -184,7 +284,7 @@ export function SetupFlow({
         onClick={phase === 'browse' ? onBack : handleBackToProfiles}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
         data-testid="setup-flow-back"
-        disabled={phase === 'previewing' || phase === 'applying'}
+        disabled={phase === 'previewing' || phase === 'applying' || phase === 'undo-checking' || phase === 'undo-running'}
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         {phase === 'browse' ? 'Back' : 'Back to profiles'}
@@ -200,6 +300,8 @@ export function SetupFlow({
           <p className="text-sm text-muted-foreground mt-0.5">
             {phase === 'browse'
               ? 'Import a saved setup or choose a profile to install your apps'
+              : phase.startsWith('undo')
+              ? 'Undo settings changes from your last setup'
               : `Setting up from ${selectedProfile?.displayName || selectedProfile?.name || 'profile'}`}
           </p>
         </div>
@@ -237,6 +339,12 @@ export function SetupFlow({
                     <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
                     Refresh
                   </Button>
+                  {onUndoDryRun && (
+                    <Button variant="ghost" size="sm" onClick={handleStartUndo}>
+                      <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                      Undo changes
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -358,9 +466,6 @@ export function SetupFlow({
                           </span>
                           <span className="truncate flex-1">
                             {event.name || formatAppIdentity(event.app)}
-                            {event.name && (
-                              <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
-                            )}
                           </span>
                         </div>
                       );
@@ -469,9 +574,6 @@ export function SetupFlow({
                             </span>
                             <span className="truncate">
                               {event.name || formatAppIdentity(event.app)}
-                              {event.name && (
-                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
-                              )}
                             </span>
                           </div>
                         );
@@ -480,7 +582,17 @@ export function SetupFlow({
                   </div>
                 )}
 
-                <div className="flex items-center gap-3 mt-6">
+                {settingsCount > 0 && (
+                  <div className="mt-4">
+                    <RestoreIntentToggle
+                      restoreIntent={restoreIntent}
+                      onRestoreIntentChange={setRestoreIntent}
+                      configModuleCount={settingsCount}
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 mt-4">
                   {previewResult.installed > 0 && (
                     <Button
                       onClick={handleApply}
@@ -552,9 +664,6 @@ export function SetupFlow({
                           </span>
                           <span className="truncate flex-1">
                             {event.name || formatAppIdentity(event.app)}
-                            {event.name && (
-                              <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
-                            )}
                           </span>
                         </div>
                       );
@@ -590,9 +699,19 @@ export function SetupFlow({
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {applyResult.installed} installed, {applyResult.alreadyPresent} already present
                       {applyResult.failed > 0 ? `, ${applyResult.failed} failed` : ''}
-                      {(applyResult.configsRestored ?? 0) > 0 && (
-                        <> &middot; {applyResult.configsRestored} {applyResult.configsRestored === 1 ? 'setting' : 'settings'} restored</>
-                      )}
+                      {(() => {
+                        const restored = applyResult.configsRestored ?? 0;
+                        const settingsFailed = applyResult.configsFailed ?? 0;
+                        if (restored > 0 && settingsFailed === 0) return <> &middot; {restored} {restored === 1 ? 'setting' : 'settings'} restored</>;
+                        if (restored > 0 && settingsFailed > 0) return <> &middot; {restored} {restored === 1 ? 'setting' : 'settings'} restored, {settingsFailed} failed</>;
+                        if (settingsFailed > 0) return <> &middot; {settingsFailed} {settingsFailed === 1 ? 'setting' : 'settings'} failed</>;
+                        // Fallback: show available settings count from configModuleMap (only when restore was requested)
+                        if (restoreIntent === 'apps-and-settings') {
+                          const configMapCount = Object.keys(applyResult.configModuleMap ?? {}).length;
+                          if (configMapCount > 0) return <> &middot; {configMapCount} {configMapCount === 1 ? 'setting' : 'settings'} included</>;
+                        }
+                        return null;
+                      })()}
                     </p>
                   </div>
                 </div>
@@ -600,7 +719,12 @@ export function SetupFlow({
                 {/* Activity summary */}
                 {applyResult.appEvents.length > 0 && (() => {
                   const applyConfigMap = applyResult.configModuleMap ?? {};
-                  const applySettingsCount = applyResult.configsRestored ?? 0;
+                  const applySettingsRestored = applyResult.configsRestored ?? 0;
+                  const applySettingsFailed = applyResult.configsFailed ?? 0;
+                  const applySettingsProcessed = applySettingsRestored + (applyResult.configsSkipped ?? 0) + applySettingsFailed;
+                  // Fall back to configModuleMap count when restore counters are empty (only when restore was requested)
+                  const configMapSettingsCount = restoreIntent === 'apps-and-settings' ? Object.keys(applyConfigMap).length : 0;
+                  const applySettingsTotal = applySettingsProcessed > 0 ? applySettingsProcessed : configMapSettingsCount;
                   const totalApplyApps = applyResult.installed + applyResult.alreadyPresent + applyResult.failed + applyResult.skipped;
                   return (
                   <div className="mt-3 border-t pt-3">
@@ -650,14 +774,29 @@ export function SetupFlow({
                           {applyResult.failed} failed
                         </button>
                       )}
-                      {applySettingsCount > 0 && (
-                        <button
-                          onClick={() => toggleFilter('settings')}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.has('settings')}
-                        >
-                          {applySettingsCount} settings
-                        </button>
+                      {applySettingsTotal > 0 && (
+                        applySettingsProcessed > 0 ? (
+                          <button
+                            onClick={() => toggleFilter('settings')}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${applySettingsFailed > 0 ? `${getColorClasses('warn').bg} ${getColorClasses('warn').text}` : `${getColorClasses('success').bg} ${getColorClasses('success').text}`} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
+                            aria-pressed={activeFilters.has('settings')}
+                          >
+                            {applySettingsRestored > 0 && applySettingsFailed === 0
+                              ? `${applySettingsRestored} ${applySettingsRestored === 1 ? 'setting' : 'settings'} restored`
+                              : applySettingsFailed > 0
+                              ? `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'} (${applySettingsFailed} failed)`
+                              : `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'}`
+                            }
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => toggleFilter('settings')}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
+                            aria-pressed={activeFilters.has('settings')}
+                          >
+                            {applySettingsTotal} {applySettingsTotal === 1 ? 'setting' : 'settings'}
+                          </button>
+                        )
                       )}
                     </div>
                     <div className="space-y-1 max-h-64 overflow-y-auto">
@@ -671,20 +810,18 @@ export function SetupFlow({
                         );
                         const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'apply', reason: event.reason });
                         const colors = getColorClasses(uiStatus.color);
-                        const hasSettings = event.app in applyConfigMap || event.app.startsWith('\u2699');
+                        const hasSettings = (restoreIntent === 'apps-and-settings' && event.app in applyConfigMap) || event.app.startsWith('\u2699');
+                        const settingsOk = statusKey !== 'failed';
                         return (
                           <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
                             <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
                             <span className="w-4 flex-shrink-0 flex justify-center">
                               {hasSettings && (
-                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
+                                <Settings2 className={`h-3 w-3 ${settingsOk ? getColorClasses('success').text : getColorClasses('error').text} ${!settingsOk ? 'opacity-50' : ''}`} />
                               )}
                             </span>
                             <span className="truncate">
                               {event.name || formatAppIdentity(event.app)}
-                              {event.name && (
-                                <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{event.app}</span>
-                              )}
                             </span>
                           </div>
                         );
@@ -694,7 +831,252 @@ export function SetupFlow({
                   );
                 })()}
 
-                <Button variant="ghost" className="mt-6" onClick={handleBackToProfiles}>
+                <div className="flex items-center gap-3 mt-6">
+                  <Button variant="ghost" onClick={handleBackToProfiles}>
+                    Back to profiles
+                  </Button>
+                  {onUndoDryRun && restoreIntent === 'apps-and-settings' && ((applyResult.configsRestored ?? 0) > 0 || Object.keys(applyResult.configModuleMap ?? {}).length > 0) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleStartUndo}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                      Undo settings
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Undo: Checking for changes */}
+        {phase === 'undo-checking' && (
+          <motion.div
+            key="undo-checking"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={transition}
+          >
+            <Card className="border-l-2 border-l-amber-500/50">
+              <CardContent className="py-6 px-6">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 text-amber-500 animate-spin" />
+                  <div>
+                    <p className="text-sm font-medium">Checking for recent changes...</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Looking for settings changes from your last setup
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Undo: Nothing to undo */}
+        {phase === 'undo-empty' && (
+          <motion.div
+            key="undo-empty"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={transition}
+          >
+            <Card className="border-l-2 border-l-muted-foreground/30">
+              <CardContent className="py-6 px-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Info className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-medium">Nothing to undo</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      No recent setup changes found. Undo only works after a setup that changed your settings.
+                    </p>
+                  </div>
+                </div>
+                <Button variant="ghost" onClick={handleBackToProfiles}>
+                  Back to profiles
+                </Button>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Undo: Confirm */}
+        {phase === 'undo-confirm' && undoDryRunData && (() => {
+          const actionableItems = undoDryRunData.results.filter(
+            (r) => r.status !== 'skip' && r.status !== 'skipped',
+          );
+          const actionableCount = actionableItems.length;
+          return (
+          <motion.div
+            key="undo-confirm"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={transition}
+          >
+            <Card className="border-l-2 border-l-amber-500/50">
+              <CardContent className="py-6 px-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <RotateCcw className="h-5 w-5 text-amber-500" />
+                  <div>
+                    <p className="text-sm font-medium">Undo settings changes</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {actionableCount} {actionableCount === 1 ? 'setting' : 'settings'} will be restored to how they were before your last setup
+                    </p>
+                  </div>
+                </div>
+
+                {actionableCount > 0 && (
+                  <div className="space-y-1 mb-4 max-h-48 overflow-y-auto">
+                    {actionableItems.map((item, idx) => (
+                      <div
+                        key={`${item.id}-${idx}`}
+                        className="flex items-center gap-2 text-xs pt-0.5"
+                      >
+                        <span className="text-muted-foreground">&middot;</span>
+                        <span className="truncate font-medium">
+                          {item.targetPath.split(/[\\/]/).pop() || item.targetPath}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs text-amber-500 mb-4">
+                  Your current settings will be backed up first.
+                </p>
+
+                <DetailsDisclosure title="Details">
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    {actionableItems.map((item, idx) => (
+                      <div key={`path-${idx}`} className="font-mono truncate" title={item.targetPath}>
+                        {item.targetPath}
+                      </div>
+                    ))}
+                    <div className="pt-1">
+                      Restore run: <span className="font-mono">{undoDryRunData.revertedRestoreRunId}</span>
+                    </div>
+                    {undoDryRunData.backupLocation && (
+                      <div>Backup to: <span className="font-mono truncate">{undoDryRunData.backupLocation}</span></div>
+                    )}
+                  </div>
+                </DetailsDisclosure>
+
+                <div className="flex items-center gap-3 mt-6">
+                  <Button
+                    onClick={handleExecuteUndo}
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    Undo
+                  </Button>
+                  <Button variant="ghost" onClick={handleBackToProfiles}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+          );
+        })()}
+
+        {/* Undo: Running */}
+        {phase === 'undo-running' && (
+          <motion.div
+            key="undo-running"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={transition}
+          >
+            <Card className="border-l-2 border-l-amber-500/50">
+              <CardContent className="py-6 px-6">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 text-amber-500 animate-spin" />
+                  <div>
+                    <p className="text-sm font-medium">Undoing changes...</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Putting your settings back how they were
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Undo: Done */}
+        {phase === 'undo-done' && undoExecuteData && (
+          <motion.div
+            key="undo-done"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={transition}
+          >
+            <Card className="border-l-2 border-l-green-500/50">
+              <CardContent className="py-6 px-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <div>
+                    <p className="text-sm font-medium">Changes undone</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {undoExecuteData.revertCount} {undoExecuteData.revertCount === 1 ? 'setting' : 'settings'} restored successfully
+                      {undoExecuteData.skipCount > 0 && ` · ${undoExecuteData.skipCount} skipped`}
+                    </p>
+                  </div>
+                </div>
+                <Button onClick={handleBackToProfiles}>
+                  Done
+                </Button>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Undo: Error */}
+        {phase === 'undo-error' && (
+          <motion.div
+            key="undo-error"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={transition}
+          >
+            <Card className={`border-l-2 ${undoExecuteData ? 'border-l-amber-500/50' : 'border-l-red-500/50'}`}>
+              <CardContent className="py-6 px-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <XCircle className={`h-5 w-5 ${undoExecuteData ? 'text-amber-500' : 'text-red-500'}`} />
+                  <div>
+                    <p className="text-sm font-medium">
+                      {undoExecuteData ? 'Completed with errors' : 'Something went wrong'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {undoError}
+                    </p>
+                  </div>
+                </div>
+                {undoExecuteData && (
+                  <div className="space-y-1 mb-4 text-xs">
+                    {undoExecuteData.revertCount > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-500 font-medium">Undone</span>
+                        <span>{undoExecuteData.revertCount}</span>
+                      </div>
+                    )}
+                    {undoExecuteData.failCount > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-500 font-medium">Failed</span>
+                        <span>{undoExecuteData.failCount}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <Button variant="ghost" onClick={handleBackToProfiles}>
                   Back to profiles
                 </Button>
               </CardContent>
