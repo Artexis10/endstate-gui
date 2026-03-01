@@ -102,12 +102,17 @@ export interface EndstateApplyData {
     name: string;
     hash: string;
   };
+  /** Legacy aggregate summary — use `counts` instead when available. */
   summary?: {
     total?: number;
     success?: number;
     skipped?: number;
     failed?: number;
   };
+  /** Structured app-only counts from the engine envelope. */
+  counts?: ApplyCounts;
+  /** Per-app result items for final-state reconciliation. */
+  items?: ApplyItem[];
   actions?: Array<{
     type: string;
     id?: string;
@@ -120,6 +125,12 @@ export interface EndstateApplyData {
   logFile?: string;
   eventsFile?: string;
   configModuleMap?: Record<string, string>;
+  /** Restore summary when --enable-restore is active. */
+  restoreSummary?: RestoreSummary;
+  restoreItems?: RestoreItem[];
+  restoreJournalFile?: string;
+  restoreFilter?: string[];
+  restoreModulesAvailable?: string[];
 }
 
 export interface CapturedApp {
@@ -174,23 +185,11 @@ export interface ApplyCounts {
   failed: number;
 }
 
-export interface EndstateApplyResultData {
-  manifestPath?: string;
-  installed?: number;
-  upgraded?: number;
-  skipped?: number;
-  failed?: number;
-  dryRun?: boolean;
-  counts?: ApplyCounts;
-  items?: ApplyItem[];
-  restoreItems?: RestoreItem[];
-  restoreSummary?: RestoreSummary;
-  restoreJournalFile?: string;
-  restoreFilter?: string[];
-  restoreModulesAvailable?: string[];
-  /** Maps winget ID → config module name for apps that have settings in the profile */
-  configModuleMap?: Record<string, string>;
-}
+/**
+ * @deprecated Use EndstateApplyData instead — the engine returns a single shape.
+ * Kept for backward compatibility with existing tests.
+ */
+export type EndstateApplyResultData = EndstateApplyData;
 
 /** Restore item from NDJSON events and JSON envelope */
 export interface RestoreItem {
@@ -220,6 +219,26 @@ export interface RestoreSummary {
   skipped: number;
   failed: number;
   backupLocation: string | null;
+}
+
+/** Individual result item from revert command */
+export interface RevertResultItem {
+  id: string;
+  targetPath: string;
+  type: string;
+  status: string; // 'skip' | 'dry-run' | 'reverted' | 'failed'
+  reason: string | null;
+}
+
+/** Revert command data from CLI envelope */
+export interface EndstateRevertData {
+  dryRun: boolean;
+  revertedRestoreRunId: string | null;
+  revertCount: number;
+  skipCount: number;
+  failCount: number;
+  backupLocation: string | null;
+  results: RevertResultItem[];
 }
 
 /** Config module metadata from capture envelope */

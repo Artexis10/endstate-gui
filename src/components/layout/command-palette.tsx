@@ -11,6 +11,7 @@ import {
   Settings,
   FolderOpen,
   Home,
+  RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -25,9 +26,10 @@ interface Command {
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onNavigate: (page: 'overview' | 'report' | 'settings') => void;
+  onNavigate: (page: 'landing' | 'report' | 'settings') => void;
   onOpenLogsFolder?: () => void;
   onOpenOutputFolder?: () => void;
+  onUndoSettings?: () => void;
 }
 
 export function CommandPalette({
@@ -36,17 +38,18 @@ export function CommandPalette({
   onNavigate,
   onOpenLogsFolder,
   onOpenOutputFolder,
+  onUndoSettings,
 }: CommandPaletteProps) {
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const commands: Command[] = [
     {
-      id: 'nav-overview',
-      label: 'Go to Overview',
+      id: 'nav-home',
+      label: 'Go to Home',
       icon: Home,
       action: () => {
-        onNavigate('overview');
+        onNavigate('landing');
         onOpenChange(false);
       },
       category: 'navigate',
@@ -93,6 +96,19 @@ export function CommandPalette({
       icon: FolderOpen,
       action: () => {
         onOpenOutputFolder();
+        onOpenChange(false);
+      },
+      category: 'action',
+    });
+  }
+
+  if (onUndoSettings) {
+    commands.push({
+      id: 'undo-settings',
+      label: 'Undo Settings Changes',
+      icon: RotateCcw,
+      action: () => {
+        onUndoSettings();
         onOpenChange(false);
       },
       category: 'action',

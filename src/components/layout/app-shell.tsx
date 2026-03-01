@@ -17,7 +17,7 @@ interface NavIndicator {
   tooltip?: string;
 }
 
-type PageType = 'landing' | 'save' | 'setup' | 'overview' | 'report' | 'settings';
+type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings';
 
 interface AppShellProps {
   children: ReactNode;
@@ -53,7 +53,7 @@ export function AppShell({
   const showSidebar = sidebarVisible && !isIntentPage;
 
   const navItems = [
-    { id: 'overview' as const, label: 'Overview', icon: Home },
+    { id: 'landing' as const, label: 'Home', icon: Home },
     { id: 'report' as const, label: 'Reports', icon: FileText },
     { id: 'settings' as const, label: 'Settings', icon: Settings },
   ];

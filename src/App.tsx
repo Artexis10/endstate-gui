@@ -7,12 +7,12 @@ import {
   EndstateReportData,
   EndstateApplyData,
   EndstateCaptureData,
-  EndstateApplyResultData,
+  EndstateRevertData,
   type RestoreItem,
   type RestoreSummary,
 } from './types';
 import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration, clearSelectedProfile } from './settings';
-import { saveDraft, loadDraft, clearDraft } from './lib/draft-store';
+import { loadDraft, clearDraft } from './lib/draft-store';
 import { resolveDraftContent } from './lib/draft-content-resolver';
 import { resolveProfilePath } from './lib/profile-selection-migration';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
@@ -24,21 +24,18 @@ import { isItemEvent, isArtifactEvent, isPhaseEvent, isRestoreItemEvent, type En
 import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
-import { OverviewScreen } from './components/app/overview-screen';
 import { IntentLanding, SaveFlow, SetupFlow } from './components/app/intent';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
-import { buildCaptureActionResult, getCapturedConfigCount, deriveCaptureSummaryText } from './lib/capture-continuity';
 import { AppShell } from './components/layout/app-shell';
 import { CommandPalette } from './components/layout/command-palette';
 import { PageHeader } from './components/app/page-header';
 import { RenameFileModal } from './components/app/rename-file-modal';
 import { LogViewerModal } from './components/app/log-viewer-modal';
 import { ToastProvider, useToast } from './components/ui/toast';
-import { formatCount } from './lib/pluralize';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -50,7 +47,7 @@ import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
 import { copyText } from './lib/clipboard';
 
 type AppStatus = 'loading' | 'ready' | 'error';
-type PageType = 'landing' | 'save' | 'setup' | 'overview' | 'report' | 'settings';
+type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings';
 
 interface AppState {
   status: AppStatus;
@@ -89,12 +86,8 @@ function AppContent() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [currentPage, setCurrentPage] = useState<PageType>('landing');
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
-  // Track which Overview card to auto-expand
-  const [overviewExpandedCard, setOverviewExpandedCard] = useState<'capture' | 'setup' | 'check' | null>(null);
-  
   // Navigation handler
   const handleNavigate = async (page: PageType) => {
-    setOverviewExpandedCard(null);
     setCurrentPage(page);
     
     // Load run artifacts when navigating to Report page
@@ -203,7 +196,7 @@ function AppContent() {
   
   const [overviewRunningAction, setOverviewRunningAction] = useState<OverviewActionType>(null);
   // Per-action state to prevent leakage between actions
-  const [actionStatusByAction, setActionStatusByAction] = useState<Record<string, OverviewActionStatus>>({
+  const [, setActionStatusByAction] = useState<Record<string, OverviewActionStatus>>({
     capture: 'idle',
     setup: 'idle',
     check: 'idle',
@@ -218,12 +211,8 @@ function AppContent() {
     setup: null,
     check: null,
   });
-  // Computed values for current running action (for backward compatibility)
-  const overviewActionStatus = overviewRunningAction ? actionStatusByAction[overviewRunningAction] : 'idle';
-  const overviewActionProgress = overviewRunningAction ? actionProgressByAction[overviewRunningAction] : null;
-  const overviewActionResult = overviewRunningAction ? actionResultByAction[overviewRunningAction] : null;
   const [liveAppEvents, setLiveAppEvents] = useState<AppEvent[]>([]);
-  const [liveCounters, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
+  const [, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
 
   // Throttled streaming updates: during engine runs, events arrive faster than
   // useful re-render rate. Buffer all streaming state and flush at ~5/sec.
@@ -283,9 +272,7 @@ function AppContent() {
     doFlush();
   }
 
-  const isRunningRef = useRef(false); // Robust guard against double-run
-  const activeRunIdRef = useRef<string | null>(null); // Track active run ID for double-run prevention
-  const [activeRunId, setActiveRunId] = useState<string | null>(null); // App-level active run ID for UI awareness
+  const [activeRunId] = useState<string | null>(null); // App-level active run ID for UI awareness
   const [showFolderPathModal, setShowFolderPathModal] = useState(false);
   const [folderPathForModal, setFolderPathForModal] = useState('');
   
@@ -299,7 +286,7 @@ function AppContent() {
   
   // Saved profile summary - drives green success strip
   // Set ONLY after successful Save Profile (not after capture, not after discard)
-  const [lastSavedProfileSummary, setLastSavedProfileSummary] = useState<{
+  const [, setLastSavedProfileSummary] = useState<{
     appCount: number;
     finishedAt: string;
     profileName?: string;
@@ -332,6 +319,9 @@ function AppContent() {
   // Run artifacts state for Report page
   const [runArtifacts, setRunArtifacts] = useState<Array<{ bundle: RunBundle; summary: RunSummary }>>([]);
   
+  // Undo settings — navigates to setup flow and triggers inline undo
+  const [setupPendingUndo, setSetupPendingUndo] = useState(false);
+
   // Log viewer modal state
   const [showLogViewerModal, setShowLogViewerModal] = useState(false);
   const [logViewerContent, setLogViewerContent] = useState('');
@@ -374,41 +364,6 @@ function AppContent() {
     setActionProgressByAction(prev => ({ ...prev, [action]: progress }));
   };
   
-  const setOverviewActionResult = (action: NonNullable<OverviewActionType>, result: OverviewActionResult | null) => {
-    setActionResultByAction(prev => ({ ...prev, [action]: result }));
-  };
-  
-  // Dismiss result - clear transient result state for a specific action
-  const dismissOverviewResult = (action?: 'capture' | 'setup' | 'check') => {
-    const actionToDismiss = action || overviewRunningAction;
-    if (!actionToDismiss) return;
-    
-    // Clear only the specific action's state
-    setActionProgressByAction(prev => ({ ...prev, [actionToDismiss]: null }));
-    setActionResultByAction(prev => ({ ...prev, [actionToDismiss]: null }));
-    setActionStatusByAction(prev => ({ ...prev, [actionToDismiss]: 'idle' }));
-    
-    // Clear live events/counters only if dismissing the currently running action
-    if (actionToDismiss === overviewRunningAction) {
-      setLiveAppEvents([]);
-      setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 });
-    }
-    
-    // Also clear lastSavedProfileSummary for capture card dismissal
-    if (actionToDismiss === 'capture') {
-      setLastSavedProfileSummary(null);
-    }
-  };
-  
-  // Navigation with back support - tracks previous page when navigating from Overview
-  const navigateWithHistory = (page: PageType) => {
-    if (currentPage === 'overview' && page !== 'overview') {
-      setPreviousPage('overview');
-      // DON'T reset overview action state - preserve it for return navigation
-      // User should be able to return to Overview and see last run results
-    }
-    setCurrentPage(page);
-  };
   
   // Go back to previous page
   const handleBack = () => {
@@ -736,20 +691,6 @@ function AppContent() {
     setPendingSuggestedName('');
   };
 
-  const handleDiscardDraft = async () => {
-    if (!pendingCaptureDraft) return;
-    
-    // Clear draft from Tauri Store
-    await clearDraft();
-    
-    // Clear in-memory draft state
-    setPendingCaptureDraft(null);
-    
-    // Clear capture action state - return to idle
-    setOverviewActionResult('capture', null);
-    setOverviewActionStatus('capture', 'idle');
-    setOverviewActionProgress('capture', null);
-  };
 
   const handleDeleteProfile = async () => {
     if (!deleteProfilePath) return;
@@ -794,12 +735,6 @@ function AppContent() {
     setDeleteProfileName('');
   };
 
-  const handleSetActiveProfile = (profile: DiscoveredProfile) => {
-    setSelectedProfile(profile.name);
-    setSelectedProfilePath(profile.path);
-    updateSettings({ selectedProfileName: profile.name });
-    showToast(`"${profile.displayName || profile.name}" is now the active profile`, 'success');
-  };
 
   const openRenameFileModal = (path: string, currentFilename: string) => {
     setRenameFilePath(path);
@@ -865,12 +800,6 @@ function AppContent() {
     setRenameFileCurrentName('');
   };
 
-  const promptForProfileName = async (_profilePath: string) => {
-    // Generate a default name based on timestamp
-    const now = new Date();
-    const defaultName = `Profile ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    openProfileNameModal('', defaultName, 'save');
-  };
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -1383,8 +1312,8 @@ function AppContent() {
     applyLineBufferRef.current?.clear();
     setIsRunning(false);
 
-    // Process result — envelope counts are source of truth, fall back to event counting
-    const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
+    // Process result — envelope counts are source of truth, fall back to NDJSON event counting (older CLI)
+    const envelopeData = applyResult.envelope?.data;
     const installed = envelopeData?.counts?.installed
       ?? collectedEvents.filter(e => e.statusKey === 'to_install').length;
     const alreadyPresent = envelopeData?.counts?.alreadyInstalled
@@ -1462,132 +1391,6 @@ function AppContent() {
     };
   };
 
-  const handleCheckFromOverview = async () => {
-    const profileName = selectedProfileRef.current || selectedProfile;
-    const profilePath = selectedProfilePathRef.current || selectedProfilePath;
-    if (!profileName) {
-      throw new Error('Please select a setup profile');
-    }
-
-    setIsRunning(true);
-    setRunLogs('');
-    setLogTruncated(false);
-    logBufferRef.current = new LogBuffer((logs, truncated) => {
-      setRunLogs(prev => prev + logs);
-      setLogTruncated(truncated);
-    });
-    applyLineBufferRef.current = new StreamingLineBuffer();
-
-    // Track check live activity via NDJSON events
-    const checkAppEvents: AppEvent[] = [];
-    const counters = { confirmed: 0, missing: 0, skipped: 0 };
-    
-    // Clear previous live events for fresh check run
-    setLiveAppEvents([]);
-    setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 });
-    
-    // Use apply --dry-run for checking (same as preview)
-    const checkResult = await runEngineStreaming<EndstateApplyData>(
-      settings,
-      'apply',
-      ['--profile', profilePath, '--dry-run'],
-      (event: StreamEvent) => {
-        // Collect raw output for Technical Details only
-        if (event.type === 'stdout' || event.type === 'stderr') {
-          logBufferRef.current?.append(event.data);
-        }
-      },
-      {
-        enableNdjsonEvents: true,
-        onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
-          // Phase events are ignored for Check flow - we always use 'verify' phase semantics
-          if (isItemEvent(ndjsonEvent)) {
-            // Force verify phase for UI display since this is a Check operation
-            const appEvent = itemEventToAppEvent(ndjsonEvent, 'verify');
-            checkAppEvents.push(appEvent);
-            
-            // Update counters based on verify semantics
-            const statusKey = appEvent.statusKey || 'skipped';
-            if (statusKey === 'present' || statusKey === 'installed') {
-              counters.confirmed++;
-            } else if (statusKey === 'to_install') {
-              counters.missing++;
-            } else if (statusKey === 'skipped') {
-              counters.skipped++;
-            }
-            
-            // Update live events for UI streaming (throttled for smooth drip)
-            throttledSetLiveAppEvents(
-              checkAppEvents.length > 2000 ? checkAppEvents.slice(-2000) : [...checkAppEvents],
-              {
-                installed: 0,
-                alreadyPresent: counters.confirmed,
-                skipped: counters.skipped,
-                failed: counters.missing,
-                configsRestored: 0,
-                configsSkipped: 0,
-                configsFailed: 0,
-              }
-            );
-            
-            const uiStatus = getPhaseAwareStatusForEvent({
-              statusKey,
-              phase: 'verify',
-              reason: appEvent.reason,
-            });
-            
-            // Build counter text for progress detail
-            const parts: string[] = [];
-            if (counters.confirmed > 0) parts.push(`${counters.confirmed} confirmed`);
-            if (counters.missing > 0) parts.push(`${counters.missing} missing`);
-            if (counters.skipped > 0) parts.push(`${counters.skipped} skipped`);
-            const counterText = parts.join(' · ') || 'Checking…';
-            
-            throttledSetProgress('check', {
-              message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
-              detail: counterText,
-              phase: 'verify'
-            });
-          }
-        },
-      }
-    );
-    
-    // Use collected events from NDJSON streaming
-    // Flush any pending throttled updates before processing result
-    flushLiveUpdates();
-
-    const collectedEvents = [...checkAppEvents];
-
-    logBufferRef.current?.flush();
-    applyLineBufferRef.current?.clear();
-    setIsRunning(false);
-
-    // Process result
-    const envelopeData = checkResult.envelope?.data as EndstateApplyResultData | undefined;
-    const missing = envelopeData?.counts?.installed ?? 0; // "installed" in dry-run = would install = missing
-    const present = envelopeData?.counts?.alreadyInstalled ?? 0;
-    
-    // Record lifecycle event as verify
-    // Note: verify/check doesn't create a run bundle currently
-    const verifyEvent: LifecycleEvent = {
-      timestamp: new Date().toISOString(),
-      profile: profileName,
-      profilePath: profilePath,
-      success: true,
-      summary: { missing, alreadyPresent: present },
-    };
-    const newState = recordLifecycleEvent('verify', verifyEvent);
-    setLifecycleState(newState);
-
-    if (missing > 0) {
-      setOverviewActionProgress('check', { message: `${formatCount(missing, 'app')} missing, ${formatCount(present, 'app')} present` });
-    } else {
-      setOverviewActionProgress('check', { message: `All ${formatCount(present, 'app')} present` });
-    }
-
-    return { missing, present, profile: profileName, appEvents: collectedEvents };
-  };
 
   const handleApplyFromOverview = async (restoreOptions?: { restoreIntent?: import('./types').RestoreIntent; selectedModules?: string[] }) => {
     // Use refs for immediate access (state may not have settled in async callbacks)
@@ -1699,6 +1502,15 @@ function AppContent() {
               }
               appEventList[existingIndex] = appEvent;
             } else {
+              // New item — also count if it arrives directly in a final state
+              // (CLI may skip non-final events for fast-resolved items)
+              const isFinal = ['installed', 'present', 'skipped', 'failed'].includes(appEvent.statusKey || '');
+              if (isFinal) {
+                if (appEvent.statusKey === 'installed') counters.installed++;
+                else if (appEvent.statusKey === 'present') counters.alreadyPresent++;
+                else if (appEvent.statusKey === 'skipped') counters.skipped++;
+                else if (appEvent.statusKey === 'failed') counters.failed++;
+              }
               appEventIndex.set(ndjsonEvent.id, appEventList.length);
               appEventList.push(appEvent);
             }
@@ -1804,23 +1616,27 @@ function AppContent() {
     setIsRunning(false);
 
     // Process result - envelope is source of truth
-    const envelopeData = applyResult.envelope?.data as EndstateApplyResultData | undefined;
+    const envelopeData = applyResult.envelope?.data;
     const envelopeItems = envelopeData?.items ?? [];
-    
+
     // CRITICAL: Reconcile live activity with final envelope
     // This ensures "Working..." entries are updated to their final status (Failed, Installed, etc.)
     const reconciledEvents = reconcileLiveActivity(appEventList, envelopeItems);
     // Bounded buffer: keep up to 2000 events for scrollback
     setLiveAppEvents(reconciledEvents.length > 2000 ? reconciledEvents.slice(-2000) : reconciledEvents);
-    
-    // Update counters from envelope (source of truth), fall back to event-derived counters
+
+    // Envelope counts are source of truth; fall back to NDJSON-derived counters only for older CLI
     const installed = envelopeData?.counts?.installed ?? counters.installed;
     const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? counters.alreadyPresent;
     const failed = envelopeData?.counts?.failed ?? counters.failed;
     const skipped = envelopeData?.counts?.skippedFiltered ?? counters.skipped;
-    
-    // Extract restore counters from envelope
-    const restoreSummary = envelopeData?.restoreSummary;
+
+    // Restore summary: envelope is source of truth, fall back to NDJSON counters for older CLI
+    const restoreSummary: RestoreSummary | undefined = envelopeData?.restoreSummary ?? (
+      (counters.configsRestored + counters.configsSkipped + counters.configsFailed > 0)
+        ? { total: counters.configsRestored + counters.configsSkipped + counters.configsFailed, restored: counters.configsRestored, skipped: counters.configsSkipped, failed: counters.configsFailed, backupLocation: null }
+        : undefined
+    );
     setLiveCounters({
       installed, alreadyPresent, skipped, failed,
       configsRestored: restoreSummary?.restored ?? 0,
@@ -2234,7 +2050,7 @@ function AppContent() {
                   setOverviewRunningAction(null);
                 }
               }}
-              onApply={async (profile) => {
+              onApply={async (profile, restoreOptions) => {
                 setProfileSelection(profile.name, profile.path);
                 updateSettings({ selectedProfileName: profile.name });
                 setIsRunning(true);
@@ -2244,7 +2060,7 @@ function AppContent() {
                 setOverviewActionStatus('setup', 'running');
                 setOverviewActionProgress('setup', { message: 'Installing applications...' });
                 try {
-                  const result = await handleApplyFromOverview();
+                  const result = await handleApplyFromOverview(restoreOptions);
                   setOverviewActionStatus('setup', result.failed > 0 ? 'error' : 'success');
                   return {
                     ...result,
@@ -2257,300 +2073,16 @@ function AppContent() {
                   setOverviewRunningAction(null);
                 }
               }}
-            />
-          </div>
-        );
-
-      case 'overview':
-        return (
-          <div className="space-y-6">
-            {errorBanner}
-            <OverviewScreen
-              sidebarVisible={sidebarVisible}
-              engineConnected={state.status !== 'error'}
-              lifecycleState={lifecycleState}
-              selectedProfile={selectedProfile}
-              profiles={profiles}
-              profilesDirectory={profilesDirectory}
-              isRunning={isRunning}
-              runningAction={overviewRunningAction}
-              actionStatus={overviewActionStatus}
-              actionProgress={overviewActionProgress}
-              actionResult={overviewActionResult}
-              actionStatusByAction={actionStatusByAction}
-              actionProgressByAction={actionProgressByAction}
-              actionResultByAction={actionResultByAction}
-              liveAppEvents={liveAppEvents}
-              liveCounters={liveCounters}
-              initialExpandedCard={overviewExpandedCard}
-              lastSavedProfileSummary={lastSavedProfileSummary}
-              onNavigate={navigateWithHistory}
-              onClearExpandedCard={() => setOverviewExpandedCard(null)}
-              onCapture={async () => {
-                // Double-run guard with runId
-                const runId = `capture-${Date.now()}`;
-                if (isRunning || isRunningRef.current || activeRunIdRef.current) {
-                  if (import.meta.env.DEV) {
-                    console.warn(`[DOUBLE-RUN BLOCKED] Capture attempt blocked. Active run: ${activeRunIdRef.current}, new runId: ${runId}`);
-                  }
-                  return;
-                }
-                isRunningRef.current = true;
-                activeRunIdRef.current = runId;
-                setActiveRunId(runId);
-                setIsRunning(true);
-                if (import.meta.env.DEV) {
-                  console.log(`[RUN START] Capture runId=${runId}`);
-                }
-                setOverviewRunningAction('capture');
-                setOverviewActionStatus('capture', 'running');
-                setOverviewActionProgress('capture', { message: 'Scanning installed applications...' });
-                
-                // Clear previous summary and draft when starting new capture
-                setLastSavedProfileSummary(null);
-                setPendingCaptureDraft(null);
-                try {
-                  const result = await handleCaptureFromOverview();
-                  setOverviewActionStatus('capture', 'success');
-                  const configCount = getCapturedConfigCount(result.envelopeData);
-                  const countText = deriveCaptureSummaryText(result.count, configCount);
-                  setOverviewActionProgress('capture', { message: countText });
-
-                  // Store draft in memory and localStorage
-                  const draft = {
-                    capturedAppsCount: result.count,
-                    capturedAt: new Date().toISOString(),
-                    draftText: result.draftText,
-                    apps: result.apps,
-                  };
-                  setPendingCaptureDraft(draft);
-
-                  // Persist draft to Tauri Store for reload survival
-                  await saveDraft({
-                    text: result.draftText,
-                    createdAt: draft.capturedAt,
-                    appCount: result.count,
-                  });
-
-                  // DO NOT set lastSavedProfileSummary here
-                  // Green success only appears after Save Profile (in handleSaveProfileName)
-
-                  // Use helper with canonical CapturedApp[] to build modal model (INV-DETAILS-1)
-                  setOverviewActionResult('capture', buildCaptureActionResult(result.appsIncluded, countText, {
-                    outputFormat: result.envelopeData?.outputFormat,
-                    configsIncluded: result.envelopeData?.configsIncluded,
-                    configsSkipped: result.envelopeData?.configsSkipped,
-                    configsCaptureErrors: result.envelopeData?.configsCaptureErrors,
-                    configModules: result.envelopeData?.configModules,
-                  }));
-                  
-                  // Prompt for profile name after state is set
-                  await promptForProfileName('');
-                } catch (err) {
-                  setOverviewActionStatus('capture', 'error');
-                  setOverviewActionResult('capture', {
-                    action: 'capture',
-                    status: 'error',
-                    summary: err instanceof Error ? err.message : 'Capture failed'
-                  });
-                } finally {
-                  if (import.meta.env.DEV) {
-                    console.log(`[RUN END] Capture runId=${runId}`);
-                  }
-                  isRunningRef.current = false;
-                  activeRunIdRef.current = null;
-                  setActiveRunId(null);
-                  setIsRunning(false);
-                  setOverviewRunningAction(null);
-                }
+              onUndoDryRun={() => runEndstateOnce<EndstateEnvelope<EndstateRevertData>>(settings, 'revert', ['--dry-run'])}
+              onUndoExecute={() => runEndstateOnce<EndstateEnvelope<EndstateRevertData>>(settings, 'revert', [])}
+              onUndoComplete={(data) => {
+                showToast(
+                  `Undid ${data.revertCount} ${data.revertCount === 1 ? 'setting' : 'settings'} successfully`,
+                  'success',
+                );
               }}
-              onSetup={async (intent: 'preview' | 'apply', restoreOptions?: import('./components/app/overview/types').RestoreOptions) => {
-                // Double-run guard with runId
-                const runId = `setup-${intent}-${Date.now()}`;
-                if (isRunning || isRunningRef.current || activeRunIdRef.current) {
-                  if (import.meta.env.DEV) {
-                    console.warn(`[DOUBLE-RUN BLOCKED] Setup ${intent} attempt blocked. Active run: ${activeRunIdRef.current}, new runId: ${runId}`);
-                  }
-                  return;
-                }
-                isRunningRef.current = true;
-                activeRunIdRef.current = runId;
-                setActiveRunId(runId);
-                setIsRunning(true);
-                if (import.meta.env.DEV) {
-                  console.log(`[RUN START] Setup ${intent} runId=${runId}`);
-                }
-                setLiveAppEvents([]);
-                setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 });
-                
-                // CRITICAL: Set runningAction BEFORE calling helper functions
-                // The helpers check if overviewRunningAction exists before updating state
-                setOverviewRunningAction('setup');
-                
-                setOverviewActionStatus('setup', 'running');
-                const isApply = intent === 'apply';
-                setOverviewActionProgress('setup', { 
-                  message: isApply ? 'Installing applications...' : 'Evaluating changes',
-                  phase: isApply ? 'apply' : 'preview'
-                });
-                try {
-                  if (isApply) {
-                    const result = await handleApplyFromOverview(restoreOptions);
-                    // Set status based on whether there were failures
-                    const hasFailures = result.failed > 0;
-                    setOverviewActionStatus('setup', hasFailures ? 'error' : 'success');
-                    // Build summary including restore info if present
-                    const restoreCount = result.restoreSummary?.restored ?? 0;
-                    const baseSummary = hasFailures
-                      ? `${result.installed} installed, ${result.failed} failed`
-                      : `${result.installed} installed, ${result.alreadyPresent} already present`;
-                    const fullSummary = restoreCount > 0
-                      ? `${baseSummary}, ${restoreCount} settings restored`
-                      : baseSummary;
-
-                    setOverviewActionResult('setup', {
-                      action: 'setup',
-                      status: hasFailures ? 'error' : 'success',
-                      summary: fullSummary,
-                      profile: result.profile,
-                      timestamp: new Date().toISOString(),
-                      counts: {
-                        installed: result.installed,
-                        alreadyPresent: result.alreadyPresent,
-                        skipped: result.skipped,
-                        failed: result.failed,
-                        manifestTotal: result.installed + result.alreadyPresent + result.skipped + result.failed,
-                        configsRestored: result.restoreSummary?.restored,
-                        configsSkipped: result.restoreSummary?.skipped,
-                        configsErrored: result.restoreSummary?.failed,
-                      },
-                      appEvents: result.appEvents,
-                      configModuleMap: result.configModuleMap,
-                      restoreItems: result.restoreItems,
-                      restoreSummary: result.restoreSummary,
-                      restoreJournalFile: result.restoreJournalFile,
-                      restoreModulesAvailable: result.restoreModulesAvailable,
-                    });
-                  } else {
-                    const result = await handlePreviewFromOverview();
-                    setOverviewActionStatus('setup', 'success');
-                    setOverviewActionResult('setup', { 
-                      action: 'setup', 
-                      status: 'success', 
-                      summary: `${result.installed} to install, ${result.alreadyPresent} already present`,
-                      profile: result.profile,
-                      timestamp: new Date().toISOString(),
-                      counts: {
-                        toInstall: result.installed,
-                        alreadyPresent: result.alreadyPresent,
-                        manifestTotal: result.installed + result.alreadyPresent,
-                      },
-                      appEvents: result.appEvents,
-                      configModuleMap: result.configModuleMap,
-                      restoreModulesAvailable: result.restoreModulesAvailable,
-                      wasPreview: true, // Flag for showing "Apply changes" button
-                    });
-                  }
-                } catch (err) {
-                  setOverviewActionStatus('setup', 'error');
-                  setOverviewActionResult('setup', { 
-                    action: 'setup', 
-                    status: 'error', 
-                    summary: err instanceof Error ? err.message : 'Setup failed' 
-                  });
-                } finally {
-                  if (import.meta.env.DEV) {
-                    console.log(`[RUN END] Setup ${intent} runId=${runId}`);
-                  }
-                  isRunningRef.current = false;
-                  activeRunIdRef.current = null;
-                  setActiveRunId(null);
-                  setIsRunning(false);
-                  setOverviewRunningAction(null);
-                }
-              }}
-              onCheck={async () => {
-                // Double-run guard with runId
-                const runId = `check-${Date.now()}`;
-                if (isRunning || isRunningRef.current || activeRunIdRef.current) {
-                  if (import.meta.env.DEV) {
-                    console.warn(`[DOUBLE-RUN BLOCKED] Check attempt blocked. Active run: ${activeRunIdRef.current}, new runId: ${runId}`);
-                  }
-                  return;
-                }
-                isRunningRef.current = true;
-                activeRunIdRef.current = runId;
-                setActiveRunId(runId);
-                setIsRunning(true);
-                if (import.meta.env.DEV) {
-                  console.log(`[RUN START] Check runId=${runId}`);
-                }
-                
-                setOverviewRunningAction('check');
-                setOverviewActionStatus('check', 'running');
-                setOverviewActionProgress('check', { message: 'Checking computer...' });
-                try {
-                  const result = await handleCheckFromOverview();
-                  setOverviewActionStatus('check', 'success');
-                  const summaryText = result.missing > 0 
-                    ? `${formatCount(result.missing, 'app')} missing, ${formatCount(result.present, 'app')} present`
-                    : `All ${formatCount(result.present, 'app')} present`;
-                  setOverviewActionResult('check', { 
-                    action: 'check', 
-                    status: 'success', 
-                    summary: summaryText,
-                    profile: result.profile,
-                    timestamp: new Date().toISOString(),
-                    counts: {
-                      missing: result.missing,
-                      alreadyPresent: result.present,
-                      manifestTotal: result.missing + result.present,
-                    },
-                    appEvents: result.appEvents,
-                  });
-                } catch (err) {
-                  setOverviewActionStatus('check', 'error');
-                  setOverviewActionResult('check', { 
-                    action: 'check', 
-                    status: 'error', 
-                    summary: err instanceof Error ? err.message : 'Check failed' 
-                  });
-                } finally {
-                  if (import.meta.env.DEV) {
-                    console.log(`[RUN END] Check runId=${runId}`);
-                  }
-                  isRunningRef.current = false;
-                  activeRunIdRef.current = null;
-                  setActiveRunId(null);
-                  setIsRunning(false);
-                  setOverviewRunningAction(null);
-                }
-              }}
-              onProfileChange={(profile: string, path: string) => {
-                setSelectedProfile(profile);
-                setSelectedProfilePath(path);
-                updateSettings({ selectedProfileName: profile });
-              }}
-              onDismissResult={dismissOverviewResult}
-              onOpenProfilesFolder={handleOpenProfilesFolder}
-              onRefreshProfiles={refreshProfiles}
-              onRenameProfile={(path: string, currentName: string) => {
-                openProfileNameModal(path, currentName, 'rename');
-              }}
-              onDeleteProfile={(path: string, displayName: string) => {
-                setDeleteProfilePath(path);
-                setDeleteProfileName(displayName);
-                setShowDeleteProfileModal(true);
-              }}
-              onSetActiveProfile={handleSetActiveProfile}
-              onSaveProfile={() => {
-                // Open the save modal for the pending capture draft (not selectedProfile)
-                if (pendingCaptureDraft) {
-                  promptForProfileName('');
-                }
-              }}
-              onDiscardDraft={handleDiscardDraft}
-              pendingCaptureDraft={pendingCaptureDraft}
+              pendingUndo={setupPendingUndo}
+              onPendingUndoConsumed={() => setSetupPendingUndo(false)}
             />
           </div>
         );
@@ -2680,7 +2212,7 @@ function AppContent() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => handleNavigate('overview')}
+                    onClick={() => handleNavigate(overviewRunningAction === 'capture' ? 'save' : 'setup')}
                   >
                     View details
                   </Button>
@@ -3000,7 +2532,7 @@ function AppContent() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => handleNavigate('overview')}
+                    onClick={() => handleNavigate(overviewRunningAction === 'capture' ? 'save' : 'setup')}
                   >
                     View details
                   </Button>
@@ -3139,7 +2671,6 @@ function AppContent() {
       case 'landing': return '';
       case 'save': return '';
       case 'setup': return '';
-      case 'overview': return '';
       case 'report': return 'Reports';
       case 'settings': return 'Settings';
       default: return '';
@@ -3166,6 +2697,10 @@ function AppContent() {
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
         onNavigate={handleNavigate}
+        onUndoSettings={() => {
+          setSetupPendingUndo(true);
+          setCurrentPage('setup');
+        }}
       />
 
       {/* Folder Path Modal (web fallback) */}
@@ -3384,6 +2919,7 @@ function AppContent() {
         isLoading={logViewerLoading}
         error={logViewerError}
       />
+
     </>
   );
 }
