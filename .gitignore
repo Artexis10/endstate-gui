@@ -27,6 +27,10 @@ npm-debug.log*
 .env
 .env.local
 .env.*.local
+.env.development
+
+# Windows artifacts
+NUL
 
 # TypeScript cache
 *.tsbuildinfo

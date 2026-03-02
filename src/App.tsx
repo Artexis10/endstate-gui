@@ -45,6 +45,8 @@ import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FileTe
 import { useMicroFeedback } from './lib/micro-feedback';
 import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
 import { copyText } from './lib/clipboard';
+import { LicenseGate, useLicenseGate } from './components/app/LicenseGate';
+import { deactivateLicense } from './lib/license';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings';
@@ -2654,6 +2656,8 @@ function AppContent() {
               </CardContent>
             </Card>
 
+            <LicenseSettingsSection />
+
           </div>
         );
 
@@ -2924,10 +2928,109 @@ function AppContent() {
   );
 }
 
+function LicenseSettingsSection() {
+  const license = useLicenseGate();
+  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+
+  if (!license) return null;
+
+  const { status, onDeactivated } = license;
+  const maskedKey = status.key
+    ? `${'*'.repeat(Math.max(0, status.key.length - 4))}${status.key.slice(-4)}`
+    : 'Unknown';
+  const activatedDate = status.activatedAt
+    ? new Date(status.activatedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    : null;
+
+  const handleDeactivate = async () => {
+    setDeactivating(true);
+    try {
+      await deactivateLicense();
+      setShowDeactivateDialog(false);
+      onDeactivated();
+    } catch {
+      // Keep dialog open on error so user can retry
+      setDeactivating(false);
+    }
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>License</CardTitle>
+          <CardDescription>Manage your Endstate license</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">License key</span>
+              <span className="font-mono">{maskedKey}</span>
+            </div>
+            {activatedDate && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Activated</span>
+                <span>{activatedDate}</span>
+              </div>
+            )}
+            {status.machineName && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Machine</span>
+                <span>{status.machineName}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setShowDeactivateDialog(true)}
+            >
+              Deactivate this machine
+            </Button>
+            <a
+              href="https://app.lemonsqueezy.com/my-orders"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="ghost" size="sm">
+                Manage license
+              </Button>
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={showDeactivateDialog} onOpenChange={setShowDeactivateDialog}>
+        <DialogContent role="alertdialog">
+          <DialogHeader>
+            <DialogTitle>Deactivate license</DialogTitle>
+            <DialogDescription>
+              This will deactivate your license on this machine. You can reactivate later using the same key.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="secondary" onClick={() => setShowDeactivateDialog(false)} disabled={deactivating}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleDeactivate} disabled={deactivating}>
+              {deactivating ? 'Deactivating...' : 'Deactivate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function App() {
   return (
     <ToastProvider>
-      <AppContent />
+      <LicenseGate>
+        <AppContent />
+      </LicenseGate>
     </ToastProvider>
   );
 }
