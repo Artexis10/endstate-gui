@@ -215,7 +215,7 @@ export function SaveFlow({
                   You'll be able to save the result as a portable file.
                 </p>
                 <Button
-                  className="mt-6"
+                  className="mt-6 bg-blue-600 hover:bg-blue-700 text-white ring-blue-600/30 hover:ring-blue-600/50"
                   onClick={handleStartScan}
                   disabled={!engineConnected || isRunning}
                   data-testid="save-flow-start-scan"
@@ -294,10 +294,10 @@ export function SaveFlow({
             transition={transition}
             className="space-y-4"
           >
-            <Card className="border-l-2 border-l-green-500/50">
+            <Card className="border-l-2 border-l-blue-500/50">
               <CardContent className="py-6 px-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <CheckCircle2 className="h-5 w-5 text-blue-500" />
                   <div>
                     <p className="text-sm font-medium">Scan complete</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -357,6 +357,7 @@ export function SaveFlow({
                   <Button
                     onClick={handleSave}
                     disabled={phase === 'saving'}
+                    className="bg-blue-600 hover:bg-blue-700 text-white ring-blue-600/30 hover:ring-blue-600/50"
                     data-testid="save-flow-save-file"
                   >
                     {phase === 'saving' ? (

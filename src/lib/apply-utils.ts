@@ -116,10 +116,10 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
   },
   preview: {
-    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'info' },
-    to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'info' },
+    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
+    to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
     installing: { shortLabel: 'EVALUATING', longLabel: 'Evaluating…', color: 'info' },
-    installed: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'info' },
+    installed: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'muted' },
     failed: { shortLabel: 'FAILED', longLabel: 'Failed', color: 'error' },
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
@@ -278,7 +278,7 @@ export function getColorClasses(color: SemanticColor): { text: string; bg: strin
     case 'success':
       return { text: 'text-success', bg: 'bg-success/10', border: 'border-success/20' };
     case 'info':
-      return { text: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' };
+      return { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' };
     case 'action':
       // Action required: vivid blue, stronger border for emphasis
       return { text: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/40' };

@@ -482,6 +482,7 @@ export function SetupFlow({
           const configMap = previewResult.configModuleMap ?? {};
           const hasConfigMap = Object.keys(configMap).length > 0;
           const settingsCount = previewResult.restoreModulesAvailable?.length ?? Object.keys(configMap).length;
+          const settingsDisplayCount = hasConfigMap ? Object.keys(configMap).length : settingsCount;
           const totalApps = previewResult.installed + previewResult.alreadyPresent;
           return (
           <motion.div
@@ -502,7 +503,7 @@ export function SetupFlow({
                       {previewResult.installed > 0
                         ? `${previewResult.installed} to install, ${previewResult.alreadyPresent} already present`
                         : `All ${totalApps} apps already present`}
-                      {settingsCount > 0 && ` · ${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'} included`}
+                      {settingsDisplayCount > 0 && ` · ${settingsDisplayCount} ${settingsDisplayCount === 1 ? 'setting' : 'settings'} included`}
                     </p>
                   </div>
                 </div>
@@ -545,11 +546,11 @@ export function SetupFlow({
                             className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
                             aria-pressed={activeFilters.has('settings')}
                           >
-                            {settingsCount} {settingsCount === 1 ? 'setting' : 'settings'}
+                            {settingsDisplayCount} {settingsDisplayCount === 1 ? 'setting' : 'settings'}
                           </button>
                         ) : (
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
-                            {settingsCount} {settingsCount === 1 ? 'setting' : 'settings'}
+                            {settingsDisplayCount} {settingsDisplayCount === 1 ? 'setting' : 'settings'}
                           </span>
                         )
                       )}
@@ -597,7 +598,7 @@ export function SetupFlow({
                     <Button
                       onClick={handleApply}
                       data-testid="setup-flow-apply"
-                      className="bg-green-600 hover:bg-green-700 text-white"
+                      className="bg-green-600 hover:bg-green-700 text-white ring-green-600/30 hover:ring-green-600/50"
                     >
                       <Play className="h-4 w-4 mr-2" />
                       Apply changes

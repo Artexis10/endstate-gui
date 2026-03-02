@@ -3,39 +3,39 @@
 @tailwind utilities;
 
 @layer base {
-  /* Default theme = DARK */
+  /* Default theme = DARK (Warm Graphite) */
   :root {
     /* Surfaces */
-    --background: 220 13% 8%;
-    --foreground: 210 40% 98%;
-    --panel: 220 13% 12%;
-    --card: 220 13% 15%;
+    --background: 30 3% 7%;        /* was: 220 13% 8%  */
+    --foreground: 30 5% 92%;       /* was: 210 40% 98% */
+    --panel: 30 3% 11%;            /* was: 220 13% 12% */
+    --card: 30 3% 14%;             /* was: 220 13% 15% */
 
     /* Neutrals */
-    --muted: 217 10% 25%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 25 4% 23%;            /* was: 217 10% 25% */
+    --muted-foreground: 30 5% 60%; /* was: 215 20% 65% */
 
     /* Popover */
-    --popover: 220 13% 12%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 30 3% 11%;          /* was: 220 13% 12% */
+    --popover-foreground: 30 5% 92%; /* was: 210 40% 98% */
 
     /* Borders / inputs */
-    --border: 217 10% 20%;
-    --input: 217 10% 20%;
+    --border: 25 4% 18%;           /* was: 217 10% 20% */
+    --input: 25 4% 18%;            /* was: 217 10% 20% */
 
     /* Brand */
     /* Primary + Accent should be stable and not redefined elsewhere */
-    --primary: 215 28% 42%;
-    --primary-foreground: 210 40% 98%;
-    --accent: 210 18% 40%;
-    --accent-foreground: 210 40% 98%;
-    --ring: 215 35% 50%;
+    --primary: 30 6% 42%;          /* was: 215 28% 42% */
+    --primary-foreground: 30 5% 92%; /* was: 210 40% 98% */
+    --accent: 30 6% 38%;           /* was: 210 18% 40% */
+    --accent-foreground: 30 5% 92%; /* was: 210 40% 98% */
+    --ring: 30 8% 50%;             /* was: 215 35% 50% */
 
     /* Secondary */
-    --secondary: 217 19% 27%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 28 5% 20%;        /* was: 217 19% 27% */
+    --secondary-foreground: 30 5% 92%; /* was: 210 40% 98% */
 
-    /* Semantic */
+    /* Semantic — DO NOT CHANGE these. They must remain as-is. */
     --success: 142 71% 45%;
     --success-foreground: 144 61% 20%;
 
@@ -45,15 +45,15 @@
     --danger: 0 84% 60%;
     --danger-foreground: 210 40% 98%;
 
-    /* Radius */
+    /* Radius — unchanged */
     --radius: 0.5rem;
 
-    /* Phase colors (stable identity mapping) */
+    /* Phase colors — DO NOT CHANGE */
     --phase-capture: 217 91% 60%; /* blue */
     --phase-setup: 142 71% 45%;   /* green (matches success) */
     --phase-verify: 38 92% 50%;   /* amber (matches warning) */
 
-    /* “Action required” — stronger than info, not error */
+    /* "Action required" — stronger than info, not error */
     --action-required: 217 91% 60%;
   }
 
