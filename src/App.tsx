@@ -420,12 +420,18 @@ function AppContent() {
 
   // Handle file drops from the Setup flow drop zone (ADR-001)
   const handleFileDrop = async (files: File[]) => {
-    if (!profilesDirectory) {
+    // Resolve profiles directory on-demand if startup init hasn't completed yet
+    let dir = profilesDirectory;
+    if (!dir) {
+      dir = (await loadProfilesDirectory()) || '';
+      if (dir) setProfilesDirectory(dir);
+    }
+    if (!dir) {
       showToast('Profiles directory not available', 'error');
       return;
     }
 
-    await ensureDirectory(profilesDirectory);
+    await ensureDirectory(dir);
 
     for (const file of files) {
       const fileName = file.name.toLowerCase();
@@ -443,13 +449,13 @@ function AppContent() {
           await invoke<string>('import_zip_from_base64', {
             data: base64Data,
             fileName: file.name,
-            profilesDir: profilesDirectory,
+            profilesDir: dir,
           });
           showToast(`Imported ${file.name}`, 'success');
         } else if (fileName.endsWith('.jsonc') || fileName.endsWith('.json') || fileName.endsWith('.json5')) {
           // Manifest files: read text and write to profiles directory
           const text = await file.text();
-          const destPath = `${profilesDirectory}\\${file.name}`;
+          const destPath = `${dir}\\${file.name}`;
           await invoke('write_text_file', { path: destPath, content: text });
           showToast(`Imported ${file.name}`, 'success');
         }
@@ -461,6 +467,59 @@ function AppContent() {
 
     // Refresh profiles after import
     await refreshProfiles();
+  };
+
+  // Import profiles by file path (Tauri mode: Rust handles file I/O directly)
+  const handleFilePathImport = async (paths: string[]) => {
+    // Resolve profiles directory on-demand if startup init hasn't completed yet
+    let dir = profilesDirectory;
+    if (!dir) {
+      dir = (await loadProfilesDirectory()) || '';
+      if (dir) setProfilesDirectory(dir);
+    }
+    if (!dir) {
+      showToast('Profiles directory not available', 'error');
+      return;
+    }
+
+    await ensureDirectory(dir);
+
+    for (const filePath of paths) {
+      const fileName = filePath.split(/[/\\]/).pop() || '';
+      try {
+        if (fileName.toLowerCase().endsWith('.zip')) {
+          await invoke('extract_zip_profile', { zipPath: filePath, profilesDir: dir });
+        } else {
+          await invoke('import_profile', { sourcePath: filePath, profilesDir: dir });
+        }
+        showToast(`Imported ${fileName}`, 'success');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        showToast(`Failed to import ${fileName}: ${msg}`, 'error');
+      }
+    }
+
+    await refreshProfiles();
+  };
+
+  // Browse for profile files using native dialog (Tauri mode only)
+  const handleBrowseFiles = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({
+        multiple: true,
+        filters: [{
+          name: 'Profile files',
+          extensions: ['zip', 'json', 'jsonc', 'json5'],
+        }],
+      });
+      if (!selected) return;
+      const paths = Array.isArray(selected) ? selected : [selected];
+      await handleFilePathImport(paths);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Failed to browse files: ${msg}`, 'error');
+    }
   };
 
   const openProfileNameModal = (profilePath: string, existingName: string = '', mode: 'save' | 'rename' = 'save', suggestedName: string = '') => {
@@ -500,6 +559,51 @@ function AppContent() {
         cleanup?.();
       };
     }
+  }, []);
+
+  // Tauri drag-drop: listen for native file drops and import to profiles.
+  // Use refs to avoid stale closures and ensure proper async cleanup.
+  const dragDropUnlistenRef = useRef<(() => void) | undefined>();
+  const handleFilePathImportRef = useRef(handleFilePathImport);
+  handleFilePathImportRef.current = handleFilePathImport;
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+        if (cancelled) return;
+        const webview = getCurrentWebviewWindow();
+        const unlisten = await webview.onDragDropEvent((event) => {
+          if (event.payload.type === 'drop') {
+            const paths = event.payload.paths as string[];
+            const accepted = paths.filter((p) => {
+              const name = p.toLowerCase();
+              return name.endsWith('.zip') || name.endsWith('.json') || name.endsWith('.jsonc') || name.endsWith('.json5');
+            });
+            if (accepted.length > 0) {
+              handleFilePathImportRef.current(accepted);
+            }
+          }
+        });
+        if (cancelled) {
+          unlisten();
+        } else {
+          dragDropUnlistenRef.current = unlisten;
+        }
+      } catch {
+        // Not in Tauri runtime or API unavailable
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      dragDropUnlistenRef.current?.();
+      dragDropUnlistenRef.current = undefined;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSaveProfileName = async () => {
@@ -2026,6 +2130,7 @@ function AppContent() {
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
               onFileDrop={handleFileDrop}
+              onBrowse={isTauriRuntime() ? handleBrowseFiles : undefined}
               onDeleteProfile={(path: string, displayName: string) => {
                 setDeleteProfilePath(path);
                 setDeleteProfileName(displayName);

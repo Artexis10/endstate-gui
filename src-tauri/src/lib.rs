@@ -539,36 +539,7 @@ fn show_file_dialog() -> Result<Option<String>, String> {
 /// * `Err(String)` - Failed to read directory
 #[tauri::command]
 fn list_manifest_files(directory: String) -> Result<Vec<String>, String> {
-    use std::fs;
-    use std::path::Path;
-
-    let dir_path = Path::new(&directory);
-    if !dir_path.exists() || !dir_path.is_dir() {
-        return Err(format!("Directory does not exist: {}", directory));
-    }
-
-    let entries = fs::read_dir(dir_path)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
-
-    let mut manifest_files = Vec::new();
-    for entry in entries {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(ext) = path.extension() {
-                    let ext_str = ext.to_string_lossy().to_lowercase();
-                    if ext_str == "json" || ext_str == "jsonc" || ext_str == "json5" {
-                        if let Some(path_str) = path.to_str() {
-                            manifest_files.push(path_str.to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    manifest_files.sort();
-    Ok(manifest_files)
+    cmd_impl::list_manifest_files(&directory)
 }
 
 /// Read a text file from disk.

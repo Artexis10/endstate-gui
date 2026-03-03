@@ -15,10 +15,12 @@ const ACCEPTED_INPUT = ACCEPTED_EXTENSIONS.join(',');
 
 interface DropZoneProps {
   onFileDrop: (files: File[]) => void;
+  /** In Tauri mode, use a native dialog instead of HTML file input */
+  onBrowse?: () => void;
   disabled?: boolean;
 }
 
-export function DropZone({ onFileDrop, disabled = false }: DropZoneProps) {
+export function DropZone({ onFileDrop, onBrowse, disabled = false }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const reduced = prefersReducedMotion();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,10 +58,13 @@ export function DropZone({ onFileDrop, disabled = false }: DropZoneProps) {
   }, [disabled, isAcceptedFile, onFileDrop]);
 
   const handleClick = useCallback(() => {
-    if (!disabled) {
+    if (disabled) return;
+    if (onBrowse) {
+      onBrowse();
+    } else {
       fileInputRef.current?.click();
     }
-  }, [disabled]);
+  }, [disabled, onBrowse]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(isAcceptedFile);

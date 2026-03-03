@@ -57,6 +57,8 @@ export interface SetupFlowProps {
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
   onFileDrop: (files: File[]) => void;
+  /** Native file browse (Tauri mode only) */
+  onBrowse?: () => void;
   onDeleteProfile: (path: string, displayName: string) => void;
   // Apply flow props
   isRunning: boolean;
@@ -79,6 +81,7 @@ export function SetupFlow({
   onOpenProfilesFolder,
   onRefreshProfiles,
   onFileDrop,
+  onBrowse,
   onDeleteProfile,
   isRunning,
   setupProgress,
@@ -319,7 +322,7 @@ export function SetupFlow({
           >
             {/* Drop zone for import */}
             <div className="mb-8">
-              <DropZone onFileDrop={onFileDrop} disabled={isRunning} />
+              <DropZone onFileDrop={onFileDrop} onBrowse={onBrowse} disabled={isRunning} />
             </div>
 
             {/* Profile list */}
