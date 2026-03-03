@@ -72,6 +72,10 @@ export interface SetupFlowProps {
   onUndoComplete?: (data: EndstateRevertData) => void;
   pendingUndo?: boolean;
   onPendingUndoConsumed?: () => void;
+  /** Increment to reset internal state (used when parent keeps component mounted) */
+  resetKey?: number;
+  /** Called when the flow returns to browse (start over, etc.) */
+  onFlowReset?: () => void;
 }
 
 export function SetupFlow({
@@ -93,6 +97,8 @@ export function SetupFlow({
   onUndoComplete,
   pendingUndo,
   onPendingUndoConsumed,
+  resetKey,
+  onFlowReset,
 }: SetupFlowProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<SetupPhase>('browse');
@@ -106,6 +112,22 @@ export function SetupFlow({
   const [undoDryRunData, setUndoDryRunData] = useState<EndstateRevertData | null>(null);
   const [undoExecuteData, setUndoExecuteData] = useState<EndstateRevertData | null>(null);
   const [undoError, setUndoError] = useState('');
+
+  // Reset internal state when resetKey changes (parent signals a fresh start)
+  useEffect(() => {
+    if (resetKey !== undefined && resetKey > 0) {
+      setPhase('browse');
+      setSelectedProfile(null);
+      setPreviewResult(null);
+      setApplyResult(null);
+      setErrorMessage('');
+      setActiveFilters(new Set());
+      setRestoreIntent('apps-only');
+      setUndoDryRunData(null);
+      setUndoExecuteData(null);
+      setUndoError('');
+    }
+  }, [resetKey]);
   const reduced = prefersReducedMotion();
   const transition = reduced
     ? { duration: 0.01 }
@@ -197,6 +219,7 @@ export function SetupFlow({
     setUndoDryRunData(null);
     setUndoExecuteData(null);
     setUndoError('');
+    onFlowReset?.();
   };
 
   /** Start the undo checking flow — fires dry-run and transitions based on result */

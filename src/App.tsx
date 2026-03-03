@@ -41,7 +41,8 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
-import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FileText, CheckCircle2 } from 'lucide-react';
+import { Loader2, Copy, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FileText, CheckCircle2, HardDrive, Download } from 'lucide-react';
+import { cn } from './lib/utils';
 import { useMicroFeedback } from './lib/micro-feedback';
 import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
 import { copyText } from './lib/clipboard';
@@ -88,10 +89,21 @@ function AppContent() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [currentPage, setCurrentPage] = useState<PageType>('landing');
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
+  const [activeFlowPage, setActiveFlowPage] = useState<'save' | 'setup' | null>(null);
+  const [flowHasWork, setFlowHasWork] = useState<Record<'save' | 'setup', boolean>>({ save: false, setup: false });
+  const [saveFlowResetKey, setSaveFlowResetKey] = useState(0);
+  const [setupFlowResetKey, setSetupFlowResetKey] = useState(0);
   // Navigation handler
   const handleNavigate = async (page: PageType) => {
+    // Remember flow page for direct back-navigation from settings/reports
+    if ((currentPage === 'save' || currentPage === 'setup') && page !== 'landing' && page !== 'save' && page !== 'setup') {
+      setPreviousPage(currentPage);
+    }
+    if (page === 'save' || page === 'setup') {
+      setActiveFlowPage(page);
+    }
     setCurrentPage(page);
-    
+
     // Load run artifacts when navigating to Report page
     if (page === 'report' && profilesDirectory) {
       const artifacts = await loadRunSummaries(profilesDirectory);
@@ -274,7 +286,6 @@ function AppContent() {
     doFlush();
   }
 
-  const [activeRunId] = useState<string | null>(null); // App-level active run ID for UI awareness
   const [showFolderPathModal, setShowFolderPathModal] = useState(false);
   const [folderPathForModal, setFolderPathForModal] = useState('');
   
@@ -2015,29 +2026,18 @@ function AppContent() {
 
   // Note: Error state no longer blocks UI - it shows a banner instead
 
-  const renderPage = () => {
-    // Show error banner at top of any page when in error state
+  // Always-mounted flow pages — hidden via CSS when not active to preserve internal state
+  const renderPersistentFlows = () => {
     const errorBanner = renderErrorBanner();
-
-    switch (currentPage) {
-      case 'landing':
-        return (
-          <div>
-            {errorBanner}
-            <IntentLanding
-              onSelectSave={() => setCurrentPage('save')}
-              onSelectSetup={() => setCurrentPage('setup')}
-              engineConnected={state.status !== 'error'}
-            />
-          </div>
-        );
-
-      case 'save':
-        return (
+    return (
+      <>
+        <div style={{ display: currentPage === 'save' ? undefined : 'none' }}>
           <div className="space-y-6">
             {errorBanner}
             <SaveFlow
-              onBack={() => setCurrentPage('landing')}
+              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
+              resetKey={saveFlowResetKey}
+              onFlowReset={() => setFlowHasWork(prev => ({ ...prev, save: false }))}
               engineConnected={state.status !== 'error'}
               isRunning={isRunning}
               captureProgress={actionProgressByAction['capture'] ?? null}
@@ -2051,6 +2051,7 @@ function AppContent() {
                 try {
                   const result = await handleCaptureFromOverview();
                   setOverviewActionStatus('capture', 'success');
+                  setFlowHasWork(prev => ({ ...prev, save: true }));
                   return {
                     count: result.count,
                     draftText: result.draftText,
@@ -2114,15 +2115,15 @@ function AppContent() {
               }}
             />
           </div>
-        );
-
-      case 'setup':
-        return (
+        </div>
+        <div style={{ display: currentPage === 'setup' ? undefined : 'none' }}>
           <div className="space-y-6">
             {errorBanner}
             <SetupFlow
               profiles={profiles}
-              onBack={() => setCurrentPage('landing')}
+              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, setup: false })); setSetupFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
+              resetKey={setupFlowResetKey}
+              onFlowReset={() => setFlowHasWork(prev => ({ ...prev, setup: false }))}
               onProfileSelect={(profile) => {
                 setProfileSelection(profile.name, profile.path);
                 updateSettings({ selectedProfileName: profile.name });
@@ -2151,6 +2152,7 @@ function AppContent() {
                 try {
                   const result = await handlePreviewFromOverview();
                   setOverviewActionStatus('setup', 'success');
+                  setFlowHasWork(prev => ({ ...prev, setup: true }));
                   return result;
                 } finally {
                   setIsRunning(false);
@@ -2169,6 +2171,7 @@ function AppContent() {
                 try {
                   const result = await handleApplyFromOverview(restoreOptions);
                   setOverviewActionStatus('setup', result.failed > 0 ? 'error' : 'success');
+                  setFlowHasWork(prev => ({ ...prev, setup: true }));
                   return {
                     ...result,
                     configsRestored: result.restoreSummary?.restored,
@@ -2192,7 +2195,34 @@ function AppContent() {
               onPendingUndoConsumed={() => setSetupPendingUndo(false)}
             />
           </div>
+        </div>
+      </>
+    );
+  };
+
+  const renderPage = () => {
+    // Show error banner at top of any page when in error state
+    const errorBanner = renderErrorBanner();
+
+    switch (currentPage) {
+      case 'landing':
+        return (
+          <div>
+            {errorBanner}
+            <IntentLanding
+              onSelectSave={() => { setActiveFlowPage('save'); setCurrentPage('save'); }}
+              onSelectSetup={() => { setActiveFlowPage('setup'); setCurrentPage('setup'); }}
+              engineConnected={state.status !== 'error'}
+              saveHasSession={flowHasWork.save}
+              setupHasSession={flowHasWork.setup}
+            />
+          </div>
         );
+
+      // Save and Setup are always mounted via renderPersistentFlows — skip here
+      case 'save':
+      case 'setup':
+        return null;
 
       case 'report':
         // Build recent runs from lifecycle state and last run data
@@ -2301,7 +2331,7 @@ function AppContent() {
             />
             
             {/* Active run banner */}
-            {activeRunId && (
+            {isRunning && (
               <Card className="border-primary/30 bg-primary/5">
                 <CardContent className="py-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -2326,7 +2356,34 @@ function AppContent() {
                 </CardContent>
               </Card>
             )}
-            
+
+            {/* Resumable flow session banner */}
+            {!isRunning && activeFlowPage && flowHasWork[activeFlowPage] && (
+              <Card className={cn(
+                'border-l-2',
+                activeFlowPage === 'save' ? 'border-l-blue-500/50 bg-blue-500/5' : 'border-l-green-500/50 bg-green-500/5'
+              )}>
+                <CardContent className="py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {activeFlowPage === 'save'
+                      ? <HardDrive className="h-4 w-4 text-blue-500" />
+                      : <Download className="h-4 w-4 text-green-500" />
+                    }
+                    <p className="text-sm font-medium">
+                      {activeFlowPage === 'save' ? 'You have an unsaved capture' : 'You have setup results to review'}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleNavigate(activeFlowPage)}
+                  >
+                    Resume
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Recent Runs */}
             <Card>
               <CardHeader>
@@ -2412,7 +2469,7 @@ function AppContent() {
                           {/* Artifact status and actions - only show in Advanced mode */}
                           {settings.showDetails && (
                           <div className="col-span-2 pt-2 border-t border-border mt-2">
-                            {activeRunId && overviewRunningAction === run.mode ? (
+                            {isRunning && overviewRunningAction === run.mode ? (
                               <span className="text-xs text-muted-foreground italic">
                                 Run in progress
                               </span>
@@ -2621,7 +2678,7 @@ function AppContent() {
             />
             
             {/* Active run banner */}
-            {activeRunId && (
+            {isRunning && (
               <Card className="border-primary/30 bg-primary/5">
                 <CardContent className="py-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -2646,7 +2703,34 @@ function AppContent() {
                 </CardContent>
               </Card>
             )}
-            
+
+            {/* Resumable flow session banner */}
+            {!isRunning && activeFlowPage && flowHasWork[activeFlowPage] && (
+              <Card className={cn(
+                'border-l-2',
+                activeFlowPage === 'save' ? 'border-l-blue-500/50 bg-blue-500/5' : 'border-l-green-500/50 bg-green-500/5'
+              )}>
+                <CardContent className="py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {activeFlowPage === 'save'
+                      ? <HardDrive className="h-4 w-4 text-blue-500" />
+                      : <Download className="h-4 w-4 text-green-500" />
+                    }
+                    <p className="text-sm font-medium">
+                      {activeFlowPage === 'save' ? 'You have an unsaved capture' : 'You have setup results to review'}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleNavigate(activeFlowPage)}
+                  >
+                    Resume
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Engine Configuration</CardTitle>
@@ -2799,6 +2883,7 @@ function AppContent() {
         previousPage={previousPage}
         onBack={handleBack}
       >
+        {renderPersistentFlows()}
         {renderPage()}
       </AppShell>
 

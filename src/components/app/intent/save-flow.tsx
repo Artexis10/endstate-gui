@@ -5,7 +5,7 @@
  * No in-GUI capture history. Session-scoped result display only.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,10 @@ export interface SaveFlowProps {
   liveAppEvents: AppEvent[];
   onStartCapture: () => Promise<CaptureResult>;
   onSaveToFile: (result: CaptureResult) => Promise<boolean>;
+  /** Increment to reset internal state (used when parent keeps component mounted) */
+  resetKey?: number;
+  /** Called when the flow returns to idle (save completed, scan again, etc.) */
+  onFlowReset?: () => void;
 }
 
 export function SaveFlow({
@@ -59,11 +63,23 @@ export function SaveFlow({
   liveAppEvents,
   onStartCapture,
   onSaveToFile,
+  resetKey,
+  onFlowReset,
 }: SaveFlowProps) {
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+
+  // Reset internal state when resetKey changes (parent signals a fresh start)
+  useEffect(() => {
+    if (resetKey !== undefined && resetKey > 0) {
+      setPhase('idle');
+      setResult(null);
+      setErrorMessage('');
+      setActiveFilters(new Set());
+    }
+  }, [resetKey]);
   const reduced = prefersReducedMotion();
   const transition = reduced
     ? { duration: 0.01 }
@@ -116,6 +132,7 @@ export function SaveFlow({
         // Reset for another capture
         setPhase('idle');
         setResult(null);
+        onFlowReset?.();
       } else {
         // User cancelled save dialog
         setPhase('done');
@@ -130,6 +147,7 @@ export function SaveFlow({
     setPhase('idle');
     setResult(null);
     setErrorMessage('');
+    onFlowReset?.();
   };
 
   // Tail of live events for activity display (filter out phase separator headers)

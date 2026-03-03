@@ -17,12 +17,16 @@ interface IntentLandingProps {
   onSelectSave: () => void;
   onSelectSetup: () => void;
   engineConnected?: boolean;
+  saveHasSession?: boolean;
+  setupHasSession?: boolean;
 }
 
 export function IntentLanding({
   onSelectSave,
   onSelectSetup,
   engineConnected = true,
+  saveHasSession,
+  setupHasSession,
 }: IntentLandingProps) {
   const reduced = prefersReducedMotion();
   const disabled = !engineConnected;
@@ -78,6 +82,18 @@ export function IntentLanding({
               Scan your apps and settings, then save everything as a portable file
             </p>
           </div>
+          {saveHasSession && (
+            <motion.div
+              className="absolute top-3 right-3"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, duration: 0.2 }}
+            >
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/15 text-blue-500">
+                Scan complete
+              </span>
+            </motion.div>
+          )}
         </motion.button>
 
         {/* Set up this computer */}
@@ -105,6 +121,18 @@ export function IntentLanding({
               Import a saved setup or choose an existing profile to install your apps
             </p>
           </div>
+          {setupHasSession && (
+            <motion.div
+              className="absolute top-3 right-3"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, duration: 0.2 }}
+            >
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/15 text-green-500">
+                Results ready
+              </span>
+            </motion.div>
+          )}
         </motion.button>
       </div>
     </div>
