@@ -72,9 +72,9 @@ export function AppShell({
             className="border-r border-border bg-panel flex flex-col overflow-hidden"
           >
             <div className="p-6 border-b border-border min-w-[256px]">
-              <div className="flex items-center gap-2.5">
-                <img src={markUrl} className="h-5 w-5 flex-shrink-0" alt="" aria-hidden="true" />
-                <span className="text-xl font-semibold tracking-tight text-primary">endstate</span>
+              <div className="flex items-center gap-3">
+                <img src={markUrl} className="h-6 w-6 flex-shrink-0" alt="" aria-hidden="true" />
+                <span className="text-xl font-semibold tracking-tight leading-none text-primary">Endstate</span>
               </div>
             </div>
             

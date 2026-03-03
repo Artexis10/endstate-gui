@@ -3,37 +3,36 @@
 @tailwind utilities;
 
 @layer base {
-  /* Default theme = DARK (Warm Graphite) */
+  /* Default theme = DARK (Anthracite Copper) */
   :root {
     /* Surfaces */
-    --background: 30 3% 7%;        /* was: 220 13% 8%  */
-    --foreground: 30 5% 92%;       /* was: 210 40% 98% */
-    --panel: 30 3% 11%;            /* was: 220 13% 12% */
-    --card: 30 3% 14%;             /* was: 220 13% 15% */
+    --background: 20 3% 6%;
+    --foreground: 20 4% 92%;
+    --panel: 20 3% 10%;
+    --card: 20 3% 13%;
 
     /* Neutrals */
-    --muted: 25 4% 23%;            /* was: 217 10% 25% */
-    --muted-foreground: 30 5% 60%; /* was: 215 20% 65% */
+    --muted: 18 3% 22%;
+    --muted-foreground: 20 3% 57%;
 
     /* Popover */
-    --popover: 30 3% 11%;          /* was: 220 13% 12% */
-    --popover-foreground: 30 5% 92%; /* was: 210 40% 98% */
+    --popover: 20 3% 10%;
+    --popover-foreground: 20 4% 92%;
 
     /* Borders / inputs */
-    --border: 25 4% 18%;           /* was: 217 10% 20% */
-    --input: 25 4% 18%;            /* was: 217 10% 20% */
+    --border: 18 3% 17%;
+    --input: 18 3% 17%;
 
     /* Brand */
-    /* Primary + Accent should be stable and not redefined elsewhere */
-    --primary: 30 6% 42%;          /* was: 215 28% 42% */
-    --primary-foreground: 30 5% 92%; /* was: 210 40% 98% */
-    --accent: 30 6% 38%;           /* was: 210 18% 40% */
-    --accent-foreground: 30 5% 92%; /* was: 210 40% 98% */
-    --ring: 30 8% 50%;             /* was: 215 35% 50% */
+    --primary: 15 20% 42%;
+    --primary-foreground: 15 5% 93%;
+    --accent: 15 16% 36%;
+    --accent-foreground: 15 5% 93%;
+    --ring: 15 22% 50%;
 
     /* Secondary */
-    --secondary: 28 5% 20%;        /* was: 217 19% 27% */
-    --secondary-foreground: 30 5% 92%; /* was: 210 40% 98% */
+    --secondary: 18 3% 18%;
+    --secondary-foreground: 20 4% 92%;
 
     /* Semantic — DO NOT CHANGE these. They must remain as-is. */
     --success: 142 71% 45%;
