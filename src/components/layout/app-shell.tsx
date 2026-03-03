@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import markUrl from '../../../assets/brand/taskbar-icon-115-sw5.svg?url';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FileText, 
@@ -71,8 +72,10 @@ export function AppShell({
             className="border-r border-border bg-panel flex flex-col overflow-hidden"
           >
             <div className="p-6 border-b border-border min-w-[256px]">
-              <h1 className="text-xl font-semibold text-primary">Endstate</h1>
-              <p className="text-xs text-muted-foreground mt-1">Setup Management</p>
+              <div className="flex items-center gap-2.5">
+                <img src={markUrl} className="h-5 w-5 flex-shrink-0" alt="" aria-hidden="true" />
+                <span className="text-xl font-semibold tracking-tight text-primary">endstate</span>
+              </div>
             </div>
             
             <nav className="flex-1 p-4 space-y-1 min-w-[256px]">

@@ -9,6 +9,7 @@
  */
 
 import { motion } from 'framer-motion';
+import markUrl from '../../../../assets/brand/taskbar-icon-115.svg?url';
 import { HardDrive, Download } from 'lucide-react';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 
@@ -41,6 +42,9 @@ export function IntentLanding({
         transition={{ ...transition, delay: 0 }}
         className="text-center mb-12"
       >
+        <div className="flex justify-center mb-4">
+          <img src={markUrl} className="h-14 w-14" alt="" aria-hidden="true" />
+        </div>
         <h1 className="text-4xl font-bold tracking-tight mb-3">Endstate</h1>
         <p className="text-base text-muted-foreground">
           What would you like to do?

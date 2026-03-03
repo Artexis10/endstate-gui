@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80" fill="none">
+  <path d="M66.7 18.3A31.7 31.7 0 1 0 70 35" stroke="#e6edf3" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="40" cy="40" r="20" fill="#e6edf3"/>
+  <circle cx="40" cy="40" r="6.7" fill="#101820"/>
+  <text x="88" y="49" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="700" fill="#e6edf3" letter-spacing="-0.5">Endstate</text>
+</svg>
