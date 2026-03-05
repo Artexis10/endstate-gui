@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Tidewave-Web__browser_eval",
+      "mcp__Tidewave__get_logs"
+    ]
+  }
+}

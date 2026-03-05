@@ -6,3 +6,6 @@ pre-push:
     openspec-validate:
       run: pwsh -NoProfile -File scripts/openspec_validate.ps1
       fail_text: "OpenSpec validation failed. Fix errors or set OPENSPEC_BYPASS=1 for emergency bypass."
+    version-sync:
+      run: node scripts/check-version-sync.mjs
+      fail_text: "Version sync check failed. Run 'npm run version:check' for details."
