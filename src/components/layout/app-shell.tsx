@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import markUrl from '../../../assets/brand/taskbar-icon-115-sw5.svg?url';
+import markUrl from '../../../assets/brand/mark-sidebar.svg?url';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FileText, 
