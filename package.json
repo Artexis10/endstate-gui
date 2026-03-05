@@ -1,7 +1,7 @@
 {
   "name": "endstate-gui",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "predev": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ENDSTATE_ALLOW_DIRECT='1'; $repoRoot = (Resolve-Path '../endstate').Path; & '../endstate/bin/endstate.ps1' bootstrap -RepoRoot $repoRoot; if ($LASTEXITCODE -eq 0) { Write-Host 'Engine bootstrapped.' } else { Write-Host 'WARNING: Engine bootstrap failed (non-fatal).' }\"",
@@ -25,7 +25,10 @@
     "openspec:list:specs": "openspec list --specs",
     "openspec:validate": "openspec validate --all --strict --no-interactive",
     "openspec:validate:ci": "pwsh -NoProfile -File scripts/openspec_validate.ps1",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "version:bump": "node scripts/bump-version.mjs",
+    "version:show": "node -e \"console.log(require('./package.json').version)\"",
+    "version:check": "node scripts/check-version-sync.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",
