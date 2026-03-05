@@ -9,7 +9,7 @@
  */
 
 import { motion } from 'framer-motion';
-import markUrl from '../../../../assets/brand/taskbar-icon-115.svg?url';
+import markUrl from '../../../../assets/brand/mark-sidebar.svg?url';
 import { HardDrive, Download } from 'lucide-react';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 

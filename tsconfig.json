@@ -22,5 +22,6 @@
     }
   },
   "include": ["src"],
+  "exclude": ["src/screenshots-harness.tsx"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
