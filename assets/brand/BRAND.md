@@ -10,40 +10,87 @@
 ## Mark
 
 The mark is a spiral — an open arc with a filled disc and dark pupil.
-Proportions: 96×96 viewBox, 3px stroke weight (default), round linecap.
+Canonical geometry: 100×100 viewBox, `translate(-48,-48)` origin.
 
-## Active Assets (referenced in code)
+## Icon Kit (`icons/`)
 
-| File | Used In | Purpose |
+```
+icons/
+├── transparent/         # General brand — canonical (scale 1.15)
+│   ├── transparent-sw4.svg / .png    # General use (web, print, large contexts)
+│   └── transparent-sw5.svg / .png    # Bold variant
+├── dark-full/           # Dark bg (#101820), full bleed (scale 1.15)
+│   ├── dark-sw4.svg / .png           # Installer source, favicon
+│   └── dark-sw5.svg / .png           # Bold on dark variant
+├── dark-padded/         # Dark bg, padded (scale 0.95) — survives circular crops
+│   ├── dark-padded-sw4.svg / .png    # Store listings, social avatars
+│   └── dark-padded-sw5.svg / .png    # Bold padded variant
+└── taskbar/             # OS taskbar/title bar optimized (scale 1.20)
+    ├── taskbar-sw4.svg / .png        # Taskbar general
+    └── taskbar-sw5.svg / .png        # Taskbar bold — Tauri icon source
+```
+
+### Scale Tiers
+
+| Tier | Scale | Translate | Purpose |
+|------|-------|-----------|---------|
+| General | 1.15 | (52, 60) | Brand mark — transparent and dark-full |
+| Padded | 0.95 | (51, 57) | Circular crops, store listings — dark-padded |
+| Taskbar | 1.20 | (52, 62) | OS taskbar/title bar — maximum legibility at small sizes |
+
+### Stroke Weights
+
+| Weight | Use |
+|--------|-----|
+| sw4 | General use (web, print, large contexts) |
+| sw5 | Small contexts (taskbar, sidebar, title bar) |
+
+### When to Use What
+
+| Context | Variant |
+|---------|---------|
+| General brand / marketing / web | `transparent/transparent-sw4` |
+| App sidebar / in-app mark | `transparent/transparent-sw5` (via `mark-sidebar.svg`) |
+| Landing page nav (on dark bg) | `transparent/transparent-sw5` |
+| Tauri window/taskbar icons | `taskbar/taskbar-sw5` (via `icon-source-1024.png`) |
+| Installer / uninstaller | `dark-padded/dark-padded-sw4` (via `installer.ico`) |
+| Favicon | `dark-full/dark-sw4` |
+| Store listings / avatars | `dark-padded/dark-padded-sw4` |
+| Social profiles / circular crops | `dark-padded/dark-padded-sw5` |
+
+## Canonical Aliases (root level)
+
+These files are referenced in code and map to specific icon kit variants:
+
+| File | Maps to | Used in |
 |------|---------|---------|
-| `mark-sidebar.svg` | `app-shell.tsx` | Sidebar logo mark |
-| `icon-source-1024.png` | `npm run tauri icon` | Source PNG for window/taskbar icon generation |
-| `icon-source.svg` | — | SVG source for the above PNG |
-| `favicon.svg` | `public/favicon.svg` | Browser tab favicon |
+| `icon-source.svg` | `icons/dark-full/dark-sw4.svg` | Favicon source |
+| `icon-source-1024.png` | `icons/taskbar/taskbar-sw5-1024.png` | `npm run tauri icon` input |
+| `mark-sidebar.svg` | `icons/transparent/transparent-sw5.svg` | `app-shell.tsx` sidebar |
 
-## Reference Assets (marketing, social, external use)
+## Other Assets
 
 | File | Purpose |
 |------|---------|
-| `mark-light.svg` | Standalone mark, light on transparent |
-| `mark-dark.svg` | Standalone mark, dark on transparent |
-| `mark-muted.svg` | Standalone mark, muted gray |
-| `mark-on-dark.svg` | Mark on ink square background |
-| `mark-on-dark-round.svg` | Mark on ink circle background |
-| `app-icon.svg` | Mark on ink rounded rect (app store style) |
-| `og-mark.svg` | Open Graph / social preview (120×120) |
-| `wordmark-light.svg` | "Endstate" text + mark, light |
-| `wordmark-dark.svg` | "Endstate" text + mark, dark |
+| `wordmark-light.svg` | "Endstate" text + mark, light on dark |
+| `wordmark-dark.svg` | "Endstate" text + mark, dark on light |
 
 ## Archive
 
 `archive/` contains iteration artifacts and superseded variants.
 Do not reference these in code.
 
-## Usage
+## Regenerating Tauri Icons
 
-- **App sidebar:** `mark-sidebar.svg` (imported via Vite `?url`)
-- **Tauri window icons:** Regenerate with `npm run tauri icon assets/brand/icon-source-1024.png`
-- **Web favicon:** `favicon.svg` (copy in `public/`)
-- **Landing page / marketing:** `mark-light.svg` or `wordmark-light.svg`
-- **Social/OG tags:** `og-mark.svg`
+```bash
+# Source: taskbar-sw5-1024.png (scale 1.20, transparent, bold stroke)
+npm run tauri icon assets/brand/icon-source-1024.png
+```
+
+## Variant Creation
+
+To create a new variant from any canonical SVG:
+- **Remove background:** Delete the `<rect>` element
+- **Change stroke weight:** Edit `stroke-width="4"` → `"5"` (or vice versa)
+- **Change scale tier:** Edit scale value and adjust translate accordingly
+- **Change background color:** Edit `fill="#101820"` on the `<rect>`
