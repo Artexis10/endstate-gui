@@ -27,7 +27,7 @@ export async function runEndstateCommand(
   args: string[] = []
 ): Promise<EndstateResult> {
   const fullArgs = [command, '--json', ...args];
-  const engineCmd = buildEngineCommand(settings, fullArgs);
+  const engineCmd = await buildEngineCommand(settings, fullArgs);
   
   const result = await invoke<ExecResult>('endstate_exec', {
     exe: engineCmd.exe,

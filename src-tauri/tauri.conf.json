@@ -33,6 +33,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "../../endstate/bin/": "engine/bin/",
+      "../../endstate/engine/": "engine/engine/",
+      "../../endstate/drivers/": "engine/drivers/",
+      "../../endstate/restorers/": "engine/restorers/",
+      "../../endstate/verifiers/": "engine/verifiers/",
+      "../../endstate/modules/": "engine/modules/",
+      "../../endstate/bundles/": "engine/bundles/",
+      "../../endstate/VERSION": "engine/VERSION",
+      "../../endstate/SCHEMA_VERSION": "engine/SCHEMA_VERSION"
+    },
     "windows": {
       "nsis": {
         "installerIcon": "icons/installer.ico",

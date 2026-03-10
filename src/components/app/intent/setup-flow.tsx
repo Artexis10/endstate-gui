@@ -17,6 +17,7 @@ import type { DiscoveredProfile } from '@/file-discovery';
 import type { EndstateEnvelope, EndstateRevertData, RestoreIntent } from '@/types';
 import type { EngineExecResult } from '@/lib/engine-exec';
 import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
+import { ConfigModuleSelector } from '@/components/app/overview/components/config-module-selector';
 import {
   type AppEvent,
   type StatusKey,
@@ -24,6 +25,7 @@ import {
   getPhaseAwareStatusForEvent,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
+import type { ConfigModuleInfo } from '@/types';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
@@ -65,7 +67,7 @@ export interface SetupFlowProps {
   setupProgress: { message: string; detail?: string } | null;
   liveAppEvents: AppEvent[];
   onPreview: (profile: DiscoveredProfile) => Promise<PreviewResult>;
-  onApply: (profile: DiscoveredProfile, restoreOptions?: { restoreIntent: RestoreIntent }) => Promise<ApplyResult>;
+  onApply: (profile: DiscoveredProfile, restoreOptions?: { restoreIntent: RestoreIntent; selectedModules?: string[] }) => Promise<ApplyResult>;
   // Undo settings flow
   onUndoDryRun?: () => Promise<EngineExecResult<EndstateEnvelope<EndstateRevertData>>>;
   onUndoExecute?: () => Promise<EngineExecResult<EndstateEnvelope<EndstateRevertData>>>;
@@ -108,6 +110,7 @@ export function SetupFlow({
   const [errorMessage, setErrorMessage] = useState('');
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [restoreIntent, setRestoreIntent] = useState<RestoreIntent>('apps-only');
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
   // Undo flow state
   const [undoDryRunData, setUndoDryRunData] = useState<EndstateRevertData | null>(null);
   const [undoExecuteData, setUndoExecuteData] = useState<EndstateRevertData | null>(null);
@@ -123,6 +126,7 @@ export function SetupFlow({
       setErrorMessage('');
       setActiveFilters(new Set());
       setRestoreIntent('apps-only');
+      setSelectedModules([]);
       setUndoDryRunData(null);
       setUndoExecuteData(null);
       setUndoError('');
@@ -200,7 +204,7 @@ export function SetupFlow({
     setErrorMessage('');
     setActiveFilters(new Set());
     try {
-      const result = await onApply(selectedProfile, settingsCount > 0 ? { restoreIntent } : undefined);
+      const result = await onApply(selectedProfile, settingsCount > 0 ? { restoreIntent, selectedModules } : undefined);
       setApplyResult(result);
       setPhase('apply-done');
     } catch (err) {
@@ -216,6 +220,7 @@ export function SetupFlow({
     setApplyResult(null);
     setErrorMessage('');
     setRestoreIntent('apps-only');
+    setSelectedModules([]);
     setUndoDryRunData(null);
     setUndoExecuteData(null);
     setUndoError('');
@@ -509,6 +514,8 @@ export function SetupFlow({
           const hasConfigMap = Object.keys(configMap).length > 0;
           const settingsCount = previewResult.restoreModulesAvailable?.length ?? Object.keys(configMap).length;
           const settingsDisplayCount = hasConfigMap ? Object.keys(configMap).length : settingsCount;
+          // Active settings count reflects user's restore selection
+          const activeSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
           const totalApps = previewResult.installed + previewResult.alreadyPresent;
           return (
           <motion.div
@@ -529,7 +536,8 @@ export function SetupFlow({
                       {previewResult.installed > 0
                         ? `${previewResult.installed} to install, ${previewResult.alreadyPresent} already present`
                         : `All ${totalApps} apps already present`}
-                      {settingsDisplayCount > 0 && ` · ${settingsDisplayCount} ${settingsDisplayCount === 1 ? 'setting' : 'settings'} included`}
+                      {activeSettingsCount > 0 && ` · ${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'} selected`}
+                      {activeSettingsCount === 0 && settingsDisplayCount > 0 && ` · ${settingsDisplayCount} ${settingsDisplayCount === 1 ? 'setting' : 'settings'} available`}
                     </p>
                   </div>
                 </div>
@@ -572,11 +580,11 @@ export function SetupFlow({
                             className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
                             aria-pressed={activeFilters.has('settings')}
                           >
-                            {settingsDisplayCount} {settingsDisplayCount === 1 ? 'setting' : 'settings'}
+                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsDisplayCount} ${settingsDisplayCount === 1 ? 'setting' : 'settings'}`}
                           </button>
                         ) : (
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
-                            {settingsDisplayCount} {settingsDisplayCount === 1 ? 'setting' : 'settings'}
+                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsDisplayCount} ${settingsDisplayCount === 1 ? 'setting' : 'settings'}`}
                           </span>
                         )
                       )}
@@ -610,12 +618,45 @@ export function SetupFlow({
                 )}
 
                 {settingsCount > 0 && (
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-3">
                     <RestoreIntentToggle
                       restoreIntent={restoreIntent}
-                      onRestoreIntentChange={setRestoreIntent}
+                      onRestoreIntentChange={(intent) => {
+                        setRestoreIntent(intent);
+                        if (intent === 'apps-only') setSelectedModules([]);
+                      }}
                       configModuleCount={settingsCount}
                     />
+                    {restoreIntent === 'apps-and-settings' && (() => {
+                      const configMap = previewResult.configModuleMap ?? {};
+                      // Invert configModuleMap (wingetId → qualifiedModuleId) to (shortId → wingetId)
+                      // configModuleMap values may be qualified like "apps.vscode" — strip prefix to match restoreModulesAvailable
+                      const moduleToWinget = new Map<string, string>();
+                      for (const [wingetId, qualifiedId] of Object.entries(configMap)) {
+                        const shortId = qualifiedId.includes('.') ? qualifiedId.split('.').pop()! : qualifiedId;
+                        moduleToWinget.set(shortId, wingetId);
+                        moduleToWinget.set(qualifiedId, wingetId);
+                      }
+                      // Build wingetId → display name from app events
+                      const wingetToName = new Map<string, string>();
+                      for (const ev of previewResult.appEvents) {
+                        if (ev.name) wingetToName.set(ev.app, ev.name);
+                      }
+                      const moduleIds = previewResult.restoreModulesAvailable ?? [...new Set([...moduleToWinget.keys()])];
+                      const modules: ConfigModuleInfo[] = moduleIds.map(id => {
+                        const wingetId = moduleToWinget.get(id);
+                        const displayName = (wingetId && wingetToName.get(wingetId)) || id;
+                        return { id, displayName, entries: 0, files: [] };
+                      });
+                      if (modules.length === 0) return null;
+                      return (
+                        <ConfigModuleSelector
+                          modules={modules}
+                          selectedModules={selectedModules}
+                          onSelectionChange={setSelectedModules}
+                        />
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -732,10 +773,10 @@ export function SetupFlow({
                         if (restored > 0 && settingsFailed === 0) return <> &middot; {restored} {restored === 1 ? 'setting' : 'settings'} restored</>;
                         if (restored > 0 && settingsFailed > 0) return <> &middot; {restored} {restored === 1 ? 'setting' : 'settings'} restored, {settingsFailed} failed</>;
                         if (settingsFailed > 0) return <> &middot; {settingsFailed} {settingsFailed === 1 ? 'setting' : 'settings'} failed</>;
-                        // Fallback: show available settings count from configModuleMap (only when restore was requested)
-                        if (restoreIntent === 'apps-and-settings') {
-                          const configMapCount = Object.keys(applyResult.configModuleMap ?? {}).length;
-                          if (configMapCount > 0) return <> &middot; {configMapCount} {configMapCount === 1 ? 'setting' : 'settings'} included</>;
+                        // Fallback: show selected settings count (only when restore was requested)
+                        if (restoreIntent === 'apps-and-settings' && selectedModules.length > 0) {
+                          const count = selectedModules.length;
+                          return <> &middot; {count} {count === 1 ? 'setting' : 'settings'} included</>;
                         }
                         return null;
                       })()}
@@ -745,12 +786,19 @@ export function SetupFlow({
 
                 {/* Activity summary */}
                 {applyResult.appEvents.length > 0 && (() => {
-                  const applyConfigMap = applyResult.configModuleMap ?? {};
+                  const fullConfigMap = applyResult.configModuleMap ?? {};
+                  // Filter config map to only include entries for modules the user selected
+                  const applyConfigMap = selectedModules.length > 0
+                    ? Object.fromEntries(Object.entries(fullConfigMap).filter(([, qualifiedId]) => {
+                        const shortId = qualifiedId.includes('.') ? qualifiedId.split('.').pop()! : qualifiedId;
+                        return selectedModules.includes(shortId) || selectedModules.includes(qualifiedId);
+                      }))
+                    : (restoreIntent === 'apps-and-settings' ? fullConfigMap : {});
                   const applySettingsRestored = applyResult.configsRestored ?? 0;
                   const applySettingsFailed = applyResult.configsFailed ?? 0;
                   const applySettingsProcessed = applySettingsRestored + (applyResult.configsSkipped ?? 0) + applySettingsFailed;
-                  // Fall back to configModuleMap count when restore counters are empty (only when restore was requested)
-                  const configMapSettingsCount = restoreIntent === 'apps-and-settings' ? Object.keys(applyConfigMap).length : 0;
+                  // Fall back to selected modules count when restore counters are empty (only when restore was requested)
+                  const configMapSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
                   const applySettingsTotal = applySettingsProcessed > 0 ? applySettingsProcessed : configMapSettingsCount;
                   const totalApplyApps = applyResult.installed + applyResult.alreadyPresent + applyResult.failed + applyResult.skipped;
                   return (

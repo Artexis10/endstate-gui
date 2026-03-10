@@ -265,8 +265,37 @@ pub fn run_engine(
         state.cancel_requested.store(false, Ordering::SeqCst);
     }
 
-    // Spawn the process with piped stdout/stderr
-    let mut cmd = crate::cmd_impl::build_engine_command(exe, args);
+    // Spawn the process with piped stdout/stderr.
+    // When exe is "__bundled__", resolve the bundled engine path from the
+    // Tauri resource directory and invoke via PowerShell.
+    let mut cmd = if exe == "__bundled__" {
+        use tauri::Manager;
+        let resource_dir = app.path().resource_dir().map_err(|e| EngineError {
+            code: "RESOURCE_DIR_ERROR".to_string(),
+            message: format!("Failed to resolve resource directory: {}", e),
+        })?;
+        let entrypoint = resource_dir.join("engine").join("bin").join("endstate.ps1");
+        if !entrypoint.exists() {
+            return {
+                // Clear run state before returning error
+                if let Ok(mut state) = run_state.lock() {
+                    state.run_id = None;
+                    state.command = None;
+                    state.child = None;
+                }
+                Err(EngineError {
+                    code: "BUNDLED_ENGINE_NOT_FOUND".to_string(),
+                    message: format!(
+                        "Bundled engine not found at: {}",
+                        entrypoint.display()
+                    ),
+                })
+            };
+        }
+        crate::cmd_impl::build_bundled_engine_command(&entrypoint, args)
+    } else {
+        crate::cmd_impl::build_engine_command(exe, args)
+    };
     cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped());
     

@@ -154,7 +154,7 @@ export async function engineGetRunId(): Promise<string | null> {
  * @returns The runId of the started run
  */
 export async function runCapabilities(settings: AppSettings): Promise<string> {
-  const engineCmd = buildEngineCommand(settings, ['capabilities', '-Json']);
+  const engineCmd = await buildEngineCommand(settings, ['capabilities', '-Json']);
   return engineRun(engineCmd.exe, engineCmd.args);
 }
 
@@ -166,7 +166,7 @@ export async function runCapabilities(settings: AppSettings): Promise<string> {
  * @returns The runId of the started run
  */
 export async function runVerify(settings: AppSettings, manifestPath: string): Promise<string> {
-  const engineCmd = buildEngineCommand(settings, ['verify', manifestPath, '-Json']);
+  const engineCmd = await buildEngineCommand(settings, ['verify', manifestPath, '-Json']);
   return engineRun(engineCmd.exe, engineCmd.args);
 }
 
@@ -178,6 +178,6 @@ export async function runVerify(settings: AppSettings, manifestPath: string): Pr
  * @returns The runId of the started run
  */
 export async function runApply(settings: AppSettings, manifestPath: string): Promise<string> {
-  const engineCmd = buildEngineCommand(settings, ['apply', manifestPath, '-Json']);
+  const engineCmd = await buildEngineCommand(settings, ['apply', manifestPath, '-Json']);
   return engineRun(engineCmd.exe, engineCmd.args);
 }

@@ -20,7 +20,7 @@ export interface EnginePathResult {
   /** Original path before migration (if migrated) */
   originalPath?: string;
   /** Resolution method used */
-  resolution: 'user_config' | 'bin_ps1' | 'bin_cmd' | 'path_fallback' | 'invalid';
+  resolution: 'user_config' | 'bin_ps1' | 'bin_cmd' | 'path_fallback' | 'bundled' | 'invalid';
   /** Debug message for logging */
   debugMessage: string;
 }

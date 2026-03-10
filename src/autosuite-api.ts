@@ -22,7 +22,7 @@ export async function runEndstate<T>(
   args: string[] = []
 ): Promise<RunEndstateResult<T>> {
   const fullArgs = [command, '--json', ...args];
-  const engineCmd = buildEngineCommand(settings, fullArgs);
+  const engineCmd = await buildEngineCommand(settings, fullArgs);
 
   let result: ExecResult;
   try {

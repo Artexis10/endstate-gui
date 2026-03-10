@@ -77,6 +77,12 @@ pub struct ProfileSummary {
 /// All engine process spawn sites MUST use this helper instead of Command::new(exe)
 /// directly. See PROJECT_SHADOW.md Section 6 (Landmines).
 pub fn build_engine_command(exe: &str, args: &[String]) -> Command {
+    // If exe is a .ps1 script path, delegate to bundled command builder
+    // which wraps with PowerShell and sets ENDSTATE_ALLOW_DIRECT=1
+    if exe.to_lowercase().ends_with(".ps1") {
+        return build_bundled_engine_command(Path::new(exe), args);
+    }
+
     let mut cmd = if cfg!(target_os = "windows")
         && exe != "pwsh"
         && exe != "powershell"
@@ -94,11 +100,36 @@ pub fn build_engine_command(exe: &str, args: &[String]) -> Command {
         c
     };
 
-    // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode
-    if exe == "pwsh" || exe == "powershell" {
+    // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell invocations (script/bundled mode).
+    // Matches "pwsh", "powershell", "powershell.exe", "pwsh.exe" (case-insensitive).
+    let exe_lower = exe.to_lowercase();
+    if exe_lower == "pwsh"
+        || exe_lower == "powershell"
+        || exe_lower == "pwsh.exe"
+        || exe_lower == "powershell.exe"
+    {
         cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
     }
 
+    cmd
+}
+
+/// Build a Command for executing the bundled engine via PowerShell.
+///
+/// The bundled engine entrypoint is a .ps1 script, so it must be invoked
+/// via `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <path> <args>`.
+/// Sets ENDSTATE_ALLOW_DIRECT=1 so the engine skips bootstrap/shim checks.
+/// Sets ENDSTATE_ROOT to the engine resource directory (parent of `bin/`)
+/// because Tauri resource paths use the `\\?\` extended path prefix which
+/// PowerShell 5.1's Split-Path cannot handle.
+pub fn build_bundled_engine_command(entrypoint: &std::path::Path, args: &[String]) -> Command {
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]);
+    cmd.arg(entrypoint);
+    cmd.args(args);
+    cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
+    // entrypoint is engine/bin/endstate.ps1 — go up twice to get engine/ root
+    cmd.env("ENDSTATE_ROOT", entrypoint.parent().unwrap().parent().unwrap());
     cmd
 }
 

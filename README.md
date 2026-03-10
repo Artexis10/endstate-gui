@@ -6,7 +6,7 @@ The GUI is designed to consume Endstate strictly through its public CLI interfac
 
 ## Status
 
-This project is under active development and is not yet intended for general use.
+Endstate GUI is in active development approaching v1.0 release.
 
 ## Development Prerequisites
 
@@ -41,8 +41,7 @@ npm run tauri icon app-icon.png
 Endstate GUI relies on the Endstate CLI being installed and available on the system PATH.  
 All operations are executed by invoking the CLI and consuming its structured output.
 
-Endstate (the core engine) is open source and licensed under the Apache License 2.0.  
-Endstate GUI is a separate project with its own licensing and distribution model.
+Both Endstate (the core engine) and Endstate GUI are open source, licensed under the Apache License 2.0.
 
 ---
 
@@ -101,11 +100,13 @@ During development, Endstate GUI resolves the CLI from the system PATH:
 
 #### Production Mode
 
-Production builds of Endstate GUI bundle a pinned Endstate CLI binary:
+Production builds of Endstate GUI will bundle the Endstate engine as Tauri resources:
 
-- **CLI Resolution:** Bundled binary at known path
+- **CLI Resolution:** Bundled engine scripts at known resource path
 - **Execution:** Tauri/Rust Command API
 - **Validation:** Capabilities handshake on startup
+
+> **Note:** Engine bundling is in progress. Currently requires Endstate CLI on system PATH.
 
 ### Compatibility Check Flow
 
@@ -134,7 +135,7 @@ All CLI commands with `--json` flag return a standardized envelope:
 ```json
 {
   "schemaVersion": "1.0",
-  "cliVersion": "0.1.0",
+  "cliVersion": "1.3.0",
   "command": "apply",
   "runId": "20241220-143052",
   "timestampUtc": "2024-12-20T14:30:52Z",
@@ -144,7 +145,7 @@ All CLI commands with `--json` flag return a standardized envelope:
 }
 ```
 
-See `.windsurf/rules/project-ruleset.md` in the endstate repository for the authoritative contract rules.
+See `docs/ai/PROJECT_RULES.md` in the endstate repository for the authoritative contract rules.
 
 ### Supported Commands
 
@@ -164,18 +165,21 @@ See `.windsurf/rules/project-ruleset.md` in the endstate repository for the auth
 
 ---
 
+## Code Signing Policy
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+**Team roles:**
+- Committers and reviewers: [Hugo Ander Kivi](https://github.com/Artexis10)
+- Approvers: [Hugo Ander Kivi](https://github.com/Artexis10)
+
+**Privacy policy:** This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
 ## License
 
-This software is proprietary and confidential.
+Licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
 
-Copyright © 2025 Substrate Systems OÜ.
-All rights reserved.
-
-Use, modification, or redistribution of this software is prohibited
-except as explicitly permitted by a written agreement with
-Substrate Systems OÜ.
-
-See the LICENSE file for details.
+Copyright 2025-2026 Substrate Systems OÜ.
 
 ## Development Notes
 
@@ -232,5 +236,4 @@ This runs unit tests for the parsing logic, runId injection, and cancellation in
 
 ## Notes
 
-This repository exists to develop the official Endstate desktop experience.  
-Details about distribution, pricing, and supported platforms will be documented closer to release.
+This repository exists to develop the official Endstate desktop experience.

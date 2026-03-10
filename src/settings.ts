@@ -60,7 +60,7 @@ export async function loadSettingsWithResolution(): Promise<{
       pathResolution: {
         path: null,
         migrated: false,
-        resolution: 'path_fallback',
+        resolution: settings.engineMode === 'bundled' ? 'bundled' : 'path_fallback',
         debugMessage: `Engine mode is '${settings.engineMode}', skipping script path resolution`,
       },
     };

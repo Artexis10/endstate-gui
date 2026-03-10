@@ -39,12 +39,50 @@ describe('ConfigModuleSelector', () => {
     expect(screen.getByText('Windows Terminal')).toBeInTheDocument();
   });
 
-  it('shows file count per module', () => {
+  it('shows file count per module when entries > 0', () => {
     renderWithProviders(<ConfigModuleSelector {...defaultProps} />);
 
     expect(screen.getByText('3 files')).toBeInTheDocument();
     expect(screen.getByText('1 file')).toBeInTheDocument();
     expect(screen.getByText('2 files')).toBeInTheDocument();
+  });
+
+  it('hides file count when entries is 0', () => {
+    const zeroModules: ConfigModuleInfo[] = [
+      { id: 'vscode', displayName: 'VS Code', entries: 0, files: [] },
+    ];
+    renderWithProviders(
+      <ConfigModuleSelector {...defaultProps} modules={zeroModules} />
+    );
+
+    expect(screen.getByText('VS Code')).toBeInTheDocument();
+    expect(screen.queryByText('0 files')).not.toBeInTheDocument();
+  });
+
+  it('renders select all button and selects all modules', () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <ConfigModuleSelector {...defaultProps} selectedModules={[]} onSelectionChange={onChange} />
+    );
+
+    const toggleAll = screen.getByTestId('config-module-toggle-all');
+    expect(toggleAll).toHaveTextContent('Select all');
+    toggleAll.click();
+
+    expect(onChange).toHaveBeenCalledWith(['vscode', 'git', 'terminal']);
+  });
+
+  it('renders deselect all button when all selected and deselects all', () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <ConfigModuleSelector {...defaultProps} onSelectionChange={onChange} />
+    );
+
+    const toggleAll = screen.getByTestId('config-module-toggle-all');
+    expect(toggleAll).toHaveTextContent('Deselect all');
+    toggleAll.click();
+
+    expect(onChange).toHaveBeenCalledWith([]);
   });
 
   it('calls onSelectionChange to remove a module when unchecked', () => {

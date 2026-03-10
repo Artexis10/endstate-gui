@@ -16,9 +16,7 @@ use event_broadcast::EventBroadcaster;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
-#[cfg(all(debug_assertions, feature = "dev-server"))]
-use tauri::Manager;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Result of CLI execution returned to the frontend.
 #[derive(Debug, Serialize, Deserialize)]
@@ -159,6 +157,27 @@ fn engine_is_running(run_state: State<'_, SharedRunState>) -> bool {
 #[tauri::command]
 fn engine_get_run_id(run_state: State<'_, SharedRunState>) -> Option<String> {
     engine_adapter::get_current_run_id(&run_state)
+}
+
+/// Resolve the bundled engine entrypoint path from Tauri resource directory.
+/// Returns the path to engine/bin/endstate.ps1 within the app's resource dir.
+/// Returns None if running in dev mode or if the bundled engine is not found.
+fn resolve_bundled_engine_path(app_handle: &AppHandle) -> Option<std::path::PathBuf> {
+    let resource_dir = app_handle.path().resource_dir().ok()?;
+    let entrypoint = resource_dir.join("engine").join("bin").join("endstate.ps1");
+    if entrypoint.exists() {
+        Some(entrypoint)
+    } else {
+        None
+    }
+}
+
+/// Get the path to the bundled engine entrypoint, if available.
+/// Returns None in dev mode or if engine is not bundled.
+#[tauri::command]
+fn get_bundled_engine_path(app: AppHandle) -> Option<String> {
+    resolve_bundled_engine_path(&app)
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
 }
 
 /// Check if a file exists at the given path.
@@ -1304,6 +1323,7 @@ pub fn run() {
             engine_cancel,
             engine_is_running,
             engine_get_run_id,
+            get_bundled_engine_path,
             list_manifest_files,
             run_endstate_streaming,
             check_file_exists,

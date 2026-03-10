@@ -43,18 +43,19 @@ export interface EngineCommand {
 
 /**
  * Build the engine command based on settings and mode.
- * 
+ *
  * For script mode: exe="pwsh", args include -NoProfile -ExecutionPolicy Bypass -File <scriptPath>
- * For bundled/path mode: exe="endstate", args are passed directly
- * 
+ * For bundled mode: exe="powershell.exe" with bundled engine path (production), or "endstate" PATH fallback (dev)
+ * For path mode: exe="endstate", args are passed directly
+ *
  * @param settings - App settings containing engineMode and engineScriptPath
  * @param commandArgs - Arguments to pass to the engine (e.g., ["capabilities", "--json"])
  * @returns EngineCommand with exe, args, and displayCommand
  */
-export function buildEngineCommand(
+export async function buildEngineCommand(
   settings: AppSettings,
   commandArgs: string[]
-): EngineCommand {
+): Promise<EngineCommand> {
   if (settings.engineMode === 'script') {
     const exe = 'pwsh';
     const args = [
@@ -67,12 +68,28 @@ export function buildEngineCommand(
     ];
     const displayCommand = `pwsh -NoProfile -ExecutionPolicy Bypass -File "${settings.engineScriptPath}" ${commandArgs.join(' ')}`;
     return { exe, args, displayCommand };
+  } else if (settings.engineMode === 'bundled') {
+    // Try to get bundled engine path from Rust backend
+    const bundledPath = await invoke<string | null>('get_bundled_engine_path');
+    if (bundledPath) {
+      // Production: use bundled engine via PowerShell
+      const exe = 'powershell.exe';
+      const args = [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        bundledPath,
+        ...commandArgs,
+      ];
+      return { exe, args, displayCommand: `[bundled] ${commandArgs.join(' ')}` };
+    } else {
+      // Dev fallback: use PATH
+      return { exe: 'endstate', args: commandArgs, displayCommand: `endstate ${commandArgs.join(' ')}` };
+    }
   } else {
-    // bundled or path mode
-    const exe = 'endstate';
-    const args = commandArgs;
-    const displayCommand = `endstate ${commandArgs.join(' ')}`;
-    return { exe, args, displayCommand };
+    // path mode
+    return { exe: 'endstate', args: commandArgs, displayCommand: `endstate ${commandArgs.join(' ')}` };
   }
 }
 
@@ -126,7 +143,7 @@ export async function runEndstateOnce<T>(
   args: string[] = []
 ): Promise<EngineExecResult<T>> {
   const fullArgs = [command, '--json', ...args];
-  const engineCmd = buildEngineCommand(settings, fullArgs);
+  const engineCmd = await buildEngineCommand(settings, fullArgs);
   const commandStr = engineCmd.displayCommand;
   
   // Check if we're in web mode without engine access

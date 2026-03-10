@@ -1090,7 +1090,7 @@ function AppContent() {
       });
     } catch (err) {
       // Catch any unexpected errors (timeouts, network issues, etc.)
-      const fallbackCmd = buildEngineCommand(settings, ['capabilities', '--json']);
+      const fallbackCmd = await buildEngineCommand(settings, ['capabilities', '--json']);
       setState({
         status: 'error',
         errorMessage: err instanceof Error ? err.message : 'Failed to initialize engine',
@@ -1546,13 +1546,10 @@ function AppContent() {
     
     // Build apply command args with optional restore flags
     const applyArgs = ['--profile', profilePath];
-    if (restoreOptions?.restoreIntent === 'apps-and-settings') {
+    if (restoreOptions?.restoreIntent === 'apps-and-settings' && restoreOptions.selectedModules && restoreOptions.selectedModules.length > 0) {
       applyArgs.push('--enable-restore');
-      if (restoreOptions.selectedModules && restoreOptions.selectedModules.length > 0) {
-        applyArgs.push('--restore-filter', restoreOptions.selectedModules.join(','));
-      }
+      applyArgs.push('--restore-filter', restoreOptions.selectedModules.join(','));
     }
-
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
       'apply',

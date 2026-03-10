@@ -3,6 +3,7 @@
  */
 
 import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import type { ConfigModuleInfo } from '@/types';
 
 interface ConfigModuleSelectorProps {
@@ -20,6 +21,8 @@ export function ConfigModuleSelector({
 }: ConfigModuleSelectorProps) {
   if (modules.length === 0) return null;
 
+  const allSelected = modules.every((m) => selectedModules.includes(m.id));
+
   const handleToggle = (moduleId: string) => {
     if (selectedModules.includes(moduleId)) {
       onSelectionChange(selectedModules.filter((id) => id !== moduleId));
@@ -28,14 +31,34 @@ export function ConfigModuleSelector({
     }
   };
 
+  const handleToggleAll = () => {
+    if (allSelected) {
+      onSelectionChange([]);
+    } else {
+      onSelectionChange(modules.map((m) => m.id));
+    }
+  };
+
   return (
     <div
       className="rounded-lg border border-border bg-muted/20 p-4 space-y-3"
       data-testid="config-module-selector"
     >
-      <p className="text-xs font-medium text-muted-foreground">
-        Settings to restore:
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">
+          Settings to restore:
+        </p>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-auto py-0.5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+          onClick={handleToggleAll}
+          disabled={disabled}
+          data-testid="config-module-toggle-all"
+        >
+          {allSelected ? 'Deselect all' : 'Select all'}
+        </Button>
+      </div>
 
       <div className="space-y-2">
         {modules.map((mod) => {
@@ -53,9 +76,11 @@ export function ConfigModuleSelector({
                 className="flex-1 flex items-center justify-between text-sm cursor-pointer"
               >
                 <span>{mod.displayName}</span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {mod.entries} file{mod.entries !== 1 ? 's' : ''}
-                </span>
+                {mod.entries > 0 && (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {mod.entries} file{mod.entries !== 1 ? 's' : ''}
+                  </span>
+                )}
               </label>
             </div>
           );
