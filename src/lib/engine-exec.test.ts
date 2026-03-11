@@ -86,8 +86,8 @@ describe('buildEngineCommand', () => {
   });
 
   describe('bundled mode', () => {
-    it('uses powershell.exe with bundled path when available', async () => {
-      const bundledPath = 'C:\\Program Files\\endstate-gui\\resources\\engine\\bin\\endstate.ps1';
+    it('uses sidecar binary path when available', async () => {
+      const bundledPath = 'C:\\Program Files\\endstate-gui\\endstate.exe';
       mockInvoke.mockResolvedValue(bundledPath);
 
       const settings: AppSettings = {
@@ -98,13 +98,8 @@ describe('buildEngineCommand', () => {
       const result = await buildEngineCommand(settings, ['capabilities', '--json']);
 
       expect(mockInvoke).toHaveBeenCalledWith('get_bundled_engine_path');
-      expect(result.exe).toBe('powershell.exe');
+      expect(result.exe).toBe(bundledPath);
       expect(result.args).toEqual([
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        bundledPath,
         'capabilities',
         '--json',
       ]);

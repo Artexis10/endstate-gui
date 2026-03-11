@@ -21,6 +21,7 @@ const SETTINGS_KEY = 'endstate-gui-settings';
 
 const DEFAULT_SETTINGS: AppSettings = {
   engineMode: 'bundled',
+  // Legacy: script mode path for PowerShell engine. Not used with Go engine.
   engineScriptPath: 'C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\bin\\endstate.ps1',
   customProfilesDirectory: '',
   selectedProfileName: null,

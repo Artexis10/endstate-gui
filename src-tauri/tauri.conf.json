@@ -33,14 +33,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "externalBin": [
+      "../../endstate/go-engine/endstate"
+    ],
     "resources": {
-      "../../endstate/bin/": "engine/bin/",
-      "../../endstate/engine/": "engine/engine/",
-      "../../endstate/drivers/": "engine/drivers/",
-      "../../endstate/restorers/": "engine/restorers/",
-      "../../endstate/verifiers/": "engine/verifiers/",
       "../../endstate/modules/": "engine/modules/",
-      "../../endstate/bundles/": "engine/bundles/",
+      "../../endstate/payload/": "engine/payload/",
       "../../endstate/VERSION": "engine/VERSION",
       "../../endstate/SCHEMA_VERSION": "engine/SCHEMA_VERSION"
     },

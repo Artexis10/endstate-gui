@@ -159,27 +159,25 @@ fn engine_get_run_id(run_state: State<'_, SharedRunState>) -> Option<String> {
     engine_adapter::get_current_run_id(&run_state)
 }
 
-/// Resolve the bundled engine entrypoint path from Tauri resource directory.
-/// Returns the path to engine/bin/endstate.ps1 within the app's resource dir.
-/// Returns None if running in dev mode or if the bundled engine is not found.
-fn resolve_bundled_engine_path(app_handle: &AppHandle) -> Option<std::path::PathBuf> {
-    let resource_dir = app_handle.path().resource_dir().ok()?;
-    let entrypoint = resource_dir.join("engine").join("bin").join("endstate.ps1");
-    if entrypoint.exists() {
-        Some(entrypoint)
+/// Resolve the bundled engine sidecar binary path.
+/// Returns the path to the Go engine binary next to the main executable.
+/// Returns None if running in dev mode or if the sidecar is not found.
+fn resolve_bundled_engine_path() -> Option<std::path::PathBuf> {
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    let sidecar = exe_dir.join("endstate.exe");
+    if sidecar.exists() {
+        Some(sidecar)
     } else {
         None
     }
 }
 
-/// Get the path to the bundled engine entrypoint, if available.
-/// Returns None in dev mode or if engine is not bundled.
-/// Strips the `\\?\` extended path prefix that Tauri adds on Windows,
-/// because PowerShell 5.1 cannot handle it in Split-Path / Join-Path.
+/// Get the path to the bundled engine sidecar binary, if available.
+/// Returns None in dev mode or if engine sidecar is not bundled.
 #[tauri::command]
-fn get_bundled_engine_path(app: AppHandle) -> Option<String> {
-    resolve_bundled_engine_path(&app)
-        .and_then(|p| p.to_str().map(|s| cmd_impl::strip_extended_path_prefix(std::path::Path::new(s))))
+fn get_bundled_engine_path(_app: AppHandle) -> Option<String> {
+    resolve_bundled_engine_path()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
 }
 
 /// Check if a file exists at the given path.

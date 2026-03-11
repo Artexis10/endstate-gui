@@ -266,33 +266,48 @@ pub fn run_engine(
     }
 
     // Spawn the process with piped stdout/stderr.
-    // When exe is "__bundled__", resolve the bundled engine path from the
-    // Tauri resource directory and invoke via PowerShell.
+    // When exe is "__bundled__", resolve the sidecar binary path and set
+    // ENDSTATE_ROOT to the resource directory so it can find modules/ and payload/.
     let mut cmd = if exe == "__bundled__" {
         use tauri::Manager;
+        // Resolve sidecar binary: lives next to the main executable
+        let exe_dir = std::env::current_exe()
+            .map_err(|e| EngineError {
+                code: "EXE_DIR_ERROR".to_string(),
+                message: format!("Failed to resolve executable directory: {}", e),
+            })?
+            .parent()
+            .ok_or_else(|| EngineError {
+                code: "EXE_DIR_ERROR".to_string(),
+                message: "Failed to get parent directory of executable".to_string(),
+            })?
+            .to_path_buf();
+        let sidecar_path = exe_dir.join("endstate.exe");
+        if !sidecar_path.exists() {
+            // Clear run state before returning error
+            if let Ok(mut state) = run_state.lock() {
+                state.run_id = None;
+                state.command = None;
+                state.child = None;
+            }
+            return Err(EngineError {
+                code: "BUNDLED_ENGINE_NOT_FOUND".to_string(),
+                message: format!(
+                    "Bundled engine not found at: {}",
+                    sidecar_path.display()
+                ),
+            });
+        }
+        let mut c = std::process::Command::new(&sidecar_path);
+        c.args(args);
+        // Set ENDSTATE_ROOT to the resource directory's engine/ subdirectory
+        // so the Go binary can find modules/, payload/, VERSION, SCHEMA_VERSION
         let resource_dir = app.path().resource_dir().map_err(|e| EngineError {
             code: "RESOURCE_DIR_ERROR".to_string(),
             message: format!("Failed to resolve resource directory: {}", e),
         })?;
-        let entrypoint = resource_dir.join("engine").join("bin").join("endstate.ps1");
-        if !entrypoint.exists() {
-            return {
-                // Clear run state before returning error
-                if let Ok(mut state) = run_state.lock() {
-                    state.run_id = None;
-                    state.command = None;
-                    state.child = None;
-                }
-                Err(EngineError {
-                    code: "BUNDLED_ENGINE_NOT_FOUND".to_string(),
-                    message: format!(
-                        "Bundled engine not found at: {}",
-                        entrypoint.display()
-                    ),
-                })
-            };
-        }
-        crate::cmd_impl::build_bundled_engine_command(&entrypoint, args)
+        c.env("ENDSTATE_ROOT", resource_dir.join("engine"));
+        c
     } else {
         crate::cmd_impl::build_engine_command(exe, args)
     };

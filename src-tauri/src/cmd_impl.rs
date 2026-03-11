@@ -68,86 +68,24 @@ pub struct ProfileSummary {
     pub captured: Option<String>,
 }
 
-/// Build a Command with proper Windows cmd /C wrapping for .cmd/.bat PATH shims.
+/// Build a Command for the engine binary.
 ///
-/// On Windows, bare command names (no path separators, not .exe, not pwsh/powershell)
-/// are wrapped with `cmd /C` so Rust can resolve .cmd shims on PATH.
-/// Also sets ENDSTATE_ALLOW_DIRECT=1 for PowerShell script mode.
+/// With the Go engine, this is simple — just spawn the exe with args.
+/// Passes through ENDSTATE_ROOT if set in the environment so the binary
+/// can find modules/ and payload/.
 ///
 /// All engine process spawn sites MUST use this helper instead of Command::new(exe)
 /// directly. See PROJECT_SHADOW.md Section 6 (Landmines).
 pub fn build_engine_command(exe: &str, args: &[String]) -> Command {
-    // If exe is a .ps1 script path, delegate to bundled command builder
-    // which wraps with PowerShell and sets ENDSTATE_ALLOW_DIRECT=1
-    if exe.to_lowercase().ends_with(".ps1") {
-        return build_bundled_engine_command(Path::new(exe), args);
-    }
-
-    let mut cmd = if cfg!(target_os = "windows")
-        && exe != "pwsh"
-        && exe != "powershell"
-        && !exe.ends_with(".exe")
-        && !exe.contains('\\')
-        && !exe.contains('/')
-    {
-        let mut c = Command::new("cmd");
-        c.args(&["/C", exe]);
-        c.args(args);
-        c
-    } else {
-        let mut c = Command::new(exe);
-        c.args(args);
-        c
-    };
-
-    // Set ENDSTATE_ALLOW_DIRECT=1 for PowerShell invocations (script/bundled mode).
-    // Matches "pwsh", "powershell", "powershell.exe", "pwsh.exe" (case-insensitive).
-    let exe_lower = exe.to_lowercase();
-    if exe_lower == "pwsh"
-        || exe_lower == "powershell"
-        || exe_lower == "pwsh.exe"
-        || exe_lower == "powershell.exe"
-    {
-        cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
-    }
-
-    cmd
-}
-
-/// Build a Command for executing the bundled engine via PowerShell.
-///
-/// The bundled engine entrypoint is a .ps1 script, so it must be invoked
-/// via `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <path> <args>`.
-/// Sets ENDSTATE_ALLOW_DIRECT=1 so the engine skips bootstrap/shim checks.
-/// Sets ENDSTATE_ROOT to the engine resource directory (parent of `bin/`)
-/// because Tauri resource paths use the `\\?\` extended path prefix which
-/// PowerShell 5.1's Split-Path cannot handle.
-pub fn build_bundled_engine_command(entrypoint: &std::path::Path, args: &[String]) -> Command {
-    // Tauri resource paths use the \\?\ extended path prefix on Windows.
-    // PowerShell 5.1's Split-Path cannot parse drive letters from these paths,
-    // causing $PSScriptRoot-derived variables to be null. Strip the prefix.
-    let clean_path = strip_extended_path_prefix(entrypoint);
-    let clean = Path::new(&clean_path);
-
-    let mut cmd = Command::new("powershell.exe");
-    cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]);
-    cmd.arg(clean);
+    let mut cmd = Command::new(exe);
     cmd.args(args);
-    cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
-    // entrypoint is engine/bin/endstate.ps1 — go up twice to get engine/ root
-    cmd.env("ENDSTATE_ROOT", clean.parent().unwrap().parent().unwrap());
-    cmd
-}
 
-/// Strip the `\\?\` extended-length path prefix that Windows/Tauri adds.
-/// PowerShell 5.1 cannot handle these prefixes in Split-Path / Join-Path.
-pub fn strip_extended_path_prefix(path: &Path) -> String {
-    let s = path.to_string_lossy();
-    if let Some(stripped) = s.strip_prefix(r"\\?\") {
-        stripped.to_string()
-    } else {
-        s.into_owned()
+    // Pass through ENDSTATE_ROOT so the Go binary can find modules/, payload/, etc.
+    if let Ok(root) = std::env::var("ENDSTATE_ROOT") {
+        cmd.env("ENDSTATE_ROOT", &root);
     }
+
+    cmd
 }
 
 pub fn endstate_exec(exe: String, args: Vec<String>) -> Result<ExecResult, ExecError> {

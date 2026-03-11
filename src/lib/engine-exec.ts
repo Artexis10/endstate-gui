@@ -44,8 +44,8 @@ export interface EngineCommand {
 /**
  * Build the engine command based on settings and mode.
  *
- * For script mode: exe="pwsh", args include -NoProfile -ExecutionPolicy Bypass -File <scriptPath>
- * For bundled mode: exe="powershell.exe" with bundled engine path (production), or "endstate" PATH fallback (dev)
+ * For script mode (legacy): exe="pwsh", args include -NoProfile -ExecutionPolicy Bypass -File <scriptPath>
+ * For bundled mode: tries sidecar binary path, falls back to "endstate" from PATH
  * For path mode: exe="endstate", args are passed directly
  *
  * @param settings - App settings containing engineMode and engineScriptPath
@@ -57,6 +57,7 @@ export async function buildEngineCommand(
   commandArgs: string[]
 ): Promise<EngineCommand> {
   if (settings.engineMode === 'script') {
+    // Legacy script mode: invoke via PowerShell
     const exe = 'pwsh';
     const args = [
       '-NoProfile',
@@ -69,20 +70,11 @@ export async function buildEngineCommand(
     const displayCommand = `pwsh -NoProfile -ExecutionPolicy Bypass -File "${settings.engineScriptPath}" ${commandArgs.join(' ')}`;
     return { exe, args, displayCommand };
   } else if (settings.engineMode === 'bundled') {
-    // Try to get bundled engine path from Rust backend
+    // Try to get bundled sidecar binary path from Rust backend
     const bundledPath = await invoke<string | null>('get_bundled_engine_path');
     if (bundledPath) {
-      // Production: use bundled engine via PowerShell
-      const exe = 'powershell.exe';
-      const args = [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        bundledPath,
-        ...commandArgs,
-      ];
-      return { exe, args, displayCommand: `[bundled] ${commandArgs.join(' ')}` };
+      // Production: use sidecar binary directly
+      return { exe: bundledPath, args: commandArgs, displayCommand: `[bundled] ${commandArgs.join(' ')}` };
     } else {
       // Dev fallback: use PATH
       return { exe: 'endstate', args: commandArgs, displayCommand: `endstate ${commandArgs.join(' ')}` };
