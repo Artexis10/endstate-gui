@@ -123,14 +123,31 @@ pub fn build_engine_command(exe: &str, args: &[String]) -> Command {
 /// because Tauri resource paths use the `\\?\` extended path prefix which
 /// PowerShell 5.1's Split-Path cannot handle.
 pub fn build_bundled_engine_command(entrypoint: &std::path::Path, args: &[String]) -> Command {
+    // Tauri resource paths use the \\?\ extended path prefix on Windows.
+    // PowerShell 5.1's Split-Path cannot parse drive letters from these paths,
+    // causing $PSScriptRoot-derived variables to be null. Strip the prefix.
+    let clean_path = strip_extended_path_prefix(entrypoint);
+    let clean = Path::new(&clean_path);
+
     let mut cmd = Command::new("powershell.exe");
     cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]);
-    cmd.arg(entrypoint);
+    cmd.arg(clean);
     cmd.args(args);
     cmd.env("ENDSTATE_ALLOW_DIRECT", "1");
     // entrypoint is engine/bin/endstate.ps1 — go up twice to get engine/ root
-    cmd.env("ENDSTATE_ROOT", entrypoint.parent().unwrap().parent().unwrap());
+    cmd.env("ENDSTATE_ROOT", clean.parent().unwrap().parent().unwrap());
     cmd
+}
+
+/// Strip the `\\?\` extended-length path prefix that Windows/Tauri adds.
+/// PowerShell 5.1 cannot handle these prefixes in Split-Path / Join-Path.
+pub fn strip_extended_path_prefix(path: &Path) -> String {
+    let s = path.to_string_lossy();
+    if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        stripped.to_string()
+    } else {
+        s.into_owned()
+    }
 }
 
 pub fn endstate_exec(exe: String, args: Vec<String>) -> Result<ExecResult, ExecError> {

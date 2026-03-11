@@ -1,7 +1,7 @@
 {
   "name": "endstate-gui",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "scripts": {
     "predev": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:ENDSTATE_ALLOW_DIRECT='1'; $repoRoot = (Resolve-Path '../endstate').Path; & '../endstate/bin/endstate.ps1' bootstrap -RepoRoot $repoRoot; if ($LASTEXITCODE -eq 0) { Write-Host 'Engine bootstrapped.' } else { Write-Host 'WARNING: Engine bootstrap failed (non-fatal).' }\"",

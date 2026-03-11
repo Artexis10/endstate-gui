@@ -178,14 +178,16 @@ endstate-gui/
 
 11. **Windows .cmd PATH resolution.** Rust's `std::process::Command` only resolves `.exe` files on Windows PATH. The `endstate.cmd` shim requires `cmd /C` wrapping. All process spawn sites MUST use the shared `build_engine_command()` helper in `cmd_impl.rs`. Never construct `Command::new(exe)` directly for engine invocation — new spawn sites will silently fail in PATH mode.
 
-12. **Cross-repo contract coupling.** Status/phase semantics are coupled between GUI and engine:
+12. **Tauri `\\?\` extended path prefix.** Tauri's `resource_dir()` returns paths with the `\\?\` extended-length prefix on Windows. PowerShell 5.1's `Split-Path` cannot parse drive letters from these paths, causing `$PSScriptRoot`-derived variables to be null. All paths returned to the frontend or passed to PowerShell must be stripped via `strip_extended_path_prefix()` in `cmd_impl.rs`. Two code paths are affected: (a) `get_bundled_engine_path` in `lib.rs` (non-streaming exec), (b) `build_bundled_engine_command` in `cmd_impl.rs` (streaming exec via engine_adapter).
+
+13. **Cross-repo contract coupling.** Status/phase semantics are coupled between GUI and engine:
     - UI semantics: `docs/ux-language.md`
     - Engine event schema: `../endstate/docs/event-contract.md`
     Changes to status/phase behavior MUST update both repos.
 
-13. **Config module data comes from bundle metadata, not the dry-run envelope.** The engine's `--dry-run` envelope does not include `configModuleMap` or `restoreModulesAvailable`. Config module info is read from the engine-produced `metadata.json` inside the bundle directory (`readBundleMetadata()` in `App.tsx`). Settings count comes from `configModulesIncluded`, and per-app gear icons use fuzzy matching between config module names and manifest app IDs. If the engine later adds these fields to the envelope, the GUI will prefer them automatically.
+14. **Config module data comes from bundle metadata, not the dry-run envelope.** The engine's `--dry-run` envelope does not include `configModuleMap` or `restoreModulesAvailable`. Config module info is read from the engine-produced `metadata.json` inside the bundle directory (`readBundleMetadata()` in `App.tsx`). Settings count comes from `configModulesIncluded`, and per-app gear icons use fuzzy matching between config module names and manifest app IDs. If the engine later adds these fields to the envelope, the GUI will prefer them automatically.
 
-14. **Bundle profile naming vs manifest filename.** Extracted zip bundles contain a generic `manifest.jsonc`. Profile discovery must use the **parent directory name** (e.g., `hugo-desktop`) as the profile ID, not the manifest filename. See `file-discovery.ts` `isNestedInSubdir` logic.
+15. **Bundle profile naming vs manifest filename.** Extracted zip bundles contain a generic `manifest.jsonc`. Profile discovery must use the **parent directory name** (e.g., `hugo-desktop`) as the profile ID, not the manifest filename. See `file-discovery.ts` `isNestedInSubdir` logic.
 
 ---
 

@@ -174,10 +174,12 @@ fn resolve_bundled_engine_path(app_handle: &AppHandle) -> Option<std::path::Path
 
 /// Get the path to the bundled engine entrypoint, if available.
 /// Returns None in dev mode or if engine is not bundled.
+/// Strips the `\\?\` extended path prefix that Tauri adds on Windows,
+/// because PowerShell 5.1 cannot handle it in Split-Path / Join-Path.
 #[tauri::command]
 fn get_bundled_engine_path(app: AppHandle) -> Option<String> {
     resolve_bundled_engine_path(&app)
-        .and_then(|p| p.to_str().map(|s| s.to_string()))
+        .and_then(|p| p.to_str().map(|s| cmd_impl::strip_extended_path_prefix(std::path::Path::new(s))))
 }
 
 /// Check if a file exists at the given path.
