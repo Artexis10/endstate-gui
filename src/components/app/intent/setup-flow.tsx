@@ -30,6 +30,22 @@ import type { ConfigModuleInfo } from '@/types';
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
 
+/** Normalize a string for fuzzy matching: lowercase, + → plus, strip non-alphanumeric */
+function normalizeForMatch(s: string): string {
+  return s.toLowerCase().replace(/\+/g, 'plus').replace(/[^a-z0-9]/g, '');
+}
+
+function humanizeModuleId(id: string): string {
+  return id
+    .replace(/^apps\./, '')
+    .replace(/-plus-plus/g, '++')
+    .replace(/-plus/g, '+')
+    .split('-')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+    .trim();
+}
+
 interface PreviewResult {
   installed: number;
   alreadyPresent: number;
@@ -637,16 +653,30 @@ export function SetupFlow({
                         moduleToWinget.set(shortId, wingetId);
                         moduleToWinget.set(qualifiedId, wingetId);
                       }
-                      // Build wingetId → display name from app events
+                      // Build wingetId → display name from app events (engine-provided name)
                       const wingetToName = new Map<string, string>();
                       for (const ev of previewResult.appEvents) {
                         if (ev.name) wingetToName.set(ev.app, ev.name);
                       }
+                      // Build normalized winget product → wingetId for fuzzy matching
+                      // (module IDs like "vlc" → product part of "VideoLAN.VLC" → "vlc")
+                      const wingetByProduct = new Map<string, string>();
+                      for (const ev of previewResult.appEvents) {
+                        if (!ev.app.includes('.')) continue;
+                        const product = ev.app.slice(ev.app.indexOf('.') + 1);
+                        wingetByProduct.set(normalizeForMatch(product), ev.app);
+                      }
                       const moduleIds = previewResult.restoreModulesAvailable ?? [...new Set([...moduleToWinget.keys()])];
                       const modules: ConfigModuleInfo[] = moduleIds.map(id => {
                         const wingetId = moduleToWinget.get(id);
-                        const displayName = (wingetId && wingetToName.get(wingetId)) || id;
-                        return { id, displayName, entries: 0, files: [] };
+                        if (wingetId && wingetToName.get(wingetId)) {
+                          return { id, displayName: wingetToName.get(wingetId)!, entries: 0, files: [] };
+                        }
+                        const matchedWingetId = wingetByProduct.get(normalizeForMatch(id));
+                        if (matchedWingetId) {
+                          return { id, displayName: formatAppIdentity(matchedWingetId), entries: 0, files: [] };
+                        }
+                        return { id, displayName: humanizeModuleId(id), entries: 0, files: [] };
                       });
                       if (modules.length === 0) return null;
                       return (
