@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "mcp__Tidewave-Web__browser_eval",
-      "mcp__Tidewave__get_logs"
+      "mcp__Tidewave__get_logs",
+      "Mcp(*)",
+      "mcp__claude_ai_Context7__*",
+      "mcp__claude_ai_Canva__*",
+      "mcp__claude_ai_Vercel__*",
+      "mcp__claude_ai_Excalidraw*",
+      "mcp__claude_ai_Mermaid*"
     ]
   }
 }
