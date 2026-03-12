@@ -71,14 +71,17 @@ export async function buildEngineCommand(
     return { exe, args, displayCommand };
   } else if (settings.engineMode === 'bundled') {
     // Try to get bundled sidecar binary path from Rust backend
-    const bundledPath = await invoke<string | null>('get_bundled_engine_path');
-    if (bundledPath) {
-      // Production: use sidecar binary directly
-      return { exe: bundledPath, args: commandArgs, displayCommand: `[bundled] ${commandArgs.join(' ')}` };
-    } else {
-      // Dev fallback: use PATH
-      return { exe: 'endstate', args: commandArgs, displayCommand: `endstate ${commandArgs.join(' ')}` };
+    try {
+      const bundledPath = await invoke<string | null>('get_bundled_engine_path');
+      if (bundledPath) {
+        // Production: use sidecar binary directly
+        return { exe: bundledPath, args: commandArgs, displayCommand: `[bundled] ${commandArgs.join(' ')}` };
+      }
+    } catch {
+      // Dev/Tidewave: command not available, fall through to PATH
     }
+    // Dev fallback: use PATH
+    return { exe: 'endstate', args: commandArgs, displayCommand: `endstate ${commandArgs.join(' ')}` };
   } else {
     // path mode
     return { exe: 'endstate', args: commandArgs, displayCommand: `endstate ${commandArgs.join(' ')}` };
