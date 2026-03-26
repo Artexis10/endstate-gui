@@ -4,7 +4,7 @@
   "version": "1.1.1",
   "type": "module",
   "scripts": {
-    "predev": "node -e \"const fs=require('fs'),s='../endstate/go-engine/endstate.exe',t='../endstate/go-engine/endstate-x86_64-pc-windows-msvc.exe';if(!fs.existsSync(t)&&fs.existsSync(s)){fs.copyFileSync(s,t);console.log('Copied Go engine binary with platform triple.')}else if(fs.existsSync(t)){console.log('Go engine sidecar binary ready.')}else{console.log('WARNING: Go engine binary not found at '+s)}\"",
+    "predev": "node scripts/rebuild-engine.js",
     "dev": "vite",
     "dev:tidewave": "cross-env VITE_TIDEWAVE_ENABLED=1 vite",
     "tauri:dev:tidewave": "cross-env TIDEWAVE_ENABLED=1 VITE_TIDEWAVE_ENABLED=1 tauri dev --features dev-server",

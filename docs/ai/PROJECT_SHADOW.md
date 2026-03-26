@@ -187,7 +187,9 @@ endstate-gui/
 
 14. **Config module data comes from bundle metadata, not the dry-run envelope.** The engine's `--dry-run` envelope does not include `configModuleMap` or `restoreModulesAvailable`. Config module info is read from the engine-produced `metadata.json` inside the bundle directory (`readBundleMetadata()` in `App.tsx`). Settings count comes from `configModulesIncluded`, and per-app gear icons use fuzzy matching between config module names and manifest app IDs. If the engine later adds these fields to the envelope, the GUI will prefer them automatically.
 
-15. **Bundle profile naming vs manifest filename.** Extracted zip bundles contain a generic `manifest.jsonc`. Profile discovery must use the **parent directory name** (e.g., `hugo-desktop`) as the profile ID, not the manifest filename. See `file-discovery.ts` `isNestedInSubdir` logic.
+15. **Engine binary auto-rebuild.** The `predev` script (`scripts/rebuild-engine.js`) rebuilds the Go engine binary on every `npm run dev` / `npm run tauri dev`. If the Go toolchain is unavailable, it falls back to the existing binary with a warning. To skip the rebuild (e.g., rapid frontend iteration), set `SKIP_ENGINE_BUILD=1`. To override the engine repo location, set `ENDSTATE_ENGINE_DIR`.
+
+16. **Bundle profile naming vs manifest filename.** Extracted zip bundles contain a generic `manifest.jsonc`. Profile discovery must use the **parent directory name** (e.g., `hugo-desktop`) as the profile ID, not the manifest filename. See `file-discovery.ts` `isNestedInSubdir` logic.
 
 ---
 
