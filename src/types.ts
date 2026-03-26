@@ -29,6 +29,7 @@ export interface EndstateCapabilitiesData {
     parallelInstall?: boolean;
     configModules?: boolean;
     jsonOutput?: boolean;
+    manualApps?: boolean;
   };
   platform?: {
     os: string;
@@ -116,7 +117,7 @@ export interface EndstateApplyData {
   actions?: Array<{
     type: string;
     id?: string;
-    ref?: string;
+    ref?: string | null;
     status: string;
     message: string;
   }>;
@@ -169,12 +170,24 @@ export interface EndstateCaptureData {
   configModules?: CaptureConfigModule[];
 }
 
+/** Manual app metadata from the engine for apps that can't be auto-installed. */
+export interface ManualAppInfo {
+  verifyPath: string;
+  launch?: string;
+  instructions?: string;
+  fallback?: string;
+}
+
 export interface ApplyItem {
   id: string;
   driver: string;
   status: 'ok' | 'skipped' | 'failed';
   reason?: string;
   message?: string;
+  /** Present when driver is "manual" and the app is not installed. */
+  manual?: ManualAppInfo | null;
+  /** Display name from engine (e.g., "Visual Studio Code"). */
+  name?: string;
 }
 
 export interface ApplyCounts {

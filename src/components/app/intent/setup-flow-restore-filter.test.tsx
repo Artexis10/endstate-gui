@@ -266,8 +266,8 @@ describe('SetupFlow — Restore module selection', () => {
     const appsAndSettingsRadio = screen.getByRole('radio', { name: /settings/i });
     await userEvent.click(appsAndSettingsRadio);
 
-    // Falls back to raw module ID
-    expect(screen.getByText('someapp')).toBeInTheDocument();
+    // Falls back to humanized module ID
+    expect(screen.getByText('Someapp')).toBeInTheDocument();
   });
 
   it('select all button selects all modules', async () => {

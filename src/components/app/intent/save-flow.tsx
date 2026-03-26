@@ -5,7 +5,7 @@
  * No in-GUI capture history. Session-scoped result display only.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,19 @@ export function SaveFlow({
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const [scanCooldown, setScanCooldown] = useState(false);
+  const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 5-second cooldown after scan completes to prevent winget database lock contention
+  useEffect(() => {
+    if (phase === 'done') {
+      setScanCooldown(true);
+      cooldownTimer.current = setTimeout(() => setScanCooldown(false), 5000);
+    }
+    return () => {
+      if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
+    };
+  }, [phase]);
 
   // Reset internal state when resetKey changes (parent signals a fresh start)
   useEffect(() => {
@@ -180,6 +193,14 @@ export function SaveFlow({
       nameByAppId.set(ref, mod.displayName);
     }
   }
+
+  // Config-only modules: captured settings with no winget match in the app list
+  const appIds = new Set((result?.apps ?? []).map(a => a.id.toLowerCase()));
+  const configOnlyModules = capturedConfigs.filter(mod => {
+    const refs = mod.wingetRefs ?? [];
+    if (refs.length === 0) return true;
+    return !refs.some(ref => appIds.has(ref.toLowerCase()));
+  });
 
   return (
     <motion.div
@@ -371,6 +392,26 @@ export function SaveFlow({
                   </div>
                 )}
 
+                {/* Config-only modules: detected via settings, not winget */}
+                {configOnlyModules.length > 0 && (
+                  <div className="mt-3 border-t pt-3" data-testid="config-only-section">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Settings detected for:</p>
+                    <div className="space-y-1">
+                      {configOnlyModules.map(mod => (
+                        <div key={mod.id} className="flex items-center gap-2 text-xs">
+                          <Settings2 className={`h-3 w-3 flex-shrink-0 ${getColorClasses('success').text}`} />
+                          <span className="truncate">{mod.displayName}</span>
+                          {mod.filesCaptured > 0 && (
+                            <span className="text-muted-foreground flex-shrink-0">
+                              ({mod.filesCaptured} {mod.filesCaptured === 1 ? 'file' : 'files'})
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-3 mt-6">
                   <Button
                     onClick={handleSave}
@@ -393,9 +434,9 @@ export function SaveFlow({
                   <Button
                     variant="ghost"
                     onClick={handleScanAgain}
-                    disabled={phase === 'saving'}
+                    disabled={phase === 'saving' || scanCooldown}
                   >
-                    Scan again
+                    {scanCooldown ? 'Wait...' : 'Scan again'}
                   </Button>
                 </div>
               </CardContent>

@@ -78,6 +78,12 @@ export function ApplyResultModal({
   const alreadyPresent = itemCounts.alreadyPresent;
   const needsAttention = itemCounts.needsAttention;
   const skippedCount = itemCounts.skipped;
+
+  // Manual apps requiring user action
+  const manualItems = useMemo(
+    () => items.filter(item => item.reason === 'manual_required'),
+    [items]
+  );
   
   // Determine status:
   // - hasFailures: any failed items
@@ -147,14 +153,15 @@ export function ApplyResultModal({
   const sortedItems = useMemo(() => {
     const priorityOrder: Record<string, number> = {
       'would_install': 0,
-      'failed': 1,
-      'install_failed': 1,
-      'installed': 2,
-      'already_installed': 3,
-      'already_present': 3,
-      'user_denied': 4,
-      'skipped': 5,
-      'filtered': 5,
+      'manual_required': 1,
+      'failed': 2,
+      'install_failed': 2,
+      'installed': 3,
+      'already_installed': 4,
+      'already_present': 4,
+      'user_denied': 5,
+      'skipped': 6,
+      'filtered': 6,
     };
     return [...items].sort((a, b) => {
       const aPriority = priorityOrder[a.reason || ''] ?? 6;
@@ -355,6 +362,46 @@ export function ApplyResultModal({
           )}
         </div>
 
+          {/* Manual installation section — apps that need user action */}
+          {manualItems.length > 0 && !isApplying && (
+            <div className="border-t border-border pt-4 space-y-3" data-testid="manual-install-section">
+              <div className="text-sm font-medium text-foreground">
+                Install manually
+              </div>
+              <div className="space-y-2">
+                {manualItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-lg bg-warning/10 border border-warning/20 p-3 space-y-1.5"
+                    data-testid={`manual-app-${item.id}`}
+                  >
+                    <div className="text-sm font-medium text-foreground">
+                      {item.name || item.id}
+                    </div>
+                    {item.manual?.instructions && (
+                      <p className="text-xs text-muted-foreground">
+                        {item.manual.instructions}
+                      </p>
+                    )}
+                    {item.manual?.launch && (
+                      <a
+                        href={item.manual.launch}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        Open download page
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                After installing, run again to confirm and restore settings.
+              </p>
+            </div>
+          )}
+
           {/* Settings (restore) section — only when restore data is present */}
           {restoreSummary && !isApplying && (
             <div className="border-t border-border pt-4 space-y-3" data-testid="restore-section">
@@ -400,15 +447,15 @@ export function ApplyResultModal({
                   <div className="border border-border rounded-lg max-h-48 overflow-y-auto pb-1">
                     {filteredItems.map((item, idx) => {
                       const badge = getActionBadge(item);
-                      const isActionable = item.reason === 'would_install' || item.reason === 'installed' || item.status === 'failed';
+                      const isActionable = item.reason === 'would_install' || item.reason === 'installed' || item.reason === 'manual_required' || item.status === 'failed';
                       return (
                         <div 
                           key={`${item.id}-${idx}`} 
                           className={`flex items-center gap-2 px-3 py-2 text-xs border-b border-border last:border-b-0 ${isActionable ? 'bg-muted/10' : ''}`}
                         >
                           <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="font-mono truncate flex-1 min-w-0" title={item.id}>{item.id}</span>
-                          <span className="text-muted-foreground text-xs flex-shrink-0">({item.driver})</span>
+                          <span className="font-mono truncate flex-1 min-w-0" title={item.id}>{item.name || item.id}</span>
+                          <span className="text-muted-foreground text-xs flex-shrink-0">({item.driver === 'manual' ? 'Manual' : item.driver})</span>
                           <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 whitespace-nowrap ${badge.className}`}>
                             {badge.label}
                           </span>

@@ -6,7 +6,7 @@ import type { EngineItemStatus, ItemEvent, EnginePhase } from './streaming-event
  * These are the source of truth for status identification.
  * See docs/UX_LANGUAGE.md for the full contract.
  */
-export type StatusKey = 
+export type StatusKey =
   | 'to_install'      // Preview: will be installed
   | 'present'         // Already on system (label: "Already present")
   | 'detected'        // Capture: app detected on system
@@ -14,7 +14,8 @@ export type StatusKey =
   | 'failed'          // Failed (preview or apply)
   | 'installing'      // Apply activity: in progress
   | 'installed'       // Apply result: successfully installed
-  | 'cancelled';      // User cancelled
+  | 'cancelled'       // User cancelled
+  | 'manual';         // Requires manual installation
 
 /**
  * Semantic color tokens for status display.
@@ -77,6 +78,11 @@ export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
     longLabel: 'Cancelled',
     color: 'warn',
   },
+  manual: {
+    shortLabel: 'MANUAL',
+    longLabel: 'Manual installation required',
+    color: 'warn',
+  },
 } as const;
 
 /**
@@ -123,6 +129,7 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'muted' },
     failed: { shortLabel: 'FAILED', longLabel: 'Failed', color: 'error' },
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
+    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn' },
   },
   apply: {
     present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
@@ -132,6 +139,7 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },
     failed: { shortLabel: 'FAILED', longLabel: 'Failed', color: 'error' },
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
+    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn' },
   },
   verify: {
     present: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
@@ -242,6 +250,14 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
     // skipped + user_denied -> CANCELLED (warn) - user cancelled, not a failure
     if (statusKey === 'skipped' && reasonLower === 'user_denied') {
       return { shortLabel: 'CANCELLED', longLabel: 'User cancelled', color: 'warn' };
+    }
+    // skipped + manual_required -> MANUAL (warn) - requires manual installation
+    if (statusKey === 'skipped' && reasonLower === 'manual_required') {
+      return { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn' };
+    }
+    // manual status key (already resolved) -> MANUAL (warn)
+    if (statusKey === 'manual') {
+      return PHASE_STATUS_MAP.apply.manual!;
     }
     // Default apply phase handling
     if (PHASE_STATUS_MAP.apply[statusKey]) {
@@ -384,6 +400,7 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     phase: uiPhase,
     reason: event.reason,
     name: event.name,
+    driver: event.driver,
   };
 }
 
@@ -434,6 +451,11 @@ export function reasonToStatusKey(item: ApplyItem): StatusKey {
     return 'cancelled';
   }
 
+  // Manual installation required
+  if (reason === 'manual_required') {
+    return 'manual';
+  }
+
   // Installed this run
   if (reason === 'installed') {
     return 'installed';
@@ -473,6 +495,7 @@ export function getStatusLabel(
   if (phase === 'preview') {
     if (statusKey === 'to_install') return STATUS_LABELS.preview.to_install;
     if (statusKey === 'present') return STATUS_LABELS.preview.already_present;
+    if (statusKey === 'manual') return 'Manual installation required';
     if (statusKey === 'skipped' || statusKey === 'cancelled') return STATUS_LABELS.preview.skipped;
     if (statusKey === 'failed') return STATUS_LABELS.preview.failed;
     return STATUS_LABELS.preview.skipped;
@@ -487,6 +510,7 @@ export function getStatusLabel(
   // Result phase
   if (statusKey === 'installed') return STATUS_LABELS.result.installed;
   if (statusKey === 'present') return STATUS_LABELS.result.already_present;
+  if (statusKey === 'manual') return 'Manual installation required';
   if (statusKey === 'skipped') return STATUS_LABELS.result.skipped;
   if (statusKey === 'failed') return STATUS_LABELS.result.failed;
   if (statusKey === 'cancelled') return STATUS_LABELS.result.cancelled;
@@ -525,6 +549,8 @@ export interface AppEvent {
   reason?: string | null; // Engine reason for status discrimination (e.g., 'filtered', 'sensitive', 'already_installed')
   /** Friendly display name from engine (e.g., "Visual Studio Code") */
   name?: string;
+  /** Engine driver (e.g., "winget", "manual"). Manual entries are synthesized config-only apps. */
+  driver?: string;
 }
 
 /**
@@ -590,6 +616,11 @@ export function normalizeApplyStatus(item: ApplyItem): ApplyCategory {
   // already_installed = already present on system
   if (reason === 'already_installed') {
     return 'alreadyPresent';
+  }
+
+  // manual_required = needs manual installation (maps to needsAttention for count purposes)
+  if (reason === 'manual_required') {
+    return 'needsAttention';
   }
 
   // user_denied = user cancelled/denied the install
@@ -887,6 +918,11 @@ export function reasonToAction(item: ApplyItem): { action: string; statusKey: St
     return { action: 'Cancelled', statusKey: 'cancelled' };
   }
 
+  // Manual installation required
+  if (reason === 'manual_required') {
+    return { action: 'Manual', statusKey: 'manual' };
+  }
+
   // Installed this run
   if (reason === 'installed') {
     return { action: 'Installed', statusKey: 'installed' };
@@ -1091,7 +1127,7 @@ export function deriveCountersFromEvents(events: AppEvent[]): import('../compone
       if (sk === 'installed') counters.installed++;
       else if (sk === 'present') counters.alreadyPresent++;
       else if (sk === 'skipped') counters.skipped++;
-      else if (sk === 'failed') counters.failed++;
+      else if (sk === 'failed' || sk === 'manual') counters.failed++;  // manual counts as needing attention
     }
   }
 

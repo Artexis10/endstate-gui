@@ -30,6 +30,27 @@ import type { ConfigModuleInfo } from '@/types';
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
 
+/** Normalize a string for fuzzy matching: lowercase, + → plus, strip non-alphanumeric */
+function normalizeForMatch(s: string): string {
+  return s.toLowerCase().replace(/\+/g, 'plus').replace(/[^a-z0-9]/g, '');
+}
+
+function humanizeModuleId(id: string): string {
+  return id
+    .replace(/^apps\./, '')
+    .replace(/-plus-plus/g, '++')
+    .replace(/-plus/g, '+')
+    .split('-')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+    .trim();
+}
+
+/** Config-only apps are synthesized from config modules with driver "manual". */
+function isConfigOnlyApp(event: AppEvent): boolean {
+  return event.driver === 'manual';
+}
+
 interface PreviewResult {
   installed: number;
   alreadyPresent: number;
@@ -513,10 +534,19 @@ export function SetupFlow({
           const configMap = previewResult.configModuleMap ?? {};
           const hasConfigMap = Object.keys(configMap).length > 0;
           const settingsCount = previewResult.restoreModulesAvailable?.length ?? Object.keys(configMap).length;
-          const settingsDisplayCount = hasConfigMap ? Object.keys(configMap).length : settingsCount;
           // Active settings count reflects user's restore selection
           const activeSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
-          const totalApps = previewResult.installed + previewResult.alreadyPresent;
+          // Separate config-only synthesized apps from winget apps
+          const configOnlyPresent = previewResult.appEvents.filter(e => isConfigOnlyApp(e) && (e.statusKey === 'present' || !e.statusKey)).length;
+          const configOnlyToInstall = previewResult.appEvents.filter(e => isConfigOnlyApp(e) && e.statusKey === 'to_install').length;
+          const adjustedInstalled = previewResult.installed - configOnlyToInstall;
+          const adjustedPresent = previewResult.alreadyPresent - configOnlyPresent;
+          const totalApps = adjustedInstalled + adjustedPresent;
+          // Partition filtered events
+          const allFilteredEvents = filterEvents(previewResult.appEvents, configMap);
+          const wingetEvents = allFilteredEvents.filter(e => !isConfigOnlyApp(e));
+          const configOnlyEvents = allFilteredEvents.filter(e => isConfigOnlyApp(e));
+          const showConfigOnlySection = configOnlyEvents.length > 0 && (activeFilters.size === 0 || activeFilters.has('settings'));
           return (
           <motion.div
             key="preview-done"
@@ -533,11 +563,11 @@ export function SetupFlow({
                   <div>
                     <p className="text-sm font-medium">Preview complete</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {previewResult.installed > 0
-                        ? `${previewResult.installed} to install, ${previewResult.alreadyPresent} already present`
+                      {adjustedInstalled > 0
+                        ? `${adjustedInstalled} to install, ${adjustedPresent} already present`
                         : `All ${totalApps} apps already present`}
                       {activeSettingsCount > 0 && ` · ${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'} selected`}
-                      {activeSettingsCount === 0 && settingsDisplayCount > 0 && ` · ${settingsDisplayCount} ${settingsDisplayCount === 1 ? 'setting' : 'settings'} available`}
+                      {activeSettingsCount === 0 && settingsCount > 0 && ` · ${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'} available`}
                     </p>
                   </div>
                 </div>
@@ -555,22 +585,22 @@ export function SetupFlow({
                           {totalApps} {totalApps === 1 ? 'app' : 'apps'}
                         </button>
                       )}
-                      {previewResult.installed > 0 && (
+                      {adjustedInstalled > 0 && (
                         <button
                           onClick={() => toggleFilter('to_install')}
                           className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('action').bg} ${getColorClasses('action').text} ${activeFilters.size > 0 && !activeFilters.has('to_install') ? 'opacity-50' : ''}`}
                           aria-pressed={activeFilters.has('to_install')}
                         >
-                          {previewResult.installed} to install
+                          {adjustedInstalled} to install
                         </button>
                       )}
-                      {previewResult.alreadyPresent > 0 && (
+                      {adjustedPresent > 0 && (
                         <button
                           onClick={() => toggleFilter('present')}
                           className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('present') ? 'opacity-50' : ''}`}
                           aria-pressed={activeFilters.has('present')}
                         >
-                          {previewResult.alreadyPresent} present
+                          {adjustedPresent} present
                         </button>
                       )}
                       {settingsCount > 0 && (
@@ -580,17 +610,17 @@ export function SetupFlow({
                             className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
                             aria-pressed={activeFilters.has('settings')}
                           >
-                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsDisplayCount} ${settingsDisplayCount === 1 ? 'setting' : 'settings'}`}
+                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'}`}
                           </button>
                         ) : (
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
-                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsDisplayCount} ${settingsDisplayCount === 1 ? 'setting' : 'settings'}`}
+                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'}`}
                           </span>
                         )
                       )}
                     </div>
                     <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {filterEvents(previewResult.appEvents, configMap).map((event, i) => {
+                      {wingetEvents.map((event, i) => {
                         const statusKey: StatusKey = event.statusKey || (
                           event.action === 'OK' ? 'present' :
                           event.action === 'To install' ? 'to_install' :
@@ -613,6 +643,25 @@ export function SetupFlow({
                           </div>
                         );
                       })}
+                      {/* Config-only synthesized apps — shown separately with gear icon */}
+                      {showConfigOnlySection && (
+                        <>
+                          <div className="border-t mt-2 pt-2">
+                            <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings detected for:</p>
+                          </div>
+                          {configOnlyEvents.map((event, i) => (
+                            <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
+                              <span className="w-16 flex-shrink-0 flex justify-end">
+                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
+                              </span>
+                              <span className="w-4 flex-shrink-0" />
+                              <span className="truncate">
+                                {event.name || humanizeModuleId(event.app)}
+                              </span>
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -637,16 +686,30 @@ export function SetupFlow({
                         moduleToWinget.set(shortId, wingetId);
                         moduleToWinget.set(qualifiedId, wingetId);
                       }
-                      // Build wingetId → display name from app events
+                      // Build wingetId → display name from app events (engine-provided name)
                       const wingetToName = new Map<string, string>();
                       for (const ev of previewResult.appEvents) {
                         if (ev.name) wingetToName.set(ev.app, ev.name);
                       }
+                      // Build normalized winget product → wingetId for fuzzy matching
+                      // (module IDs like "vlc" → product part of "VideoLAN.VLC" → "vlc")
+                      const wingetByProduct = new Map<string, string>();
+                      for (const ev of previewResult.appEvents) {
+                        if (!ev.app.includes('.')) continue;
+                        const product = ev.app.slice(ev.app.indexOf('.') + 1);
+                        wingetByProduct.set(normalizeForMatch(product), ev.app);
+                      }
                       const moduleIds = previewResult.restoreModulesAvailable ?? [...new Set([...moduleToWinget.keys()])];
                       const modules: ConfigModuleInfo[] = moduleIds.map(id => {
                         const wingetId = moduleToWinget.get(id);
-                        const displayName = (wingetId && wingetToName.get(wingetId)) || id;
-                        return { id, displayName, entries: 0, files: [] };
+                        if (wingetId && wingetToName.get(wingetId)) {
+                          return { id, displayName: wingetToName.get(wingetId)!, entries: 0, files: [] };
+                        }
+                        const matchedWingetId = wingetByProduct.get(normalizeForMatch(id));
+                        if (matchedWingetId) {
+                          return { id, displayName: formatAppIdentity(matchedWingetId), entries: 0, files: [] };
+                        }
+                        return { id, displayName: humanizeModuleId(id), entries: 0, files: [] };
                       });
                       if (modules.length === 0) return null;
                       return (
@@ -765,7 +828,13 @@ export function SetupFlow({
                       {applyResult.failed > 0 ? 'Setup completed with errors' : 'Setup complete'}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {applyResult.installed} installed, {applyResult.alreadyPresent} already present
+                      {(() => {
+                        // Exclude config-only synthesized apps from install/present counts
+                        const cfgOnlyPresent = applyResult.appEvents.filter(e => isConfigOnlyApp(e) && (e.statusKey === 'present' || !e.statusKey)).length;
+                        const adjInstalled = applyResult.installed;
+                        const adjPresent = applyResult.alreadyPresent - cfgOnlyPresent;
+                        return `${adjInstalled} installed, ${adjPresent} already present`;
+                      })()}
                       {applyResult.failed > 0 ? `, ${applyResult.failed} failed` : ''}
                       {(() => {
                         const restored = applyResult.configsRestored ?? 0;
@@ -800,7 +869,14 @@ export function SetupFlow({
                   // Fall back to selected modules count when restore counters are empty (only when restore was requested)
                   const configMapSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
                   const applySettingsTotal = applySettingsProcessed > 0 ? applySettingsProcessed : configMapSettingsCount;
-                  const totalApplyApps = applyResult.installed + applyResult.alreadyPresent + applyResult.failed + applyResult.skipped;
+                  // Separate config-only synthesized apps from winget apps
+                  const configOnlyCount = applyResult.appEvents.filter(e => isConfigOnlyApp(e)).length;
+                  const totalApplyApps = applyResult.installed + applyResult.alreadyPresent + applyResult.failed + applyResult.skipped - configOnlyCount;
+                  // Partition filtered events
+                  const allApplyEvents = filterEvents(applyResult.appEvents, applyConfigMap);
+                  const applyWingetEvents = allApplyEvents.filter(e => !isConfigOnlyApp(e));
+                  const applyConfigOnlyEvents = allApplyEvents.filter(e => isConfigOnlyApp(e));
+                  const showApplyConfigOnlySection = applyConfigOnlyEvents.length > 0 && (activeFilters.size === 0 || activeFilters.has('settings'));
                   return (
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
@@ -875,7 +951,7 @@ export function SetupFlow({
                       )}
                     </div>
                     <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {filterEvents(applyResult.appEvents, applyConfigMap).map((event, i) => {
+                      {applyWingetEvents.map((event, i) => {
                         const statusKey: StatusKey = event.statusKey || (
                           event.action === 'OK' ? 'present' :
                           event.action === 'Installed' ? 'installed' :
@@ -901,6 +977,25 @@ export function SetupFlow({
                           </div>
                         );
                       })}
+                      {/* Config-only synthesized apps — shown separately with gear icon */}
+                      {showApplyConfigOnlySection && (
+                        <>
+                          <div className="border-t mt-2 pt-2">
+                            <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings detected for:</p>
+                          </div>
+                          {applyConfigOnlyEvents.map((event, i) => (
+                            <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
+                              <span className="w-16 flex-shrink-0 flex justify-end">
+                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
+                              </span>
+                              <span className="w-4 flex-shrink-0" />
+                              <span className="truncate">
+                                {event.name || humanizeModuleId(event.app)}
+                              </span>
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </div>
                   </div>
                   );

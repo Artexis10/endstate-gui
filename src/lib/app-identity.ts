@@ -7,19 +7,13 @@
 
 /**
  * Format app identity for display.
- * If the app string contains a dot (likely a Winget ID), show it as-is.
- * Otherwise, show the internal key.
- * 
+ * Returns the raw winget ID as-is. The Go engine provides proper display
+ * names via the `name` field; this is the safe fallback when name is absent.
+ *
  * @param app - App identifier string
- * @returns Formatted app identity for display
+ * @returns The app identifier unchanged
  */
 export function formatAppIdentity(app: string): string {
-  // If already contains a dot, assume it's a Winget ID and use as-is
-  if (app.includes('.')) {
-    return app;
-  }
-  
-  // Otherwise, return the internal key as-is
   return app;
 }
 
