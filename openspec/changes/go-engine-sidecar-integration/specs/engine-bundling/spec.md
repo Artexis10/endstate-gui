@@ -44,6 +44,11 @@ The Tauri build SHALL bundle the Go engine binary from the sibling `../endstate/
 
 The bundled engine directory SHALL be excluded from git via .gitignore.
 
+#### Scenario: Engine directory is gitignored
+- **WHEN** the repository `.gitignore` is checked
+- **THEN** it contains entries that exclude the bundled engine directory (e.g., `src-tauri/engine/`)
+- **AND** engine binaries and data files are not committed to the GUI repo
+
 ### Requirement: No PowerShell wrapping in command builder
 
 The engine command builder SHALL spawn the engine binary directly without shell wrapping.
