@@ -33,7 +33,7 @@ export type EngineItemStatus =
 /**
  * Item reason values from the engine
  */
-export type EngineItemReason = 
+export type EngineItemReason =
   | 'already_installed'
   | 'filtered'
   | 'filtered_runtime'
@@ -42,6 +42,7 @@ export type EngineItemReason =
   | 'detected'
   | 'install_failed'
   | 'missing'
+  | 'manual_required'
   | null;
 
 /**

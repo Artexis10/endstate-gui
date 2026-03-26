@@ -299,4 +299,126 @@ describe('ApplyResultModal', () => {
       expect(screen.queryByRole('button', { name: /revert settings/i })).not.toBeInTheDocument();
     });
   });
+
+  describe('Manual app section', () => {
+    const manualItems: ApplyItem[] = [
+      {
+        id: 'custom-tool',
+        driver: 'manual',
+        status: 'skipped',
+        reason: 'manual_required',
+        name: 'Custom Tool',
+        manual: {
+          verifyPath: 'C:\\Program Files\\CustomTool\\custom.exe',
+          launch: 'https://example.com/download',
+          instructions: 'Download and run the installer',
+        },
+      },
+      { id: 'WingetApp', driver: 'winget', status: 'ok', reason: 'installed' },
+      { id: 'PresentApp', driver: 'winget', status: 'skipped', reason: 'already_installed' },
+    ];
+
+    const manualProps = {
+      ...defaultProps,
+      isDryRun: false,
+      items: manualItems,
+      counts: { total: 3, installed: 1, alreadyInstalled: 1, skippedFiltered: 0, failed: 1 },
+    };
+
+    it('renders "Install manually" section for manual_required apps', () => {
+      renderWithProviders(<ApplyResultModal {...manualProps} />);
+      expect(screen.getByTestId('manual-install-section')).toBeInTheDocument();
+      expect(screen.getByText('Install manually')).toBeInTheDocument();
+    });
+
+    it('shows app display name from name field', () => {
+      renderWithProviders(<ApplyResultModal {...manualProps} />);
+      expect(screen.getByText('Custom Tool')).toBeInTheDocument();
+    });
+
+    it('shows instructions text', () => {
+      renderWithProviders(<ApplyResultModal {...manualProps} />);
+      expect(screen.getByText('Download and run the installer')).toBeInTheDocument();
+    });
+
+    it('renders download link when launch URL is present', () => {
+      renderWithProviders(<ApplyResultModal {...manualProps} />);
+      const link = screen.getByText('Open download page');
+      expect(link).toBeInTheDocument();
+      expect(link.closest('a')).toHaveAttribute('href', 'https://example.com/download');
+      expect(link.closest('a')).toHaveAttribute('target', '_blank');
+    });
+
+    it('shows footer text about re-running', () => {
+      renderWithProviders(<ApplyResultModal {...manualProps} />);
+      expect(screen.getByText(/after installing, run again/i)).toBeInTheDocument();
+    });
+
+    it('does not show download link when launch URL is absent', () => {
+      const noLaunchItems: ApplyItem[] = [
+        {
+          id: 'no-launch-app',
+          driver: 'manual',
+          status: 'skipped',
+          reason: 'manual_required',
+          name: 'No Launch App',
+          manual: {
+            verifyPath: 'C:\\path\\to\\app.exe',
+            instructions: 'Install it manually',
+          },
+        },
+      ];
+      renderWithProviders(
+        <ApplyResultModal
+          {...manualProps}
+          items={noLaunchItems}
+          counts={{ total: 1, installed: 0, alreadyInstalled: 0, skippedFiltered: 0, failed: 1 }}
+        />
+      );
+      expect(screen.queryByText('Open download page')).not.toBeInTheDocument();
+      expect(screen.getByText('Install it manually')).toBeInTheDocument();
+    });
+
+    it('does not show manual section when no manual_required items', () => {
+      const wingetOnly: ApplyItem[] = [
+        { id: 'App1', driver: 'winget', status: 'ok', reason: 'installed' },
+      ];
+      renderWithProviders(
+        <ApplyResultModal
+          {...manualProps}
+          items={wingetOnly}
+          counts={{ total: 1, installed: 1, alreadyInstalled: 0, skippedFiltered: 0, failed: 0 }}
+        />
+      );
+      expect(screen.queryByTestId('manual-install-section')).not.toBeInTheDocument();
+    });
+
+    it('renders both manual and winget apps in mixed result', () => {
+      renderWithProviders(<ApplyResultModal {...manualProps} />);
+      // Manual section exists
+      expect(screen.getByTestId('manual-install-section')).toBeInTheDocument();
+      // Installed count should be shown
+      expect(screen.getByText('Installed this run')).toBeInTheDocument();
+    });
+
+    it('falls back to id when name is not present', () => {
+      const noNameItems: ApplyItem[] = [
+        {
+          id: 'some-manual-app',
+          driver: 'manual',
+          status: 'skipped',
+          reason: 'manual_required',
+          manual: { verifyPath: 'C:\\path\\to\\app.exe' },
+        },
+      ];
+      renderWithProviders(
+        <ApplyResultModal
+          {...manualProps}
+          items={noNameItems}
+          counts={{ total: 1, installed: 0, alreadyInstalled: 0, skippedFiltered: 0, failed: 1 }}
+        />
+      );
+      expect(screen.getByText('some-manual-app')).toBeInTheDocument();
+    });
+  });
 });

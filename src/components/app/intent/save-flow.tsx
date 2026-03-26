@@ -181,6 +181,14 @@ export function SaveFlow({
     }
   }
 
+  // Config-only modules: captured settings with no winget match in the app list
+  const appIds = new Set((result?.apps ?? []).map(a => a.id.toLowerCase()));
+  const configOnlyModules = capturedConfigs.filter(mod => {
+    const refs = mod.wingetRefs ?? [];
+    if (refs.length === 0) return true;
+    return !refs.some(ref => appIds.has(ref.toLowerCase()));
+  });
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -16 }}
@@ -367,6 +375,26 @@ export function SaveFlow({
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Config-only modules: detected via settings, not winget */}
+                {configOnlyModules.length > 0 && (
+                  <div className="mt-3 border-t pt-3" data-testid="config-only-section">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Settings detected for:</p>
+                    <div className="space-y-1">
+                      {configOnlyModules.map(mod => (
+                        <div key={mod.id} className="flex items-center gap-2 text-xs">
+                          <Settings2 className={`h-3 w-3 flex-shrink-0 ${getColorClasses('success').text}`} />
+                          <span className="truncate">{mod.displayName}</span>
+                          {mod.filesCaptured > 0 && (
+                            <span className="text-muted-foreground flex-shrink-0">
+                              ({mod.filesCaptured} {mod.filesCaptured === 1 ? 'file' : 'files'})
+                            </span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

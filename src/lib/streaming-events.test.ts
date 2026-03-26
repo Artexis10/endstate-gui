@@ -705,4 +705,51 @@ describe('streaming-events', () => {
       expect((events[5] as SummaryEvent).phase).toBe('capture');
     });
   });
+
+  describe('Manual app events', () => {
+    it('should parse item event with driver=manual', () => {
+      const line = '{"version":1,"event":"item","id":"custom-tool","driver":"manual","status":"skipped","reason":"manual_required","message":"Manual installation required","timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+
+      expect(event).not.toBeNull();
+      expect(isItemEvent(event!)).toBe(true);
+      const itemEvent = event as ItemEvent;
+      expect(itemEvent.id).toBe('custom-tool');
+      expect(itemEvent.driver).toBe('manual');
+      expect(itemEvent.status).toBe('skipped');
+      expect(itemEvent.reason).toBe('manual_required');
+    });
+
+    it('should parse present manual app (already installed)', () => {
+      const line = '{"version":1,"event":"item","id":"custom-tool","driver":"manual","status":"present","reason":"already_installed","message":"Verified installed","timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+
+      expect(event).not.toBeNull();
+      const itemEvent = event as ItemEvent;
+      expect(itemEvent.driver).toBe('manual');
+      expect(itemEvent.status).toBe('present');
+      expect(itemEvent.reason).toBe('already_installed');
+    });
+
+    it('should apply manual item event to streaming state', () => {
+      const state = createStreamingState();
+      const event: ItemEvent = {
+        version: STREAMING_EVENT_VERSION,
+        runId: 'test-run-1',
+        event: 'item',
+        id: 'custom-tool',
+        driver: 'manual',
+        status: 'skipped',
+        reason: 'manual_required',
+        timestamp: '2025-01-01T00:00:00.000Z',
+      };
+
+      const modified = applyStreamingEvent(state, event);
+
+      expect(modified).toBe(true);
+      expect(state.items.size).toBe(1);
+      expect(state.items.get('custom-tool')?.driver).toBe('manual');
+      expect(state.items.get('custom-tool')?.reason).toBe('manual_required');
+    });
+  });
 });

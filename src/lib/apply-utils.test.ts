@@ -10,10 +10,13 @@ import {
   StreamingLineBuffer,
   reconcileLiveActivity,
   reasonToAction,
+  reasonToStatusKey,
   getFailedItemMessage,
+  getPhaseAwareStatusForEvent,
   RESTORE_STATUS_MAP,
   getRestoreUiStatus,
   deriveCountersFromEvents,
+  UI_STATUS_MAP,
   type AppEvent,
   type RestoreStatusKey,
 } from './apply-utils';
@@ -863,6 +866,118 @@ describe('apply-utils', () => {
       const counters = deriveCountersFromEvents(events);
       expect(counters.installed).toBe(1);
       expect(counters.alreadyPresent).toBe(0);
+    });
+
+    it('counts manual status as failed (needs attention)', () => {
+      const events: AppEvent[] = [
+        { app: 'ManualApp', action: 'Manual', statusKey: 'manual' },
+        { app: 'git', action: 'Installed', statusKey: 'installed' },
+      ];
+      const counters = deriveCountersFromEvents(events);
+      expect(counters.failed).toBe(1);
+      expect(counters.installed).toBe(1);
+    });
+  });
+
+  describe('Manual app handling', () => {
+    describe('reasonToStatusKey — manual_required', () => {
+      it('maps reason=manual_required to manual status key', () => {
+        const item: ApplyItem = { id: 'ManualApp', driver: 'manual', status: 'skipped', reason: 'manual_required' };
+        expect(reasonToStatusKey(item)).toBe('manual');
+      });
+    });
+
+    describe('normalizeApplyStatus — manual_required', () => {
+      it('maps reason=manual_required to needsAttention category', () => {
+        const item: ApplyItem = { id: 'ManualApp', driver: 'manual', status: 'skipped', reason: 'manual_required' };
+        expect(normalizeApplyStatus(item)).toBe('needsAttention');
+      });
+    });
+
+    describe('reasonToAction — manual_required', () => {
+      it('maps manual_required to Manual action with manual statusKey', () => {
+        const item: ApplyItem = { id: 'ManualApp', driver: 'manual', status: 'skipped', reason: 'manual_required' };
+        const result = reasonToAction(item);
+        expect(result.action).toBe('Manual');
+        expect(result.statusKey).toBe('manual');
+      });
+    });
+
+    describe('UI_STATUS_MAP — manual entry', () => {
+      it('has manual entry with correct label and color', () => {
+        expect(UI_STATUS_MAP.manual).toBeDefined();
+        expect(UI_STATUS_MAP.manual.shortLabel).toBe('MANUAL');
+        expect(UI_STATUS_MAP.manual.longLabel).toBe('Manual installation required');
+        expect(UI_STATUS_MAP.manual.color).toBe('warn');
+      });
+    });
+
+    describe('getPhaseAwareStatusForEvent — manual_required reason', () => {
+      it('apply phase: skipped + manual_required → MANUAL (warn)', () => {
+        const result = getPhaseAwareStatusForEvent({
+          statusKey: 'skipped',
+          phase: 'apply',
+          reason: 'manual_required',
+        });
+        expect(result.shortLabel).toBe('MANUAL');
+        expect(result.longLabel).toBe('Manual installation required');
+        expect(result.color).toBe('warn');
+      });
+
+      it('apply phase: manual status key → MANUAL (warn)', () => {
+        const result = getPhaseAwareStatusForEvent({
+          statusKey: 'manual',
+          phase: 'apply',
+        });
+        expect(result.shortLabel).toBe('MANUAL');
+        expect(result.color).toBe('warn');
+      });
+
+      it('preview phase: manual status key → MANUAL (warn)', () => {
+        const result = getPhaseAwareStatusForEvent({
+          statusKey: 'manual',
+          phase: 'preview',
+        });
+        expect(result.shortLabel).toBe('MANUAL');
+        expect(result.color).toBe('warn');
+      });
+    });
+
+    describe('present manual app (already installed)', () => {
+      it('maps present + already_installed (driver=manual) to present', () => {
+        const item: ApplyItem = { id: 'ManualApp', driver: 'manual', status: 'skipped', reason: 'already_installed' };
+        expect(reasonToStatusKey(item)).toBe('present');
+      });
+
+      it('categorizes present manual app as alreadyPresent', () => {
+        const item: ApplyItem = { id: 'ManualApp', driver: 'manual', status: 'skipped', reason: 'already_installed' };
+        expect(normalizeApplyStatus(item)).toBe('alreadyPresent');
+      });
+    });
+
+    describe('null ref handling', () => {
+      it('action with ref: null does not error in reasonToStatusKey', () => {
+        const item: ApplyItem = { id: 'ManualApp', driver: 'manual', status: 'skipped', reason: 'manual_required' };
+        // Simulating null ref scenario — reasonToStatusKey does not use ref, so this is a smoke test
+        expect(() => reasonToStatusKey(item)).not.toThrow();
+      });
+    });
+
+    describe('mixed results: winget and manual apps', () => {
+      it('categorizes mixed result set correctly', () => {
+        const items: ApplyItem[] = [
+          { id: 'WingetApp', driver: 'winget', status: 'ok', reason: 'installed' },
+          { id: 'PresentApp', driver: 'winget', status: 'skipped', reason: 'already_installed' },
+          { id: 'ManualApp', driver: 'manual', status: 'skipped', reason: 'manual_required' },
+          { id: 'PresentManual', driver: 'manual', status: 'skipped', reason: 'already_installed' },
+        ];
+        const groups = categorizeApplyItems(items);
+        const counts = countCategorizedItems(groups);
+
+        expect(counts.installedThisRun).toBe(1);
+        expect(counts.alreadyPresent).toBe(2); // PresentApp + PresentManual
+        expect(counts.needsAttention).toBe(1); // ManualApp
+      });
     });
   });
 });

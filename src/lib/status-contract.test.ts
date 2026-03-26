@@ -165,4 +165,32 @@ describe('Status/Phase Contract (UX_LANGUAGE.md)', () => {
       expect(engineStatusToStatusKey('failed')).toBe('failed');
     });
   });
+
+  describe('Critical Semantic Rule 5: MANUAL (Apply Phase)', () => {
+    it('apply + (skipped, manual_required) → MANUAL (warn)', () => {
+      const statusKey: StatusKey = engineStatusToStatusKey('skipped');
+      const result = getPhaseAwareStatusForEvent({
+        statusKey,
+        phase: 'apply',
+        reason: 'manual_required',
+      });
+
+      expect(result.shortLabel).toBe('MANUAL');
+      expect(result.longLabel).toBe('Manual installation required');
+      expect(result.color).toBe('warn');
+    });
+
+    it('apply + manual_required is NOT SKIPPED or FAILED', () => {
+      const statusKey: StatusKey = engineStatusToStatusKey('skipped');
+      const result = getPhaseAwareStatusForEvent({
+        statusKey,
+        phase: 'apply',
+        reason: 'manual_required',
+      });
+
+      expect(result.shortLabel).not.toBe('SKIPPED');
+      expect(result.shortLabel).not.toBe('FAILED');
+      expect(result.color).not.toBe('error');
+    });
+  });
 });

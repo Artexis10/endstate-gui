@@ -71,6 +71,7 @@ Emitted in `item` events via `reason` field (nullable):
 - `"filtered"` / `"filtered_runtime"` / `"filtered_store"` - Excluded by filter
 - `"sensitive_excluded"` - Excluded for security
 - `"detected"` - Found during capture
+- `"manual_required"` - App cannot be auto-installed; needs manual action
 - `null` - No specific reason
 
 ### Engine Phase Enum
@@ -128,6 +129,7 @@ Internal UI status keys (canonical filter/logic keys):
 | `skipped` | `already_installed` | PRESENT | success (green) | Already on system (NOT "Skipped") |
 | `skipped` | `user_denied` | CANCELLED | warn (yellow) | User cancelled (NOT "Failed") |
 | `skipped` | * | SKIPPED | warn (yellow) | Skipped by filter |
+| `skipped` | `manual_required` | MANUAL | warn (yellow) | Requires manual installation |
 | `failed` | `install_failed` | FAILED | error (red) | Real install failure |
 | `failed` | * | FAILED | error (red) | Unknown failure |
 
