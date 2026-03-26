@@ -5,7 +5,7 @@
  * No in-GUI capture history. Session-scoped result display only.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,19 @@ export function SaveFlow({
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const [scanCooldown, setScanCooldown] = useState(false);
+  const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 5-second cooldown after scan completes to prevent winget database lock contention
+  useEffect(() => {
+    if (phase === 'done') {
+      setScanCooldown(true);
+      cooldownTimer.current = setTimeout(() => setScanCooldown(false), 5000);
+    }
+    return () => {
+      if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
+    };
+  }, [phase]);
 
   // Reset internal state when resetKey changes (parent signals a fresh start)
   useEffect(() => {
@@ -421,9 +434,9 @@ export function SaveFlow({
                   <Button
                     variant="ghost"
                     onClick={handleScanAgain}
-                    disabled={phase === 'saving'}
+                    disabled={phase === 'saving' || scanCooldown}
                   >
-                    Scan again
+                    {scanCooldown ? 'Wait...' : 'Scan again'}
                   </Button>
                 </div>
               </CardContent>
