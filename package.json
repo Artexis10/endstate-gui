@@ -4,7 +4,7 @@
   "version": "1.1.1",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/rebuild-engine.js",
+    "predev": "node scripts/rebuild-engine.cjs",
     "dev": "vite",
     "dev:tidewave": "cross-env VITE_TIDEWAVE_ENABLED=1 vite",
     "tauri:dev:tidewave": "cross-env TIDEWAVE_ENABLED=1 VITE_TIDEWAVE_ENABLED=1 tauri dev --features dev-server",
