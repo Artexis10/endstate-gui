@@ -39,6 +39,50 @@ If the Project Shadow and repository code appear to conflict, prefer the reposit
 
 ---
 
+## Commit Message Convention
+
+All commits MUST use [Conventional Commits](https://www.conventionalcommits.org/) format. This is enforced because the release pipeline (release-please) reads commit messages to determine semantic version bumps automatically.
+
+### Format
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+### Types
+
+| Type | Version bump | Description |
+|------|-------------|-------------|
+| `feat` | minor | New feature or capability |
+| `fix` | patch | Bug fix |
+| `perf` | patch | Performance improvement |
+| `refactor` | none | Code change that neither fixes a bug nor adds a feature |
+| `docs` | none | Documentation only |
+| `test` | none | Adding or correcting tests |
+| `chore` | none | Maintenance, dependencies, CI |
+| `ci` | none | CI/CD changes |
+| `style` | none | Formatting, whitespace |
+
+### Breaking Changes
+
+Breaking changes bump the major version (once past 1.0). Signal them with:
+- `feat!:` or `fix!:` (type with `!`)
+- `BREAKING CHANGE:` in the commit footer
+
+### Rules
+
+- Every commit to main MUST have a conventional prefix
+- The description MUST be lowercase and imperative ("add feature" not "Added feature")
+- Scope is optional but encouraged for multi-area repos (e.g., `feat(planner):`, `fix(capture):`)
+- `chore:`, `docs:`, `ci:`, `style:`, `test:` do NOT trigger releases — use them for non-functional changes
+- `feat:` and `fix:` ALWAYS trigger a release PR — do not use them for trivial changes unless a release is intended
+
+---
+
 ## Contract & Change Safety
 
 - **Preserve public APIs** and integration contracts unless explicitly changing them
@@ -83,7 +127,7 @@ If the Project Shadow and repository code appear to conflict, prefer the reposit
 
 **OpenSpec is the canonical behavior specification system for this repository.**
 
-Behavior changes MUST be represented as OpenSpec changes. OpenSpec provides:
+Significant changes MUST be represented as OpenSpec changes. This includes behavior changes, licensing, dev workflow, tooling, infrastructure, and any decision that benefits from spec-driven documentation. OpenSpec provides:
 - Machine-readable behavior specifications
 - Change tracking and validation
 - Enforcement at development workflow gates
@@ -107,6 +151,33 @@ OPENSPEC_BYPASS=1 git push
 ```
 
 Bypass is logged and should be used sparingly.
+
+---
+
+## Release Pipeline
+
+This repository uses **release-please** for automated semantic versioning.
+
+### How it works
+
+1. Conventional commits land on main
+2. release-please creates/updates a Release PR with version bump + CHANGELOG
+3. Human maintainer merges the Release PR when ready to ship
+4. release-please creates a git tag → GitHub Release workflow fires
+
+### AI collaborator responsibilities
+
+- Write conventional commit messages on every commit
+- Use `feat:` for new features (triggers minor bump)
+- Use `fix:` for bug fixes (triggers patch bump)
+- Use `chore:`, `docs:`, `ci:` for non-release changes
+- Do NOT manually edit version files (VERSION, package.json version) — release-please manages these
+- Do NOT manually create git tags — release-please manages these
+- Do NOT bump versions in commit messages unless explicitly instructed
+
+### Manual version control
+
+If the human maintainer instructs a manual version bump (e.g., to force a specific version), follow their instruction. Otherwise, leave versioning to the automated pipeline.
 
 ---
 
@@ -144,3 +215,4 @@ AI collaborators operating in this repository must:
 4. Represent behavior changes as OpenSpec changes
 5. Stop when acceptance criteria are met
 6. Ask when uncertain rather than assume
+7. Use conventional commit messages on every commit
