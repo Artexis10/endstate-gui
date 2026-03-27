@@ -62,7 +62,7 @@ export interface ActionResult {
   /** Path to restore journal file for revert */
   restoreJournalFile?: string;
   /** Available config modules in the profile */
-  restoreModulesAvailable?: string[];
+  restoreModulesAvailable?: import('@/types').RestoreModuleRef[];
   /** Structured config module metadata from capture envelope */
   configModules?: CaptureConfigModule[];
   /** Maps winget ID → config module name (from apply/preview envelope) */

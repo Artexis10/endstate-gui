@@ -10,6 +10,7 @@ import {
   EndstateRevertData,
   type RestoreItem,
   type RestoreSummary,
+  type RestoreModuleRef,
 } from './types';
 import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration, clearSelectedProfile } from './settings';
 import { loadDraft, clearDraft } from './lib/draft-store';
@@ -67,7 +68,7 @@ interface AppState {
  * Returns config module info if the profile is inside a bundle (subdirectory with metadata.json).
  */
 async function readBundleMetadata(profilePath: string): Promise<{
-  configModulesIncluded?: string[];
+  configModulesIncluded?: RestoreModuleRef[];
 } | null> {
   try {
     const dir = profilePath.replace(/[\\/][^\\/]+$/, '');
@@ -76,7 +77,7 @@ async function readBundleMetadata(profilePath: string): Promise<{
     if (!exists) return null;
     const content = await invoke<string>('read_text_file', { path: metadataPath });
     const metadata = JSON.parse(content);
-    const configModulesIncluded: string[] | undefined = metadata.configModulesIncluded;
+    const configModulesIncluded: RestoreModuleRef[] | undefined = metadata.configModulesIncluded;
     if (!configModulesIncluded?.length) return null;
     return { configModulesIncluded };
   } catch {
@@ -189,9 +190,9 @@ function AppContent() {
     restoreItems?: RestoreItem[];
     restoreSummary?: RestoreSummary;
     restoreJournalFile?: string;
-    restoreModulesAvailable?: string[];
+    restoreModulesAvailable?: RestoreModuleRef[];
   }
-  
+
   // Live counters during apply/preview
   // Option A: Truthful model with friendly grouping
   // - installed: count of Installed
@@ -1509,7 +1510,6 @@ function AppContent() {
       message: `${installed} to install, ${alreadyPresent} already present`
     });
 
-    // If engine didn't provide restoreModulesAvailable, try reading bundle metadata
     let restoreModulesAvailable = envelopeData?.restoreModulesAvailable;
     const configModuleMap = envelopeData?.configModuleMap;
     if (!restoreModulesAvailable) {
@@ -1865,7 +1865,6 @@ function AppContent() {
       });
     }
     
-    // If engine didn't provide restoreModulesAvailable, try reading bundle metadata
     const configModuleMapResult = envelopeData?.configModuleMap;
     let restoreModulesAvailableResult = envelopeData?.restoreModulesAvailable;
     if (!restoreModulesAvailableResult) {

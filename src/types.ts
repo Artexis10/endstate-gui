@@ -131,7 +131,13 @@ export interface EndstateApplyData {
   restoreItems?: RestoreItem[];
   restoreJournalFile?: string;
   restoreFilter?: string[];
-  restoreModulesAvailable?: string[];
+  restoreModulesAvailable?: RestoreModuleRef[];
+}
+
+/** Enriched module reference from engine (v1.5+), or plain string ID from older CLIs. */
+export interface RestoreModuleRef {
+  id: string;
+  displayName: string;
 }
 
 export interface CapturedApp {

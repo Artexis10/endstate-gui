@@ -14,7 +14,7 @@ import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 import { DropZone } from './drop-zone';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import type { DiscoveredProfile } from '@/file-discovery';
-import type { EndstateEnvelope, EndstateRevertData, RestoreIntent } from '@/types';
+import type { EndstateEnvelope, EndstateRevertData, RestoreIntent, RestoreModuleRef } from '@/types';
 import type { EngineExecResult } from '@/lib/engine-exec';
 import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
 import { ConfigModuleSelector } from '@/components/app/overview/components/config-module-selector';
@@ -31,21 +31,6 @@ type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
 
 /** Normalize a string for fuzzy matching: lowercase, + → plus, strip non-alphanumeric */
-function normalizeForMatch(s: string): string {
-  return s.toLowerCase().replace(/\+/g, 'plus').replace(/[^a-z0-9]/g, '');
-}
-
-function humanizeModuleId(id: string): string {
-  return id
-    .replace(/^apps\./, '')
-    .replace(/-plus-plus/g, '++')
-    .replace(/-plus/g, '+')
-    .split('-')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-    .trim();
-}
-
 /** Config-only apps are synthesized from config modules with driver "manual". */
 function isConfigOnlyApp(event: AppEvent): boolean {
   return event.driver === 'manual';
@@ -55,7 +40,7 @@ interface PreviewResult {
   installed: number;
   alreadyPresent: number;
   appEvents: AppEvent[];
-  restoreModulesAvailable?: string[];
+  restoreModulesAvailable?: RestoreModuleRef[];
   /** Maps winget ID → config module name for apps with settings */
   configModuleMap?: Record<string, string>;
 }
@@ -179,7 +164,7 @@ export function SetupFlow({
     return filtered.filter(event => {
       const statusKey: StatusKey = event.statusKey || 'skipped';
       for (const f of activeFilters) {
-        if (f === 'settings' && event.app in configMap) return true;
+        if (f === 'settings' && (event.app in configMap || isConfigOnlyApp(event))) return true;
         if (f === statusKey) return true;
       }
       return false;
@@ -662,7 +647,7 @@ export function SetupFlow({
                                   <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : getColorClasses('success').text}`} />
                                 </span>
                                 <span className="truncate">
-                                  {event.name || humanizeModuleId(event.app)}
+                                  {event.name || formatAppIdentity(event.app)}
                                 </span>
                               </div>
                             );
@@ -684,41 +669,14 @@ export function SetupFlow({
                       configModuleCount={settingsCount}
                     />
                     {restoreIntent === 'apps-and-settings' && (() => {
-                      const configMap = previewResult.configModuleMap ?? {};
-                      // Invert configModuleMap (wingetId → qualifiedModuleId) to (shortId → wingetId)
-                      // configModuleMap values may be qualified like "apps.vscode" — strip prefix to match restoreModulesAvailable
-                      const moduleToWinget = new Map<string, string>();
-                      for (const [wingetId, qualifiedId] of Object.entries(configMap)) {
-                        const shortId = qualifiedId.includes('.') ? qualifiedId.split('.').pop()! : qualifiedId;
-                        moduleToWinget.set(shortId, wingetId);
-                        moduleToWinget.set(qualifiedId, wingetId);
-                      }
-                      // Build wingetId → display name from app events (engine-provided name)
-                      const wingetToName = new Map<string, string>();
-                      for (const ev of previewResult.appEvents) {
-                        if (ev.name) wingetToName.set(ev.app, ev.name);
-                      }
-                      // Build normalized winget product → wingetId for fuzzy matching
-                      // (module IDs like "vlc" → product part of "VideoLAN.VLC" → "vlc")
-                      const wingetByProduct = new Map<string, string>();
-                      for (const ev of previewResult.appEvents) {
-                        if (!ev.app.includes('.')) continue;
-                        const product = ev.app.slice(ev.app.indexOf('.') + 1);
-                        wingetByProduct.set(normalizeForMatch(product), ev.app);
-                      }
-                      const moduleIds = previewResult.restoreModulesAvailable ?? [...new Set([...moduleToWinget.keys()])];
-                      const modules: ConfigModuleInfo[] = moduleIds.map(id => {
-                        const wingetId = moduleToWinget.get(id);
-                        if (wingetId && wingetToName.get(wingetId)) {
-                          return { id, displayName: wingetToName.get(wingetId)!, entries: 0, files: [] };
-                        }
-                        const matchedWingetId = wingetByProduct.get(normalizeForMatch(id));
-                        if (matchedWingetId) {
-                          return { id, displayName: formatAppIdentity(matchedWingetId), entries: 0, files: [] };
-                        }
-                        return { id, displayName: humanizeModuleId(id), entries: 0, files: [] };
-                      });
-                      if (modules.length === 0) return null;
+                      const moduleRefs = previewResult.restoreModulesAvailable;
+                      if (!moduleRefs?.length) return null;
+                      const modules: ConfigModuleInfo[] = moduleRefs.map(ref => ({
+                        id: ref.id,
+                        displayName: ref.displayName || ref.id,
+                        entries: 0,
+                        files: [],
+                      }));
                       return (
                         <ConfigModuleSelector
                           modules={modules}
@@ -1012,7 +970,7 @@ export function SetupFlow({
                                   <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : wasSelected ? getColorClasses('success').text : getColorClasses('warn').text}`} />
                                 </span>
                                 <span className={`truncate ${!wasSelected ? 'text-muted-foreground' : ''}`}>
-                                  {event.name || humanizeModuleId(event.app)}
+                                  {event.name || formatAppIdentity(event.app)}
                                 </span>
                               </div>
                             );

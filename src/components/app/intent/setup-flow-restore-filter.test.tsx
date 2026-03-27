@@ -36,7 +36,10 @@ function makePreviewWithModules() {
       { app: 'Git.Git', action: 'To install', name: 'Git', timestamp: 2 },
       { app: 'Mozilla.Firefox', action: 'To install', name: 'Firefox', timestamp: 3 },
     ],
-    restoreModulesAvailable: ['vscode', 'git'],
+    restoreModulesAvailable: [
+      { id: 'vscode', displayName: 'Visual Studio Code' },
+      { id: 'git', displayName: 'Git' },
+    ],
     configModuleMap: { 'Microsoft.VisualStudioCode': 'apps.vscode', 'Git.Git': 'apps.git' } as Record<string, string>,
   };
 }
@@ -247,7 +250,7 @@ describe('SetupFlow — Restore module selection', () => {
       appEvents: [
         { app: 'Some.App', action: 'To install', timestamp: 1 }, // no name field
       ],
-      restoreModulesAvailable: ['someapp'],
+      restoreModulesAvailable: [{ id: 'someapp', displayName: 'Some App' }],
       configModuleMap: { 'Some.App': 'apps.someapp' } as Record<string, string>,
     };
     const onPreview = vi.fn().mockResolvedValue(previewResult);
@@ -266,8 +269,8 @@ describe('SetupFlow — Restore module selection', () => {
     const appsAndSettingsRadio = screen.getByRole('radio', { name: /settings/i });
     await userEvent.click(appsAndSettingsRadio);
 
-    // Falls back to humanized module ID
-    expect(screen.getByText('Someapp')).toBeInTheDocument();
+    // Uses engine-provided displayName
+    expect(screen.getByText('Some App')).toBeInTheDocument();
   });
 
   it('select all button selects all modules', async () => {
