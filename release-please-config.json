@@ -4,7 +4,8 @@
     ".": {
       "release-type": "node",
       "bump-minor-pre-major": true,
-      "tag-prefix": "gui-v",
+      "component": "gui",
+      "include-component-in-tag": true,
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
         { "type": "fix", "section": "Bug Fixes" },

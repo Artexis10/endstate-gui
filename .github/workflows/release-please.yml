@@ -15,9 +15,8 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          release-type: node
-          tag-name: gui-v${version}
-          release-name: GUI ${version}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
       # If a release was created, also update tauri.conf.json and Cargo.toml
       # (release-please only handles package.json for node type)
