@@ -8,17 +8,11 @@ Tool-specific rule files (e.g., Windsurf, Cursor) must delegate to this contract
 
 ## Authority & Context
 
-### Project Shadow
+### Architecture Context
 
-If `docs/ai/PROJECT_SHADOW.md` exists:
-- Treat it as authoritative architectural context
-- Do not contradict it
-- If it appears outdated or incomplete, propose a minimal update via pull request - do not free-form architectural assumptions
-
-If `docs/ai/PROJECT_SHADOW.md` does not exist and the task is architecture-sensitive:
-- Generate it first using the Project Shadow generator prompt before proceeding
-
-If the Project Shadow and repository code appear to conflict, prefer the repository code and propose a reconciliation update via pull request.
+- Architecture context, commands, and landmines are in `CLAUDE.md` (auto-loaded by Claude Code)
+- Invariants and behavior specifications are in `openspec/specs/` (lazy-loaded on demand)
+- If architecture context appears outdated, propose a minimal update to `CLAUDE.md` via PR
 
 ### Decision Authority
 
@@ -117,7 +111,6 @@ Breaking changes bump the major version (once past 1.0). Signal them with:
 
 - Prefer **concise, high-signal output**
 - Avoid speculation and roadmap content
-- Use patch-style language for Shadow or Delta updates
 - Do not restate unchanged context
 - Do not pad responses with filler or hedging
 
@@ -181,27 +174,15 @@ If the human maintainer instructs a manual version bump (e.g., to force a specif
 
 ---
 
-## Shadow Updates
+## Non-Goals
 
-Propose a PROJECT_SHADOW.md update when changes affect:
-
-| Category | Examples |
-|----------|----------|
-| Core invariants | Rules that must never be violated |
-| Architecture or subsystem boundaries | New modules, removed components, restructured directories |
-| Contracts or public APIs | Interface changes, new integration points |
-| Authority or ownership model | Changed review process, new decision-makers |
-| Landmines or sharp edges | Newly discovered non-obvious failure modes |
-| Explicit non-goals | Scope boundaries added or removed |
-| Testing philosophy | Strategy changes (not individual test additions) |
-| Development workflow assumptions | Build process, environment requirements |
-
-Do **not** require Shadow updates for:
-- Bug fixes within existing architecture
-- Documentation updates
-- Dependency version bumps
-- Test additions that follow existing strategy
-- Performance optimizations that preserve contracts
+1. **Not a data migration tool** — Endstate does not migrate personal data, browser profiles, or credentials
+2. **Not a personalization sync tool** — Endstate provisions machines; it does not sync preferences across devices
+3. **No automatic configuration restore** — config restore requires explicit user opt-in per app
+4. **No hidden internal state** — profiles are never stored in AppData or invisible locations
+5. **No GUI-only features** — everything the GUI does must be reproducible via CLI
+6. **No secrets handling** — browser profiles, auth tokens, password managers, and license blobs are intentionally unsupported
+7. **No interactive preparation phase for manual apps** — deferred to v1.1
 
 ---
 
@@ -210,9 +191,8 @@ Do **not** require Shadow updates for:
 AI collaborators operating in this repository must:
 
 1. Read and follow this contract
-2. Respect Project Shadow authority when present
-3. Propose Shadow updates for shadow-level changes
-4. Represent behavior changes as OpenSpec changes
-5. Stop when acceptance criteria are met
-6. Ask when uncertain rather than assume
-7. Use conventional commit messages on every commit
+2. Represent significant changes as OpenSpec changes
+3. Update CLAUDE.md when landmines or architecture context changes
+4. Stop when acceptance criteria are met
+5. Ask when uncertain rather than assume
+6. Use conventional commit messages on every commit

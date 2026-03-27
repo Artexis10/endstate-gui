@@ -91,9 +91,10 @@ Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstat
 
 These govern AI behavior in this repo, in precedence order:
 
-1. `docs/ai/AI_CONTRACT.md` — AI behavior contract
-2. `docs/ai/PROJECT_SHADOW.md` — Architectural truth, invariants, landmines
-3. `docs/ai/PROJECT_RULES.md` — Operational policy
+1. `docs/ai/AI_CONTRACT.md` — AI behavior contract (highest authority)
+2. `docs/ai/PROJECT_RULES.md` — Operational policy
+3. `CLAUDE.md` — Architecture context, commands, landmines (this file, auto-loaded by Claude Code)
+4. `openspec/specs/` — Invariants and behavior specifications (lazy-loaded on demand)
 
 ### Key Rules from These Documents
 
@@ -115,9 +116,11 @@ These govern AI behavior in this repo, in precedence order:
 
 - **Preview vs execution semantics** — Dry-run output must NEVER be presented as execution results
 - **Phase transitions within single spawn** — Apply + Verify run in one CLI call. Activity list must NOT reset between phases.
-- **Status semantic rules** — `verify` + `failed` + `missing` → MISSING (warn), not FAILED. `apply` + `skipped` + `already_installed` → "Already present" (success). See `PROJECT_SHADOW.md` §6 items 8-10.
+- **Status semantic rules** — `verify` + `failed` + `missing` → MISSING (warn), not FAILED. `apply` + `skipped` + `already_installed` → "Already present" (success). See `docs/ux-language.md` for full mapping.
 - **Cross-repo contract coupling** — Status/phase semantics are coupled between GUI (`docs/ux-language.md`) and engine (`../endstate/docs/event-contract.md`). Changes must update both.
-- **Stale bootstrapped engine** — The GUI spawns the bootstrapped CLI at `%LOCALAPPDATA%\Endstate\bin\`, NOT the repo copy. New engine features/fixes won't appear until re-bootstrapped. The `predev` npm hook handles this for `npm run dev` / `tauri dev`, but manual testing or Tauri dev without `npm run` requires a manual `endstate bootstrap`. Debug artifacts showing wrong `cliVersion` hash (GUI repo hash instead of engine hash) are the telltale sign.
+- **Stale engine binary mitigated by predev auto-rebuild** — The `predev` script (`scripts/rebuild-engine.cjs`) rebuilds the Go engine binary on every `npm run dev` / `tauri dev`. If the Go toolchain is unavailable, it falls back to the existing binary with a warning. Set `SKIP_ENGINE_BUILD=1` to skip for rapid frontend iteration. Manual testing or Tauri dev without `npm run` still requires a manual rebuild.
+- **Config-only app display names from module catalog** — Config-only apps (synthesized from pathExists matchers) get their display names from the engine's module catalog `displayName` field. If missing, the app ID is used as-is.
+- **Scan cooldown** — The "Scan again" button has a 5-second debounce to prevent winget database lock contention from rapid successive captures.
 - **Tidewave Windows path bug** — `patches/tidewave+0.6.0.patch` fixes `eval_worker.js` where `import()` with bare Windows paths (`C:\...` or `C:/...`) causes `ERR_UNSUPPORTED_ESM_URL_SCHEME` because Node's ESM loader interprets `C:` as a URL protocol. The upstream code has no Windows path handling at all. The patch adds two layers: (1) a `module.register()` ESM resolve hook that intercepts **all** dynamic imports (including `import(path.join(cwd, ...))` where the path is computed at runtime), converting Windows paths to `file:///` URLs; (2) a regex-based `fixWindowsImportPaths()` that rewrites string-literal paths in eval code text as a belt-and-suspenders fallback. **When upgrading tidewave**, check if the upstream `eval_worker.js` has Windows path handling; if so, remove the patch. If not, regenerate: copy the patch's `import { register }` block and `fixWindowsImportPaths` function into `node_modules/tidewave/dist/evaluation/eval_worker.js`, then run `npx patch-package tidewave`.
 
 ## Patches
@@ -126,4 +129,4 @@ These govern AI behavior in this repo, in precedence order:
 
 ## OpenSpec
 
-Behavior changes must be represented as OpenSpec changes. Level 2 enforcement: pre-push hook blocks invalid specs. Specs live in `openspec/specs/`.
+Significant changes must be represented as OpenSpec changes. Level 2 enforcement: pre-push hook blocks invalid specs. Specs live in `openspec/specs/`, changes in `openspec/changes/`. Emergency bypass: `OPENSPEC_BYPASS=1 git push`.

@@ -14,26 +14,18 @@ This file configures Windsurf behavior for this repository.
 
 Follow these documents in order of precedence:
 
-1. `docs/ai/AI_CONTRACT.md` — global AI behavior contract (highest authority)
-2. `docs/ai/PROJECT_SHADOW.md` — architectural truth, invariants, landmines
-3. `docs/ai/PROJECT_RULES.md` — operational policy (env, build, test, storage)
+1. `docs/ai/AI_CONTRACT.md` — AI behavior contract (highest authority)
+2. `docs/ai/PROJECT_RULES.md` — operational policy
+3. `CLAUDE.md` — architecture context, commands, landmines (auto-loaded by Claude Code)
+4. `openspec/specs/` — invariants and behavior specifications (lazy-loaded on demand)
 
 If any instruction in this file conflicts with the above, the higher-authority document wins.
 
 ---
 
-## Conflict Resolution
+## Contract Precedence
 
-### Code vs Shadow
-
-If repository code conflicts with PROJECT_SHADOW.md:
-- **Code wins** for the current task
-- Propose a Delta Shadow to reconcile the discrepancy
-- Do not silently drift
-
-### Contract Precedence
-
-AI_CONTRACT.md > PROJECT_SHADOW.md > PROJECT_RULES.md > this file
+AI_CONTRACT.md > PROJECT_RULES.md > CLAUDE.md > this file
 
 ---
 
@@ -42,7 +34,8 @@ AI_CONTRACT.md > PROJECT_SHADOW.md > PROJECT_RULES.md > this file
 | Change Type | Edit Location |
 |-------------|---------------|
 | AI behavior rules | `docs/ai/AI_CONTRACT.md` |
-| Architecture, invariants, landmines | `docs/ai/PROJECT_SHADOW.md` |
+| Architecture, landmines | `CLAUDE.md` |
+| Invariants, behavior specs | `openspec/specs/` |
 | Env, build, test, storage policy | `docs/ai/PROJECT_RULES.md` |
 | Windsurf-specific enforcement | This file |
 
@@ -79,7 +72,6 @@ Do not use `--no-verify` unless explicitly instructed by user.
 | Document | Purpose |
 |----------|---------|
 | `docs/ai/AI_CONTRACT.md` | AI behavior contract |
-| `docs/ai/PROJECT_SHADOW.md` | Architectural truth |
 | `docs/ai/PROJECT_RULES.md` | Operational policy |
 | `docs/ux-guardrails.md` | UX forbidden behaviors |
 | `docs/ux-principles.md` | UX design principles |

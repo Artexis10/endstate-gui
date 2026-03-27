@@ -5,9 +5,10 @@
 This document is authoritative for repository operational policy.
 
 **Authority hierarchy:**
-1. `docs/ai/AI_CONTRACT.md` — global AI behavior contract
-2. `docs/ai/PROJECT_SHADOW.md` — architectural truth, invariants, landmines
-3. `docs/ai/PROJECT_RULES.md` — operational policy (this file)
+1. `docs/ai/AI_CONTRACT.md` — AI behavior contract (highest authority)
+2. `docs/ai/PROJECT_RULES.md` — operational policy (this file)
+3. `CLAUDE.md` — architecture context, commands, landmines (auto-loaded by Claude Code)
+4. `openspec/specs/` — invariants and behavior specifications (lazy-loaded on demand)
 
 ---
 
@@ -203,8 +204,7 @@ Verify writes completed before claiming success.
 
 | Document | Purpose |
 |----------|---------|
-| `docs/ai/AI_CONTRACT.md` | Global AI behavior contract |
-| `docs/ai/PROJECT_SHADOW.md` | Architectural truth |
+| `docs/ai/AI_CONTRACT.md` | AI behavior contract |
 | `docs/ux-guardrails.md` | UX forbidden behaviors |
 | `docs/ux-principles.md` | UX design principles |
 | `docs/profile-contract.md` | Profile validation contract |
