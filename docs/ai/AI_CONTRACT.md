@@ -2,7 +2,7 @@
 
 This document is the **single source of truth** for AI collaborator behavior in this repository.
 
-Tool-specific rule files (e.g., Windsurf, Cursor) must delegate to this contract. If a tool-specific rule conflicts with this contract, **this contract wins**.
+This contract applies to all AI collaborators (e.g., Claude Code).
 
 ---
 
