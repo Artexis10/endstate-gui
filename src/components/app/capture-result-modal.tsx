@@ -43,9 +43,10 @@ export function CaptureResultModal({
 
   // Filter apps by search query
   const filteredApps = searchQuery.trim()
-    ? appsIncluded.filter(app => 
-        app.id.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+    ? appsIncluded.filter(app => {
+        const q = searchQuery.toLowerCase();
+        return app.id.toLowerCase().includes(q) || app.name?.toLowerCase().includes(q);
+      })
     : appsIncluded;
 
   // Group apps by source
@@ -165,7 +166,7 @@ export function CaptureResultModal({
                         {apps.map((app, idx) => (
                           <div key={idx} className="flex items-center gap-2 px-3 py-2 text-xs border-b border-border last:border-b-0">
                             <Package className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                            <span className="font-mono truncate">{app.id}</span>
+                            <span className="font-mono truncate" title={app.id}>{app.name || app.id}</span>
                           </div>
                         ))}
                       </div>

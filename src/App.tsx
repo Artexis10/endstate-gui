@@ -1169,7 +1169,7 @@ function AppContent() {
             });
             throttledSetProgress('capture', {
               message: 'Scanning applications...',
-              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}`
+              detail: `${uiStatus.longLabel}: ${ndjsonEvent.name || ndjsonEvent.id}`
             });
           } else if (isArtifactEvent(ndjsonEvent)) {
             const artifactEvent: AppEvent = {
@@ -1350,9 +1350,20 @@ function AppContent() {
       }
     }
     
+    // Enrich appsIncluded with display names from streaming events.
+    // The envelope often omits `name` but the NDJSON item events carry it.
+    const streamingNameMap = new Map<string, string>();
+    for (const ev of overviewCaptureEvents) {
+      if (ev.name && ev.app) streamingNameMap.set(ev.app, ev.name);
+    }
+    const enrichedAppsIncluded = appsIncluded.map(a => ({
+      ...a,
+      name: a.name || streamingNameMap.get(a.id),
+    }));
+
     // Return structured result with draft text and canonical app list for modal
     // INVARIANT: count, apps, and appsIncluded ALL derive from envelope.data.appsIncluded
-    return { count: capturedCount, draftText, apps: appsList, appsIncluded, envelopeData };
+    return { count: capturedCount, draftText, apps: appsList, appsIncluded: enrichedAppsIncluded, envelopeData };
   };
 
   const handlePreviewFromOverview = async () => {
@@ -1412,7 +1423,7 @@ function AppContent() {
             });
             throttledSetProgress('setup', {
               message: 'Evaluating changes',
-              detail: `${uiStatus.longLabel}: ${ndjsonEvent.id}`
+              detail: `${uiStatus.longLabel}: ${ndjsonEvent.name || ndjsonEvent.id}`
             });
           }
         },
@@ -1659,7 +1670,7 @@ function AppContent() {
                 ? `Verifying… ${verifyCounters.total}/${manifestTotal}`
                 : `Verifying… (${verifyCounters.total} checked)`;
               throttledSetProgress('setup', {
-                message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
+                message: `${uiStatus.longLabel}: ${ndjsonEvent.name || ndjsonEvent.id}`,
                 detail: verifyProgress,
                 phase: 'verify'
               });
@@ -1673,7 +1684,7 @@ function AppContent() {
               const counterText = parts.join(' · ') || 'Working…';
 
               throttledSetProgress('setup', {
-                message: `${uiStatus.longLabel}: ${ndjsonEvent.id}`,
+                message: `${uiStatus.longLabel}: ${ndjsonEvent.name || ndjsonEvent.id}`,
                 detail: counterText,
                 phase: 'apply'
               });
