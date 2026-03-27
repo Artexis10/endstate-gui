@@ -991,16 +991,27 @@ export function SetupFlow({
                             <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings only</p>
                           </div>
                           {applyConfigOnlyEvents.map((event, i) => {
-                            const cfgStatusKey: StatusKey = event.statusKey || 'present';
-                            const cfgUiStatus = getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason });
-                            const cfgColors = getColorClasses(cfgUiStatus.color);
+                            // Check if this config-only module was selected for restore
+                            const moduleId = fullConfigMap[event.app];
+                            const shortId = moduleId?.includes('.') ? moduleId.split('.').pop()! : moduleId;
+                            const wasSelected = restoreIntent === 'apps-and-settings' &&
+                              selectedModules.length > 0 &&
+                              (selectedModules.includes(shortId ?? '') || selectedModules.includes(moduleId ?? ''));
+                            // If not selected, show as skipped regardless of engine status
+                            const cfgStatusKey: StatusKey = wasSelected ? (event.statusKey || 'present') : 'skipped';
+                            const cfgLabel = wasSelected
+                              ? getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason }).shortLabel
+                              : 'SKIPPED';
+                            const cfgColor = wasSelected
+                              ? getColorClasses(getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason }).color)
+                              : getColorClasses('warn');
                             return (
                               <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                                <span className={`w-16 flex-shrink-0 text-right font-medium ${cfgColors.text}`}>{cfgUiStatus.shortLabel}</span>
+                                <span className={`w-16 flex-shrink-0 text-right font-medium ${cfgColor.text}`}>{cfgLabel}</span>
                                 <span className="w-4 flex-shrink-0 flex justify-center">
-                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : getColorClasses('success').text}`} />
+                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : wasSelected ? getColorClasses('success').text : getColorClasses('warn').text}`} />
                                 </span>
-                                <span className="truncate">
+                                <span className={`truncate ${!wasSelected ? 'text-muted-foreground' : ''}`}>
                                   {event.name || humanizeModuleId(event.app)}
                                 </span>
                               </div>
