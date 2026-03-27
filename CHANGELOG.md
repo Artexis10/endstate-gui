@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.3.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.2.2...gui-v1.3.0) (2026-03-27)
+
+
+### Features
+
+* consume enriched restoreModulesAvailable and simplify display name resolution ([7aac1d8](https://github.com/Artexis10/endstate-gui/commit/7aac1d846dce642dcc3d63051f2a9cfe33cf31f7))
+
+
+### Bug Fixes
+
+* activate bundled sidecar resolution and stop silent PATH fallback ([0b23b33](https://github.com/Artexis10/endstate-gui/commit/0b23b3303dba998fc68c79cfc29741a0af533d5f))
+* correct inflated app counts, filter config copy noise, and show status on settings-only apps ([64a480e](https://github.com/Artexis10/endstate-gui/commit/64a480eed52dda77875d6605973065df5de1a55c))
+* show restore selection status on config-only apps in apply results ([1677f08](https://github.com/Artexis10/endstate-gui/commit/1677f08272ec2473409744b6d64c96ba3691318b))
+
 ## [1.2.2](https://github.com/Artexis10/endstate-gui/compare/gui-v1.2.1...gui-v1.2.2) (2026-03-27)
 
 
