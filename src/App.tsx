@@ -1440,12 +1440,22 @@ function AppContent() {
     applyLineBufferRef.current?.clear();
     setIsRunning(false);
 
-    // Process result — envelope counts are source of truth, fall back to NDJSON event counting (older CLI)
+    // Envelope counts are source of truth; fall back to actions array.
+    // No streaming counter fallback — those are unreliable (inflated by plan/verify phases).
     const envelopeData = applyResult.envelope?.data;
-    const installed = envelopeData?.counts?.installed
-      ?? collectedEvents.filter(e => e.statusKey === 'to_install').length;
-    const alreadyPresent = envelopeData?.counts?.alreadyInstalled
-      ?? collectedEvents.filter(e => e.statusKey === 'present').length;
+    const previewActions = envelopeData?.actions ?? [];
+    let installed: number, alreadyPresent: number;
+    if (envelopeData?.counts) {
+      installed = envelopeData.counts.installed;
+      alreadyPresent = envelopeData.counts.alreadyInstalled;
+    } else if (previewActions.length > 0) {
+      installed = previewActions.filter(a => a.status === 'to_install' || a.status === 'installed').length;
+      alreadyPresent = previewActions.filter(a => a.status === 'present').length;
+    } else {
+      console.error('[PREVIEW] Envelope missing both counts and actions — cannot derive reliable totals. Raw envelope:', applyResult.envelope);
+      installed = 0;
+      alreadyPresent = 0;
+    }
 
     // Persist run artifacts (logs, diagnostics, summary)
     if (runBundle) {
@@ -1750,11 +1760,27 @@ function AppContent() {
     // Bounded buffer: keep up to 2000 events for scrollback
     setLiveAppEvents(reconciledEvents.length > 2000 ? reconciledEvents.slice(-2000) : reconciledEvents);
 
-    // Envelope counts are source of truth; fall back to NDJSON-derived counters only for older CLI
-    const installed = envelopeData?.counts?.installed ?? counters.installed;
-    const alreadyPresent = envelopeData?.counts?.alreadyInstalled ?? counters.alreadyPresent;
-    const failed = envelopeData?.counts?.failed ?? counters.failed;
-    const skipped = envelopeData?.counts?.skippedFiltered ?? counters.skipped;
+    // Envelope counts are source of truth; fall back to actions array.
+    // No streaming counter fallback — those are unreliable (inflated by plan/verify phases).
+    const envelopeActions = envelopeData?.actions ?? [];
+    let installed: number, alreadyPresent: number, failed: number, skipped: number;
+    if (envelopeData?.counts) {
+      installed = envelopeData.counts.installed;
+      alreadyPresent = envelopeData.counts.alreadyInstalled;
+      failed = envelopeData.counts.failed;
+      skipped = envelopeData.counts.skippedFiltered;
+    } else if (envelopeActions.length > 0) {
+      installed = envelopeActions.filter(a => a.status === 'installed').length;
+      alreadyPresent = envelopeActions.filter(a => a.status === 'present').length;
+      failed = envelopeActions.filter(a => a.status === 'failed').length;
+      skipped = envelopeActions.filter(a => a.status === 'skipped').length;
+    } else {
+      console.error('[APPLY] Envelope missing both counts and actions — cannot derive reliable totals. Raw envelope:', applyResult.envelope);
+      installed = 0;
+      alreadyPresent = 0;
+      failed = 0;
+      skipped = 0;
+    }
 
     // Restore summary: envelope is source of truth, fall back to NDJSON counters for older CLI
     const restoreSummary: RestoreSummary | undefined = envelopeData?.restoreSummary ?? (

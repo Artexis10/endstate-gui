@@ -171,8 +171,10 @@ export function SetupFlow({
 
   /** Filter events based on active filter set (OR logic). */
   const filterEvents = (events: AppEvent[], configMap: Record<string, string>) => {
-    // Always exclude phase separator headers
-    const filtered = events.filter(e => e.app !== '── APPLY ──' && e.app !== '── VERIFY ──');
+    // Exclude phase separator headers and raw config copy operations (internal engine detail)
+    const filtered = events.filter(e =>
+      e.app !== '── APPLY ──' && e.app !== '── VERIFY ──' && !e.app.startsWith('copy:')
+    );
     if (activeFilters.size === 0) return filtered;
     return filtered.filter(event => {
       const statusKey: StatusKey = event.statusKey || 'skipped';
@@ -643,23 +645,28 @@ export function SetupFlow({
                           </div>
                         );
                       })}
-                      {/* Config-only synthesized apps — shown separately with gear icon */}
+                      {/* Config-only apps (detected via settings, not winget) */}
                       {showConfigOnlySection && (
                         <>
                           <div className="border-t mt-2 pt-2">
-                            <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings detected for:</p>
+                            <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings only</p>
                           </div>
-                          {configOnlyEvents.map((event, i) => (
-                            <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                              <span className="w-16 flex-shrink-0 flex justify-end">
-                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
-                              </span>
-                              <span className="w-4 flex-shrink-0" />
-                              <span className="truncate">
-                                {event.name || humanizeModuleId(event.app)}
-                              </span>
-                            </div>
-                          ))}
+                          {configOnlyEvents.map((event, i) => {
+                            const cfgStatusKey: StatusKey = event.statusKey || 'present';
+                            const cfgUiStatus = getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason });
+                            const cfgColors = getColorClasses(cfgUiStatus.color);
+                            return (
+                              <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
+                                <span className={`w-16 flex-shrink-0 text-right font-medium ${cfgColors.text}`}>{cfgUiStatus.shortLabel}</span>
+                                <span className="w-4 flex-shrink-0 flex justify-center">
+                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : getColorClasses('success').text}`} />
+                                </span>
+                                <span className="truncate">
+                                  {event.name || humanizeModuleId(event.app)}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </>
                       )}
                     </div>
@@ -871,7 +878,7 @@ export function SetupFlow({
                   const applySettingsTotal = applySettingsProcessed > 0 ? applySettingsProcessed : configMapSettingsCount;
                   // Separate config-only synthesized apps from winget apps
                   const configOnlyCount = applyResult.appEvents.filter(e => isConfigOnlyApp(e)).length;
-                  const totalApplyApps = applyResult.installed + applyResult.alreadyPresent + applyResult.failed + applyResult.skipped - configOnlyCount;
+                  const totalApplyApps = applyResult.installed + applyResult.alreadyPresent + applyResult.failed - configOnlyCount;
                   // Partition filtered events
                   const allApplyEvents = filterEvents(applyResult.appEvents, applyConfigMap);
                   const applyWingetEvents = allApplyEvents.filter(e => !isConfigOnlyApp(e));
@@ -977,23 +984,28 @@ export function SetupFlow({
                           </div>
                         );
                       })}
-                      {/* Config-only synthesized apps — shown separately with gear icon */}
+                      {/* Config-only apps (detected via settings, not winget) */}
                       {showApplyConfigOnlySection && (
                         <>
                           <div className="border-t mt-2 pt-2">
-                            <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings detected for:</p>
+                            <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings only</p>
                           </div>
-                          {applyConfigOnlyEvents.map((event, i) => (
-                            <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                              <span className="w-16 flex-shrink-0 flex justify-end">
-                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
-                              </span>
-                              <span className="w-4 flex-shrink-0" />
-                              <span className="truncate">
-                                {event.name || humanizeModuleId(event.app)}
-                              </span>
-                            </div>
-                          ))}
+                          {applyConfigOnlyEvents.map((event, i) => {
+                            const cfgStatusKey: StatusKey = event.statusKey || 'present';
+                            const cfgUiStatus = getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason });
+                            const cfgColors = getColorClasses(cfgUiStatus.color);
+                            return (
+                              <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
+                                <span className={`w-16 flex-shrink-0 text-right font-medium ${cfgColors.text}`}>{cfgUiStatus.shortLabel}</span>
+                                <span className="w-4 flex-shrink-0 flex justify-center">
+                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : getColorClasses('success').text}`} />
+                                </span>
+                                <span className="truncate">
+                                  {event.name || humanizeModuleId(event.app)}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </>
                       )}
                     </div>

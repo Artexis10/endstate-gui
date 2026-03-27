@@ -79,19 +79,19 @@ describe('SetupFlow — Config-only (manual) app distinction', () => {
     vi.clearAllMocks();
   });
 
-  it('shows manual apps in a separate "Settings detected for:" section', async () => {
+  it('shows manual apps in a separate "Settings only" section', async () => {
     await navigateToPreview(makePreviewWithManualApps());
 
-    expect(screen.getByText('Settings detected for:')).toBeInTheDocument();
+    expect(screen.getByText('Settings only')).toBeInTheDocument();
     // Config-only apps should show their display names
     expect(screen.getByText('Adobe Lightroom Classic')).toBeInTheDocument();
     expect(screen.getByText('Claude Code')).toBeInTheDocument();
   });
 
-  it('does not show "Settings detected for:" section when no manual apps', async () => {
+  it('does not show "Settings only" section when no manual apps', async () => {
     await navigateToPreview(makePreviewWingetOnly());
 
-    expect(screen.queryByText('Settings detected for:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Settings only')).not.toBeInTheDocument();
   });
 
   it('manual apps do not count in the "X apps" badge', async () => {
@@ -101,15 +101,15 @@ describe('SetupFlow — Config-only (manual) app distinction', () => {
     expect(screen.getByText('4 apps')).toBeInTheDocument();
   });
 
-  it('manual apps do not show PRESENT/TO INSTALL status labels', async () => {
+  it('manual apps show status labels in "Settings only" section', async () => {
     await navigateToPreview(makePreviewWithManualApps());
 
     // Winget apps should still have status labels
     expect(screen.getByText('GitHub CLI')).toBeInTheDocument();
     expect(screen.getByText('Docker Desktop')).toBeInTheDocument();
 
-    // Config-only section exists with gear icons, not status labels
-    const section = screen.getByText('Settings detected for:');
+    // Config-only section exists with status labels and gear icons
+    const section = screen.getByText('Settings only');
     expect(section).toBeInTheDocument();
   });
 
