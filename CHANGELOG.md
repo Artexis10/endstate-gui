@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [1.2.1](https://github.com/Artexis10/endstate-gui/compare/gui-v1.1.1...gui-v1.2.1) (2026-03-26)
+
+### Features
+
+* Manual app status mapping with MANUAL label (warn/yellow)
+* "Install manually" section in result modal with instructions + launch link
+* Config-only apps separated into "Settings detected for:" section
+* Config-only apps shown in capture screen
+* Auto-rebuild Go engine in predev script
+
+### Bug Fixes
+
+* Settings count off-by-one (17 vs 18)
+* Scan cooldown to prevent winget lock contention
+* Null ref handling for manual apps
+
+### Performance
+
+* Badge counts adjusted to exclude synthesized config-only apps
+
 ## [1.1.0] - 2026-03-10
 
 ### Added
