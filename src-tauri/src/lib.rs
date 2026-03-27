@@ -62,8 +62,17 @@ impl From<std::io::Error> for ExecError {
 /// * `Ok(ExecResult)` - Execution completed (check exit_code for success)
 /// * `Err(ExecError)` - Execution failed to start (e.g., CLI not found)
 #[tauri::command]
-fn endstate_exec(exe: String, args: Vec<String>) -> Result<ExecResult, ExecError> {
-    let output = cmd_impl::build_engine_command(&exe, &args).output()?;
+fn endstate_exec(app: AppHandle, exe: String, args: Vec<String>) -> Result<ExecResult, ExecError> {
+    let output = if exe == "__bundled__" {
+        engine_adapter::build_bundled_command(&app, &args)
+            .map_err(|e| ExecError {
+                code: e.code,
+                message: e.message,
+            })?
+            .output()?
+    } else {
+        cmd_impl::build_engine_command(&exe, &args).output()?
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -157,27 +166,6 @@ fn engine_is_running(run_state: State<'_, SharedRunState>) -> bool {
 #[tauri::command]
 fn engine_get_run_id(run_state: State<'_, SharedRunState>) -> Option<String> {
     engine_adapter::get_current_run_id(&run_state)
-}
-
-/// Resolve the bundled engine sidecar binary path.
-/// Returns the path to the Go engine binary next to the main executable.
-/// Returns None if running in dev mode or if the sidecar is not found.
-fn resolve_bundled_engine_path() -> Option<std::path::PathBuf> {
-    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    let sidecar = exe_dir.join("endstate.exe");
-    if sidecar.exists() {
-        Some(sidecar)
-    } else {
-        None
-    }
-}
-
-/// Get the path to the bundled engine sidecar binary, if available.
-/// Returns None in dev mode or if engine sidecar is not bundled.
-#[tauri::command]
-fn get_bundled_engine_path(_app: AppHandle) -> Option<String> {
-    resolve_bundled_engine_path()
-        .and_then(|p| p.to_str().map(|s| s.to_string()))
 }
 
 /// Check if a file exists at the given path.
@@ -1323,7 +1311,6 @@ pub fn run() {
             engine_cancel,
             engine_is_running,
             engine_get_run_id,
-            get_bundled_engine_path,
             list_manifest_files,
             run_endstate_streaming,
             check_file_exists,

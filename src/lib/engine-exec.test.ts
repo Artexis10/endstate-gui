@@ -86,10 +86,7 @@ describe('buildEngineCommand', () => {
   });
 
   describe('bundled mode', () => {
-    it('uses sidecar binary path when available', async () => {
-      const bundledPath = 'C:\\Program Files\\endstate-gui\\endstate.exe';
-      mockInvoke.mockResolvedValue(bundledPath);
-
+    it('passes __bundled__ sentinel to Rust for sidecar resolution', async () => {
       const settings: AppSettings = {
         ...baseSettings,
         engineMode: 'bundled',
@@ -97,29 +94,11 @@ describe('buildEngineCommand', () => {
 
       const result = await buildEngineCommand(settings, ['capabilities', '--json']);
 
-      expect(mockInvoke).toHaveBeenCalledWith('get_bundled_engine_path');
-      expect(result.exe).toBe(bundledPath);
-      expect(result.args).toEqual([
-        'capabilities',
-        '--json',
-      ]);
-      expect(result.displayCommand).toBe('[bundled] capabilities --json');
-    });
-
-    it('falls back to endstate PATH when bundled path is null (dev mode)', async () => {
-      mockInvoke.mockResolvedValue(null);
-
-      const settings: AppSettings = {
-        ...baseSettings,
-        engineMode: 'bundled',
-      };
-
-      const result = await buildEngineCommand(settings, ['capabilities', '--json']);
-
-      expect(mockInvoke).toHaveBeenCalledWith('get_bundled_engine_path');
-      expect(result.exe).toBe('endstate');
+      expect(result.exe).toBe('__bundled__');
       expect(result.args).toEqual(['capabilities', '--json']);
-      expect(result.displayCommand).toBe('endstate capabilities --json');
+      expect(result.displayCommand).toBe('[bundled] capabilities --json');
+      // Should NOT call get_bundled_engine_path — resolution is in Rust
+      expect(mockInvoke).not.toHaveBeenCalled();
     });
   });
 
@@ -153,9 +132,7 @@ describe('buildEngineCommand', () => {
       expect(result.displayCommand).toMatch(/^pwsh\s/);
     });
 
-    it('bundled mode displayCommand shows [bundled] when path available', async () => {
-      mockInvoke.mockResolvedValue('C:\\path\\to\\endstate.ps1');
-
+    it('bundled mode displayCommand always shows [bundled] prefix', async () => {
       const settings: AppSettings = {
         ...baseSettings,
         engineMode: 'bundled',
@@ -164,19 +141,6 @@ describe('buildEngineCommand', () => {
       const result = await buildEngineCommand(settings, ['capabilities', '--json']);
 
       expect(result.displayCommand).toMatch(/^\[bundled\]/);
-    });
-
-    it('bundled mode displayCommand shows endstate when no bundled path (dev fallback)', async () => {
-      mockInvoke.mockResolvedValue(null);
-
-      const settings: AppSettings = {
-        ...baseSettings,
-        engineMode: 'bundled',
-      };
-
-      const result = await buildEngineCommand(settings, ['capabilities', '--json']);
-
-      expect(result.displayCommand).toMatch(/^endstate\s/);
     });
   });
 });

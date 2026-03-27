@@ -2772,18 +2772,24 @@ function AppContent() {
               <CardContent className="space-y-4">
                 <RadioGroup
                   value={settings.engineMode}
-                  onValueChange={(value: 'path' | 'script') => updateSettings({ engineMode: value })}
+                  onValueChange={(value: 'bundled' | 'path' | 'script') => updateSettings({ engineMode: value })}
                 >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="bundled" id="engine-bundled" />
+                    <label htmlFor="engine-bundled" className="text-sm cursor-pointer">
+                      Bundled (recommended)
+                    </label>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="path" id="engine-path" />
                     <label htmlFor="engine-path" className="text-sm cursor-pointer">
-                      Use endstate from PATH
+                      System PATH (development)
                     </label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="script" id="engine-script" />
                     <label htmlFor="engine-script" className="text-sm cursor-pointer">
-                      Use endstate script path
+                      Script (legacy)
                     </label>
                   </div>
                 </RadioGroup>

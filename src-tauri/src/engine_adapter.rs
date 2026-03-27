@@ -22,6 +22,79 @@ use tauri::{AppHandle, Emitter};
 
 use crate::event_broadcast::EventBroadcaster;
 
+/// Candidate sidecar filenames in priority order.
+/// Tauri's externalBin installs with target-triple suffix in production;
+/// the predev rebuild script copies as plain endstate.exe for dev.
+const SIDECAR_CANDIDATES: &[&str] = &[
+    "endstate-x86_64-pc-windows-msvc.exe",
+    "endstate.exe",
+];
+
+/// Build a `Command` for the bundled sidecar binary.
+///
+/// Resolves the sidecar from the directory containing the main executable,
+/// trying target-triple-suffixed filename first (Tauri production install),
+/// then plain `endstate.exe` (dev mode).
+///
+/// Sets `ENDSTATE_ROOT` to the Tauri resource directory's `engine/` subdirectory
+/// so the Go binary can find modules/, payload/, VERSION, SCHEMA_VERSION.
+///
+/// Used by both `run_engine` (streaming) and `endstate_exec` (non-streaming).
+pub fn build_bundled_command(
+    app: &AppHandle,
+    args: &[String],
+) -> Result<std::process::Command, EngineError> {
+    use tauri::Manager;
+
+    let exe_dir = std::env::current_exe()
+        .map_err(|e| EngineError {
+            code: "EXE_DIR_ERROR".to_string(),
+            message: format!("Failed to resolve executable directory: {}", e),
+        })?
+        .parent()
+        .ok_or_else(|| EngineError {
+            code: "EXE_DIR_ERROR".to_string(),
+            message: "Failed to get parent directory of executable".to_string(),
+        })?
+        .to_path_buf();
+
+    // Try each candidate filename in priority order
+    let sidecar_path = SIDECAR_CANDIDATES
+        .iter()
+        .map(|name| exe_dir.join(name))
+        .find(|p| p.exists());
+
+    let sidecar_path = match sidecar_path {
+        Some(p) => p,
+        None => {
+            let searched: Vec<String> = SIDECAR_CANDIDATES
+                .iter()
+                .map(|name| exe_dir.join(name).display().to_string())
+                .collect();
+            return Err(EngineError {
+                code: "BUNDLED_ENGINE_NOT_FOUND".to_string(),
+                message: format!(
+                    "Bundled engine not found. Searched: {}",
+                    searched.join(", ")
+                ),
+            });
+        }
+    };
+
+    let mut cmd = std::process::Command::new(&sidecar_path);
+    cmd.args(args);
+
+    // Set ENDSTATE_ROOT to the resource directory's engine/ subdirectory
+    // so the Go binary can find modules/, payload/, VERSION, SCHEMA_VERSION
+    let resource_dir = app.path().resource_dir().map_err(|e| EngineError {
+        code: "RESOURCE_DIR_ERROR".to_string(),
+        message: format!("Failed to resolve resource directory: {}", e),
+    })?;
+    cmd.env("ENDSTATE_ROOT", resource_dir.join("engine"));
+
+    Ok(cmd)
+}
+
 /// Emit an event to both Tauri and the HTTP bridge broadcaster.
 fn emit_event(app: &AppHandle, broadcaster: &EventBroadcaster, event: &serde_json::Value) {
     let _ = app.emit(EVENT_CHANNEL, event);
@@ -266,48 +339,20 @@ pub fn run_engine(
     }
 
     // Spawn the process with piped stdout/stderr.
-    // When exe is "__bundled__", resolve the sidecar binary path and set
-    // ENDSTATE_ROOT to the resource directory so it can find modules/ and payload/.
+    // When exe is "__bundled__", resolve the sidecar binary and set ENDSTATE_ROOT.
     let mut cmd = if exe == "__bundled__" {
-        use tauri::Manager;
-        // Resolve sidecar binary: lives next to the main executable
-        let exe_dir = std::env::current_exe()
-            .map_err(|e| EngineError {
-                code: "EXE_DIR_ERROR".to_string(),
-                message: format!("Failed to resolve executable directory: {}", e),
-            })?
-            .parent()
-            .ok_or_else(|| EngineError {
-                code: "EXE_DIR_ERROR".to_string(),
-                message: "Failed to get parent directory of executable".to_string(),
-            })?
-            .to_path_buf();
-        let sidecar_path = exe_dir.join("endstate.exe");
-        if !sidecar_path.exists() {
-            // Clear run state before returning error
-            if let Ok(mut state) = run_state.lock() {
-                state.run_id = None;
-                state.command = None;
-                state.child = None;
+        match build_bundled_command(app, args) {
+            Ok(c) => c,
+            Err(e) => {
+                // Clear run state before returning error
+                if let Ok(mut state) = run_state.lock() {
+                    state.run_id = None;
+                    state.command = None;
+                    state.child = None;
+                }
+                return Err(e);
             }
-            return Err(EngineError {
-                code: "BUNDLED_ENGINE_NOT_FOUND".to_string(),
-                message: format!(
-                    "Bundled engine not found at: {}",
-                    sidecar_path.display()
-                ),
-            });
         }
-        let mut c = std::process::Command::new(&sidecar_path);
-        c.args(args);
-        // Set ENDSTATE_ROOT to the resource directory's engine/ subdirectory
-        // so the Go binary can find modules/, payload/, VERSION, SCHEMA_VERSION
-        let resource_dir = app.path().resource_dir().map_err(|e| EngineError {
-            code: "RESOURCE_DIR_ERROR".to_string(),
-            message: format!("Failed to resolve resource directory: {}", e),
-        })?;
-        c.env("ENDSTATE_ROOT", resource_dir.join("engine"));
-        c
     } else {
         crate::cmd_impl::build_engine_command(exe, args)
     };
