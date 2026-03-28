@@ -13,7 +13,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: process.env.CI ? 'npx vite dev --port 1420' : 'npm run dev',
+    command: 'npx vite dev --port 1420',
     url: 'http://127.0.0.1:1420',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
