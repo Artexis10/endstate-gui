@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.3.4](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.3...gui-v1.3.4) (2026-03-28)
+
+
+### Bug Fixes
+
+* **ci:** add VITE_DEV_BYPASS_LICENSE to e2e webServer env ([8fa0375](https://github.com/Artexis10/endstate-gui/commit/8fa03751f9bdcc5b22c7dd67122341f3640e0639))
+
 ## [1.3.3](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.2...gui-v1.3.3) (2026-03-28)
 
 
