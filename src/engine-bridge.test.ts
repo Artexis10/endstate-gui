@@ -16,7 +16,6 @@ import {
   type LogEvent,
   type ResultEvent,
   type CliEnvelopeEvent,
-  type EngineEvent,
 } from './engine-bridge';
 import type { AppSettings } from './settings';
 

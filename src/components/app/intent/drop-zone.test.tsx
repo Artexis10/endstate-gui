@@ -1,14 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { renderWithProviders, screen, fireEvent, waitFor } from '../../../test/test-utils';
+import { renderWithProviders, screen, fireEvent } from '../../../test/test-utils';
 import { DropZone } from './drop-zone';
-
-function createDragEvent(files: File[]) {
-  return {
-    preventDefault: vi.fn(),
-    stopPropagation: vi.fn(),
-    dataTransfer: { files },
-  };
-}
 
 function createFile(name: string): File {
   return new File(['content'], name, { type: 'application/octet-stream' });
