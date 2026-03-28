@@ -1,25 +1,38 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { forceAdvancedMode } from './helpers/ui-mode';
 import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * E2E tests for Reports page log visibility.
- * 
+ *
+ * Updated for ADR-001 intent-based UI:
+ * - The sidebar (nav-report) is not visible on the intent landing page.
+ * - Navigation to Reports uses the command palette (Ctrl+K -> "Go to Reports").
+ *
  * These tests verify that:
  * 1. "View logs" button appears when artifactPaths.logFile exists in lifecycle state
  * 2. "No logs captured" message only appears when no artifact paths
  * 3. Details disclosure shows log path and events path
  * 4. Page title is "Reports" (not "Report")
  */
+
+/** Navigate to Reports page via command palette (works from any page including landing). */
+async function navigateToReports(page: Page) {
+  await page.keyboard.press('Control+k');
+  await expect(page.locator('text=Go to Reports')).toBeVisible({ timeout: 3000 });
+  await page.click('text=Go to Reports');
+  await expect(page.locator('h2:has-text("Reports")')).toBeVisible({ timeout: 5000 });
+}
+
 test.describe('Reports - Log Visibility', () => {
   const LOG_FILE_PATH = 'C:\\test\\profiles\\Runs\\2025-01-01T00-00-00_abc1\\engine.log';
   const EVENTS_FILE_PATH = 'C:\\test\\profiles\\Runs\\2025-01-01T00-00-00_abc1\\events.jsonl';
   const BUNDLE_DIR = 'C:\\test\\profiles\\Runs\\2025-01-01T00-00-00_abc1';
 
   test.beforeEach(async ({ page, baseURL }) => {
-    // Force advanced mode for sidebar navigation
+    // Force advanced mode for sidebar visibility once we leave intent pages
     await forceAdvancedMode(page);
-    
+
     const LOG_FILE_PATH = 'C:\\test\\profiles\\Runs\\2025-01-01T00-00-00_abc1\\engine.log';
     const EVENTS_FILE_PATH = 'C:\\test\\profiles\\Runs\\2025-01-01T00-00-00_abc1\\events.jsonl';
 
@@ -66,13 +79,14 @@ test.describe('Reports - Log Visibility', () => {
   });
 
   test('Reports page title is "Reports" not "Report"', async ({ page }) => {
-    // Navigate to Reports page
-    await page.click('[data-testid="nav-report"]');
+    // Navigate to Reports page via command palette
+    await navigateToReports(page);
 
     // Verify the page header says "Reports"
-    const pageHeader = page.locator('h1, h2').filter({ hasText: /^Reports$/ });
+    const pageHeader = page.locator('h2').filter({ hasText: /^Reports$/ });
     await expect(pageHeader.first()).toBeVisible();
 
+    // Once on the report page, sidebar should be visible (non-intent page)
     // Verify sidebar also says "Reports"
     const sidebarItem = page.locator('[data-testid="nav-report"]');
     await expect(sidebarItem).toContainText('Reports');
@@ -99,11 +113,8 @@ test.describe('Reports - Log Visibility', () => {
       localStorage.setItem('test-endstate-lifecycle-state', JSON.stringify(lifecycleState));
     }, { logFile: LOG_FILE_PATH, eventsFile: EVENTS_FILE_PATH, bundleDir: BUNDLE_DIR });
 
-    // Navigate to Reports page
-    await page.click('[data-testid="nav-report"]');
-
-    // Verify Reports page loaded - use specific h1 selector
-    await expect(page.locator('h1:has-text("Reports")')).toBeVisible();
+    // Navigate to Reports page via command palette
+    await navigateToReports(page);
 
     // Look for Recent Runs section
     await expect(page.locator('text=Recent Runs')).toBeVisible();
@@ -126,11 +137,10 @@ test.describe('Reports - Log Visibility', () => {
       localStorage.setItem('test-endstate-lifecycle-state', JSON.stringify(lifecycleState));
     });
 
-    // Navigate to Reports page
-    await page.click('[data-testid="nav-report"]');
+    // Navigate to Reports page via command palette
+    await navigateToReports(page);
 
-    // Verify Reports page loaded - use specific h1 selector
-    await expect(page.locator('h1:has-text("Reports")')).toBeVisible();
+    // Verify Reports page loaded
     await expect(page.locator('text=Recent Runs')).toBeVisible();
   });
 
@@ -155,11 +165,8 @@ test.describe('Reports - Log Visibility', () => {
       localStorage.setItem('test-endstate-lifecycle-state', JSON.stringify(lifecycleState));
     }, { logFile: LOG_FILE_PATH, eventsFile: EVENTS_FILE_PATH, bundleDir: BUNDLE_DIR });
 
-    // Navigate to Reports page
-    await page.click('[data-testid="nav-report"]');
-
-    // Verify Reports page loaded - use specific h1 selector
-    await expect(page.locator('h1:has-text("Reports")')).toBeVisible();
+    // Navigate to Reports page via command palette
+    await navigateToReports(page);
 
     // The details disclosure should be available when artifact paths exist and setting is ON
     // Enable the setting first
@@ -168,9 +175,10 @@ test.describe('Reports - Log Visibility', () => {
     });
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await page.click('[data-testid="nav-report"]');
-    await expect(page.locator('h1:has-text("Reports")')).toBeVisible();
-    
+
+    // After reload, navigate to reports again
+    await navigateToReports(page);
+
     // This verifies the UI structure is correct
     await expect(page.locator('text=Recent Runs')).toBeVisible();
   });
@@ -180,7 +188,7 @@ test.describe('Reports - Run Expansion with showDetails=false', () => {
   test('run entries expand and show summary content when showDetails is false', async ({ page, baseURL }) => {
     // Use Advanced mode for navigation but set showDetails=false to test Simplified behavior
     await forceAdvancedMode(page);
-    
+
     await page.addInitScript(() => {
       // Set showDetails=false to simulate Simplified mode behavior
       const settings = {
@@ -194,7 +202,7 @@ test.describe('Reports - Run Expansion with showDetails=false', () => {
       };
       localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
       localStorage.setItem('endstate-gui-settings', JSON.stringify(settings));
-      
+
       // Set up lifecycle state with a recent run
       const lifecycleState = {
         lastCapture: {
@@ -237,22 +245,24 @@ test.describe('Reports - Run Expansion with showDetails=false', () => {
         }
       };
     });
-    
+
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    
-    // Navigate to Reports page via sidebar
-    await page.click('[data-testid="nav-report"]');
+
+    // Navigate to Reports page via command palette (sidebar not visible on landing)
+    await page.keyboard.press('Control+k');
+    await expect(page.locator('text=Go to Reports')).toBeVisible({ timeout: 3000 });
+    await page.click('text=Go to Reports');
     await expect(page.locator('text=Recent Runs')).toBeVisible({ timeout: 5000 });
-    
+
     // Find a run entry
     const runEntry = page.locator('details').first();
     await expect(runEntry).toBeVisible();
-    
+
     // Expand the run entry by clicking
     await runEntry.locator('summary').click();
     await expect(runEntry.locator('text=Command')).toBeVisible({ timeout: 3000 });
-    
+
     // Verify expanded content is visible - these should ALWAYS show regardless of mode
     // Command field
     await expect(runEntry.locator('text=Command')).toBeVisible({ timeout: 3000 });
@@ -260,7 +270,7 @@ test.describe('Reports - Run Expansion with showDetails=false', () => {
     await expect(runEntry.locator('text=Time')).toBeVisible({ timeout: 3000 });
     // Status field
     await expect(runEntry.locator('text=Status')).toBeVisible({ timeout: 3000 });
-    
+
     // Verify the run entry is actually expanded (has the expanded content div)
     await expect(runEntry.locator('.border-t.border-border.bg-muted\\/30')).toBeVisible();
   });

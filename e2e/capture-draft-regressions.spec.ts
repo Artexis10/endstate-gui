@@ -294,50 +294,9 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     expect(writeOps.length).toBeGreaterThan(0);
   });
 
-  test('Discard works: removes draft and returns to neutral state', async ({ page }) => {
-    // Create draft and simulate capture success state
-    await page.evaluate((draftPath) => {
-      const existingPaths = (window as any).__test_existingPaths;
-      const fileContents = (window as any).__test_fileContents;
-      existingPaths.add(draftPath);
-      fileContents.set(draftPath, '{"version": 1, "apps": [{"name": "discard-app"}]}');
-    }, DRAFT_PATH);
-
-    // Expand capture card to show draft controls
-    await page.click('[data-testid="overview-card-capture"]');
-    
-    // Draft card should be visible (this would appear after capture completes)
-    // For this test, we'll directly trigger the discard via the test hook if needed
-    // Or we can simulate the full capture flow - let's use a simpler approach
-    
-    // Since we need the UI to show the draft card, let's inject the state
-    await page.evaluate((draftPath) => {
-      // Simulate App state having pendingCaptureDraftPath
-      const appElement = document.querySelector('[data-testid="capture-card-expanded-content"]');
-      if (appElement) {
-        // The draft card should render when pendingCaptureDraftPath exists
-        // We'll need to trigger this through the actual app state
-        // For now, let's verify the discard button exists when draft is present
-      }
-    }, DRAFT_PATH);
-    
-    // Check if discard button is visible (it should be when draft exists)
-    const discardButton = page.locator('[data-testid="discard-draft-button"]');
-    if (await discardButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await discardButton.click();
-      
-      // Draft should be deleted
-      const draftExists = await page.evaluate((draftPath) => {
-        return (window as any).__test_existingPaths.has(draftPath);
-      }, DRAFT_PATH);
-      expect(draftExists).toBe(false);
-      
-      // Verify delete was called
-      const operations = await page.evaluate(() => (window as any).__test_operations);
-      const deleteOps = operations.filter((op: any) => op.type === 'delete_file' && op.path === DRAFT_PATH);
-      expect(deleteOps.length).toBeGreaterThan(0);
-    }
-  });
+  // DELETED: "Discard works" — The overview-card-capture / discard-draft-button UI
+  // no longer exists in the intent-based design. The save flow handles capture
+  // lifecycle (scan → save file) without a persistent draft discard concept.
 
   test('Stale draft on save: recovery when draft file missing before save', async ({ page }) => {
     // Create draft initially
@@ -381,38 +340,9 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     expect(renameOps.length).toBe(0);
   });
 
-  test('Stale draft on discard: idempotent behavior when draft already gone', async ({ page }) => {
-    // Create draft initially
-    await page.evaluate((draftPath) => {
-      const existingPaths = (window as any).__test_existingPaths;
-      const fileContents = (window as any).__test_fileContents;
-      existingPaths.add(draftPath);
-      fileContents.set(draftPath, '{"version": 1, "apps": [{"name": "gone-app"}]}');
-    }, DRAFT_PATH);
-
-    // Expand capture card
-    await page.click('[data-testid="overview-card-capture"]');
-    
-    // Simulate draft being deleted externally
-    await page.evaluate((draftPath) => {
-      const existingPaths = (window as any).__test_existingPaths;
-      const fileContents = (window as any).__test_fileContents;
-      existingPaths.delete(draftPath);
-      fileContents.delete(draftPath);
-    }, DRAFT_PATH);
-    
-    // Try to discard (should be idempotent)
-    const discardButton = page.locator('[data-testid="discard-draft-button"]');
-    if (await discardButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await discardButton.click();
-      
-      // Should not throw error, should handle gracefully
-      // Verify the operation was attempted but handled the missing file
-      const operations = await page.evaluate(() => (window as any).__test_operations);
-      const deleteOps = operations.filter((op: any) => op.type === 'delete_file' && op.path === DRAFT_PATH);
-      // May or may not have attempted delete depending on preflight check
-    }
-  });
+  // DELETED: "Stale draft on discard" — The overview-card-capture / discard-draft-button UI
+  // no longer exists in the intent-based design. Draft discard is not a concept in
+  // the save flow; users simply navigate back or scan again.
 
   test('Manage Profiles draft protection: cannot delete pending draft', async ({ page }) => {
     // Create both a draft and a saved profile
@@ -591,7 +521,7 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     }
   });
 
-  test('No profiles state: Capture CTA visible and accessible', async ({ page }) => {
+  test('No profiles state: Save intent CTA visible and accessible', async ({ page }) => {
     // Clear all profiles to simulate no-profiles state
     await page.evaluate(() => {
       (window as any).__test_existingPaths.clear();
@@ -602,57 +532,22 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     await page.reload();
     await page.waitForLoadState('networkidle');
 
-    // Capture card should be visible at top of Overview
-    const captureCard = page.locator('[data-testid="overview-card-capture"]');
-    await expect(captureCard).toBeVisible();
+    // In the intent-based design, the "Save this computer" card is always visible on the landing page
+    const saveIntent = page.locator('[data-testid="intent-save"]');
+    await expect(saveIntent).toBeVisible();
 
-    // Verify it's near the top (not buried)
-    const cardBox = await captureCard.boundingBox();
+    // Verify it's in the viewport (not buried)
+    const cardBox = await saveIntent.boundingBox();
     expect(cardBox).not.toBeNull();
     if (cardBox) {
-      // Card should be in upper portion of viewport (y < 400px is reasonable)
-      expect(cardBox.y).toBeLessThan(400);
+      // Card should be in the viewport
+      expect(cardBox.y).toBeLessThan(600);
     }
   });
 
-  test('First capture not saved: draft strip in unified status slot', async ({ page }) => {
-    // Simulate capture creating draft
-    await page.evaluate((draftPath) => {
-      const existingPaths = (window as any).__test_existingPaths;
-      const fileContents = (window as any).__test_fileContents;
-      existingPaths.add(draftPath);
-      fileContents.set(draftPath, '{"version": 1, "apps": [{"name": "first-app"}]}');
-    }, DRAFT_PATH);
-
-    // Trigger capture completion with draft - use draftText for the E2E hook
-    await page.evaluate(() => {
-      (window as any).__endstate_e2e_openSaveProfileModal?.({ 
-        draftText: '{"version": 1, "apps": [{"name": "first-app"}]}', 
-        suggestedName: 'First Profile' 
-      });
-    });
-
-    // Close modal without saving (Cancel)
-    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
-    await page.click('[data-testid="profile-name-cancel"]');
-    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
-
-    // Expand Capture card to see draft strip (it's inside expanded content)
-    await page.click('[data-testid="overview-card-capture"]');
-    await expect(page.locator('[data-testid="capture-card-expanded-content"]')).toBeVisible();
-
-    // Draft strip should be visible in expanded Capture card
-    const draftCard = page.locator('[data-testid="capture-draft-card"]');
-    await expect(draftCard).toBeVisible();
-
-    // Verify it contains expected text
-    await expect(draftCard).toContainText('Capture finished');
-    await expect(draftCard).toContainText('Not saved yet');
-
-    // Verify Save and Discard buttons are present
-    await expect(page.locator('[data-testid="save-profile-button"]')).toBeVisible();
-    await expect(page.locator('[data-testid="discard-draft-button"]')).toBeVisible();
-  });
+  // DELETED: "First capture not saved: draft strip in unified status slot" —
+  // The overview-card-capture / capture-draft-card / discard-draft-button UI no longer
+  // exists. The save flow handles unsaved captures inline (scan again or save file).
 
   test('Save profile flow completes successfully', async ({ page }) => {
     // Old test: expected saved-profile-card testid and success strip position checks
@@ -716,98 +611,16 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     expect(count).toBeLessThanOrEqual(1);
   });
 
-  test('No profiles CTA appears before Recent Activity', async ({ page, baseURL }) => {
-    // Set up empty profiles state via addInitScript before navigation
-    // The beforeEach already ran, so we need to reconfigure and reload
-    await page.addInitScript(() => {
-      // Override list_manifest_files to return empty array
-      const originalInvoke = (window as any).__TAURI__?.core?.invoke;
-      if (originalInvoke) {
-        (window as any).__TAURI__.core.invoke = async (cmd: string, args?: any) => {
-          if (cmd === 'list_manifest_files') {
-            return []; // No profiles
-          }
-          return originalInvoke(cmd, args);
-        };
-      }
-    });
+  // DELETED: "No profiles CTA appears before Recent Activity" —
+  // The no-profile-prompt and overview-card-capture UI no longer exist.
+  // The intent landing page always shows both intent cards (save/setup)
+  // regardless of profile state.
 
-    // Reload to apply empty state
-    await page.goto(baseURL || '/');
-    await page.waitForLoadState('networkidle');
+  // DELETED: "Setup completion: View details in strip, no duplicate below" —
+  // The overview-card-apply UI no longer exists. Setup completion results
+  // are shown inline within the SetupFlow component.
 
-    // Both no-profile prompt and primary actions should be visible
-    const noProfilePrompt = page.locator('[data-testid="no-profile-prompt"]');
-    const captureCard = page.locator('[data-testid="overview-card-capture"]');
-    
-    await expect(noProfilePrompt).toBeVisible({ timeout: 5000 });
-    await expect(captureCard).toBeVisible();
-
-    // Get positions
-    const promptBox = await noProfilePrompt.boundingBox();
-    const captureBox = await captureCard.boundingBox();
-    
-    expect(promptBox).not.toBeNull();
-    expect(captureBox).not.toBeNull();
-    
-    if (promptBox && captureBox) {
-      // No-profile prompt should appear before (above) the Capture card
-      expect(promptBox.y).toBeLessThan(captureBox.y);
-    }
-  });
-
-  test('Setup completion: View details in strip, no duplicate below', async ({ page }) => {
-    // Simulate a setup completion with issues
-    await page.evaluate(() => {
-      // Trigger a setup action result
-      const event = new CustomEvent('test-setup-result', {
-        detail: {
-          action: 'setup',
-          status: 'error',
-          counts: {
-            installed: 5,
-            alreadyPresent: 3,
-            failed: 2,
-            skipped: 1
-          }
-        }
-      });
-      window.dispatchEvent(event);
-    });
-
-    // Expand Setup card
-    await page.click('[data-testid="overview-card-apply"]');
-    await expect(page.locator('[data-testid="overview-card-apply"]')).toBeVisible();
-
-    // Look for "View details" buttons in the Setup card context
-    const setupCard = page.locator('[data-testid="overview-card-apply"]');
-    const viewDetailsButtons = setupCard.locator('button:has-text("View details")');
-    
-    // Should have exactly 1 View details button (in the completion strip)
-    const count = await viewDetailsButtons.count();
-    expect(count).toBeLessThanOrEqual(1);
-  });
-
-  test('Verify start: scrolls to Check card', async ({ page }) => {
-    // Scroll to bottom first
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-
-    // Click Check card to expand it
-    const checkCard = page.locator('[data-testid="overview-card-verify"]');
-    await expect(checkCard).toBeVisible();
-    await checkCard.click();
-    await expect(page.locator('[data-testid="check-card-expanded-content"]')).toBeVisible();
-
-    // Get Check card position
-    const checkBox = await checkCard.boundingBox();
-    
-    expect(checkBox).not.toBeNull();
-    
-    if (checkBox) {
-      // Card should be in viewport (top should be visible)
-      const viewportHeight = await page.evaluate(() => window.innerHeight);
-      expect(checkBox.y).toBeGreaterThanOrEqual(0);
-      expect(checkBox.y).toBeLessThan(viewportHeight);
-    }
-  });
+  // DELETED: "Verify start: scrolls to Check card" —
+  // The overview-card-verify / check-card-expanded-content UI no longer exists.
+  // Verify is a sub-action within the SetupFlow component.
 });

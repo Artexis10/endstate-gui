@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { forceAdvancedMode, goToApplyPage, goToVerifyPage } from './helpers/ui-mode';
+import { forceAdvancedMode } from './helpers/ui-mode';
 import { installTauriMock } from './helpers/tauri-mock';
 
 /**
@@ -58,15 +58,16 @@ test.describe('Streaming Contract', () => {
     
     // CRITICAL ASSERTIONS:
     // 1. No error banner should be visible
-    await expect(page.locator('text=Engine Connection Issue')).not.toBeVisible();
+    await expect(page.locator('text=Engine not connected')).not.toBeVisible();
     await expect(page.locator('text=Tauri streaming not available')).not.toBeVisible();
     await expect(page.locator('text=running in web mode without mock')).not.toBeVisible();
-    
+
     // 2. App should be in ready state, not error state
     await expect(page.locator('text=Loading...')).not.toBeVisible();
-    
-    // 3. Navigation should work - navigate to Apply page
-    await goToApplyPage(page);
+
+    // 3. Navigation should work - intent cards should be clickable
+    await expect(page.locator('[data-testid="intent-save"]')).toBeVisible();
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible();
   });
 
   test('Streaming invoke throws - error banner appears', async ({ page, baseURL }) => {
@@ -83,16 +84,21 @@ test.describe('Streaming Contract', () => {
     
     await page.goto(baseURL || '/');
     
-    await page.waitForSelector('text=Engine Connection Issue', { timeout: 15000 });
-    
+    // Wait for the error state to propagate to the UI.
+    // The error banner renders inside persistent flow containers (display:none) AND the landing page.
+    // The most reliable signal is that the intent cards become disabled.
+    const intentSave = page.locator('[data-testid="intent-save"]');
+    await expect(intentSave).toBeVisible({ timeout: 15000 });
+    await expect(intentSave).toBeDisabled({ timeout: 15000 });
+
     // CRITICAL ASSERTIONS:
-    // 1. Error banner should be visible for real failures
-    await expect(page.locator('text=Engine Connection Issue')).toBeVisible();
-    
+    // 1. Error state is active - intent cards are disabled
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeDisabled();
+
     // 2. UI should remain navigable (non-blocking error)
-    // Old assertion: expected nav buttons that don't exist in current UI
-    // New contract: verify Settings button is visible (always present in nav)
-    await expect(page.locator('button:has-text("Settings")')).toBeVisible();
+    // Both intent cards are still rendered (visible but disabled)
+    await expect(page.locator('[data-testid="intent-save"]')).toBeVisible();
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible();
   });
 
   test('Verify with missing apps shows results, not error banner', async ({ page, baseURL }) => {
@@ -193,10 +199,11 @@ test.describe('Streaming Contract', () => {
     
     // CRITICAL ASSERTIONS:
     // Domain failure (VERIFY_FAILED) should NOT show error banner
-    await expect(page.locator('text=Engine Connection Issue')).not.toBeVisible();
+    await expect(page.locator('text=Engine not connected')).not.toBeVisible();
     await expect(page.locator('text=Tauri streaming not available')).not.toBeVisible();
-    
-    // App should be usable - navigate to Apply page
-    await goToApplyPage(page);
+
+    // App should be usable - intent cards should be clickable
+    await expect(page.locator('[data-testid="intent-save"]')).toBeVisible();
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible();
   });
 });

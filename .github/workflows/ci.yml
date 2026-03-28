@@ -35,10 +35,6 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1/3, 2/3, 3/3]
 
     steps:
       - uses: actions/checkout@v4
@@ -67,14 +63,14 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      - name: Run E2E tests (shard ${{ matrix.shard }})
-        run: npx playwright test --shard=${{ matrix.shard }}
+      - name: Run E2E tests
+        run: npx playwright test
 
       - name: Upload Playwright artifacts on failure
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report-${{ strategy.job-index }}
+          name: playwright-report
           path: |
             playwright-report/
             test-results/

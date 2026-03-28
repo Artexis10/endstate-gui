@@ -64,36 +64,32 @@ test.describe('UX Hardening - Folder Modal', () => {
 
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    
+
     // Wait for app to be ready - use heading role which is stable across UI modes
     await expect(page.getByRole('heading', { name: 'Endstate' })).toBeVisible({ timeout: 5000 });
-    
-    // First, open the Manage Profiles modal via the settings/gear button
-    // The "Open folder" button is inside ManageProfilesModal
-    const manageProfilesButton = page.locator('[data-testid="manage-profiles-button"]');
-    await expect(manageProfilesButton).toBeVisible({ timeout: 3000 });
-    await manageProfilesButton.click();
-    
-    // Wait for ManageProfilesModal to open
-    const manageModal = page.locator('[role="dialog"]').filter({ hasText: 'Manage Profiles' });
-    await expect(manageModal).toBeVisible({ timeout: 3000 });
-    
-    // Click "Open folder" button (specific text, inside the modal)
-    const openFolderButton = manageModal.getByRole('button', { name: /Open folder/i });
-    await expect(openFolderButton).toBeVisible();
+
+    // Navigate to setup flow where the "Open folder" button lives
+    const intentSetup = page.locator('[data-testid="intent-setup"]');
+    await expect(intentSetup).toBeVisible({ timeout: 5000 });
+    await intentSetup.click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+
+    // Click "Open folder" button in the setup flow's browse phase
+    const openFolderButton = page.getByRole('button', { name: /Open folder/i });
+    await expect(openFolderButton).toBeVisible({ timeout: 3000 });
     await openFolderButton.click();
-    
+
     // Folder path modal should appear (web mode fallback)
     const folderModal = page.locator('[data-testid="folder-path-modal"]');
     await expect(folderModal).toBeVisible({ timeout: 3000 });
-    
+
     // Modal should show the path input
     const pathInput = folderModal.locator('[data-testid="folder-path-input"]');
     await expect(pathInput).toBeVisible();
-    
+
     // Verify no alert was triggered
     expect(alertFired).toBe(false);
-    
+
     // Close button should work (use .first() to avoid matching X button)
     await folderModal.getByRole('button', { name: 'Close' }).first().click();
     await expect(folderModal).not.toBeVisible();

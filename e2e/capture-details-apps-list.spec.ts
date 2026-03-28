@@ -4,18 +4,17 @@ import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * E2E Regression Test: Capture Details Apps List
- * 
- * Prevents regression where Capture Details modal shows
- * "No applications were detected on this computer."
- * even when appsIncluded exists in the envelope.
- * 
- * This test exercises the same UI wiring as production:
- * 1. actionResultByAction["capture"] is populated with appEvents from appsIncluded
- * 2. Clicking Details opens ActionDetailsModal with detailsAction="capture"
- * 3. Modal renders apps list (not fallback text)
- * 
- * Uses direct state injection to test the modal rendering logic deterministically,
- * matching the pattern used by other E2E tests in this repo.
+ *
+ * Prevents regression where capture results show no apps even when
+ * appsIncluded exists in the envelope.
+ *
+ * Updated for ADR-001 intent-based UI:
+ * 1. Navigate to Save flow via intent-save card
+ * 2. Start scan via save-flow-start-scan
+ * 3. After scan completes, verify apps are shown inline in the save flow
+ *
+ * The old ActionDetailsModal path (overview-card-capture -> capture-details-button)
+ * has been replaced by inline app rendering in the SaveFlow component.
  */
 test.describe('Capture Details Apps List - Regression Prevention', () => {
   // Fixture apps matching real engine schema
@@ -29,167 +28,85 @@ test.describe('Capture Details Apps List - Regression Prevention', () => {
 
   test.beforeEach(async ({ page, baseURL }) => {
     await forceAdvancedMode(page);
-    await installTauriMock(page);
+    await installTauriMock(page, {
+      allowUnknownInvokes: true,
+    });
 
-    await page.addInitScript(() => {
+    await page.addInitScript((fixtureApps: typeof FIXTURE_APPS) => {
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runEndstateStreaming: async (_settings: any, command: string) => {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function, options?: any) => {
           if (command === 'capabilities') {
-            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } } };
+            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } }, ndjsonEvents: [] };
           }
           if (command === 'report') {
-            return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
+            return { exitCode: 0, envelope: { success: true, data: { hasState: false } }, ndjsonEvents: [] };
           }
-          return { exitCode: 0, envelope: { success: true, data: {} } };
+          if (command === 'capture') {
+            // Return envelope with captured apps
+            const envelope = {
+              success: true,
+              data: {
+                outputPath: 'C:\\test\\profiles\\captured.jsonc',
+                counts: { totalFound: fixtureApps.length, included: fixtureApps.length, skipped: 0 },
+                appsIncluded: fixtureApps.map((a: any) => ({ id: a.id, source: a.source })),
+              },
+            };
+            return { exitCode: 0, envelope, ndjsonEvents: [] };
+          }
+          return { exitCode: 0, envelope: { success: true, data: {} }, ndjsonEvents: [] };
         }
       };
-    });
+    }, FIXTURE_APPS);
 
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
   });
 
-  test('REGRESSION: Capture Details shows apps list when appsIncluded exists (not fallback text)', async ({ page }) => {
-    // Inject capture result state (simulates handleCaptureFromOverview completing)
-    await page.evaluate((fixtureApps) => {
-      // Build appEvents from appsIncluded (same as buildCaptureActionResult)
-      const appEvents = fixtureApps.map((app: any) => ({
-        app: app.id,
-        action: 'Captured',
-        timestamp: Date.now(),
-        statusKey: 'detected',
-        phase: 'capture',
-      }));
+  test('REGRESSION: Capture results show apps list when appsIncluded exists (not empty state)', async ({ page }) => {
+    // Navigate to Save flow via intent landing
+    await page.click('[data-testid="intent-save"]');
 
-      // Inject the capture result into the app state
-      (window as any).__endstate_e2e_setCaptureResult?.({
-        action: 'capture',
-        status: 'success',
-        summary: `${fixtureApps.length} apps captured`,
-        timestamp: new Date().toISOString(),
-        counts: { total: fixtureApps.length },
-        appEvents,
-      });
-    }, FIXTURE_APPS);
+    // Wait for Save flow to appear
+    await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
 
-    // Trigger save profile flow to make Details button appear
-    await page.evaluate(() => {
-      const manifest = {
-        version: 1,
-        apps: [
-          { name: '7zip.7zip', source: 'winget' },
-          { name: 'Git.Git', source: 'winget' },
-          { name: 'Docker.DockerDesktop', source: 'winget' },
-          { name: 'Microsoft.VSCode', source: 'winget' },
-          { name: 'Notepad++.Notepad++', source: 'winget' },
-        ],
-      };
-      (window as any).__endstate_e2e_openSaveProfileModal?.({
-        draftText: JSON.stringify(manifest, null, 2),
-        suggestedName: 'Test Profile',
-      });
-    });
+    // Start scan
+    await page.click('[data-testid="save-flow-start-scan"]');
 
-    // Wait for profile name modal to appear
-    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
+    // Wait for scan to complete - "Scan complete" text appears
+    await expect(page.locator('text=Scan complete')).toBeVisible({ timeout: 15000 });
 
-    // Save the profile
-    await page.locator('[data-testid="profile-name-input"]').fill('Test Profile');
-    await page.click('[data-testid="profile-name-save"]');
-
-    // Wait for modal to close (success animation completes)
-    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
-
-    // Expand Capture card to see the success strip with Details button
-    const captureCard = page.locator('[data-testid="overview-card-capture"]');
-    await captureCard.click();
-
-    // Click the real Details button
-    const detailsButton = page.locator('[data-testid="capture-details-button"]');
-    await expect(detailsButton).toBeVisible({ timeout: 5000 });
-    await detailsButton.click();
-
-    // Verify modal is open with correct title
-    const modal = page.locator('[data-testid="action-details-modal"]');
-    await expect(modal).toBeVisible({ timeout: 5000 });
-    await expect(modal.locator('text=Capture Details')).toBeVisible();
-
-    // CRITICAL ASSERTION - Apps list should be visible
-    const appsList = page.locator('[data-testid="action-details-apps-list"]');
-    await expect(appsList).toBeVisible({ timeout: 5000 });
+    // CRITICAL ASSERTION: Apps should be visible in the results
+    // The save flow shows "Found N apps" text
+    await expect(page.locator(`text=Found ${FIXTURE_APPS.length} apps`)).toBeVisible();
 
     // Verify at least one fixture app ID is visible in the list
-    await expect(appsList.locator('text=7zip.7zip')).toBeVisible();
+    // The SaveFlow uses formatAppIdentity which renders the app ID
+    await expect(page.locator('text=7zip.7zip')).toBeVisible();
 
-    // CRITICAL ASSERTION - Fallback text should NOT be visible
-    const fallback = page.locator('[data-testid="action-details-fallback"]');
-    await expect(fallback).not.toBeVisible();
-
-    // Also verify the specific fallback text is not present anywhere in the modal
-    await expect(modal.locator('text=No applications were detected on this computer.')).not.toBeVisible();
-    await expect(modal.locator('text=Apps were captured but the list is unavailable.')).not.toBeVisible();
+    // CRITICAL ASSERTION: The filter pill (button) showing app count should be visible
+    await expect(page.locator(`button:has-text("${FIXTURE_APPS.length} apps")`)).toBeVisible();
   });
 
-  test('Capture Details shows correct app count in header', async ({ page }) => {
-    // Inject capture result state
-    await page.evaluate((fixtureApps) => {
-      const appEvents = fixtureApps.map((app: any) => ({
-        app: app.id,
-        action: 'Captured',
-        timestamp: Date.now(),
-        statusKey: 'detected',
-        phase: 'capture',
-      }));
+  test('Capture results show correct app count after scan', async ({ page }) => {
+    // Navigate to Save flow via intent landing
+    await page.click('[data-testid="intent-save"]');
 
-      (window as any).__endstate_e2e_setCaptureResult?.({
-        action: 'capture',
-        status: 'success',
-        summary: `${fixtureApps.length} apps captured`,
-        timestamp: new Date().toISOString(),
-        counts: { total: fixtureApps.length },
-        appEvents,
-      });
-    }, FIXTURE_APPS);
+    // Wait for Save flow to appear
+    await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
 
-    // Trigger save profile flow to make Details button appear
-    await page.evaluate(() => {
-      const manifest = {
-        version: 1,
-        apps: [
-          { name: '7zip.7zip', source: 'winget' },
-          { name: 'Git.Git', source: 'winget' },
-          { name: 'Docker.DockerDesktop', source: 'winget' },
-          { name: 'Microsoft.VSCode', source: 'winget' },
-          { name: 'Notepad++.Notepad++', source: 'winget' },
-        ],
-      };
-      (window as any).__endstate_e2e_openSaveProfileModal?.({
-        draftText: JSON.stringify(manifest, null, 2),
-        suggestedName: 'Test Profile 2',
-      });
-    });
+    // Start scan
+    await page.click('[data-testid="save-flow-start-scan"]');
 
-    // Wait for profile name modal and save
-    await expect(page.locator('[data-testid="profile-name-modal"]')).toBeVisible({ timeout: 3000 });
-    await page.locator('[data-testid="profile-name-input"]').fill('Test Profile 2');
-    await page.click('[data-testid="profile-name-save"]');
-    await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible({ timeout: 3000 });
+    // Wait for scan to complete
+    await expect(page.locator('text=Scan complete')).toBeVisible({ timeout: 15000 });
 
-    // Expand Capture card and click Details button
-    const captureCard = page.locator('[data-testid="overview-card-capture"]');
-    await captureCard.click();
+    // Verify the summary shows correct count (5 apps)
+    await expect(page.locator(`text=Found ${FIXTURE_APPS.length} apps`)).toBeVisible();
 
-    const detailsButton = page.locator('[data-testid="capture-details-button"]');
-    await expect(detailsButton).toBeVisible({ timeout: 5000 });
-    await detailsButton.click();
+    // Verify the filter pill shows correct count
+    await expect(page.locator(`button:has-text("${FIXTURE_APPS.length} apps")`)).toBeVisible();
 
-    const modal = page.locator('[data-testid="action-details-modal"]');
-    await expect(modal).toBeVisible({ timeout: 5000 });
-
-    // Verify the summary shows correct count (5 apps captured)
-    await expect(modal.locator('text=5 apps captured')).toBeVisible();
-
-    // Verify the apps list header shows correct count
-    await expect(modal.locator('text=Apps (5)')).toBeVisible();
+    // Verify the Save file button is available
+    await expect(page.locator('[data-testid="save-flow-save-file"]')).toBeVisible();
   });
 });

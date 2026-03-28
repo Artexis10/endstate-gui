@@ -110,31 +110,29 @@ test.describe('Error Retry Flow - UX Contracts', () => {
   });
 
   test('Apply modal shows error state with retry capability', async ({ page }) => {
-    // App starts on Overview - navigate to Apply page
+    // Navigate to Setup flow
     await goToApplyPage(page);
-    
-    // Profile is pre-selected via seedProfileSettings
-    // Preview changes button should be visible
-    await expect(page.locator('button:has-text("Preview changes")')).toBeVisible();
+
+    // Setup flow should be visible with profile list or drop zone
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible();
   });
 
   test('Capture page loads with button enabled', async ({ page }) => {
-    // Navigate to Capture page
+    // Navigate to Save/Capture flow
     await goToCapturePage(page);
-    
-    // Verify Capture button exists and is enabled
-    const captureButton = page.locator('main >> button:has-text("Capture computer")');
-    await expect(captureButton).toBeVisible();
-    await expect(captureButton).toBeEnabled();
+
+    // In the intent-based design, the save flow has a "Start scan" button
+    const scanButton = page.locator('[data-testid="save-flow-start-scan"]');
+    await expect(scanButton).toBeVisible();
+    await expect(scanButton).toBeEnabled();
   });
 
   test('Apply page shows profile selector', async ({ page }) => {
-    // App starts on Overview - navigate to Apply page
+    // Navigate to Setup flow
     await goToApplyPage(page);
-    
-    // Profile is pre-selected via seedProfileSettings
-    // Preview changes button should be visible (indicates profile is selected)
-    await expect(page.locator('button:has-text("Preview changes")')).toBeVisible();
+
+    // Setup flow should be visible (contains profile list or drop zone)
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible();
   });
 
   test('Profile selection persists in localStorage', async ({ page }) => {

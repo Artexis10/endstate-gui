@@ -1,33 +1,22 @@
 import { test, expect } from '@playwright/test';
-import { forceAdvancedMode, seedProfileSettings, goToApplyPage } from './helpers/ui-mode';
 import { installTauriMock } from './helpers/tauri-mock';
 
 /**
- * E2E tests for Setup Details modal UX improvements:
- * - Badge text not clipped (shows "Will be installed" not "WOULD I")
- * - Close button shows "Close" not "Done"
- * 
- * These tests use Advanced mode for simpler navigation to the Apply page.
+ * E2E tests for Setup Details UX:
+ * - Preview results show inline in SetupFlow
+ * - Status labels are readable and not truncated
+ * - Failure states render correctly
  */
 
-test.describe('Apply Modal UX - Button Labels', () => {
+test.describe('Setup Flow UX - Already Installed Results', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', true);
-
     await installTauriMock(page, {
-      enableEventListeners: true,
-      invoke: {
-        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
-        read_text_file: () => '{"version": 1, "apps": [{"name": "App1"}]}',
-        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 1 } }),
-        check_file_exists: () => true,
-      }
+      initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
     });
 
     await page.addInitScript(() => {
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function, options?: any) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }
@@ -35,85 +24,53 @@ test.describe('Apply Modal UX - Button Labels', () => {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
           }
           if (command === 'apply') {
-            // All apps already installed - simple success case
-            onEvent({ type: 'stdout', data: '[SKIP] App1 - already installed\n' });
-            
-            return { 
-              exitCode: 0, 
-              envelope: { 
+            const ndjsonItems = [
+              { event: 'item', id: 'App1', driver: 'winget', status: 'present', reason: 'already_installed', name: 'App1' },
+            ];
+            for (const item of ndjsonItems) {
+              if (options?.onNdjsonEvent) options.onNdjsonEvent(item);
+              if (onEvent) onEvent({ type: 'stdout', data: JSON.stringify(item) + '\n' });
+            }
+            return {
+              exitCode: 0,
+              envelope: {
                 success: true,
-                data: { 
-                  counts: {
-                    total: 1,
-                    installed: 0,
-                    alreadyInstalled: 1,
-                    skippedFiltered: 0,
-                    failed: 0
-                  },
-                  items: [
-                    { id: 'App1', driver: 'winget', status: 'skipped', reason: 'already_installed' }
-                  ]
-                } 
-              } 
+                data: {
+                  counts: { installed: 0, alreadyInstalled: 1, failed: 0 },
+                  items: ndjsonItems,
+                }
+              },
+              ndjsonEvents: ndjsonItems,
             };
           }
           return { exitCode: 0, envelope: { success: true, data: {} } };
         }
       };
     });
-    
+
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await goToApplyPage(page);
   });
 
-  test('Details modal shows "Close" button not "Done"', async ({ page }) => {
-    // Old test: expected modal after Preview changes click
-    // New contract: results appear in expanded card, details modal opens via View details button
-    
-    // Click Preview changes - results appear in expanded card
-    await page.click('button:has-text("Preview changes")');
-    
-    // Wait for completion in expanded card
-    await expect(page.locator('text=/Completed/i')).toBeVisible({ timeout: 10000 });
-    
-    // Click View details to open the details modal
-    const viewDetailsButton = page.locator('button:has-text("View details")');
-    if (await viewDetailsButton.isVisible()) {
-      await viewDetailsButton.click();
-      
-      // Wait for details modal
-      const modal = page.locator('[role="dialog"]');
-      await expect(modal).toBeVisible({ timeout: 5000 });
-      
-      // Should have "Close" button (not "Done")
-      await expect(modal.locator('button:has-text("Close")')).toBeVisible();
-      
-      // Should NOT have "Done" button
-      const doneButtons = await modal.locator('button').filter({ hasText: /^Done$/ }).count();
-      expect(doneButtons).toBe(0);
-    }
+  test('Preview results show inline with readable status labels', async ({ page }) => {
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+    await page.locator('[data-testid="profile-card-test-profile"]').click();
+    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/already present/i').first()).toBeVisible();
+    await expect(page.locator('text=App1').first()).toBeVisible();
   });
 });
 
-test.describe('Apply Modal UX - Badge Text', () => {
+test.describe('Setup Flow UX - Would Install Results', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', true);
-
     await installTauriMock(page, {
-      enableEventListeners: true,
-      invoke: {
-        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
-        read_text_file: () => '{"version": 1, "apps": [{"name": "TestApp.App"}]}',
-        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 1 } }),
-        check_file_exists: () => true,
-      }
+      initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
     });
 
     await page.addInitScript(() => {
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function, options?: any) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }
@@ -121,86 +78,55 @@ test.describe('Apply Modal UX - Badge Text', () => {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
           }
           if (command === 'apply') {
-            // Dry run with would_install items
-            onEvent({ type: 'stdout', data: '[PLAN] Would install TestApp.App\n' });
-            
-            return { 
-              exitCode: 0, 
-              envelope: { 
-                success: true, 
-                data: { 
-                  dryRun: true,
-                  counts: {
-                    total: 1,
-                    installed: 0,
-                    alreadyInstalled: 0,
-                    skippedFiltered: 0,
-                    failed: 0
-                  },
-                  items: [
-                    { id: 'TestApp.App', driver: 'winget', status: 'ok', reason: 'would_install' }
-                  ]
-                } 
-              } 
+            const ndjsonItems = [
+              { event: 'item', id: 'TestApp.App', driver: 'winget', status: 'to_install', reason: 'would_install', name: 'TestApp' },
+            ];
+            for (const item of ndjsonItems) {
+              if (options?.onNdjsonEvent) options.onNdjsonEvent(item);
+              if (onEvent) onEvent({ type: 'stdout', data: JSON.stringify(item) + '\n' });
+            }
+            return {
+              exitCode: 0,
+              envelope: {
+                success: true,
+                data: {
+                  counts: { installed: 1, alreadyInstalled: 0, failed: 0 },
+                  items: ndjsonItems,
+                }
+              },
+              ndjsonEvents: ndjsonItems,
             };
           }
           return { exitCode: 0, envelope: { success: true, data: {} } };
         }
       };
     });
-    
+
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await goToApplyPage(page);
   });
 
-  test('badge shows full "Will be installed" text, not truncated', async ({ page }) => {
-    // Old test: expected modal after Preview changes click
-    // New contract: results appear in expanded card, badge text verified in details modal
-    
-    // Click Preview changes - results appear in expanded card
-    await page.click('button:has-text("Preview changes")');
-    
-    // Wait for completion in expanded card
-    await expect(page.locator('text=/Completed/i')).toBeVisible({ timeout: 10000 });
-    
-    // Click View details to open the details modal
-    const viewDetailsButton = page.locator('button:has-text("View details")');
-    if (await viewDetailsButton.isVisible()) {
-      await viewDetailsButton.click();
-      
-      // Wait for details modal
-      const modal = page.locator('[role="dialog"]');
-      await expect(modal).toBeVisible({ timeout: 5000 });
-      
-      // Badge should show full text "Will be installed" - not truncated
-      // The badge text should be visible somewhere in the modal
-      await expect(modal.locator('text=/Will be installed|Already present/i')).toBeVisible({ timeout: 3000 });
-      
-      // Should NOT be truncated to "WOULD I" or similar
-      await expect(modal.locator('text=WOULD I')).not.toBeVisible();
-    }
+  test('preview shows "to install" text without truncation', async ({ page }) => {
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+    await page.locator('[data-testid="profile-card-test-profile"]').click();
+    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/to install/i').first()).toBeVisible();
+    // Should NOT show truncated status text
+    await expect(page.locator('text=WOULD I')).not.toBeVisible();
+    await expect(page.locator('[data-testid="setup-flow-apply"]')).toBeVisible();
   });
 });
 
-test.describe('Apply Modal UX - Failure Status', () => {
+test.describe('Setup Flow UX - Failure Status', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', true);
-
     await installTauriMock(page, {
-      enableEventListeners: true,
-      invoke: {
-        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
-        read_text_file: () => '{"version": 1, "apps": [{"name": "FailingApp.App"}]}',
-        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 1 } }),
-        check_file_exists: () => true,
-      }
+      initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
     });
 
     await page.addInitScript(() => {
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
+        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function, options?: any) => {
           if (command === 'capabilities') {
             return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'report'] } } };
           }
@@ -208,52 +134,42 @@ test.describe('Apply Modal UX - Failure Status', () => {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
           }
           if (command === 'apply') {
-            // Simulate a failed apply (works for both preview and actual apply)
-            onEvent({ type: 'stdout', data: '[FAIL] FailingApp.App - installation failed\n' });
-            
-            return { 
-              exitCode: 1, 
-              envelope: { 
-                success: true, // success: true with failed counts - UI checks counts.failed
+            const ndjsonItems = [
+              { event: 'item', id: 'FailingApp.App', driver: 'winget', status: 'failed', reason: 'install_failed', name: 'Failing App', message: 'Package not found' },
+            ];
+            for (const item of ndjsonItems) {
+              if (options?.onNdjsonEvent) options.onNdjsonEvent(item);
+              if (onEvent) onEvent({ type: 'stdout', data: JSON.stringify(item) + '\n' });
+            }
+            return {
+              exitCode: 1,
+              envelope: {
+                success: true,
                 error: null,
-                data: { 
-                  counts: {
-                    total: 1,
-                    installed: 0,
-                    alreadyInstalled: 0,
-                    skippedFiltered: 0,
-                    failed: 1
-                  },
-                  items: [
-                    { id: 'FailingApp.App', driver: 'winget', status: 'failed', reason: 'install_failed', message: 'Package not found' }
-                  ]
-                } 
-              } 
+                data: {
+                  counts: { installed: 0, alreadyInstalled: 0, failed: 1 },
+                  items: ndjsonItems,
+                }
+              },
+              ndjsonEvents: ndjsonItems,
             };
           }
           return { exitCode: 0, envelope: { success: true, data: {} } };
         }
       };
     });
-    
+
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    await goToApplyPage(page);
   });
 
-  test('Apply shows completion status after preview', async ({ page }) => {
-    // Old test: expected modal with failure status after Preview changes click
-    // New contract: results appear in expanded card with completion indication
-    
-    // Click Preview changes - results appear in expanded card
-    await page.click('button:has-text("Preview changes")');
-    
-    // Wait for completion in expanded card
-    await expect(page.locator('text=/Completed/i')).toBeVisible({ timeout: 10000 });
-    
-    // Verify the expanded card shows result controls (Run setup or similar)
-    // This confirms the preview completed and UI is ready for next action
-    const hasResultControls = await page.locator('button:has-text("Run setup"), button:has-text("View details"), button:has-text("Close")').first().isVisible();
-    expect(hasResultControls || true).toBe(true); // At minimum, completion message is shown
+  test('Preview shows completion even when items fail', async ({ page }) => {
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+    await page.locator('[data-testid="profile-card-test-profile"]').click();
+    // Should reach a terminal state without hanging
+    await expect(
+      page.locator('text=Preview complete').or(page.locator('text=/failed/i')).first()
+    ).toBeVisible({ timeout: 10000 });
   });
 });

@@ -2,20 +2,16 @@ import { test, expect } from '@playwright/test';
 import { installTauriMock } from './helpers/tauri-mock';
 
 /**
- * Accordion Navigation Regression Test
- * 
- * Verifies that the "Set up computer" accordion card remains interactive
- * after navigating away from Overview and returning.
- * 
- * Bug scenario:
- * 1. Expand "Set up computer" card
- * 2. Click "Preview changes" (runs preview, shows result)
- * 3. Click "View details" (opens modal)
- * 4. Navigate to Report page via "View all" in Recent Activity
- * 5. Return to Overview
- * 6. Accordion should be expandable/collapsible again
+ * Flow Navigation Regression Test (replaces Accordion Navigation test)
+ *
+ * The app was refactored from accordion-based OverviewScreen to
+ * IntentLanding + SaveFlow/SetupFlow. There are no accordions.
+ *
+ * This test verifies that navigating between intent flows (save/setup)
+ * and settings works correctly, and that flow state is preserved when
+ * navigating back to the landing page and re-entering a flow.
  */
-test.describe('Accordion Navigation Bug', () => {
+test.describe('Flow Navigation', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await installTauriMock(page, {
       invoke: {
@@ -35,7 +31,7 @@ test.describe('Accordion Navigation Bug', () => {
     });
 
     await page.addInitScript(() => {
-      // Mock engine with preview support
+      // Mock engine with capture and apply support
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function) => {
           if (command === 'capabilities') {
@@ -44,10 +40,23 @@ test.describe('Accordion Navigation Bug', () => {
           if (command === 'report') {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } } };
           }
+          if (command === 'capture') {
+            onEvent({ type: 'stdout', data: '[OK] Discord.Discord (driver: winget)\n' });
+            return {
+              exitCode: 0,
+              envelope: {
+                success: true,
+                data: {
+                  outputPath: 'C:\\test\\setup.jsonc',
+                  counts: { totalFound: 1, included: 1, skipped: 0 },
+                  appsIncluded: [{ id: 'Discord.Discord', name: 'Discord', driver: 'winget' }],
+                }
+              }
+            };
+          }
           if (command === 'apply') {
             const isDryRun = args.includes('--dry-run');
             if (isDryRun) {
-              // Preview response
               onEvent({ type: 'stdout', data: '[OK] Discord.Discord - already installed\n' });
               return {
                 exitCode: 0,
@@ -66,154 +75,96 @@ test.describe('Accordion Navigation Bug', () => {
           return { exitCode: 0, envelope: { success: true, data: {} } };
         }
       };
-
-      // Seed lifecycle state to show Recent Activity section
-      const lifecycleState = {
-        lastCapture: {
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          success: true,
-          summary: { total: 10 }
-        }
-      };
-      localStorage.setItem('endstate-lifecycle-state', JSON.stringify(lifecycleState));
-      
-      // Seed settings with selected profile (required for Preview changes button to be enabled)
-      const settings = {
-        engineMode: 'path',
-        engineScriptPath: '',
-        customProfilesDirectory: '',
-        lastSelectedProfile: 'test-profile',
-        lastSelectedProfilePath: 'C:\\test\\profiles\\test-profile.jsonc',
-        dryRunEnabled: false,
-      };
-      localStorage.setItem('endstate-gui-settings', JSON.stringify(settings));
-      
-      // Ensure Default UI mode (not Advanced)
-      localStorage.setItem('endstate-ui-mode', 'default');
     });
 
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
   });
 
-  test('Set up computer accordion remains interactive after navigation to Report and back', async ({ page }) => {
-    // Wait for Overview screen to load (shows "Endstate" heading in Default mode)
+  test('can navigate from landing to save flow and back', async ({ page }) => {
+    // Verify we're on the intent landing page
     await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="intent-save"]')).toBeVisible();
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible();
 
-    // Verify we're in Default mode - "Set up computer" should be a card, not a nav item
-    const setupCard = page.locator('text=Set up computer').first();
-    await expect(setupCard).toBeVisible();
+    // Click "Save this computer" to enter save flow
+    await page.locator('[data-testid="intent-save"]').click();
+    await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
 
-    // Step 1: Expand "Set up computer" card by clicking it
-    await setupCard.click();
+    // Verify save flow content is shown
+    await expect(page.locator('h2:has-text("Save this computer")')).toBeVisible();
 
-    // Verify expanded content is visible - look for "Preview changes" button (the action button)
-    const previewChangesBtn = page.getByRole('button', { name: 'Preview changes' });
-    await expect(previewChangesBtn).toBeVisible({ timeout: 3000 });
-    // Wait for button to be enabled (profile discovery may take time)
-    await expect(previewChangesBtn).toBeEnabled({ timeout: 10000 });
+    // Navigate back to landing via back button
+    await page.locator('[data-testid="save-flow-back"]').click();
 
-    // Step 2: Click "Preview changes" button
-    await previewChangesBtn.click();
-
-    // Wait for preview to complete - should show success state
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
-
-    // Step 3: Click "Details" to open modal
-    await page.click('button:has-text("Details")');
-
-    // Verify modal is open
-    const dialog = page.locator('[role="dialog"]');
-    await expect(dialog).toBeVisible({ timeout: 3000 });
-
-    // Close the modal (button changed from "Done" to "Close")
-    await page.click('[role="dialog"] button:has-text("Close")');
-    await expect(dialog).not.toBeVisible({ timeout: 3000 });
-
-    // Step 4: Navigate to Report page via "View all" in Recent Activity
-    await page.click('button:has-text("View all")');
-
-    // Verify we're on Report page
-    await expect(page.locator('h1:has-text("Report")')).toBeVisible({ timeout: 5000 });
-
-    // Step 5: Navigate back to Overview (use Back button or nav)
-    // In Default mode, there should be a Back button
-    const backButton = page.locator('button:has-text("Back")');
-    if (await backButton.isVisible()) {
-      await backButton.click();
-    } else {
-      // Fallback: use browser back or navigate via other means
-      await page.goBack();
-    }
-
-    // Verify we're back on Overview
+    // Verify we're back on intent landing
     await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
-
-    // Step 6: Verify accordion is interactive - the success result should still be showing
-    // This tests that action results persist across navigation (correct behavior)
-    const setupCardAfterNav = page.locator('[data-testid="overview-card-apply"]');
-    await expect(setupCardAfterNav).toBeVisible();
-    
-    // Expand the card
-    await setupCardAfterNav.click();
-    await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible();
-    
-    // Verify the success result is still showing (action results persist across navigation)
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 3000 });
-    
-    // Verify result controls are present (Details, Dismiss, Apply changes buttons)
-    await expect(page.getByRole('button', { name: 'Details' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Dismiss' })).toBeVisible();
-    
-    // Test passes - accordion is interactive and result persists after navigation
+    await expect(page.locator('[data-testid="intent-save"]')).toBeVisible();
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible();
   });
 
-  test('Accordion state resets properly when navigating away during action result', async ({ page }) => {
-    // Wait for Overview screen
+  test('can navigate from landing to setup flow and back', async ({ page }) => {
+    // Verify intent landing
     await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 10000 });
 
-    // Expand "Set up computer" card
-    const setupCard = page.locator('text=Set up computer').first();
-    await setupCard.click();
-    const previewChangesBtn = page.getByRole('button', { name: 'Preview changes' });
-    await expect(previewChangesBtn).toBeVisible({ timeout: 3000 });
-    // Wait for button to be enabled (profile discovery may take time)
-    await expect(previewChangesBtn).toBeEnabled({ timeout: 10000 });
+    // Click "Set up this computer" to enter setup flow
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
 
-    // Run preview
-    await previewChangesBtn.click();
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
+    // Verify setup flow content is shown
+    await expect(page.locator('h2:has-text("Set up this computer")')).toBeVisible();
 
-    // Navigate away while result is showing (without dismissing)
-    await page.click('button:has-text("View all")');
-    await expect(page.locator('h1:has-text("Report")')).toBeVisible({ timeout: 5000 });
+    // Navigate back to landing
+    await page.locator('[data-testid="setup-flow-back"]').click();
 
-    // Navigate back
-    const backButton = page.locator('button:has-text("Back")');
-    if (await backButton.isVisible()) {
-      await backButton.click();
-    } else {
-      await page.goBack();
-    }
+    // Verify we're back on intent landing
+    await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
+  });
 
-    // Verify Overview is shown
+  test('can navigate between save and setup flows via landing', async ({ page }) => {
+    await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 10000 });
+
+    // Enter save flow
+    await page.locator('[data-testid="intent-save"]').click();
+    await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
+
+    // Go back to landing
+    await page.locator('[data-testid="save-flow-back"]').click();
     await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
 
-    // Card should be interactive - the success result should still be showing
-    const setupCardAfterNav = page.locator('[data-testid="overview-card-apply"]');
-    await expect(setupCardAfterNav).toBeVisible();
-    
-    // Expand the card
-    await setupCardAfterNav.click();
-    await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible();
-    
-    // Verify the success result is still showing (action results persist across navigation)
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 3000 });
-    
-    // Verify result controls are present
-    await expect(page.getByRole('button', { name: 'Details' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Dismiss' })).toBeVisible();
-    
-    // Test passes - accordion state persists correctly after navigation
+    // Enter setup flow
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+
+    // Go back to landing
+    await page.locator('[data-testid="setup-flow-back"]').click();
+    await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('navigating to settings from a flow and back preserves app state', async ({ page }) => {
+    await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 10000 });
+
+    // Enter a flow first - the settings button is in the topbar on flow pages
+    // (the topbar is hidden on the landing page)
+    await page.locator('[data-testid="intent-save"]').click();
+    await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
+
+    // Navigate to settings via the settings button (visible on flow pages)
+    const settingsBtn = page.locator('button[title="Settings"]');
+    await expect(settingsBtn).toBeVisible({ timeout: 3000 });
+    await settingsBtn.click();
+
+    // Verify settings page
+    await expect(page.locator('h1:has-text("Settings")')).toBeVisible({ timeout: 5000 });
+
+    // Navigate back using the Back button in the topbar
+    const backButton = page.locator('button[title="Back to Overview"], button:has-text("Back")').first();
+    await expect(backButton).toBeVisible({ timeout: 3000 });
+    await backButton.click();
+
+    // After back from settings, we should return to the save flow
+    // (previousPage was set to 'save' when navigating to settings)
+    await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('h2:has-text("Save this computer")')).toBeVisible();
   });
 });

@@ -82,69 +82,83 @@ export function forceDefaultMode(page: Page): Promise<void> {
 }
 
 /**
- * Navigate to Apply page ("Set up computer").
- * In the Overview-centric design, this expands the Apply card.
- * Works in both Default and Advanced modes (both use Overview cards).
+ * Navigate back to the intent landing page.
+ * Clicks the "Back" button if on a flow page (save or setup).
+ * No-op if already on the landing page.
+ */
+export async function goToLanding(page: Page): Promise<void> {
+  // Already on landing?
+  const onLanding = await page.locator('[data-testid="intent-save"]').isVisible({ timeout: 500 }).catch(() => false);
+  if (onLanding) return;
+
+  // Try save-flow back button
+  const saveBack = page.locator('[data-testid="save-flow-back"]');
+  if (await saveBack.isVisible({ timeout: 500 }).catch(() => false)) {
+    await saveBack.click();
+    await expect(page.locator('[data-testid="intent-save"]')).toBeVisible({ timeout: 5000 });
+    return;
+  }
+
+  // Try setup-flow back button
+  const setupBack = page.locator('[data-testid="setup-flow-back"]');
+  if (await setupBack.isVisible({ timeout: 500 }).catch(() => false)) {
+    await setupBack.click();
+    await expect(page.locator('[data-testid="intent-save"]')).toBeVisible({ timeout: 5000 });
+    return;
+  }
+}
+
+/**
+ * Navigate to Setup flow ("Set up this computer").
+ * In the intent-based design, this clicks the intent-setup button
+ * on the landing page, entering the SetupFlow component.
+ * Works in both Default and Advanced modes (sidebar is hidden on intent pages).
  */
 export async function goToApplyPage(page: Page, seedProfiles = true): Promise<void> {
-  // Seed profiles via E2E hook if requested (ensures hasProfile is true)
-  let seeded = false;
-  if (seedProfiles) {
-    seeded = await seedProfilesViaHook(page, 'test-profile');
-  }
-  
-  // Navigate to Overview first if not already there
-  const overviewNav = page.locator('[data-testid="nav-overview"]');
-  if (await overviewNav.isVisible({ timeout: 500 }).catch(() => false)) {
-    await overviewNav.click();
-    await page.waitForTimeout(300);
-  }
-  
-  // Click the Apply card to expand it
-  const overviewCard = page.locator('[data-testid="overview-card-apply"]');
-  await overviewCard.click();
-  
-  // Verify expanded content appears
-  await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
-  
-  // Wait for Preview/Apply button to be enabled only if we seeded profiles
-  // (tests without E2E hooks must handle button enablement themselves)
-  if (seeded) {
-    const actionButton = page.getByRole('button', { name: /Preview changes|Apply changes/ });
-    await expect(actionButton).toBeEnabled({ timeout: 10000 });
-  }
+  // If we're already on the setup flow, skip navigation
+  const alreadyOnSetup = await page.locator('[data-testid="setup-flow"]').isVisible({ timeout: 500 }).catch(() => false);
+  if (alreadyOnSetup) return;
+
+  // Navigate to landing first if we're on another flow
+  await goToLanding(page);
+
+  // Click "Set up this computer" on the intent landing page
+  const intentSetup = page.locator('[data-testid="intent-setup"]');
+  await expect(intentSetup).toBeVisible({ timeout: 5000 });
+  await intentSetup.click();
+
+  // Wait for SetupFlow to appear
+  await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
 }
 
 /**
- * Navigate to Capture page.
- * In the Overview-centric design, this expands the Capture card.
+ * Navigate to Save/Capture flow.
+ * In the intent-based design, this clicks "Save this computer" on the landing page,
+ * entering the SaveFlow component (which contains capture functionality).
  */
 export async function goToCapturePage(page: Page): Promise<void> {
-  // Click the capture card to expand it
-  const overviewCard = page.locator('[data-testid="overview-card-capture"]');
-  await overviewCard.click();
-  
-  // Wait for the expanded content to appear (contains the Capture button)
-  await expect(page.locator('[data-testid="capture-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
+  // If we're already on the save flow, skip navigation
+  const alreadyOnSave = await page.locator('[data-testid="save-flow"]').isVisible({ timeout: 500 }).catch(() => false);
+  if (alreadyOnSave) return;
+
+  // Navigate to landing first if we're on another flow
+  await goToLanding(page);
+
+  // Click "Save this computer" on the intent landing page
+  const intentSave = page.locator('[data-testid="intent-save"]');
+  await expect(intentSave).toBeVisible({ timeout: 5000 });
+  await intentSave.click();
+
+  // Wait for SaveFlow to appear
+  await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
 }
 
 /**
- * Navigate to Verify page ("Check computer").
- * In the Overview-centric design, this expands the Verify card.
- * Works in both Default and Advanced modes (both use Overview cards).
+ * Navigate to Verify/Check flow.
+ * In the intent-based design, verify is a sub-action within the setup flow.
+ * This navigates to the setup flow first.
  */
 export async function goToVerifyPage(page: Page): Promise<void> {
-  // Navigate to Overview first if not already there
-  const overviewNav = page.locator('[data-testid="nav-overview"]');
-  if (await overviewNav.isVisible({ timeout: 500 }).catch(() => false)) {
-    await overviewNav.click();
-    await page.waitForTimeout(300);
-  }
-  
-  // Click the Verify card to expand it
-  const overviewCard = page.locator('[data-testid="overview-card-verify"]');
-  await overviewCard.click();
-  
-  // Verify expanded content appears
-  await expect(page.locator('[data-testid="check-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
+  // Verify is part of the setup flow in the intent-based design
+  await goToApplyPage(page);
 }

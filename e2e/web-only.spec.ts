@@ -22,7 +22,8 @@ test.describe('UX Contract Tests', () => {
     await goToCapturePage(page);
     await goToApplyPage(page);
     await goToCapturePage(page);
-    await expect(page.locator('main >> button:has-text("Start capture")')).toBeVisible();
+    // In the intent-based design, the save flow has a "Start scan" button
+    await expect(page.locator('[data-testid="save-flow-start-scan"]')).toBeVisible();
   });
 
   test('Last Run persists per-command', async ({ page }) => {

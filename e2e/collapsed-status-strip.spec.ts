@@ -1,25 +1,26 @@
 import { test, expect } from '@playwright/test';
-import { forceAdvancedMode, forceDefaultMode, seedProfileSettings, goToApplyPage, goToVerifyPage } from './helpers/ui-mode';
 import { installTauriMock } from './helpers/tauri-mock';
 
 /**
- * Collapsed Status Strip Tests
- * Verifies:
- * 1) Closed card shows last-run strip after a run completes
- * 2) Clicking "Dismiss" returns the card to neutral state
- * 3) Divider is consistent across Default and Advanced modes (always present)
+ * Flow Results Display Tests (replaces Collapsed Status Strip tests)
+ *
+ * The app was refactored from collapsible accordion cards with status strips
+ * to full-page flows (IntentLanding -> SaveFlow / SetupFlow).
+ *
+ * There are no collapsed cards, status strips, or card dividers.
+ * These tests verify the equivalent behavior:
+ *   1) Setup flow shows results after preview completes
+ *   2) Navigating back to profiles resets the result state
+ *   3) Layout is consistent across flows
+ *
+ * NOTE: Uses initialProfileFiles (serializable) instead of function-based
+ * custom handlers, since Playwright's addInitScript serializes arguments
+ * as JSON and functions are dropped.
  */
-test.describe('Collapsed Status Strip', () => {
+test.describe('Flow Results Display', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    await seedProfileSettings(page, 'test-profile', true);
-
     await installTauriMock(page, {
-      invoke: {
-        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
-        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } }),
-        check_file_exists: () => true,
-        read_text_file: () => '{}',
-      }
+      initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
     });
 
     await page.addInitScript(() => {
@@ -37,7 +38,7 @@ test.describe('Collapsed Status Strip', () => {
               { id: 'app-1', driver: 'winget', status: 'ok', reason: isDryRun ? 'would_install' : 'installed', name: 'Test App 1' },
               { id: 'app-2', driver: 'winget', status: 'ok', reason: 'already_installed', name: 'Test App 2' },
             ];
-            
+
             for (const item of items) {
               if (options?.onNdjsonEvent) {
                 options.onNdjsonEvent(item);
@@ -47,18 +48,18 @@ test.describe('Collapsed Status Strip', () => {
               }
               await new Promise(r => setTimeout(r, 10));
             }
-            
-            return { 
-              exitCode: 0, 
-              envelope: { 
-                success: true, 
-                data: { 
+
+            return {
+              exitCode: 0,
+              envelope: {
+                success: true,
+                data: {
                   dryRun: isDryRun,
                   installed: isDryRun ? 1 : 1,
                   alreadyPresent: 1,
                   failed: 0,
                   items
-                } 
+                }
               },
               ndjsonEvents: items,
             };
@@ -67,88 +68,79 @@ test.describe('Collapsed Status Strip', () => {
         }
       };
     });
-    
+
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
   });
 
-  test('collapsed card shows status strip after run completes', async ({ page }) => {
-    // Expand the Apply card and run preview
-    await goToApplyPage(page);
-    await page.click('button:has-text("Preview changes")');
-    
-    // Wait for completion
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
-    
-    // Collapse the card by clicking elsewhere (the Capture card)
-    await page.locator('[data-testid="overview-card-capture"]').click();
-    
-    // Verify the collapsed status strip appears on the Apply card
-    await expect(page.locator('[data-testid="card-status-strip-apply"]')).toBeVisible({ timeout: 3000 });
-    
-    // Verify strip content
-    await expect(page.locator('[data-testid="card-status-strip-apply"]')).toContainText('Completed successfully');
+  test('setup flow shows preview results after completion', async ({ page }) => {
+    // Navigate to setup flow
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+
+    // Wait for profile discovery then select the profile card to start preview
+    await expect(page.locator('[data-testid="profile-card-test-profile"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('[data-testid="profile-card-test-profile"]').click();
+
+    // Wait for preview to complete - shows "Preview complete"
+    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+
+    // Verify result summary shows counts
+    await expect(page.locator('text=/to install.*already present|already present/i')).toBeVisible({ timeout: 3000 });
   });
 
-  test('clicking Dismiss on collapsed strip returns card to neutral state', async ({ page }) => {
-    // Expand the Apply card and run preview
-    await goToApplyPage(page);
-    await page.click('button:has-text("Preview changes")');
-    
-    // Wait for completion
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
-    
-    // Collapse the card
-    await page.locator('[data-testid="overview-card-capture"]').click();
-    
-    // Verify the collapsed status strip appears
-    await expect(page.locator('[data-testid="card-status-strip-apply"]')).toBeVisible({ timeout: 3000 });
-    
-    // Click the dismiss button on the strip
-    await page.locator('[data-testid="card-status-dismiss"]').click();
-    
-    // Verify the strip is gone
-    await expect(page.locator('[data-testid="card-status-strip-apply"]')).not.toBeVisible({ timeout: 3000 });
-    
-    // Verify the expanded result is also gone (card should be in neutral state)
-    await page.locator('[data-testid="overview-card-apply"]').click();
-    await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible({ timeout: 3000 });
-    
-    // The "Completed successfully" message should not be visible anymore
-    await expect(page.locator('[data-testid="setup-card-expanded-content"]').locator('text=Completed successfully')).not.toBeVisible();
+  test('navigating back to profiles resets result state', async ({ page }) => {
+    // Navigate to setup flow
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+
+    // Wait for profile discovery then select profile and wait for preview
+    await expect(page.locator('[data-testid="profile-card-test-profile"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('[data-testid="profile-card-test-profile"]').click();
+    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+
+    // Click "Back to profiles" button to return to profile list
+    await page.click('button:has-text("Back to profiles")');
+
+    // Verify we're back to the profile list (result is gone)
+    await expect(page.locator('text=Preview complete')).not.toBeVisible({ timeout: 3000 });
+    await expect(page.locator('[data-testid="profile-card-test-profile"]')).toBeVisible({ timeout: 3000 });
   });
 
-  test('dismiss from expanded card also clears collapsed strip', async ({ page }) => {
-    // Expand the Apply card and run preview
-    await goToApplyPage(page);
-    await page.click('button:has-text("Preview changes")');
-    
-    // Wait for completion
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
-    
-    // Click Dismiss button in expanded view
-    await page.getByRole('button', { name: 'Dismiss' }).click();
-    
-    // Collapse the card
-    await page.locator('[data-testid="overview-card-capture"]').click();
-    
-    // Verify no status strip appears (state was cleared)
-    await expect(page.locator('[data-testid="card-status-strip-apply"]')).not.toBeVisible({ timeout: 2000 });
+  test('re-entering setup flow after back-to-landing shows fresh state', async ({ page }) => {
+    // Navigate to setup flow
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+
+    // Wait for profile discovery then select profile and wait for preview
+    await expect(page.locator('[data-testid="profile-card-test-profile"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('[data-testid="profile-card-test-profile"]').click();
+    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+
+    // Navigate all the way back to landing
+    // First back to profiles
+    await page.click('button:has-text("Back to profiles")');
+    await expect(page.locator('[data-testid="profile-card-test-profile"]')).toBeVisible({ timeout: 3000 });
+
+    // Then back to landing
+    await page.locator('[data-testid="setup-flow-back"]').click();
+    await expect(page.locator('h1:has-text("Endstate")')).toBeVisible({ timeout: 5000 });
+
+    // Re-enter setup flow - should show profile list, not old results
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="profile-card-test-profile"]')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=Preview complete')).not.toBeVisible();
   });
 });
 
-test.describe('Divider consistency across UI modes', () => {
-  test('divider is present in Default mode', async ({ page, baseURL }) => {
-    await forceDefaultMode(page);
-    await seedProfileSettings(page, 'test-profile', true);
-
+test.describe('Flow layout consistency', () => {
+  test('save flow has consistent layout structure', async ({ page, baseURL }) => {
     await installTauriMock(page, {
-      invoke: {
-        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
-        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } }),
-        check_file_exists: () => true,
-        read_text_file: () => '{}',
-      }
+      initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
     });
 
     await page.addInitScript(() => {
@@ -164,51 +156,24 @@ test.describe('Divider consistency across UI modes', () => {
         }
       };
     });
-    
+
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    
-    // Expand the Apply card
-    await page.locator('[data-testid="overview-card-apply"]').click();
-    await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
-    
-    // Divider SHOULD be present in Default mode (consistent with Advanced)
-    await expect(page.locator('[data-testid="card-divider"]')).toBeVisible();
+
+    // Navigate to save flow
+    await expect(page.locator('[data-testid="intent-save"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('[data-testid="intent-save"]').click();
+    await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
+
+    // Verify layout elements
+    await expect(page.locator('h2:has-text("Save this computer")')).toBeVisible();
+    await expect(page.locator('[data-testid="save-flow-back"]')).toBeVisible();
+    await expect(page.locator('[data-testid="save-flow-start-scan"]')).toBeVisible();
   });
 
-  test('divider is present in Advanced mode (consistent with Default)', async ({ page, baseURL }) => {
-    await forceAdvancedMode(page);
-    await seedProfileSettings(page, 'test-profile', true);
-
-    await page.addInitScript(() => {
-      // Also set showDetails to true for Advanced mode
-      localStorage.setItem('test:endstate-gui-settings', JSON.stringify({
-        engineMode: 'path',
-        engineScriptPath: '',
-        customProfilesDirectory: '',
-        lastSelectedProfile: 'test-profile',
-        lastSelectedProfilePath: 'C:\\test\\profiles\\test-profile.jsonc',
-        dryRunEnabled: true,
-        showDetails: true,
-      }));
-      localStorage.setItem('endstate-gui-settings', JSON.stringify({
-        engineMode: 'path',
-        engineScriptPath: '',
-        customProfilesDirectory: '',
-        lastSelectedProfile: 'test-profile',
-        lastSelectedProfilePath: 'C:\\test\\profiles\\test-profile.jsonc',
-        dryRunEnabled: true,
-        showDetails: true,
-      }));
-    });
-
+  test('setup flow has consistent layout structure', async ({ page, baseURL }) => {
     await installTauriMock(page, {
-      invoke: {
-        list_manifest_files: () => ['C:\\test\\profiles\\test-profile.jsonc'],
-        validate_profile: () => ({ valid: true, errors: [], summary: { name: 'test-profile', version: 1, appCount: 2 } }),
-        check_file_exists: () => true,
-        read_text_file: () => '{}',
-      }
+      initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
     });
 
     await page.addInitScript(() => {
@@ -224,15 +189,19 @@ test.describe('Divider consistency across UI modes', () => {
         }
       };
     });
-    
+
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
-    
-    // Expand the Apply card
-    await page.locator('[data-testid="overview-card-apply"]').click();
-    await expect(page.locator('[data-testid="setup-card-expanded-content"]')).toBeVisible({ timeout: 5000 });
-    
-    // Divider SHOULD be present in Advanced mode (consistent with Default)
-    await expect(page.locator('[data-testid="card-divider"]')).toBeVisible();
+
+    // Navigate to setup flow
+    await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('[data-testid="intent-setup"]').click();
+    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+
+    // Verify layout elements
+    await expect(page.locator('h2:has-text("Set up this computer")')).toBeVisible();
+    await expect(page.locator('[data-testid="setup-flow-back"]')).toBeVisible();
+    // Profile card should be visible (wait for async discovery)
+    await expect(page.locator('[data-testid="profile-card-test-profile"]')).toBeVisible({ timeout: 10000 });
   });
 });

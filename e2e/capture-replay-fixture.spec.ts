@@ -4,26 +4,35 @@ import { installTauriMock } from './helpers/tauri-mock';
 
 /**
  * E2E Test: Capture Golden Replay Fixture
- * 
- * Tests deterministic replay of real NDJSON events from fixture file.
- * Uses capture_ok_realistic.events.jsonl to verify:
+ *
+ * Tests deterministic replay of real NDJSON events from fixture data.
+ * Verifies:
  * 1. Event replay produces correct app events
- * 2. Capture Details modal renders apps list (not fallback)
+ * 2. Capture results render apps list inline in SaveFlow (not empty)
  * 3. Counters match fixture data
- * 
- * This test proves the replay infrastructure works end-to-end
- * without invoking the real engine.
+ *
+ * Updated for ADR-001 intent-based UI:
+ * - Old path: button:has-text("Capture computer") -> overview-card-capture -> action-details-modal
+ * - New path: intent-save -> save-flow-start-scan -> inline results in SaveFlow
  */
 test.describe('Capture Golden Replay Fixture', () => {
+  const FIXTURE_APPS = [
+    { id: 'Mozilla.Firefox', driver: 'winget' },
+    { id: 'Google.Chrome', driver: 'winget' },
+    { id: 'Microsoft.VisualStudioCode', driver: 'winget' },
+    { id: 'Notepad++.Notepad++', driver: 'winget' },
+    { id: '7zip.7zip', driver: 'winget' },
+  ];
+
   test.beforeEach(async ({ page, baseURL }) => {
     await forceAdvancedMode(page);
     await installTauriMock(page, {
       allowUnknownInvokes: true,
     });
 
-    await page.addInitScript(() => {
+    await page.addInitScript((apps: typeof FIXTURE_APPS) => {
       (window as any).__ENDSTATE_E2E_SCENARIO__ = 'capture_ok_replay';
-      
+
       // Mock engine that simulates capture with 5 apps
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function, options?: any) => {
@@ -34,15 +43,6 @@ test.describe('Capture Golden Replay Fixture', () => {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } }, ndjsonEvents: [] };
           }
           if (command === 'capture') {
-            // Simulate 5 apps being captured with NDJSON events
-            const apps = [
-              { id: 'Mozilla.Firefox', driver: 'winget' },
-              { id: 'Google.Chrome', driver: 'winget' },
-              { id: 'Microsoft.VisualStudioCode', driver: 'winget' },
-              { id: 'Notepad++.Notepad++', driver: 'winget' },
-              { id: '7zip.7zip', driver: 'winget' },
-            ];
-            
             // Emit item events
             for (const app of apps) {
               if (options?.onNdjsonEvent) {
@@ -52,7 +52,7 @@ test.describe('Capture Golden Replay Fixture', () => {
                 onEvent({ type: 'stdout', data: JSON.stringify({ event: 'item', id: app.id, driver: app.driver }) + '\n' });
               }
             }
-            
+
             // Return envelope with captured apps
             const envelope = {
               success: true,
@@ -62,93 +62,58 @@ test.describe('Capture Golden Replay Fixture', () => {
                 appsIncluded: apps.map(a => ({ id: a.id, source: a.driver })),
               },
             };
-            
+
             return { exitCode: 0, envelope, ndjsonEvents: apps.map(a => ({ event: 'item', ...a })) };
           }
           return { exitCode: 0, envelope: { success: true, data: {} }, ndjsonEvents: [] };
         }
       };
-    });
+    }, FIXTURE_APPS);
 
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
   });
 
-  test('Replay fixture produces non-empty apps list in Capture Details', async ({ page }) => {
-    // Click Capture button to trigger replay scenario
-    await page.click('main >> button:has-text("Capture computer")');
+  test('Replay fixture produces non-empty apps list in capture results', async ({ page }) => {
+    // Navigate to Save flow via intent landing
+    await page.click('[data-testid="intent-save"]');
 
-    // Wait for capture to complete - the save profile modal should appear
-    const saveProfileModal = page.locator('[data-testid="profile-name-modal"]');
-    await expect(saveProfileModal).toBeVisible({ timeout: 10000 });
-    
-    // Save the profile
-    await page.locator('[data-testid="profile-name-input"]').fill('Replay Test Profile');
-    await page.click('[data-testid="profile-name-save"]');
-    await expect(saveProfileModal).not.toBeVisible({ timeout: 3000 });
-    
-    // Wait for success state after save
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
+    // Wait for Save flow to appear
+    await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
 
-    // Expand Capture card to see the success strip with Details button
-    const captureCard = page.locator('[data-testid="overview-card-capture"]');
-    await captureCard.click();
+    // Start scan to trigger replay scenario
+    await page.click('[data-testid="save-flow-start-scan"]');
 
-    // Click the Details button to open Action Details modal
-    const detailsButton = page.locator('[data-testid="capture-details-button"]').first();
-    await expect(detailsButton).toBeVisible({ timeout: 5000 });
-    await detailsButton.click();
+    // Wait for scan to complete - "Scan complete" text appears
+    await expect(page.locator('text=Scan complete')).toBeVisible({ timeout: 15000 });
 
-    // Verify Action Details modal is open with correct title
-    const modal = page.locator('[data-testid="action-details-modal"]');
-    await expect(modal).toBeVisible({ timeout: 5000 });
-    await expect(modal.locator('text=Capture Details')).toBeVisible();
-
-    // CRITICAL ASSERTION - Apps list should be visible
-    const appsList = page.locator('[data-testid="action-details-apps-list"]');
-    await expect(appsList).toBeVisible({ timeout: 5000 });
+    // CRITICAL ASSERTION: Apps should be visible in the results
+    await expect(page.locator('text=Found 5 apps')).toBeVisible();
 
     // Verify at least one fixture app ID is visible in the list
-    await expect(appsList.locator('text=Mozilla.Firefox')).toBeVisible();
+    await expect(page.locator('text=Mozilla.Firefox')).toBeVisible();
 
-    // CRITICAL ASSERTION - Fallback text should NOT be visible
-    const fallback = page.locator('[data-testid="action-details-fallback"]');
-    await expect(fallback).not.toBeVisible();
+    // Verify the Save file button is available (scan succeeded)
+    await expect(page.locator('[data-testid="save-flow-save-file"]')).toBeVisible();
   });
 
-  test('Replay fixture shows correct count in header', async ({ page }) => {
-    // Click Capture button to trigger replay scenario
-    await page.click('main >> button:has-text("Capture computer")');
+  test('Replay fixture shows correct count in results', async ({ page }) => {
+    // Navigate to Save flow via intent landing
+    await page.click('[data-testid="intent-save"]');
 
-    // Wait for capture to complete - the save profile modal should appear
-    const saveProfileModal = page.locator('[data-testid="profile-name-modal"]');
-    await expect(saveProfileModal).toBeVisible({ timeout: 10000 });
-    
-    // Save the profile
-    await page.locator('[data-testid="profile-name-input"]').fill('Replay Count Test');
-    await page.click('[data-testid="profile-name-save"]');
-    await expect(saveProfileModal).not.toBeVisible({ timeout: 3000 });
-    
-    // Wait for success state after save
-    await expect(page.locator('text=Completed successfully')).toBeVisible({ timeout: 5000 });
+    // Wait for Save flow to appear
+    await expect(page.locator('[data-testid="save-flow"]')).toBeVisible({ timeout: 5000 });
 
-    // Expand Capture card to see the success strip with Details button
-    const captureCard = page.locator('[data-testid="overview-card-capture"]');
-    await captureCard.click();
+    // Start scan to trigger replay scenario
+    await page.click('[data-testid="save-flow-start-scan"]');
 
-    // Click the Details button
-    const detailsButton = page.locator('[data-testid="capture-details-button"]').first();
-    await expect(detailsButton).toBeVisible({ timeout: 5000 });
-    await detailsButton.click();
+    // Wait for scan to complete
+    await expect(page.locator('text=Scan complete')).toBeVisible({ timeout: 15000 });
 
-    // Verify Action Details modal shows correct count
-    const modal = page.locator('[data-testid="action-details-modal"]');
-    await expect(modal).toBeVisible({ timeout: 5000 });
+    // Verify the summary shows correct count (5 apps)
+    await expect(page.locator('text=Found 5 apps')).toBeVisible();
 
-    // Verify the summary shows correct count (5 apps captured)
-    await expect(modal.locator('text=5 apps captured')).toBeVisible();
-
-    // Verify the apps list header shows correct count
-    await expect(modal.locator('text=Apps (5)')).toBeVisible();
+    // Verify the filter pill shows correct count
+    await expect(page.locator('button:has-text("5 apps")')).toBeVisible();
   });
 });
