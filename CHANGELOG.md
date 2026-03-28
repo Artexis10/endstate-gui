@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.3.3](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.2...gui-v1.3.3) (2026-03-28)
+
+
+### Bug Fixes
+
+* **ci:** use vite dev server directly for e2e on CI ([5703f2e](https://github.com/Artexis10/endstate-gui/commit/5703f2e0877c4daf10c1400750b05df46fcd5078))
+* update e2e tests for intent-based UI, parallelize CI with 2 workers ([7eb3479](https://github.com/Artexis10/endstate-gui/commit/7eb34792723b9415ad553915b8ea60ec417a4ffa))
+
 ## [1.3.2](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.1...gui-v1.3.2) (2026-03-28)
 
 
