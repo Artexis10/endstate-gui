@@ -52,6 +52,36 @@ The Tauri build SHALL bundle the engine Go binary via `externalBin` and engine r
 - **THEN** the installer includes the engine binary as a sidecar
 - **AND** the installer includes engine/modules/, engine/payload/, engine/VERSION, engine/SCHEMA_VERSION as resources
 
+### Requirement: Console window suppression on Windows
+
+Child processes spawned by the GUI SHALL NOT display a visible console window.
+
+#### Scenario: Engine spawn does not flash a terminal window
+- **WHEN** the GUI spawns the engine binary on Windows
+- **THEN** the process SHALL be created with the `CREATE_NO_WINDOW` flag (0x08000000)
+- **AND** no visible console window SHALL appear to the user
+- **AND** this SHALL apply to both `build_bundled_command` and `build_engine_command` spawn sites
+
+### Requirement: License bypass protection in production builds
+
+The `VITE_DEV_BYPASS_LICENSE` environment variable SHALL NOT leak into production builds.
+
+#### Scenario: Production build has license gate active
+- **WHEN** `npm run tauri build` executes
+- **THEN** `.env.production` SHALL set `VITE_DEV_BYPASS_LICENSE=0`
+- **AND** the license gate SHALL be active in the resulting binary regardless of the build machine's environment variables
+
+### Requirement: Streaming path uses bundled sidecar
+
+The streaming execution path SHALL use the bundled sidecar when `engineMode === 'bundled'`.
+
+#### Scenario: Streaming runner passes bundled sentinel
+- **WHEN** `engineMode` is `'bundled'`
+- **AND** the streaming runner invokes the engine
+- **THEN** the frontend SHALL pass `exe = '__bundled__'` to the Tauri command
+- **AND** `run_endstate_streaming` in Rust SHALL resolve the sidecar via `build_bundled_command`
+- **AND** `ENDSTATE_ROOT` SHALL be set to the resource directory's `engine/` subdirectory
+
 ## REMOVED Requirements
 
 ### Requirement: Frontend resolves bundled engine path

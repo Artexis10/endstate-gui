@@ -73,11 +73,11 @@ export async function runEndstateStreaming<T>(
   let execArgs: string[];
 
   if (settings.engineMode === 'bundled') {
-    // Bundled mode: use 'endstate' from PATH (bundled with app)
-    exe = 'endstate';
+    // Bundled mode: delegate sidecar resolution to Rust via "__bundled__" sentinel
+    exe = '__bundled__';
     execArgs = fullArgs;
     if (import.meta.env.DEV) {
-      console.log(`[ENGINE] mode=bundled, exe=endstate (from PATH)`);
+      console.log(`[ENGINE] mode=bundled, exe=__bundled__ (sidecar resolved by Rust)`);
     }
   } else if (settings.engineMode === 'path') {
     exe = 'endstate';

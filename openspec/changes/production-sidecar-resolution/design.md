@@ -41,9 +41,26 @@ This handles both production installs and `tauri dev` without conditional compil
 
 The Tauri command `get_bundled_engine_path` and its backing function `resolve_bundled_engine_path()` are deleted. The frontend no longer needs to resolve the sidecar path — it delegates entirely to Rust via the `"__bundled__"` sentinel.
 
-### Decision 4: `endstate_exec` also handles `"__bundled__"` for non-streaming calls
+### Decision 4: ALL spawn sites handle `"__bundled__"` — including `run_endstate_streaming`
 
-The non-streaming `endstate_exec` command (used for capabilities) must also resolve the sidecar when `exe === "__bundled__"`. Extract the sidecar resolution + ENDSTATE_ROOT logic into a shared helper used by both `run_engine` and `endstate_exec`.
+Every Rust function that spawns the engine must check for the `"__bundled__"` sentinel:
+- `run_engine()` in `engine_adapter.rs` (streaming via event channel) — already has it
+- `endstate_exec()` in `lib.rs` (non-streaming) — already has it
+- `run_endstate_streaming()` in `lib.rs` (streaming via simple stdout/stderr) — **must be added**
+
+The shared `build_bundled_command()` helper is called by all three.
+
+### Decision 5: Suppress console windows on Windows with CREATE_NO_WINDOW
+
+On Windows, spawning a child process without CREATE_NO_WINDOW allocates a visible console window. Both `build_bundled_command()` and `build_engine_command()` will set `creation_flags(0x08000000)` behind `#[cfg(target_os = "windows")]`. This covers all downstream spawn sites.
+
+### Decision 6: Explicit `.env.production` prevents license bypass leaking into builds
+
+Vite reads `VITE_`-prefixed vars from the process environment, not just `.env` files. If the build machine has `VITE_DEV_BYPASS_LICENSE=1` set (e.g., from a shell profile), it gets baked into the production bundle. A `.env.production` file with `VITE_DEV_BYPASS_LICENSE=0` provides an explicit override that Vite loads in production mode.
+
+### Decision 7: streaming-runner.ts uses `__bundled__` sentinel
+
+The frontend `streaming-runner.ts` currently sets `exe = 'endstate'` for bundled mode, bypassing the Rust sidecar resolution entirely. It must use `exe = '__bundled__'` to match `engine-exec.ts` behavior.
 
 ## Risks / Trade-offs
 

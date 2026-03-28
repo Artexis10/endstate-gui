@@ -20,6 +20,9 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 use crate::event_broadcast::EventBroadcaster;
 
 /// Candidate sidecar filenames in priority order.
@@ -91,6 +94,11 @@ pub fn build_bundled_command(
         message: format!("Failed to resolve resource directory: {}", e),
     })?;
     cmd.env("ENDSTATE_ROOT", resource_dir.join("engine"));
+
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
 
     Ok(cmd)
 }

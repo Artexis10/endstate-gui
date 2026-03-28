@@ -8,6 +8,9 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 use serde::{Deserialize, Serialize};
 
 /// Result of CLI execution.
@@ -83,6 +86,11 @@ pub fn build_engine_command(exe: &str, args: &[String]) -> Command {
     // Pass through ENDSTATE_ROOT so the Go binary can find modules/, payload/, etc.
     if let Ok(root) = std::env::var("ENDSTATE_ROOT") {
         cmd.env("ENDSTATE_ROOT", &root);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
     cmd

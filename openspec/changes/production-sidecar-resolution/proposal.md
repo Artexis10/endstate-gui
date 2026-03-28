@@ -4,11 +4,13 @@ Production builds of endstate-gui bundle the Go engine binary as a Tauri sidecar
 
 ## What Changes
 
-- **Activate the `__bundled__` sidecar code path**: The frontend will pass the `"__bundled__"` sentinel to the Rust layer when `engineMode === 'bundled'`, activating the existing (currently dead) sidecar resolution branch in `engine_adapter.rs` that correctly sets `ENDSTATE_ROOT`.
+- **Activate the `__bundled__` sidecar code path in ALL spawn sites**: The frontend streaming-runner and engine-exec will pass `"__bundled__"` sentinel when `engineMode === 'bundled'`. Rust's `run_endstate_streaming` gains the same `__bundled__` branch that `run_engine` and `endstate_exec` already have, so capture/apply/verify all resolve the sidecar and set `ENDSTATE_ROOT`.
 - **Fix sidecar filename resolution**: The Rust `__bundled__` branch will look for both `endstate.exe` and the target-triple-suffixed filename (`endstate-x86_64-pc-windows-msvc.exe`) that Tauri's `externalBin` actually installs.
 - **Remove silent PATH fallback**: When `engineMode === 'bundled'`, if the sidecar binary is not found, the system will surface an error to the user instead of silently falling back to PATH.
+- **Suppress console window on Windows**: Add `CREATE_NO_WINDOW` (0x08000000) creation flag to all child process spawn sites (`build_bundled_command` and `build_engine_command`) so no terminal window flashes during engine operations.
+- **Prevent license bypass leak into production**: Create `.env.production` with `VITE_DEV_BYPASS_LICENSE=0` as an explicit override, preventing build-time env contamination from the dev bypass.
 - **Expose bundled mode in settings UI**: Add "Bundled (recommended)" to the engine mode radio group so users can see and select all three modes.
-- **Delete dead frontend resolution code**: Remove `get_bundled_engine_path` Tauri command and the frontend `invoke` call that tried (and failed) to resolve the sidecar path from TypeScript.
+- **Delete dead frontend resolution code**: Remove `resolve_bundled_engine_path()` Tauri command from `lib.rs` and its command registration.
 
 ## Capabilities
 
@@ -22,7 +24,8 @@ _(none — this change fixes the implementation of an existing capability)_
 
 ## Impact
 
-- **Rust backend**: `engine_adapter.rs` (sidecar resolution in `__bundled__` branch), `lib.rs` (remove `resolve_bundled_engine_path` and `get_bundled_engine_path` command)
-- **Frontend**: `src/lib/engine-exec.ts` (simplify `buildEngineCommand` for bundled mode), `src/App.tsx` (settings radio group)
+- **Rust backend**: `engine_adapter.rs` (sidecar resolution, CREATE_NO_WINDOW flag), `cmd_impl.rs` (CREATE_NO_WINDOW flag), `lib.rs` (`run_endstate_streaming` `__bundled__` branch, remove `resolve_bundled_engine_path`)
+- **Frontend**: `src/streaming-runner.ts` (bundled mode sentinel), `src/lib/engine-exec.ts` (remove silent fallback), `src/App.tsx` (settings radio group)
+- **Build**: `.env.production` (license bypass protection)
 - **No CLI contract changes**: The engine binary interface is unchanged
-- **No new dependencies**: Uses existing Tauri resource/path APIs
+- **No new dependencies**: Uses existing Tauri resource/path APIs and `std::os::windows::process::CommandExt`

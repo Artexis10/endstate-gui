@@ -1113,10 +1113,19 @@ async fn run_endstate_streaming(
         
         let start_time = std::time::Instant::now();
         
-        let mut cmd = crate::cmd_impl::build_engine_command(&exe, &args);
+        let mut cmd = if exe == "__bundled__" {
+            match crate::engine_adapter::build_bundled_command(&app, &args) {
+                Ok(c) => c,
+                Err(e) => {
+                    return Err(format!("Bundled engine error: {}", e.message));
+                }
+            }
+        } else {
+            crate::cmd_impl::build_engine_command(&exe, &args)
+        };
         cmd.stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        
+
         let mut child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn process: {}", e))?;
 
