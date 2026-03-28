@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.3.1](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.0...gui-v1.3.1) (2026-03-28)
+
+
+### Bug Fixes
+
+* enforce bundled sidecar for all engine spawn paths ([916cbc6](https://github.com/Artexis10/endstate-gui/commit/916cbc65e3b0550fa8df86f4ba1d032310e1f3ef))
+
 ## [1.3.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.2.2...gui-v1.3.0) (2026-03-27)
 
 
