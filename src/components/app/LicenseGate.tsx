@@ -11,7 +11,7 @@ interface LicenseGateProps {
 }
 
 export function LicenseGate({ children }: LicenseGateProps) {
-  if (import.meta.env.VITE_DEV_BYPASS_LICENSE === '1') {
+  if (import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_LICENSE === '1') {
     return <>{children}</>;
   }
 
