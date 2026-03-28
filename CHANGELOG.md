@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.3.2](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.1...gui-v1.3.2) (2026-03-28)
+
+
+### Bug Fixes
+
+* exclude platform wrapper files from coverage thresholds ([0137576](https://github.com/Artexis10/endstate-gui/commit/01375767ab80ddb158701429df2a0d26cb1ee4b8))
+* require Vite dev mode for license bypass, not just env flag ([5ca31f4](https://github.com/Artexis10/endstate-gui/commit/5ca31f41fbd312606198386518d2dd098f30068e))
+
 ## [1.3.1](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.0...gui-v1.3.1) (2026-03-28)
 
 
