@@ -18,6 +18,10 @@ export default defineConfig({
         'src/vite-env.d.ts',
         'src-tauri/**',
         'e2e/**',
+        'src/**/index.ts',
+        'src/lib/tauri-bridge.ts',
+        'src/lib/http-bridge.ts',
+        'src/lib/clipboard.ts',
       ],
       thresholds: {
         lines: 70,
