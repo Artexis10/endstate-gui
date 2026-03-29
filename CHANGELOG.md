@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.4.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.6...gui-v1.4.0) (2026-03-29)
+
+
+### Features
+
+* automate engine rebuild in build pipeline, unify scripts ([2eb6a6f](https://github.com/Artexis10/endstate-gui/commit/2eb6a6f997c24ad244e4847e7f46f8476a094f04))
+* show bundled engine version during build and in settings ([a43e6fc](https://github.com/Artexis10/endstate-gui/commit/a43e6fc724a283c832b70789facd1cc6b641459f))
+
+
+### Bug Fixes
+
+* listen for Tauri 'enter' drag event to trigger dropzone animation ([5074e42](https://github.com/Artexis10/endstate-gui/commit/5074e4217d6a204f5611a57226e76f0991ee56ff))
+
 ## [1.3.6](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.5...gui-v1.3.6) (2026-03-29)
 
 
