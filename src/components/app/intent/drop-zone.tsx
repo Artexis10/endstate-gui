@@ -45,9 +45,10 @@ export function DropZone({ onFileDrop, onBrowse, disabled = false }: DropZonePro
         const webview = getCurrentWebviewWindow();
         const unlisten = await webview.onDragDropEvent((event) => {
           if (disabled) return;
-          if (event.payload.type === 'over') {
+          const t = event.payload.type;
+          if (t === 'enter' || t === 'over') {
             setIsDragOver(true);
-          } else if (event.payload.type === 'leave' || event.payload.type === 'drop') {
+          } else if (t === 'leave' || t === 'drop') {
             setIsDragOver(false);
           }
         });
