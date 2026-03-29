@@ -112,11 +112,18 @@ pub fn compute_fingerprint() -> Result<String, String> {
 // License cache (disk persistence)
 // ---------------------------------------------------------------------------
 
-/// Return the path to the license cache file: `%APPDATA%/Endstate/license.json`
+/// Return the path to the license cache file.
+///
+/// Uses `%APPDATA%/com.substratesystems.endstate/license.json` to match
+/// the bundle identifier that the NSIS uninstaller cleans up.
+/// Previously used `%APPDATA%/Endstate/` which the uninstaller never touched,
+/// causing stale license caches to survive install/uninstall cycles.
 pub fn cache_path() -> Result<PathBuf, String> {
     let config_dir = dirs::config_dir()
         .ok_or_else(|| "Could not determine APPDATA directory".to_string())?;
-    Ok(config_dir.join("Endstate").join("license.json"))
+    Ok(config_dir
+        .join("com.substratesystems.endstate")
+        .join("license.json"))
 }
 
 /// Read the cached license from disk. Returns `None` if the file doesn't exist.

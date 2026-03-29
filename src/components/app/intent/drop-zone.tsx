@@ -5,13 +5,18 @@
  * Renders as a prominent drop area within the Set up flow.
  */
 
-import { useState, useCallback, useRef, type DragEvent } from 'react';
+import { useState, useCallback, useRef, useEffect, type DragEvent } from 'react';
 import { motion } from 'framer-motion';
 import { Upload } from 'lucide-react';
 import { prefersReducedMotion } from '@/lib/motion';
 
 const ACCEPTED_EXTENSIONS = ['.zip', '.json', '.jsonc', '.json5'];
 const ACCEPTED_INPUT = ACCEPTED_EXTENSIONS.join(',');
+
+/** Check if running inside the Tauri runtime */
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_IPC__' in window;
+}
 
 interface DropZoneProps {
   onFileDrop: (files: File[]) => void;
@@ -24,6 +29,44 @@ export function DropZone({ onFileDrop, onBrowse, disabled = false }: DropZonePro
   const [isDragOver, setIsDragOver] = useState(false);
   const reduced = prefersReducedMotion();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const tauriUnlistenRef = useRef<(() => void) | undefined>();
+
+  // In Tauri, WebView2 intercepts file drag events at the OS level before they
+  // reach the DOM. Listen for Tauri's native drag-drop events to drive the
+  // isDragOver animation state, since HTML5 onDragOver/onDragLeave never fire.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+        if (cancelled) return;
+        const webview = getCurrentWebviewWindow();
+        const unlisten = await webview.onDragDropEvent((event) => {
+          if (disabled) return;
+          if (event.payload.type === 'over') {
+            setIsDragOver(true);
+          } else if (event.payload.type === 'leave' || event.payload.type === 'drop') {
+            setIsDragOver(false);
+          }
+        });
+        if (cancelled) {
+          unlisten();
+        } else {
+          tauriUnlistenRef.current = unlisten;
+        }
+      } catch {
+        // Tauri API unavailable
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      tauriUnlistenRef.current?.();
+      tauriUnlistenRef.current = undefined;
+    };
+  }, [disabled]);
 
   const isAcceptedFile = useCallback((file: File) => {
     const name = file.name.toLowerCase();
