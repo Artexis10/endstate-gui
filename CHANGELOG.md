@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.3.6](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.5...gui-v1.3.6) (2026-03-29)
+
+
+### Bug Fixes
+
+* align license cache path with NSIS cleanup and wire Tauri drag events to dropzone ([3e27137](https://github.com/Artexis10/endstate-gui/commit/3e27137437f47c9cb50344505465f62fb615e0a9))
+
 ## [1.3.5](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.4...gui-v1.3.5) (2026-03-28)
 
 
