@@ -1,7 +1,6 @@
 import { invoke, listen } from './lib/tauri-bridge';
 import { EndstateEnvelope } from './types';
 import { AppSettings } from './settings';
-import { validateEngineScriptPath, getRepoRootFromScriptPath } from './lib/engine-path';
 import {
   StreamingEvent as NdjsonEvent,
   StreamingEventBuffer,
@@ -79,37 +78,12 @@ export async function runEndstateStreaming<T>(
     if (import.meta.env.DEV) {
       console.log(`[ENGINE] mode=bundled, exe=__bundled__ (sidecar resolved by Rust)`);
     }
-  } else if (settings.engineMode === 'path') {
+  } else {
+    // Path mode: use endstate from PATH
     exe = 'endstate';
     execArgs = fullArgs;
     if (import.meta.env.DEV) {
       console.log(`[ENGINE] mode=path, exe=endstate (from PATH)`);
-    }
-  } else {
-    // Script mode: validate path exists before attempting execution
-    const validationError = await validateEngineScriptPath(settings.engineScriptPath);
-    if (validationError) {
-      // Build helpful error message with bin/ suggestion
-      const repoRoot = getRepoRootFromScriptPath(settings.engineScriptPath);
-      const binPath = repoRoot ? `${repoRoot}\\bin\\endstate.ps1` : null;
-      let errorMsg = validationError;
-      if (binPath && !validationError.includes(binPath)) {
-        errorMsg += `\nExpected location: ${binPath}`;
-      }
-      throw new Error(errorMsg);
-    }
-    
-    exe = 'pwsh';
-    execArgs = [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      settings.engineScriptPath,
-      ...fullArgs,
-    ];
-    if (import.meta.env.DEV) {
-      console.log(`[ENGINE] mode=script, exe=pwsh, scriptPath=${settings.engineScriptPath}`);
     }
   }
 

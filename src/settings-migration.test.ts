@@ -21,7 +21,6 @@ describe('settings profile selection migration', () => {
       // Simulate stored settings with selectedProfileName already set
       const mockSettings = {
         engineMode: 'bundled',
-        engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: 'myprofile',
         dryRunEnabled: true,
@@ -40,7 +39,6 @@ describe('settings profile selection migration', () => {
       // Simulate legacy stored settings with path but no selectedProfileName
       const legacySettings = {
         engineMode: 'bundled',
-        engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: null,
         lastSelectedProfile: '',
@@ -70,7 +68,6 @@ describe('settings profile selection migration', () => {
     it('should clear selection when migration fails', async () => {
       const legacySettings = {
         engineMode: 'bundled',
-        engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: null,
         lastSelectedProfile: '',
@@ -94,7 +91,6 @@ describe('settings profile selection migration', () => {
     it('should migrate from legacy lastSelectedProfile when no path exists', async () => {
       const legacySettings = {
         engineMode: 'bundled',
-        engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: null,
         lastSelectedProfile: 'myprofile',
@@ -114,7 +110,6 @@ describe('settings profile selection migration', () => {
     it('should handle draft_ paths by clearing selection', async () => {
       const legacySettings = {
         engineMode: 'bundled',
-        engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: null,
         lastSelectedProfile: '',
@@ -139,7 +134,6 @@ describe('settings profile selection migration', () => {
     it('should clear selectedProfileName only', () => {
       const mockSettings = {
         engineMode: 'bundled',
-        engineScriptPath: '',
         customProfilesDirectory: '',
         selectedProfileName: 'myprofile',
         dryRunEnabled: true,

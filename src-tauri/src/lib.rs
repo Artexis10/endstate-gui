@@ -55,7 +55,7 @@ impl From<std::io::Error> for ExecError {
 /// captures stdout, stderr, and exit code, and returns them to the frontend.
 ///
 /// # Arguments
-/// * `exe` - Executable to run (e.g., "endstate" or "pwsh")
+/// * `exe` - Executable to run (e.g., "endstate" or "__bundled__")
 /// * `args` - Command line arguments to pass to the executable
 ///
 /// # Returns
@@ -1086,7 +1086,7 @@ async fn run_endstate_streaming(
         let meta_path = debug_dir.join("meta.json");
         
         let _cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_else(|_| "unknown".to_string());
-        let _mode = if exe == "endstate" { "bundled/path" } else if exe == "pwsh" || exe == "powershell" { "script" } else { "unknown" };
+        let _mode = if exe == "endstate" || exe == "__bundled__" { "bundled/path" } else { "unknown" };
         
         // Resolve absolute path of executable for bundled/path mode
         let _resolved_exe = if exe == "endstate" {

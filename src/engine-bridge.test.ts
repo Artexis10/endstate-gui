@@ -32,7 +32,6 @@ const mockListen = vi.mocked(listen);
 
 const baseSettings: AppSettings = {
   engineMode: 'bundled',
-  engineScriptPath: '',
   customProfilesDirectory: '',
   selectedProfileName: null,
   dryRunEnabled: false,
@@ -301,23 +300,18 @@ describe('engine-bridge functions', () => {
       expect(runId).toBe('run-a-1');
     });
 
-    it('uses script mode when configured', async () => {
-      const scriptSettings: AppSettings = {
+    it('uses path mode when configured', async () => {
+      const pathSettings: AppSettings = {
         ...baseSettings,
-        engineMode: 'script',
-        engineScriptPath: 'C:\\test\\endstate.ps1',
+        engineMode: 'path',
       };
       mockInvoke.mockResolvedValue('run-a-2');
 
-      await runApply(scriptSettings, 'C:\\profiles\\setup.jsonc');
+      await runApply(pathSettings, 'C:\\profiles\\setup.jsonc');
 
       expect(mockInvoke).toHaveBeenCalledWith('engine_run', {
-        exe: 'pwsh',
-        args: [
-          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-          'C:\\test\\endstate.ps1',
-          'apply', 'C:\\profiles\\setup.jsonc', '-Json',
-        ],
+        exe: 'endstate',
+        args: ['apply', 'C:\\profiles\\setup.jsonc', '-Json'],
       });
     });
   });

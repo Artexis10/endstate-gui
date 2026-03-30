@@ -31,25 +31,11 @@ export interface EngineRun {
 }
 
 /**
- * Get engine root directory from a known path.
- * Assumes engine writes to logs/ and state/ relative to engine root.
- * Handles both old (root/endstate.ps1) and new (root/bin/endstate.ps1) locations.
+ * Get engine root directory from settings.
+ * For 'path' and 'bundled' modes, we can't determine engine root without running a command.
+ * Returns null and lets the caller handle it.
  */
-export function getEngineRoot(settings: { engineMode: 'path' | 'script' | 'bundled'; engineScriptPath?: string }): string | null {
-  if (settings.engineMode === 'script' && settings.engineScriptPath) {
-    const normalized = settings.engineScriptPath.replace(/\//g, '\\');
-    
-    // New location: repo/bin/endstate.ps1 or repo/bin/endstate.cmd
-    if (normalized.endsWith('\\bin\\endstate.ps1') || normalized.endsWith('\\bin\\endstate.cmd')) {
-      return normalized.slice(0, normalized.lastIndexOf('\\bin\\'));
-    }
-    
-    // Old location: repo/endstate.ps1 - parent directory is engine root
-    const parts = normalized.split(/[\\/]/);
-    parts.pop(); // Remove endstate.ps1
-    return parts.join('\\');
-  }
-  
+export function getEngineRoot(_settings: { engineMode: 'path' | 'bundled' }): string | null {
   // For 'path' and 'bundled' modes, we can't determine engine root without running a command
   // Return null and let caller handle it
   return null;

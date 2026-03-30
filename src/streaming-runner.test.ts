@@ -9,15 +9,9 @@ vi.mock('./lib/tauri-bridge', () => ({
   isTauriRuntime: vi.fn(() => false),
 }));
 
-vi.mock('./lib/engine-path', () => ({
-  validateEngineScriptPath: vi.fn(() => Promise.resolve(null)),
-  getRepoRootFromScriptPath: vi.fn(() => null),
-}));
-
 describe('streaming-runner', () => {
   const mockSettings: AppSettings = {
-    engineMode: 'script',
-    engineScriptPath: 'C:\\test\\endstate.ps1',
+    engineMode: 'bundled',
     customProfilesDirectory: '',
     selectedProfileName: null,
     dryRunEnabled: true,
@@ -194,7 +188,7 @@ describe('streaming-runner', () => {
       );
     });
 
-    it('uses script mode with pwsh when engineMode is script', async () => {
+    it('uses bundled mode with __bundled__ sentinel when engineMode is bundled', async () => {
       const mockUnlisten = vi.fn();
       let eventCallback: (event: any) => void = () => {};
 
@@ -213,13 +207,8 @@ describe('streaming-runner', () => {
       expect(invoke).toHaveBeenCalledWith(
         'run_endstate_streaming',
         expect.objectContaining({
-          exe: 'pwsh',
+          exe: '__bundled__',
           args: [
-            '-NoProfile',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-File',
-            'C:\\test\\endstate.ps1',
             'verify',
             '--json',
             '--profile',
@@ -248,13 +237,8 @@ describe('streaming-runner', () => {
       expect(invoke).toHaveBeenCalledWith(
         'run_endstate_streaming',
         expect.objectContaining({
-          exe: 'pwsh',
+          exe: '__bundled__',
           args: [
-            '-NoProfile',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-File',
-            'C:\\test\\endstate.ps1',
             'capture',
             '--json',
             '--out',
@@ -458,13 +442,8 @@ describe('streaming-runner', () => {
       expect(invoke).toHaveBeenCalledWith(
         'run_endstate_streaming',
         expect.objectContaining({
-          exe: 'pwsh',
+          exe: '__bundled__',
           args: [
-            '-NoProfile',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-File',
-            'C:\\test\\endstate.ps1',
             'apply',
             '--json',
             '--events',

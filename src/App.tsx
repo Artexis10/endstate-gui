@@ -1051,7 +1051,7 @@ function AppContent() {
           );
         } else {
           console.warn(
-            '[ENGINE WARNING] No gitCommit in capabilities — likely running stale bootstrapped copy. Consider using script mode or re-bootstrapping.'
+            '[ENGINE WARNING] No gitCommit in capabilities — likely running stale bootstrapped copy. Consider re-bootstrapping.'
           );
         }
       }
@@ -1105,10 +1105,10 @@ function AppContent() {
   };
 
   useEffect(() => {
-    if (settings.engineMode && (settings.engineMode === 'bundled' || settings.engineMode === 'path' || settings.engineScriptPath)) {
+    if (settings.engineMode) {
       loadInitialData();
     }
-  }, [settings.engineMode, settings.engineScriptPath]);
+  }, [settings.engineMode]);
 
   // Overview-specific handlers that execute in-place without navigation or modals
   const handleCaptureFromOverview = async () => {
@@ -1903,7 +1903,7 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  if (!settings.engineMode || (settings.engineMode === 'script' && !settings.engineScriptPath)) {
+  if (!settings.engineMode) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Card className="max-w-md">
@@ -1965,7 +1965,6 @@ function AppContent() {
       location: typeof window !== 'undefined' ? window.location.href : 'unknown',
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
       engineMode: settings.engineMode,
-      engineScriptPath: settings.engineScriptPath,
       safeMode,
       errorMessage: state.errorMessage,
       errorCommand: state.errorCommand,
@@ -2779,7 +2778,7 @@ function AppContent() {
               <CardContent className="space-y-4">
                 <RadioGroup
                   value={settings.engineMode}
-                  onValueChange={(value: 'bundled' | 'path' | 'script') => updateSettings({ engineMode: value })}
+                  onValueChange={(value: 'bundled' | 'path') => updateSettings({ engineMode: value })}
                 >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="bundled" id="engine-bundled" />
@@ -2793,25 +2792,7 @@ function AppContent() {
                       System PATH (development)
                     </label>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="script" id="engine-script" />
-                    <label htmlFor="engine-script" className="text-sm cursor-pointer">
-                      Script (legacy)
-                    </label>
-                  </div>
                 </RadioGroup>
-
-                {settings.engineMode === 'script' && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Script Path</label>
-                    <Input
-                      type="text"
-                      value={settings.engineScriptPath}
-                      onChange={(e) => updateSettings({ engineScriptPath: e.target.value })}
-                      placeholder="C:\path\to\endstate.ps1"
-                    />
-                  </div>
-                )}
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Custom Storage Directory (optional)</label>

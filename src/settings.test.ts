@@ -14,9 +14,8 @@ describe('settings', () => {
   describe('loadSettings', () => {
     it('returns default settings when localStorage is empty', () => {
       const settings = loadSettings();
-      
+
       expect(settings.engineMode).toBe('bundled');
-      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\bin\\endstate.ps1');
       expect(settings.customProfilesDirectory).toBe('');
       expect(settings.selectedProfileName).toBeNull();
       expect(settings.dryRunEnabled).toBe(true);
@@ -25,7 +24,6 @@ describe('settings', () => {
     it('loads settings from localStorage when present (namespaced)', () => {
       const stored: AppSettings = {
         engineMode: 'path',
-        engineScriptPath: '/custom/path.ps1',
         customProfilesDirectory: '/manifests',
         selectedProfileName: 'TestProfile',
         dryRunEnabled: false,
@@ -34,14 +32,13 @@ describe('settings', () => {
       localStorage.setItem(NAMESPACED_KEY, JSON.stringify(stored));
 
       const settings = loadSettings();
-      
+
       expect(settings).toEqual(stored);
     });
 
     it('migrates legacy un-namespaced settings to namespaced key', () => {
       const stored: AppSettings = {
         engineMode: 'path',
-        engineScriptPath: '/legacy/path.ps1',
         customProfilesDirectory: '/legacy',
         selectedProfileName: null,
         dryRunEnabled: false,
@@ -50,7 +47,7 @@ describe('settings', () => {
       localStorage.setItem(LEGACY_KEY, JSON.stringify(stored));
 
       const settings = loadSettings();
-      
+
       expect(settings).toEqual(stored);
       // Legacy key should be removed after migration
       expect(localStorage.getItem(LEGACY_KEY)).toBeNull();
@@ -66,7 +63,7 @@ describe('settings', () => {
       localStorage.setItem(NAMESPACED_KEY, JSON.stringify(partial));
 
       const settings = loadSettings();
-      
+
       expect(settings.engineMode).toBe('path');
       expect(settings.customProfilesDirectory).toBe('/custom');
       expect(settings.dryRunEnabled).toBe(true);
@@ -74,11 +71,28 @@ describe('settings', () => {
 
     it('returns defaults when localStorage contains invalid JSON', () => {
       localStorage.setItem(NAMESPACED_KEY, 'invalid-json');
-      
+
       const settings = loadSettings();
-      
+
       expect(settings.engineMode).toBe('bundled');
       expect(settings.dryRunEnabled).toBe(true);
+    });
+
+    it('migrates stored script mode to bundled', () => {
+      const stored = {
+        engineMode: 'script',
+        engineScriptPath: '/old/path.ps1',
+        customProfilesDirectory: '',
+        selectedProfileName: null,
+        dryRunEnabled: true,
+        showDetails: false,
+      };
+      localStorage.setItem(NAMESPACED_KEY, JSON.stringify(stored));
+
+      const settings = loadSettings();
+
+      expect(settings.engineMode).toBe('bundled');
+      expect((settings as any).engineScriptPath).toBeUndefined();
     });
   });
 
@@ -86,7 +100,6 @@ describe('settings', () => {
     it('persists settings to localStorage with namespace', () => {
       const settings: AppSettings = {
         engineMode: 'path',
-        engineScriptPath: '/test/path.ps1',
         customProfilesDirectory: '/test/manifests',
         selectedProfileName: 'Profile1',
         dryRunEnabled: false,
@@ -102,8 +115,7 @@ describe('settings', () => {
 
     it('overwrites existing settings', () => {
       const initial: AppSettings = {
-        engineMode: 'script',
-        engineScriptPath: '/old/path.ps1',
+        engineMode: 'bundled',
         customProfilesDirectory: '/old',
         selectedProfileName: 'Old',
         dryRunEnabled: true,
@@ -113,7 +125,6 @@ describe('settings', () => {
 
       const updated: AppSettings = {
         engineMode: 'path',
-        engineScriptPath: '/new/path.ps1',
         customProfilesDirectory: '/new',
         selectedProfileName: 'New',
         dryRunEnabled: false,

@@ -6,7 +6,6 @@
 
 import { invoke, isEngineAvailable } from './tauri-bridge';
 import { AppSettings } from '../settings';
-import { validateEngineScriptPath, getRepoRootFromScriptPath } from './engine-path';
 
 /** Typed error kinds for engine execution */
 export type EngineErrorKind = 
@@ -44,11 +43,10 @@ export interface EngineCommand {
 /**
  * Build the engine command based on settings and mode.
  *
- * For script mode (legacy): exe="pwsh", args include -NoProfile -ExecutionPolicy Bypass -File <scriptPath>
- * For bundled mode: tries sidecar binary path, falls back to "endstate" from PATH
+ * For bundled mode: delegates sidecar resolution to Rust via "__bundled__" sentinel
  * For path mode: exe="endstate", args are passed directly
  *
- * @param settings - App settings containing engineMode and engineScriptPath
+ * @param settings - App settings containing engineMode
  * @param commandArgs - Arguments to pass to the engine (e.g., ["capabilities", "--json"])
  * @returns EngineCommand with exe, args, and displayCommand
  */
@@ -56,20 +54,7 @@ export async function buildEngineCommand(
   settings: AppSettings,
   commandArgs: string[]
 ): Promise<EngineCommand> {
-  if (settings.engineMode === 'script') {
-    // Legacy script mode: invoke via PowerShell
-    const exe = 'pwsh';
-    const args = [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      settings.engineScriptPath,
-      ...commandArgs,
-    ];
-    const displayCommand = `pwsh -NoProfile -ExecutionPolicy Bypass -File "${settings.engineScriptPath}" ${commandArgs.join(' ')}`;
-    return { exe, args, displayCommand };
-  } else if (settings.engineMode === 'bundled') {
+  if (settings.engineMode === 'bundled') {
     // Delegate sidecar resolution entirely to Rust via the "__bundled__" sentinel.
     // Rust handles target-triple filename lookup and sets ENDSTATE_ROOT.
     return { exe: '__bundled__', args: commandArgs, displayCommand: `[bundled] ${commandArgs.join(' ')}` };
@@ -165,22 +150,6 @@ export async function runEndstateOnce<T>(
   }
   
   // Tauri runtime - execute via endstate_exec
-  // Script mode validation: check path exists before attempting execution
-  if (settings.engineMode === 'script') {
-    const validationError = await validateEngineScriptPath(settings.engineScriptPath);
-    if (validationError) {
-      return {
-        success: false,
-        error: {
-          kind: 'command_not_found',
-          message: validationError,
-          command: commandStr,
-          details: `Configured path: ${settings.engineScriptPath}`,
-        },
-      };
-    }
-  }
-  
   try {
     const result = await invoke<ExecResult>('endstate_exec', {
       exe: engineCmd.exe,
@@ -194,18 +163,7 @@ export async function runEndstateOnce<T>(
                          result.stderr?.includes('CommandNotFoundException');
       
       if (isNotFound) {
-        // Build helpful error message
-        let message = 'endstate command not found.';
-        if (settings.engineMode === 'script') {
-          const repoRoot = getRepoRootFromScriptPath(settings.engineScriptPath);
-          const binPath = repoRoot ? `${repoRoot}\\bin\\endstate.ps1` : null;
-          message = `Engine script not found at: ${settings.engineScriptPath}`;
-          if (binPath && settings.engineScriptPath !== binPath) {
-            message += `\nThe engine may have moved to: ${binPath}`;
-          }
-        } else {
-          message = 'endstate command not found. Check that it is installed and in PATH.';
-        }
+        const message = 'endstate command not found. Check that it is installed and in PATH.';
         
         return {
           success: false,
@@ -363,7 +321,7 @@ export function getErrorMessage(error: EngineError): string {
     case 'engine_unavailable_web':
       return 'Engine not available in web mode. Enable mock mode for testing, or run the app in Tauri.';
     case 'command_not_found':
-      return 'endstate command not found. Please install endstate or configure the script path in Settings.';
+      return 'endstate command not found. Please install endstate or check your PATH.';
     case 'command_failed':
       return error.message;
     case 'invoke_failed':

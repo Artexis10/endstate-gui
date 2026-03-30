@@ -9,7 +9,7 @@ import { seedLocalStorage, clearLocalStorage, getLocalStorageKeys } from '../tes
  * This test suite enforces the contract between persisted preferences and transient UI states.
  * 
  * PERSISTED PREFERENCES (survive reload):
- * 1. App Settings (engineMode, engineScriptPath, customProfilesDirectory, lastSelectedProfile, dryRunEnabled)
+ * 1. App Settings (engineMode, customProfilesDirectory, lastSelectedProfile, dryRunEnabled)
  * 2. Last Run Data per command (capture/apply/verify outcomes with timestamps)
  * 3. Technical Logs Visibility (showDetails preference)
  * 
@@ -30,9 +30,8 @@ describe('Persistence Boundaries', () => {
   describe('PERSISTED: App Settings', () => {
     it('uses defaults when localStorage is empty', () => {
       const settings = loadSettings();
-      
+
       expect(settings.engineMode).toBe('bundled');
-      expect(settings.engineScriptPath).toBe('C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\bin\\endstate.ps1');
       expect(settings.customProfilesDirectory).toBe('');
       expect(settings.selectedProfileName).toBeNull();
       expect(settings.dryRunEnabled).toBe(true);
@@ -41,7 +40,6 @@ describe('Persistence Boundaries', () => {
     it('restores settings from localStorage when seeded', () => {
       const customSettings: AppSettings = {
         engineMode: 'path',
-        engineScriptPath: 'C:\\custom\\path\\endstate.ps1',
         customProfilesDirectory: 'C:\\custom\\profiles',
         selectedProfileName: 'my-profile',
         dryRunEnabled: false,
@@ -59,7 +57,6 @@ describe('Persistence Boundaries', () => {
     it('persists settings to localStorage when saved', () => {
       const settings: AppSettings = {
         engineMode: 'path',
-        engineScriptPath: '/usr/local/bin/endstate',
         customProfilesDirectory: '/home/user/profiles',
         selectedProfileName: 'work-setup',
         dryRunEnabled: true,
@@ -70,7 +67,7 @@ describe('Persistence Boundaries', () => {
 
       const keys = getLocalStorageKeys();
       expect(keys).toContain('web:endstate-gui-settings');
-      
+
       const stored = localStorage.getItem('web:endstate-gui-settings');
       expect(stored).toBeTruthy();
       expect(JSON.parse(stored!)).toEqual(settings);
@@ -86,8 +83,7 @@ describe('Persistence Boundaries', () => {
 
     it('merges partial updates with defaults', () => {
       const initial: AppSettings = {
-        engineMode: 'script',
-        engineScriptPath: 'C:\\endstate.ps1',
+        engineMode: 'path',
         customProfilesDirectory: '',
         selectedProfileName: null,
         dryRunEnabled: true,
@@ -103,7 +99,7 @@ describe('Persistence Boundaries', () => {
 
       const reloaded = loadSettings();
       expect(reloaded.dryRunEnabled).toBe(false);
-      expect(reloaded.engineMode).toBe('script');
+      expect(reloaded.engineMode).toBe('path');
     });
   });
 
@@ -429,8 +425,7 @@ describe('Persistence Boundaries', () => {
 
       // Save all persisted preferences
       const settings: AppSettings = {
-        engineMode: 'script',
-        engineScriptPath: 'C:\\endstate.ps1',
+        engineMode: 'path',
         customProfilesDirectory: '',
         selectedProfileName: 'test',
         dryRunEnabled: true,

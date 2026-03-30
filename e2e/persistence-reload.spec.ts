@@ -40,8 +40,7 @@ test.describe('Persistence Boundaries on Reload', () => {
     // Step 1: Seed localStorage with persisted preferences
     await page.evaluate(() => {
       const settings = {
-        engineMode: 'script',
-        engineScriptPath: 'C:\\test\\endstate.ps1',
+        engineMode: 'path',
         customProfilesDirectory: '',
         selectedProfileName: 'test-profile',
         dryRunEnabled: false,
@@ -148,8 +147,7 @@ test.describe('Persistence Boundaries on Reload', () => {
     // Set initial preference
     await page.evaluate(() => {
       const settings = {
-        engineMode: 'script',
-        engineScriptPath: 'C:\\test\\endstate.ps1',
+        engineMode: 'path',
         customProfilesDirectory: '',
         selectedProfileName: 'profile-v1',
         dryRunEnabled: true,
@@ -157,25 +155,24 @@ test.describe('Persistence Boundaries on Reload', () => {
       };
       localStorage.setItem('test:endstate-gui-settings', JSON.stringify(settings));
     });
-    
+
     // Reload
     await page.reload();
     await page.waitForLoadState('networkidle');
-    
+
     // Verify first preference persisted
     let persistedSettings = await page.evaluate(() => {
       const settingsKey = Object.keys(localStorage).find(k => k.includes('endstate-gui-settings'));
       return settingsKey ? JSON.parse(localStorage.getItem(settingsKey) || '{}') : null;
     });
-    
+
     expect(persistedSettings?.selectedProfileName).toBe('profile-v1');
     expect(persistedSettings?.dryRunEnabled).toBe(true);
-    
+
     // Update preference
     await page.evaluate(() => {
       const settings = {
-        engineMode: 'script',
-        engineScriptPath: 'C:\\test\\endstate.ps1',
+        engineMode: 'path',
         customProfilesDirectory: '',
         selectedProfileName: 'profile-v2',
         dryRunEnabled: false,

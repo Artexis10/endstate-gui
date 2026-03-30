@@ -23,7 +23,6 @@ export function seedProfileSettings(page: Page, profileName = 'test-profile', dr
     
     const settings = {
       engineMode: 'path',
-      engineScriptPath: '',
       customProfilesDirectory: '',
       lastSelectedProfile: name,
       lastSelectedProfilePath: `C:\\test\\profiles\\${name}.jsonc`,

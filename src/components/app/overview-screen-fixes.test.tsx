@@ -15,7 +15,6 @@ import type { DiscoveredProfile } from '@/file-discovery';
 vi.mock('@/settings', () => ({
   loadSettings: () => ({
     engineMode: 'bundled',
-    engineScriptPath: '',
     customProfilesDirectory: '',
     lastSelectedProfile: '',
     lastSelectedProfilePath: '',

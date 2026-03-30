@@ -8,22 +8,13 @@ vi.mock('./tauri-bridge', () => ({
   isEngineAvailable: vi.fn(() => true),
 }));
 
-// Mock engine-path for script validation
-vi.mock('./engine-path', () => ({
-  validateEngineScriptPath: vi.fn().mockResolvedValue(null),
-  getRepoRootFromScriptPath: vi.fn().mockReturnValue(null),
-}));
-
 import { invoke, isEngineAvailable } from './tauri-bridge';
-import { validateEngineScriptPath } from './engine-path';
 const mockInvoke = vi.mocked(invoke);
 const mockIsEngineAvailable = vi.mocked(isEngineAvailable);
-const mockValidateScriptPath = vi.mocked(validateEngineScriptPath);
 
 describe('buildEngineCommand', () => {
   const baseSettings: AppSettings = {
     engineMode: 'bundled',
-    engineScriptPath: '',
     customProfilesDirectory: '',
     selectedProfileName: null,
     dryRunEnabled: false,
@@ -32,66 +23,6 @@ describe('buildEngineCommand', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  describe('script mode', () => {
-    it('returns pwsh with -File flag for script mode', async () => {
-      const settings: AppSettings = {
-        ...baseSettings,
-        engineMode: 'script',
-        engineScriptPath: 'C:\\Users\\test\\endstate\\bin\\endstate.ps1',
-      };
-
-      const result = await buildEngineCommand(settings, ['capabilities', '--json']);
-
-      expect(result.exe).toBe('pwsh');
-      expect(result.args).toEqual([
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        'C:\\Users\\test\\endstate\\bin\\endstate.ps1',
-        'capabilities',
-        '--json',
-      ]);
-      expect(result.displayCommand).toContain('pwsh');
-      expect(result.displayCommand).toContain('-File');
-      expect(result.displayCommand).toContain('endstate.ps1');
-    });
-
-    it('includes all command args after script path', async () => {
-      const settings: AppSettings = {
-        ...baseSettings,
-        engineMode: 'script',
-        engineScriptPath: 'C:\\test\\endstate.ps1',
-      };
-
-      const result = await buildEngineCommand(settings, ['verify', '--json', '--profile', 'test.jsonc']);
-
-      expect(result.args).toEqual([
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        'C:\\test\\endstate.ps1',
-        'verify',
-        '--json',
-        '--profile',
-        'test.jsonc',
-      ]);
-    });
-
-    it('displayCommand shows quoted script path', async () => {
-      const settings: AppSettings = {
-        ...baseSettings,
-        engineMode: 'script',
-        engineScriptPath: 'C:\\path with spaces\\endstate.ps1',
-      };
-
-      const result = await buildEngineCommand(settings, ['capabilities', '--json']);
-
-      expect(result.displayCommand).toContain('"C:\\path with spaces\\endstate.ps1"');
-    });
   });
 
   describe('bundled mode', () => {
@@ -127,20 +58,6 @@ describe('buildEngineCommand', () => {
   });
 
   describe('displayCommand accuracy', () => {
-    it('script mode displayCommand never shows bare endstate', async () => {
-      const settings: AppSettings = {
-        ...baseSettings,
-        engineMode: 'script',
-        engineScriptPath: 'C:\\test\\endstate.ps1',
-      };
-
-      const result = await buildEngineCommand(settings, ['capabilities', '--json']);
-
-      // Must NOT start with 'endstate ' - that would indicate fallback
-      expect(result.displayCommand).not.toMatch(/^endstate\s/);
-      expect(result.displayCommand).toMatch(/^pwsh\s/);
-    });
-
     it('bundled mode displayCommand always shows [bundled] prefix', async () => {
       const settings: AppSettings = {
         ...baseSettings,
@@ -157,7 +74,6 @@ describe('buildEngineCommand', () => {
 describe('runEndstateOnce', () => {
   const baseSettings: AppSettings = {
     engineMode: 'bundled',
-    engineScriptPath: '',
     customProfilesDirectory: '',
     selectedProfileName: null,
     dryRunEnabled: false,
@@ -177,7 +93,6 @@ describe('runEndstateOnce', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsEngineAvailable.mockReturnValue(true);
-    mockValidateScriptPath.mockResolvedValue(null);
   });
 
   describe('web mode (engine unavailable)', () => {
@@ -236,56 +151,6 @@ describe('runEndstateOnce', () => {
       }
 
       delete (window as any).__ENDSTATE_MOCK_ENGINE__;
-    });
-  });
-
-  describe('script mode validation', () => {
-    it('returns command_not_found when script path validation fails', async () => {
-      const settings: AppSettings = {
-        ...baseSettings,
-        engineMode: 'script',
-        engineScriptPath: 'C:\\bad\\path.ps1',
-      };
-      mockValidateScriptPath.mockResolvedValue('Engine script not found at: C:\\bad\\path.ps1');
-
-      const result = await runEndstateOnce(settings, 'capabilities');
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.kind).toBe('command_not_found');
-        expect(result.error.message).toContain('Engine script not found');
-        expect(result.error.details).toContain('C:\\bad\\path.ps1');
-      }
-    });
-
-    it('proceeds with execution when script path is valid', async () => {
-      const settings: AppSettings = {
-        ...baseSettings,
-        engineMode: 'script',
-        engineScriptPath: 'C:\\valid\\endstate.ps1',
-      };
-      mockValidateScriptPath.mockResolvedValue(null);
-      mockInvoke.mockResolvedValue({
-        stdout: JSON.stringify(validEnvelope),
-        stderr: '',
-        exitCode: 0,
-      });
-
-      const result = await runEndstateOnce(settings, 'capabilities');
-
-      expect(result.success).toBe(true);
-    });
-
-    it('does not validate script path for bundled mode', async () => {
-      mockInvoke.mockResolvedValue({
-        stdout: JSON.stringify(validEnvelope),
-        stderr: '',
-        exitCode: 0,
-      });
-
-      await runEndstateOnce(baseSettings, 'capabilities');
-
-      expect(mockValidateScriptPath).not.toHaveBeenCalled();
     });
   });
 
@@ -642,24 +507,6 @@ ${JSON.stringify(validEnvelope)}`;
       }));
     });
 
-    it('uses pwsh exe for script mode', async () => {
-      const settings: AppSettings = {
-        ...baseSettings,
-        engineMode: 'script',
-        engineScriptPath: 'C:\\test\\endstate.ps1',
-      };
-      mockInvoke.mockResolvedValue({
-        stdout: JSON.stringify(validEnvelope),
-        stderr: '',
-        exitCode: 0,
-      });
-
-      await runEndstateOnce(settings, 'capabilities');
-
-      expect(mockInvoke).toHaveBeenCalledWith('endstate_exec', expect.objectContaining({
-        exe: 'pwsh',
-      }));
-    });
   });
 });
 
@@ -681,7 +528,7 @@ describe('getErrorMessage', () => {
     };
     const msg = getErrorMessage(error);
     expect(msg).toContain('not found');
-    expect(msg).toContain('Settings');
+    expect(msg).toContain('PATH');
   });
 
   it('returns the error message for command_failed', () => {

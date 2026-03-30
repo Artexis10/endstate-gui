@@ -193,7 +193,6 @@ test.describe('Reports - Run Expansion with showDetails=false', () => {
       // Set showDetails=false to simulate Simplified mode behavior
       const settings = {
         engineMode: 'path',
-        engineScriptPath: '',
         customProfilesDirectory: '',
         lastSelectedProfile: 'test-profile',
         lastSelectedProfilePath: 'C:\\test\\profiles\\test-profile.jsonc',
