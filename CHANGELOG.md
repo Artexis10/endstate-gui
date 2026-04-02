@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.5.1](https://github.com/Artexis10/endstate-gui/compare/gui-v1.5.0...gui-v1.5.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* **ci:** merge build into release-please workflow to fix token trigger issue ([7f46026](https://github.com/Artexis10/endstate-gui/commit/7f460268c85f0dcea46d336232a5b91cfce384bd))
+
 ## [1.5.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.4.0...gui-v1.5.0) (2026-04-02)
 
 
