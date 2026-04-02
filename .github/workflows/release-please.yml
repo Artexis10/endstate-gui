@@ -3,6 +3,11 @@ name: release-please
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Existing release tag to build and attach assets to (e.g. gui-v1.5.1)'
+        required: true
 
 permissions:
   contents: write
@@ -50,7 +55,7 @@ jobs:
 
   build:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: windows-latest
     permissions:
       contents: write
@@ -104,7 +109,7 @@ jobs:
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          tag_name: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
