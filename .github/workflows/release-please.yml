@@ -105,6 +105,7 @@ jobs:
         run: npm run tauri build
         env:
           SKIP_ENGINE_BUILD: '1'
+          ENDSTATE_ENGINE_DIR: endstate/go-engine
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
