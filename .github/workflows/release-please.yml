@@ -63,12 +63,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Artexis10/endstate
-          path: ../endstate
+          path: endstate
           token: ${{ secrets.ENGINE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: ../endstate/go-engine/go.mod
+          go-version-file: endstate/go-engine/go.mod
 
       - uses: actions/setup-node@v4
         with:
@@ -79,18 +79,18 @@ jobs:
       - name: Build Go engine with version ldflags
         shell: bash
         run: |
-          VER=$(cat ../endstate/VERSION)
-          SCHEMA_VER=$(cat ../endstate/SCHEMA_VERSION)
+          VER=$(cat endstate/VERSION)
+          SCHEMA_VER=$(cat endstate/SCHEMA_VERSION)
           LDFLAGS="-X github.com/Artexis10/endstate/go-engine/internal/config.version=${VER} -X github.com/Artexis10/endstate/go-engine/internal/config.schemaVersion=${SCHEMA_VER}"
-          cd ../endstate/go-engine
+          cd endstate/go-engine
           go build -ldflags "${LDFLAGS}" -o endstate.exe ./cmd/endstate/
 
       - name: Copy engine binary to sidecar locations
         shell: bash
         run: |
-          cp ../endstate/go-engine/endstate.exe ../endstate/go-engine/endstate-x86_64-pc-windows-msvc.exe
+          cp endstate/go-engine/endstate.exe endstate/go-engine/endstate-x86_64-pc-windows-msvc.exe
           mkdir -p src-tauri/target/release
-          cp ../endstate/go-engine/endstate.exe src-tauri/target/release/endstate.exe
+          cp endstate/go-engine/endstate.exe src-tauri/target/release/endstate.exe
 
       - name: Install npm dependencies
         run: npm ci
