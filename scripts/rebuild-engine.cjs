@@ -27,10 +27,42 @@ const RELEASE_EXE = path.resolve(__dirname, '../src-tauri/target/release/endstat
 if (process.env.SKIP_ENGINE_BUILD === '1') {
   console.log('SKIP_ENGINE_BUILD=1 — skipping Go build.');
 } else {
+  // Read version files for ldflags embedding
+  const engineRoot = path.resolve(ENGINE_DIR, '..');
+  const ver = fs.readFileSync(path.join(engineRoot, 'VERSION'), 'utf8').trim();
+  const schemaVer = fs.readFileSync(path.join(engineRoot, 'SCHEMA_VERSION'), 'utf8').trim();
+  const ldflags = `-X github.com/Artexis10/endstate/go-engine/internal/config.version=${ver} -X github.com/Artexis10/endstate/go-engine/internal/config.schemaVersion=${schemaVer}`;
+
+  // Staleness guard: warn or block if engine repo is behind origin/main
+  try {
+    execSync('git fetch origin main --quiet', {
+      cwd: engineRoot,
+      stdio: 'pipe',
+      timeout: 15000,
+    });
+    const behind = execSync('git log HEAD..origin/main --oneline', {
+      cwd: engineRoot,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    if (behind) {
+      const count = behind.split('\n').length;
+      const msg = `Local engine repo is ${count} commit(s) behind origin/main. Run: cd ${engineRoot} && git pull`;
+      if (strict) {
+        console.error(`ERROR: ${msg}`);
+        process.exit(1);
+      } else {
+        console.warn(`WARNING: ${msg}`);
+      }
+    }
+  } catch (err) {
+    console.warn('WARNING: Could not check engine repo staleness (git fetch failed).');
+  }
+
   try {
     console.log('Building Go engine...');
     const start = Date.now();
-    execSync('go build -o endstate.exe ./cmd/endstate/', {
+    execSync(`go build -ldflags "${ldflags}" -o endstate.exe ./cmd/endstate/`, {
       cwd: ENGINE_DIR,
       stdio: 'inherit',
     });
@@ -100,11 +132,6 @@ try {
   schemaVersion = caps.schemaVersion || 'unknown';
 } catch (err) {
   console.warn(`WARNING: Could not extract engine version: ${err.message}`);
-  // Fallback to VERSION file in engine repo
-  const versionFile = path.resolve(ENGINE_DIR, '../../VERSION');
-  if (fs.existsSync(versionFile)) {
-    cliVersion = fs.readFileSync(versionFile, 'utf8').trim();
-  }
 }
 
 console.log(`\n  Bundling engine v${cliVersion} (schema ${schemaVersion})\n`);
