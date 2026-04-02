@@ -2,6 +2,8 @@
 
 ### Requirement: predev script rebuilds the engine
 
+The `predev` npm script SHALL rebuild (bootstrap) the engine binary before starting the development server, ensuring the GUI runs against current engine code. The build SHALL embed version and schema version via `-ldflags`.
+
 #### Scenario: Build embeds version via ldflags
 - **WHEN** the rebuild script compiles the engine
 - **THEN** it passes `-ldflags` with `version` and `schemaVersion` read from `VERSION` and `SCHEMA_VERSION` files in the engine repo root
