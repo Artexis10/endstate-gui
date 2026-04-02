@@ -10,17 +10,60 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+        with:
+          repository: Artexis10/endstate
+          path: ../endstate
+          token: ${{ secrets.ENGINE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ../endstate/go-engine/go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Extract version from tag
         id: version
+        shell: bash
         run: echo "version=${GITHUB_REF_NAME#gui-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Go engine with version ldflags
+        shell: bash
+        run: |
+          VER=$(cat ../endstate/VERSION)
+          SCHEMA_VER=$(cat ../endstate/SCHEMA_VERSION)
+          LDFLAGS="-X github.com/Artexis10/endstate/go-engine/internal/config.version=${VER} -X github.com/Artexis10/endstate/go-engine/internal/config.schemaVersion=${SCHEMA_VER}"
+          cd ../endstate/go-engine
+          go build -ldflags "${LDFLAGS}" -o endstate.exe ./cmd/endstate/
+
+      - name: Copy engine binary to sidecar locations
+        shell: bash
+        run: |
+          cp ../endstate/go-engine/endstate.exe ../endstate/go-engine/endstate-x86_64-pc-windows-msvc.exe
+          mkdir -p src-tauri/target/release
+          cp ../endstate/go-engine/endstate.exe src-tauri/target/release/endstate.exe
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        shell: bash
+        run: npm run tauri build
+        env:
+          SKIP_ENGINE_BUILD: '1'
 
       - name: Extract changelog section
         id: changelog
+        shell: bash
         run: |
           version="${{ steps.version.outputs.version }}"
           # Extract section between ## [x.y.z] and the next ## [ (or EOF)
@@ -46,5 +89,8 @@ jobs:
           name: GUI ${{ steps.version.outputs.version }}
           body_path: /tmp/release-body.md
           make_latest: true
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
