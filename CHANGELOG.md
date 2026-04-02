@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.5.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.4.0...gui-v1.5.0) (2026-04-02)
+
+
+### Features
+
+* **ci:** add Tauri build artifacts to release workflow ([d43de3e](https://github.com/Artexis10/endstate-gui/commit/d43de3ec9bcfc38c94934d341653901de8f0cfe0))
+* embed version via ldflags and add engine staleness guard ([bddbe86](https://github.com/Artexis10/endstate-gui/commit/bddbe86621ff82dad17e35ee94a2dd96c6173446))
+
+
+### Bug Fixes
+
+* **openspec:** add missing requirement text to engine-build-ldflags delta spec ([d3b7147](https://github.com/Artexis10/endstate-gui/commit/d3b7147e21266b76f505a3406475365751abf2ff))
+
 ## [1.4.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.3.6...gui-v1.4.0) (2026-03-29)
 
 
