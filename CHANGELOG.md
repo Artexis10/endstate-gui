@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.5.2](https://github.com/Artexis10/endstate-gui/compare/gui-v1.5.1...gui-v1.5.2) (2026-04-03)
+
+
+### Bug Fixes
+
+* **ci:** add workflow_dispatch trigger for manual build recovery ([c36da22](https://github.com/Artexis10/endstate-gui/commit/c36da222d85cc915ae8bef44e5675cd6b4e9099c))
+* **ci:** create empty payload directory for Tauri resource bundling ([5278a86](https://github.com/Artexis10/endstate-gui/commit/5278a86ada93fde3d112f61f8abc17e6406a4b1b))
+* **ci:** create junction for engine repo at expected sidecar path ([f06b076](https://github.com/Artexis10/endstate-gui/commit/f06b076d4984cbce911badc5b9ec19bdccf60138))
+* **ci:** set ENDSTATE_ENGINE_DIR for prebuild script ([128ee45](https://github.com/Artexis10/endstate-gui/commit/128ee451cc366e88362e82f9fbd7300399037d91))
+* **ci:** use workspace-relative path for engine repo checkout ([f8a98cc](https://github.com/Artexis10/endstate-gui/commit/f8a98ccc86f0407dd0b7897d973aa36c1be397ac))
+
 ## [1.5.1](https://github.com/Artexis10/endstate-gui/compare/gui-v1.5.0...gui-v1.5.1) (2026-04-02)
 
 
