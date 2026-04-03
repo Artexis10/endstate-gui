@@ -78,6 +78,12 @@ jobs:
         shell: cmd
         run: mklink /J ..\endstate endstate
 
+      # payload/ is gitignored (user-specific captured config); create the
+      # minimum structure so the Tauri resource glob resolves in CI.
+      - name: Create empty payload directory
+        shell: bash
+        run: mkdir -p endstate/payload/apps
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: endstate/go-engine/go.mod
