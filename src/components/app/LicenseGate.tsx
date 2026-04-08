@@ -125,7 +125,7 @@ export function LicenseGate({ children }: LicenseGateProps) {
           </Button>
           <div className="text-center">
             <a
-              href="https://endstate.lemonsqueezy.com"
+              href="https://checkout.example.com"
               target="_blank"
               rel="noopener noreferrer"
               className={cn(

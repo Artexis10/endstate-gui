@@ -3208,7 +3208,7 @@ function LicenseSettingsSection() {
               Deactivate this machine
             </Button>
             <a
-              href="https://app.lemonsqueezy.com/my-orders"
+              href="https://checkout.example.com/my-orders"
               target="_blank"
               rel="noopener noreferrer"
             >

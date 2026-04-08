@@ -164,7 +164,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Apply and verify workflows with result modals
 - Capture workflow with app selection
 - Configuration export and restore UX
-- License activation via LemonSqueezy
+- License activation via checkout provider
 - Advanced mode for technical details
 - Engine schema compatibility handshake
 

@@ -43,7 +43,7 @@ describe('file-discovery', () => {
       vi.mocked(invoke)
         .mockImplementation(async (cmd: string) => {
           if (cmd === 'list_manifest_files') return [
-            'C:\\manifests\\Hugo-Laptop.jsonc',
+            'C:\\manifests\\My-Laptop.jsonc',
             'C:\\manifests\\Test-Profile.json',
             'C:\\manifests\\Another.json5',
           ];
@@ -55,7 +55,7 @@ describe('file-discovery', () => {
       const profiles = await discoverProfiles('C:\\manifests');
 
       expect(profiles).toHaveLength(3);
-      expect(profiles.map(p => p.name)).toEqual(['Hugo-Laptop', 'Test-Profile', 'Another']);
+      expect(profiles.map(p => p.name)).toEqual(['My-Laptop', 'Test-Profile', 'Another']);
       expect(invoke).toHaveBeenCalledWith('list_manifest_files', { directory: 'C:\\manifests' });
     });
 

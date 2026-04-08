@@ -94,7 +94,7 @@ Settings are persisted in **localStorage** under key `endstate-gui-settings`:
 
 - User configures a manifest directory in Settings
 - GUI scans directory for `*.json`, `*.jsonc`, `*.json5` files
-- Profile names extracted from filenames (e.g., `Hugo-Laptop.jsonc` → "Hugo-Laptop")
+- Profile names extracted from filenames (e.g., `My-Laptop.jsonc` → "My-Laptop")
 - Dropdown populated with discovered profiles
 - Last selected profile persisted in localStorage
 

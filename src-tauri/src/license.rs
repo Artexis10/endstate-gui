@@ -48,18 +48,18 @@ pub struct LicenseCache {
     pub activated_at: String,
 }
 
-/// LemonSqueezy activation/validation API response (relevant fields).
+/// Checkout provider activation/validation API response (relevant fields).
 #[derive(Debug, Deserialize)]
-struct LemonSqueezyResponse {
+struct CheckoutProviderResponse {
     activated: Option<bool>,
     valid: Option<bool>,
     deactivated: Option<bool>,
-    instance: Option<LemonSqueezyInstance>,
+    instance: Option<CheckoutProviderInstance>,
     error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct LemonSqueezyInstance {
+struct CheckoutProviderInstance {
     id: String,
 }
 
@@ -163,55 +163,55 @@ pub fn delete_cache() -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
-// LemonSqueezy API calls
+// Checkout provider API calls
 // ---------------------------------------------------------------------------
 
-const LEMONSQUEEZY_API_BASE: &str = "https://api.lemonsqueezy.com/v1/licenses";
+const CHECKOUT_API_BASE: &str = "https://api.checkout.example.com/v1/licenses";
 
-/// Activate a license key with LemonSqueezy.
-async fn api_activate(key: &str, instance_name: &str) -> Result<LemonSqueezyResponse, String> {
+/// Activate a license key with Checkout provider.
+async fn api_activate(key: &str, instance_name: &str) -> Result<CheckoutProviderResponse, String> {
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{}/activate", LEMONSQUEEZY_API_BASE))
+        .post(format!("{}/activate", CHECKOUT_API_BASE))
         .form(&[("license_key", key), ("instance_name", instance_name)])
         .send()
         .await
         .map_err(|e| format!("Activation request failed: {}", e))?;
 
-    resp.json::<LemonSqueezyResponse>()
+    resp.json::<CheckoutProviderResponse>()
         .await
         .map_err(|e| format!("Failed to parse activation response: {}", e))
 }
 
-/// Validate a license key with LemonSqueezy.
-async fn api_validate(key: &str, instance_id: &str) -> Result<LemonSqueezyResponse, String> {
+/// Validate a license key with Checkout provider.
+async fn api_validate(key: &str, instance_id: &str) -> Result<CheckoutProviderResponse, String> {
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{}/validate", LEMONSQUEEZY_API_BASE))
+        .post(format!("{}/validate", CHECKOUT_API_BASE))
         .form(&[("license_key", key), ("instance_id", instance_id)])
         .send()
         .await
         .map_err(|e| format!("Validation request failed: {}", e))?;
 
-    resp.json::<LemonSqueezyResponse>()
+    resp.json::<CheckoutProviderResponse>()
         .await
         .map_err(|e| format!("Failed to parse validation response: {}", e))
 }
 
-/// Deactivate a license key with LemonSqueezy.
+/// Deactivate a license key with Checkout provider.
 async fn api_deactivate(
     key: &str,
     instance_id: &str,
-) -> Result<LemonSqueezyResponse, String> {
+) -> Result<CheckoutProviderResponse, String> {
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{}/deactivate", LEMONSQUEEZY_API_BASE))
+        .post(format!("{}/deactivate", CHECKOUT_API_BASE))
         .form(&[("license_key", key), ("instance_id", instance_id)])
         .send()
         .await
         .map_err(|e| format!("Deactivation request failed: {}", e))?;
 
-    resp.json::<LemonSqueezyResponse>()
+    resp.json::<CheckoutProviderResponse>()
         .await
         .map_err(|e| format!("Failed to parse deactivation response: {}", e))
 }
@@ -220,7 +220,7 @@ async fn api_deactivate(
 // Tauri command implementations
 // ---------------------------------------------------------------------------
 
-/// Activate a license key. Computes machine fingerprint, calls LemonSqueezy,
+/// Activate a license key. Computes machine fingerprint, calls Checkout provider,
 /// caches on success.
 pub async fn activate(key: String) -> Result<LicenseStatus, String> {
     let fingerprint = compute_fingerprint()?;
@@ -318,7 +318,7 @@ pub async fn check() -> Result<LicenseStatus, String> {
     }
 }
 
-/// Deactivate the current license. Calls LemonSqueezy, deletes cache on success.
+/// Deactivate the current license. Calls Checkout provider, deletes cache on success.
 pub async fn deactivate() -> Result<(), String> {
     let cache = read_cache()?
         .ok_or_else(|| "No active license to deactivate".to_string())?;

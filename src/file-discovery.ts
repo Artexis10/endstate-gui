@@ -130,7 +130,7 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
         const filename = segments.pop() || '';
         const parentDir = segments.pop() || '';
         const bareFilename = filename.replace(/\.(jsonc?|json5)$/i, '');
-        // For extracted zip bundles (e.g. Setups/hugo-desktop/manifest.jsonc),
+        // For extracted zip bundles (e.g. Setups/my-desktop/manifest.jsonc),
         // use the parent directory name as the profile ID instead of "manifest"
         const dirBasename = directory.split(/[/\\]/).pop() || '';
         const isNestedInSubdir = parentDir !== '' && parentDir.toLowerCase() !== dirBasename.toLowerCase();

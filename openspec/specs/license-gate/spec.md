@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Gate the GUI behind license key activation. The GUI requires a valid LemonSqueezy license key tied to a machine fingerprint. Unlicensed users see an activation screen; licensed users proceed to the app. Offline use is supported via cached validation. Development builds can bypass the gate entirely.
+Gate the GUI behind license key activation. The GUI requires a valid checkout provider license key tied to a machine fingerprint. Unlicensed users see an activation screen; licensed users proceed to the app. Offline use is supported via cached validation. Development builds can bypass the gate entirely.
 
 ## Requirements
 
@@ -19,16 +19,16 @@ The system SHALL compute a SHA-256 fingerprint from three Windows registry/syste
 - **WHEN** the fingerprint is computed twice on the same machine
 - **THEN** both results are identical
 
-### Requirement: Activation calls LemonSqueezy API
-The system SHALL activate a license key by calling the LemonSqueezy `/v1/licenses/activate` endpoint with the license key and machine fingerprint as instance name.
+### Requirement: Activation calls checkout provider API
+The system SHALL activate a license key by calling the checkout provider `/v1/licenses/activate` endpoint with the license key and machine fingerprint as instance name.
 
 #### Scenario: Successful activation
-- **WHEN** LemonSqueezy returns `activated: true` with an `instance.id`
+- **WHEN** checkout provider returns `activated: true` with an `instance.id`
 - **THEN** the system persists a cache file with key, instance ID, fingerprint, and activation timestamp
 - **AND** returns `LicenseStatus` with `activated: true`
 
 #### Scenario: Failed activation
-- **WHEN** LemonSqueezy returns `activated: false` or an error
+- **WHEN** checkout provider returns `activated: false` or an error
 - **THEN** no cache is written
 - **AND** returns `LicenseStatus` with `activated: false` and the error in `validationError`
 
@@ -48,7 +48,7 @@ The system SHALL store license data at `%APPDATA%/Endstate/license.json` using c
 - **THEN** the cache file is removed from disk
 
 ### Requirement: License check validates fingerprint and calls API
-The system SHALL check license status by reading the cache, verifying the fingerprint matches the current machine, and validating online with LemonSqueezy.
+The system SHALL check license status by reading the cache, verifying the fingerprint matches the current machine, and validating online with checkout provider.
 
 #### Scenario: No cache exists
 - **WHEN** no cache file exists at the expected path
@@ -59,23 +59,23 @@ The system SHALL check license status by reading the cache, verifying the finger
 - **THEN** returns `LicenseStatus` with `activated: false` and `validationError: "License was activated on a different machine"`
 
 #### Scenario: Online validation succeeds
-- **WHEN** cache exists, fingerprint matches, and LemonSqueezy returns `valid: true`
+- **WHEN** cache exists, fingerprint matches, and checkout provider returns `valid: true`
 - **THEN** returns `LicenseStatus` with `activated: true`
 
 #### Scenario: Online validation fails
-- **WHEN** cache exists, fingerprint matches, but LemonSqueezy returns `valid: false`
+- **WHEN** cache exists, fingerprint matches, but checkout provider returns `valid: false`
 - **THEN** deletes the cache file
 - **AND** returns `LicenseStatus` with `activated: false` and the error in `validationError`
 
 #### Scenario: Offline grace
-- **WHEN** cache exists, fingerprint matches, but the LemonSqueezy API is unreachable
+- **WHEN** cache exists, fingerprint matches, but the checkout provider API is unreachable
 - **THEN** trusts the cache and returns `LicenseStatus` with `activated: true`
 
-### Requirement: Deactivation calls LemonSqueezy API
+### Requirement: Deactivation calls checkout provider API
 The system SHALL deactivate by calling `/v1/licenses/deactivate` with the cached key and instance ID.
 
 #### Scenario: Successful deactivation
-- **WHEN** LemonSqueezy returns `deactivated: true`
+- **WHEN** checkout provider returns `deactivated: true`
 - **THEN** the cache file is deleted
 - **AND** returns success
 
@@ -92,7 +92,7 @@ The system SHALL wrap the entire application in a `LicenseGate` component that c
 
 #### Scenario: Unlicensed
 - **WHEN** license check returns `activated: false`
-- **THEN** an activation card is displayed with a key input field, activate button, and "Buy Endstate" link to `https://endstate.lemonsqueezy.com`
+- **THEN** an activation card is displayed with a key input field, activate button, and "Buy Endstate" link to `https://checkout.example.com`
 
 #### Scenario: Licensed
 - **WHEN** license check returns `activated: true`
@@ -116,7 +116,7 @@ The system SHALL skip the license gate entirely when `VITE_DEV_BYPASS_LICENSE` i
 
 ## Implementation References
 
-- `src-tauri/src/license.rs` — Machine fingerprint, LemonSqueezy API, cache persistence, Tauri command implementations
+- `src-tauri/src/license.rs` — Machine fingerprint, checkout provider API, cache persistence, Tauri command implementations
 - `src/lib/license.ts` — Frontend bridge (`activateLicense`, `checkLicense`, `deactivateLicense`)
 - `src/components/app/LicenseGate.tsx` — Gate component, activation UI, context provider
 - `src/App.tsx` — Imports `LicenseGate` and `useLicenseGate`, wraps app

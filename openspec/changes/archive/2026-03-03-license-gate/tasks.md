@@ -7,9 +7,9 @@ All tasks are retroactive — implementation is complete.
 - [x] Machine fingerprint: read `MachineGuid` + hostname + `InstallDate` from registry, concatenate, SHA-256 hash to 64-char hex
 - [x] `LicenseStatus` type: `activated: bool`, `validationError: Option<String>`
 - [x] `LicenseCache` type: `key`, `instanceId`, `fingerprint`, `activatedAt` (camelCase serialization)
-- [x] `activate()`: POST to LemonSqueezy `/v1/licenses/activate`, write cache on success
+- [x] `activate()`: POST to checkout provider `/v1/licenses/activate`, write cache on success
 - [x] `check()`: read cache, verify fingerprint, validate online, offline grace fallback
-- [x] `deactivate()`: POST to LemonSqueezy `/v1/licenses/deactivate`, delete cache
+- [x] `deactivate()`: POST to checkout provider `/v1/licenses/deactivate`, delete cache
 - [x] Cache path: `%APPDATA%/Endstate/license.json`, create parent dirs on write
 - [x] 6 unit tests: serialization, inactive constructors, cache roundtrip, fingerprint determinism
 

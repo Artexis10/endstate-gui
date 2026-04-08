@@ -44,7 +44,7 @@ export function getEngineRoot(_settings: { engineMode: 'path' | 'bundled' }): st
 /**
  * Parse a log filename to extract run information.
  * Log filename format: <command>-<YYYYMMDD>-<HHMMSS>-<MACHINE>.log
- * Example: capture-20251222-044732-WIN-LAPTOP.log
+ * Example: capture-20251222-044732-MACHINE.log
  */
 function parseLogFilename(filename: string): { 
   runId: string; 
