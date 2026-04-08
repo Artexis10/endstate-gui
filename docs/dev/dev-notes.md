@@ -22,7 +22,7 @@ The GUI runs these endstate commands with `--json` flag:
 **Mode 2: Script Path**
 - Command: `pwsh -NoProfile -ExecutionPolicy Bypass -File <script.ps1> <command> --json <args>`
 - Uses absolute path to endstate.ps1
-- Default: `C:\Users\win-laptop\Desktop\projects\endstate\endstate.ps1`
+- Default: `C:\Users\<user>\Desktop\projects\endstate\endstate.ps1`
 
 ## STDOUT Parsing Contract
 

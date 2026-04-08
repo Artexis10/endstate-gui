@@ -19,7 +19,7 @@ Date: YYYY-MM-DD
 
 ## Critical Finding: Missing Specification
 
-`@c:\Users\win-laptop\Desktop\projects\endstate-gui\docs\ux\GLOBAL_NAVIGATION_INTERACTION_MAP.md:1` is **empty**. This is a structural gap—navigation behavior is undefined, yet all three surface maps assume users can "leave and return" with state preserved. This creates unspecified cross-surface transition behavior.
+`docs/ux/GLOBAL_NAVIGATION_INTERACTION_MAP.md` is **empty**. This is a structural gap—navigation behavior is undefined, yet all three surface maps assume users can "leave and return" with state preserved. This creates unspecified cross-surface transition behavior.
 
 ---
 
@@ -223,7 +223,7 @@ Date: YYYY-MM-DD
 
 ## Risk 11: Navigation Undefined — All "Leave and Return" Flows Are Unverifiable
 
-**Risk:** All three interaction maps define "Flow E — Leave and Return" with specific guarantees, but [GLOBAL_NAVIGATION_INTERACTION_MAP.md](cci:7://file:///c:/Users/win-laptop/Desktop/projects/endstate-gui/docs/ux/GLOBAL_NAVIGATION_INTERACTION_MAP.md:0:0-0:0) is empty. There is no specification for how navigation preserves or restores state.
+**Risk:** All three interaction maps define "Flow E — Leave and Return" with specific guarantees, but [GLOBAL_NAVIGATION_INTERACTION_MAP.md](docs/ux/GLOBAL_NAVIGATION_INTERACTION_MAP.md) is empty. There is no specification for how navigation preserves or restores state.
 
 **Contract violated:**
 - **I-2 Action Feedback Contract** — persistent resolution requirement
@@ -321,11 +321,11 @@ Date: YYYY-MM-DD
 
 ---
 
-**Audit complete.** Risk 11 (empty [GLOBAL_NAVIGATION_INTERACTION_MAP.md](cci:7://file:///c:/Users/win-laptop/Desktop/projects/endstate-gui/docs/ux/GLOBAL_NAVIGATION_INTERACTION_MAP.md:0:0-0:0)) is a blocking gap—all "leave and return" guarantees are unverifiable until navigation behavior is specified.
+**Audit complete.** Risk 11 (empty [GLOBAL_NAVIGATION_INTERACTION_MAP.md](docs/ux/GLOBAL_NAVIGATION_INTERACTION_MAP.md)) is a blocking gap—all "leave and return" guarantees are unverifiable until navigation behavior is specified.
 
 Audit complete. 
 
-**14 risks identified** across the UX specifications. The most critical finding: [GLOBAL_NAVIGATION_INTERACTION_MAP.md](cci:7://file:///c:/Users/win-laptop/Desktop/projects/endstate-gui/docs/ux/GLOBAL_NAVIGATION_INTERACTION_MAP.md:0:0-0:0) is empty, which makes all "leave and return" guarantees in the three surface maps unverifiable.
+**14 risks identified** across the UX specifications. The most critical finding: [GLOBAL_NAVIGATION_INTERACTION_MAP.md](docs/ux/GLOBAL_NAVIGATION_INTERACTION_MAP.md) is empty, which makes all "leave and return" guarantees in the three surface maps unverifiable.
 
 Key high-severity risks:
 - **State loss on navigation** (Capture, Profiles)

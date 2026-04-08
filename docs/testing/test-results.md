@@ -5,7 +5,7 @@
 
 ## Test Environment
 - OS: Windows
-- Endstate Path: `C:\Users\win-laptop\Desktop\projects\endstate\endstate.ps1`
+- Endstate Path: `C:\Users\&lt;user&gt;\Desktop\projects\endstate\endstate.ps1`
 - GUI Framework: Tauri v2 + React + TypeScript
 
 ## Architecture Validation
@@ -146,7 +146,7 @@
 Command::new("pwsh")
     .arg("-NoProfile")
     .arg("-File")
-    .arg("C:\\Users\\win-laptop\\Desktop\\projects\\endstate\\endstate.ps1")
+    .arg("C:\\Users\\&lt;user&gt;\\Desktop\\projects\\endstate\\endstate.ps1")
     .args(&["verify", "--profile", "Missing", "--json"])
     .output()
 ```

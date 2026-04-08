@@ -66,3 +66,6 @@ src-tauri/engine/
 
 # Generated build-time constants
 src/generated/
+
+# Internal working documents
+go-sidecar-integration-prompt.md
