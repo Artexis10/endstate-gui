@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import { ArrowLeft, HardDrive, Download, CheckCircle2, Save, Settings2, XCircle } from 'lucide-react';
+import { ArrowLeft, HardDrive, Download, CheckCircle2, Save, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -64,52 +64,13 @@ const SAVE_SETTINGS_IDS = new Set([
   'Microsoft.PowerToys',
 ]);
 
-// Setup flow mock data — apply-done state
+// Setup flow mock data — preview-done state
 interface MockAppEvent {
   app: string;
   name: string;
   statusKey: StatusKey;
   reason?: string;
 }
-
-const SETUP_EVENTS: MockAppEvent[] = [
-  { app: 'Microsoft.VisualStudioCode', name: 'Visual Studio Code', statusKey: 'installed' },
-  { app: 'Git.Git', name: 'Git', statusKey: 'installed' },
-  { app: 'Google.Chrome', name: 'Google Chrome', statusKey: 'present' },
-  { app: 'Mozilla.Firefox', name: 'Firefox', statusKey: 'installed' },
-  { app: 'Microsoft.WindowsTerminal', name: 'Windows Terminal', statusKey: 'present' },
-  { app: 'Microsoft.PowerShell', name: 'PowerShell', statusKey: 'present' },
-  { app: '7zip.7zip', name: '7-Zip', statusKey: 'installed' },
-  { app: 'Notepad++.Notepad++', name: 'Notepad++', statusKey: 'installed' },
-  { app: 'VideoLAN.VLC', name: 'VLC Media Player', statusKey: 'present' },
-  { app: 'Discord.Discord', name: 'Discord', statusKey: 'present' },
-  { app: 'Spotify.Spotify', name: 'Spotify', statusKey: 'present' },
-  { app: 'SlackTechnologies.Slack', name: 'Slack', statusKey: 'installed' },
-  { app: 'Microsoft.PowerToys', name: 'PowerToys', statusKey: 'installed' },
-  { app: 'Docker.DockerDesktop', name: 'Docker Desktop', statusKey: 'installed' },
-  { app: 'Postman.Postman', name: 'Postman', statusKey: 'present' },
-  { app: 'WinSCP.WinSCP', name: 'WinSCP', statusKey: 'present' },
-  { app: 'PuTTY.PuTTY', name: 'PuTTY', statusKey: 'present' },
-  { app: 'OBSProject.OBSStudio', name: 'OBS Studio', statusKey: 'present' },
-  { app: 'GIMP.GIMP', name: 'GIMP', statusKey: 'present' },
-  { app: 'Bitwarden.Bitwarden', name: 'Bitwarden', statusKey: 'present' },
-  { app: 'Notion.Notion', name: 'Notion', statusKey: 'present' },
-  { app: 'Obsidian.Obsidian', name: 'Obsidian', statusKey: 'present' },
-  { app: 'Valve.Steam', name: 'Steam', statusKey: 'present' },
-  { app: 'BurntSushi.ripgrep.MSVC', name: 'ripgrep', statusKey: 'present' },
-  { app: 'sharkdp.fd', name: 'fd', statusKey: 'present' },
-  { app: 'junegunn.fzf', name: 'fzf', statusKey: 'present' },
-  { app: 'ajeetdsouza.zoxide', name: 'zoxide', statusKey: 'present' },
-  { app: 'WinMerge.WinMerge', name: 'WinMerge', statusKey: 'present' },
-];
-
-const SETUP_CONFIG_MAP: Record<string, string> = {
-  'Microsoft.VisualStudioCode': 'vscode',
-  'Git.Git': 'git',
-  'Microsoft.WindowsTerminal': 'windows-terminal',
-  'Microsoft.PowerShell': 'powershell',
-  'Microsoft.PowerToys': 'powertoys',
-};
 
 // ── Harness Components ─────────────────────────────────────────────
 
@@ -197,12 +158,29 @@ function SaveScreenshot() {
 }
 
 function SetupScreenshot() {
-  const installedCount = SETUP_EVENTS.filter(e => e.statusKey === 'installed').length;
-  const presentCount = SETUP_EVENTS.filter(e => e.statusKey === 'present').length;
-  const failedCount = 0;
-  const skippedCount = 0;
-  const configsRestored = 5;
-  const totalApps = installedCount + presentCount;
+  const toInstallCount = 3;
+  const presentCount = 69;
+  const settingsCount = 8;
+  const totalApps = toInstallCount + presentCount;
+
+  // Visible app list matching original screenshot layout
+  const previewApps: MockAppEvent[] = [
+    { app: '7zip.7zip', name: '7-Zip 25.01 (x64)', statusKey: 'present' },
+    { app: 'Adobe.CreativeCloud', name: 'Adobe Creative Cloud', statusKey: 'present' },
+    { app: 'Cursor.Cursor', name: 'Cursor (User)', statusKey: 'present' },
+    { app: 'Apple.MobileDeviceSupport', name: 'Apple Mobile Device Support', statusKey: 'present' },
+    { app: 'Apple.SoftwareUpdate', name: 'Apple Software Update', statusKey: 'present' },
+    { app: 'Bitwarden.Bitwarden', name: 'Bitwarden', statusKey: 'present' },
+    { app: 'Brave.Brave', name: 'Brave', statusKey: 'present' },
+    { app: 'BurntSushi.ripgrep.MSVC', name: 'RipGrep MSVC', statusKey: 'present' },
+    { app: 'Bytedance.CapCut', name: 'CapCut', statusKey: 'present' },
+    { app: 'Cloudflare.cloudflared', name: 'cloudflared', statusKey: 'present' },
+    { app: 'Codeium.Windsurf', name: 'Windsurf (User)', statusKey: 'present' },
+    { app: 'Cryptomator.Cryptomator', name: 'Cryptomator', statusKey: 'present' },
+  ];
+
+  // Apps with settings (gear icon)
+  const settingsApps = new Set(['Codeium.Windsurf']);
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
@@ -225,15 +203,15 @@ function SetupScreenshot() {
         </div>
       </div>
 
-      {/* Apply-done state */}
+      {/* Preview-done state */}
       <Card className="border-l-2 border-l-green-500/50">
         <CardContent className="py-6 px-6">
           <div className="flex items-center gap-3 mb-4">
             <CheckCircle2 className="h-5 w-5 text-green-500" />
             <div>
-              <p className="text-sm font-medium">Setup complete</p>
+              <p className="text-sm font-medium">Preview complete</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {installedCount} installed, {presentCount} already present &middot; {configsRestored} settings restored
+                {toInstallCount} to install, {presentCount} already present &middot; {settingsCount} settings included
               </p>
             </div>
           </div>
@@ -244,21 +222,21 @@ function SetupScreenshot() {
               <button className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer ${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}>
                 {totalApps} apps
               </button>
-              <button className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
-                {installedCount} installed
+              <button className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer ${getColorClasses('action').bg} ${getColorClasses('action').text}`}>
+                {toInstallCount} to install
               </button>
               <button className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer ${getColorClasses('success').bg} ${getColorClasses('success').text} opacity-50`}>
                 {presentCount} present
               </button>
               <button className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
-                {configsRestored} settings restored
+                {settingsCount} settings
               </button>
             </div>
             <div className="space-y-1 max-h-64 overflow-y-auto">
-              {SETUP_EVENTS.map((event, i) => {
-                const uiStatus = getPhaseAwareStatusForEvent({ statusKey: event.statusKey, phase: 'apply', reason: event.reason });
+              {previewApps.map((event, i) => {
+                const uiStatus = getPhaseAwareStatusForEvent({ statusKey: event.statusKey, phase: 'preview', reason: event.reason });
                 const colors = getColorClasses(uiStatus.color);
-                const hasSettings = event.app in SETUP_CONFIG_MAP;
+                const hasSettings = settingsApps.has(event.app);
                 return (
                   <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
                     <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
@@ -274,7 +252,27 @@ function SetupScreenshot() {
             </div>
           </div>
 
+          {/* Settings radio group */}
+          <div className="mt-6 border-t pt-4">
+            <p className="text-xs text-muted-foreground mb-3">This profile includes settings for {settingsCount} apps</p>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <span className="w-4 h-4 rounded-full border-2 border-green-500 flex items-center justify-center">
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                </span>
+                Install apps only
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer text-muted-foreground">
+                <span className="w-4 h-4 rounded-full border-2 border-muted-foreground/40" />
+                Install apps and restore settings
+              </label>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3 mt-6">
+            <Button className="bg-green-600 hover:bg-green-700 text-white ring-green-600/30 hover:ring-green-600/50">
+              Apply changes
+            </Button>
             <Button variant="ghost">
               Back to profiles
             </Button>

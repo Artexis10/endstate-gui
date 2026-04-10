@@ -69,3 +69,7 @@ src/generated/
 
 # Internal working documents
 go-sidecar-integration-prompt.md
+
+# Screenshot reference copies and extras (local only)
+screenshots/reference/
+screenshots/extras/
