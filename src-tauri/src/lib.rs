@@ -8,6 +8,7 @@ pub(crate) mod cmd_impl;
 mod engine_adapter;
 mod event_broadcast;
 mod license;
+mod license_pubkey;
 #[cfg(all(debug_assertions, feature = "dev-server"))]
 mod dev_server;
 

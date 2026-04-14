@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Changed
+- **BREAKING**: License activation now uses substratesystems.io with Ed25519-signed keys issued via Paddle checkout. The prior LemonSqueezy integration is removed.
+- Offline cache is now cryptographically verified; existing caches from pre-migration builds will be discarded and users must re-activate with a newly issued license key once.
+- Online re-validation runs at most every 30 days; beyond that window the app requires connectivity to re-validate.
+
+
 ## [1.5.2](https://github.com/Artexis10/endstate-gui/compare/gui-v1.5.1...gui-v1.5.2) (2026-04-03)
 
 

@@ -3207,15 +3207,6 @@ function LicenseSettingsSection() {
             >
               Deactivate this machine
             </Button>
-            <a
-              href="https://checkout.example.com/my-orders"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="ghost" size="sm">
-                Manage license
-              </Button>
-            </a>
           </div>
         </CardContent>
       </Card>

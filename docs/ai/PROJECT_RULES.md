@@ -23,6 +23,7 @@ This document is authoritative for repository operational policy.
 - `src/cli-bridge.ts` — canonical CLI invocation layer
 - `src/engine-bridge.ts` — engine abstraction layer
 - `src-tauri/src/engine_adapter.rs` — Rust CLI adapter
+- `src-tauri/src/license_pubkey.rs` — Ed25519 public key, root of trust for license verification
 
 ### Safe to modify without architectural review
 

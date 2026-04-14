@@ -32,6 +32,7 @@ hex = "0.4"
 winreg = "0.55"
 hostname = "0.4"
 chrono = "0.4"
+ed25519-dalek = "2"
 
 [features]
 default = []
