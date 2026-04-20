@@ -49,6 +49,7 @@ import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
 import { copyText } from './lib/clipboard';
 import { LicenseGate, useLicenseGate } from './components/app/LicenseGate';
 import { deactivateLicense } from './lib/license';
+import { UpdatePrompt, runUpdateCheck } from './components/UpdatePrompt';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings';
@@ -2872,6 +2873,29 @@ function AppContent() {
               </CardContent>
             </Card>
 
+            <Card>
+              <CardHeader>
+                <CardTitle>Updates</CardTitle>
+                <CardDescription>
+                  Endstate checks for updates automatically on launch. You can also check manually.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="secondary"
+                  onClick={() => { void runUpdateCheck({ manual: true }); }}
+                  disabled={!isTauriRuntime()}
+                >
+                  Check for updates
+                </Button>
+                {!isTauriRuntime() && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Updates are only available in the desktop app.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
             <LicenseSettingsSection />
 
           </div>
@@ -3237,6 +3261,7 @@ function App() {
   return (
     <ToastProvider>
       <LicenseGate>
+        <UpdatePrompt />
         <AppContent />
       </LicenseGate>
     </ToastProvider>

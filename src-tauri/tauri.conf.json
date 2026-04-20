@@ -48,5 +48,15 @@
         "template": "./windows/installer.nsi"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://substratesystems.io/updates/latest.json"
+      ],
+      "dialog": false,
+      "pubkey": "REPLACE_WITH_ACTUAL_PUBLIC_KEY"
+    }
   }
 }

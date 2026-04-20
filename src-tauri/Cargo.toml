@@ -26,6 +26,8 @@ axum = { version = "0.8", optional = true }
 tower-http = { version = "0.6", features = ["cors"], optional = true }
 tokio-stream = { version = "0.1", features = ["sync"], optional = true }
 tauri-plugin-dialog = "2.6.0"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 reqwest = { version = "0.12", features = ["json"] }
 sha2 = "0.10"
 hex = "0.4"
