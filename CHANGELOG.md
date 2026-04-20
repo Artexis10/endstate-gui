@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.6.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.5.2...gui-v1.6.0) (2026-04-14)
+
+
+### Features
+
+* migrate license system from LemonSqueezy to Ed25519 + Paddle ([cb3d70a](https://github.com/Artexis10/endstate-gui/commit/cb3d70ae583f641abaa7a51359e5ad670744b855))
+
+
+### Bug Fixes
+
+* replace PII in setup screenshot with sanitized mock data ([62e9133](https://github.com/Artexis10/endstate-gui/commit/62e9133f2d6e7563ec3a31940982f4cb6e4b6f91))
+
 ## [Unreleased]
 
 ### Changed
