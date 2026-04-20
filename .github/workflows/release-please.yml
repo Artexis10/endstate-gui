@@ -1,3 +1,10 @@
+# Engine version is pinned via ENGINE_REF (see env: below).
+# To ship a new engine version with the next GUI release:
+#   1. Verify the engine tag exists: gh release list --repo Artexis10/endstate
+#   2. Update ENGINE_REF below to the desired tag (e.g. v1.8.0)
+#   3. Commit, PR, merge. Next release-please PR will build against that engine.
+# Do not leave ENGINE_REF unpinned (blank or 'main') — builds must be reproducible.
+
 name: release-please
 
 on:
@@ -12,6 +19,9 @@ on:
 permissions:
   contents: write
   pull-requests: write
+
+env:
+  ENGINE_REF: v1.7.5  # Pinned engine version. Bump deliberately per release.
 
 jobs:
   release-please:
@@ -68,8 +78,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Artexis10/endstate
+          ref: ${{ env.ENGINE_REF }}
           path: endstate
           token: ${{ secrets.ENGINE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Record engine version
+        shell: bash
+        run: |
+          cd endstate
+          echo "Engine ref: ${{ env.ENGINE_REF }}" | tee -a $GITHUB_STEP_SUMMARY
+          echo "Engine SHA: $(git rev-parse HEAD)" | tee -a $GITHUB_STEP_SUMMARY
+          echo "Engine VERSION file: $(cat VERSION)" | tee -a $GITHUB_STEP_SUMMARY
 
       # tauri.conf.json references ../../endstate/ relative to src-tauri/
       # (i.e. ../endstate from workspace root). actions/checkout can't write
