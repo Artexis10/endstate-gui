@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.7.1](https://github.com/Artexis10/endstate-gui/compare/gui-v1.7.0...gui-v1.7.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* **build:** resolve pre-existing tsc errors in screenshots-harness ([#25](https://github.com/Artexis10/endstate-gui/issues/25)) ([fa01b22](https://github.com/Artexis10/endstate-gui/commit/fa01b229e4c82900378ef96efd85ae0fa5e3d2b2))
+* **release:** restore npm ci step before tauri-action ([#23](https://github.com/Artexis10/endstate-gui/issues/23)) ([ad92b0e](https://github.com/Artexis10/endstate-gui/commit/ad92b0e238251296cfa038ed6d272f5a759db154))
+
 ## [1.7.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.6.0...gui-v1.7.0) (2026-04-21)
 
 
