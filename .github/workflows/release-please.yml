@@ -129,21 +129,16 @@ jobs:
           mkdir -p src-tauri/target/release
           cp endstate/go-engine/endstate.exe src-tauri/target/release/endstate.exe
 
-      - name: Install npm dependencies
-        run: npm ci
-
-      - name: Build Tauri app
-        shell: bash
-        run: npm run tauri build
-        env:
-          SKIP_ENGINE_BUILD: '1'
-
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
-          files: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/msi/*.msi
+      # Build, sign, and upload via the first-party Tauri action. Signing env
+      # vars are read natively by the Tauri CLI (contract, not an action detail).
+      # SKIP_ENGINE_BUILD=1 prevents the repo's prebuild script from rebuilding
+      # the Go engine — the preceding steps already produced and placed it.
+      - name: Build, sign, and upload Tauri installers
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKIP_ENGINE_BUILD: '1'
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}
+        with:
+          tagName: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
