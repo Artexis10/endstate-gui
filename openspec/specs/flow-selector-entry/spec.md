@@ -1,5 +1,8 @@
-## ADDED Requirements
+# flow-selector-entry Specification
 
+## Purpose
+TBD - created by archiving change flow-selector-dual-entry. Update Purpose after archive.
+## Requirements
 ### Requirement: Dual-flow entry screen
 When no profile is selected, the GUI SHALL present two entry flows side by side: "Save this computer" (Capture) and "Set up this machine" (Apply).
 
@@ -38,17 +41,12 @@ When no profile is selected, the GUI SHALL present two entry flows side by side:
 - WHEN the user clicks the back button
 - THEN the view returns to the side-by-side split
 
-## REMOVED Requirements
+### Requirement: Action cards as equal peers after profile selected
 
-### Requirement: Linear stepper (NoProfilePrompt)
-The sequential Capture → Setup → Verify stepper with step numbers and lock icons is removed.
-
-## MODIFIED Requirements
-
-### Requirement: Action cards as equal peers
-When a profile IS selected, the three action cards (Capture, Setup, Check) SHALL appear without step numbers or lock icons.
+Once a profile IS selected, the three action cards (Capture, Setup, Check) SHALL appear without step numbers or lock icons. All three SHALL be enabled and interactable without sequential numbering. The prior linear `Capture → Setup → Verify` stepper (`NoProfilePrompt`) SHALL NOT be rendered anywhere in the app.
 
 #### Scenario: All cards enabled with profile selected
-- GIVEN a profile is selected
-- WHEN the overview screen renders action cards
-- THEN all three cards are enabled and interactable without sequential numbering
+- **WHEN** the overview screen renders after a profile is selected
+- **THEN** all three action cards SHALL be enabled and interactable
+- **AND** no step numbers, lock icons, or linear stepper SHALL be shown
+
