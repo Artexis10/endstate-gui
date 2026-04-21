@@ -129,6 +129,12 @@ jobs:
           mkdir -p src-tauri/target/release
           cp endstate/go-engine/endstate.exe src-tauri/target/release/endstate.exe
 
+      # tauri-action@v0 does NOT install npm deps on its own — it just runs the
+      # tauri script from package.json. Without this step, `npm run tauri build`
+      # fails with `'tauri' is not recognized` because the CLI is a devDependency.
+      - name: Install npm dependencies
+        run: npm ci
+
       # Build, sign, and upload via the first-party Tauri action. Signing env
       # vars are read natively by the Tauri CLI (contract, not an action detail).
       # SKIP_ENGINE_BUILD=1 prevents the repo's prebuild script from rebuilding
