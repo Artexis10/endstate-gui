@@ -42,3 +42,8 @@ The Tauri build SHALL bundle the engine script tree from the sibling `../endstat
 ### Requirement: Engine files are not tracked in GUI repo
 
 The bundled engine directory SHALL be excluded from git via .gitignore.
+
+#### Scenario: Engine directory is gitignored
+- **WHEN** the repository `.gitignore` is checked
+- **THEN** it contains entries that exclude the bundled engine directory (e.g., `src-tauri/engine/`)
+- **AND** engine binaries and data files are not committed to the GUI repo

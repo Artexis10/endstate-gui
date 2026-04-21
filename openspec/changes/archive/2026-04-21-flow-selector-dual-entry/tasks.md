@@ -23,6 +23,6 @@
 - [x] 4.1 App compiles with no TypeScript errors
 - [x] 4.2 All 732 existing tests pass
 - [x] 4.3 Test updated: FlowSelector shown instead of disabled cards when no profile
-- [ ] 4.4 Both flows work visually in the browser
-- [ ] 4.5 Animations respect `prefers-reduced-motion`
-- [ ] 4.6 Responsive: panels stack vertically on small screens
+- [x] 4.4 Both flows work visually in the browser
+- [x] 4.5 Animations respect `prefers-reduced-motion`
+- [x] 4.6 Responsive: panels stack vertically on small screens
