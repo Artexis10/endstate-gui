@@ -6,8 +6,8 @@
 
 ## 2. Wire signing environment
 
-- [x] 2.1 Expose `TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}` on the `tauri-action` step
-- [x] 2.2 Expose `TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_KEY_PASSWORD }}` on the same step
+- [x] 2.1 Expose `TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}` on the `tauri-action` step
+- [x] 2.2 Expose `TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}` on the same step
 
 ## 3. Upload signed artifacts to the created release
 
@@ -21,11 +21,11 @@
 - [x] 4.2 Do not alter workflow triggers (`push: main`, `workflow_dispatch`)
 - [x] 4.3 Do not alter `permissions:` beyond what tauri-action documents as needed (`contents: write` is already granted)
 
-## 5. Out-of-band operator prerequisites (not done in this PR)
+## 5. Out-of-band operator prerequisites (done before this PR merges)
 
-- [ ] 5.1 Operator: run keypair generation per `docs/runbooks/UPDATER_SETUP.md`
-- [ ] 5.2 Operator: populate GH Actions secrets `TAURI_UPDATER_PRIVATE_KEY` and `TAURI_UPDATER_KEY_PASSWORD`
-- [ ] 5.3 Operator: replace the placeholder `REPLACE_WITH_ACTUAL_PUBLIC_KEY` in `src-tauri/tauri.conf.json` with the generated pubkey (separate PR)
+- [x] 5.1 Operator: run keypair generation per `docs/runbooks/UPDATER_SETUP.md`
+- [x] 5.2 Operator: populate GH Actions secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+- [x] 5.3 Operator: replace the placeholder `REPLACE_WITH_ACTUAL_PUBLIC_KEY` in `src-tauri/tauri.conf.json` with the generated pubkey (landed on PR #18)
 
 ## 6. Verification (post-merge, on next real release)
 

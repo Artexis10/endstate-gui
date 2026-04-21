@@ -54,7 +54,7 @@ The file has comments, engine-pin documentation, and release-please wiring that 
 No user-visible migration. Rollout is entirely CI:
 
 1. **Merge this change.** `release-please.yml` now references tauri-action + signing env.
-2. **Operator step** (required before next release): run keypair generation per `docs/runbooks/UPDATER_SETUP.md`, populate `TAURI_UPDATER_PRIVATE_KEY` + `TAURI_UPDATER_KEY_PASSWORD` secrets, replace the placeholder pubkey in `tauri.conf.json`, land that follow-up PR.
+2. **Operator step** (already done before this PR's merge): keypair generated per `docs/runbooks/UPDATER_SETUP.md`, `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets populated, placeholder pubkey in `tauri.conf.json` replaced on PR #18.
 3. **Next release.** release-please creates a release; the `build` job runs tauri-action; signed bundles + `.sig` files land on the GitHub Release.
 4. **Prompt 3 (separate).** Vercel API route at `substratesystems.io` proxies GitHub Releases API to emit `latest.json`. Only then does any existing install actually update.
 

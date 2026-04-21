@@ -18,12 +18,12 @@ The release workflow SHALL build signed Tauri Windows installers (NSIS `.exe` an
 #### Scenario: Signing environment sourced from secrets
 
 - **WHEN** `tauri-apps/tauri-action@v0` runs
-- **THEN** `TAURI_SIGNING_PRIVATE_KEY` SHALL be set from the GitHub Actions secret `TAURI_UPDATER_PRIVATE_KEY`
-- **AND** `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` SHALL be set from the GitHub Actions secret `TAURI_UPDATER_KEY_PASSWORD`
+- **THEN** `TAURI_SIGNING_PRIVATE_KEY` SHALL be set from the GitHub Actions secret of the same name
+- **AND** `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` SHALL be set from the GitHub Actions secret of the same name
 
 #### Scenario: Missing signing secrets fail the build
 
-- **WHEN** the build job runs and either `TAURI_UPDATER_PRIVATE_KEY` or `TAURI_UPDATER_KEY_PASSWORD` is unset
+- **WHEN** the build job runs and either `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is unset
 - **THEN** `tauri-apps/tauri-action@v0` SHALL fail the job instead of producing unsigned bundles
 
 ### Requirement: Attach installer artifacts to GitHub Release

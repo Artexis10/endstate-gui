@@ -5,9 +5,9 @@ Prompt 1 (PR #18) wired a Tauri v2 updater into the GUI that only installs bundl
 ## What Changes
 
 - Replace the hand-rolled `build` job in `.github/workflows/release-please.yml` with `tauri-apps/tauri-action@v0`, which treats signing as a first-class step of the build lifecycle.
-- Inject two signing environment variables on the `build` job sourced from existing GitHub Actions secrets:
-  - `TAURI_SIGNING_PRIVATE_KEY` from secret `TAURI_UPDATER_PRIVATE_KEY`
-  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` from secret `TAURI_UPDATER_KEY_PASSWORD`
+- Inject two signing environment variables on the `build` job sourced from existing GitHub Actions secrets. Secret names match the Tauri CLI env-var contract exactly, so no translation layer is needed:
+  - `TAURI_SIGNING_PRIVATE_KEY` from secret `TAURI_SIGNING_PRIVATE_KEY`
+  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` from secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
   - Both secret names are documented in `docs/runbooks/UPDATER_SETUP.md`.
 - Produce a sibling `.sig` file for each installer bundle. Attach `*.exe`, `*.exe.sig`, `*.msi`, `*.msi.sig` to the GitHub Release as assets.
 - Preserve the existing engine checkout (`Artexis10/endstate` pinned via `ENGINE_REF`), the Go ldflags embedding of `VERSION` / `SCHEMA_VERSION`, the sidecar triple copy, and the release-please-driven release body. The switch is additive with respect to those concerns.
@@ -27,11 +27,11 @@ Prompt 1 (PR #18) wired a Tauri v2 updater into the GUI that only installs bundl
 - New dependencies:
   - GitHub Action: `tauri-apps/tauri-action@v0` (already used implicitly via `tauri build` today, now invoked directly).
 - Secrets consumed (no new secrets created by this change):
-  - `TAURI_UPDATER_PRIVATE_KEY` — must be populated before the first signed release; operator step per `docs/runbooks/UPDATER_SETUP.md`.
-  - `TAURI_UPDATER_KEY_PASSWORD` — must be populated alongside.
+  - `TAURI_SIGNING_PRIVATE_KEY` — populated as part of the operator steps that preceded this PR.
+  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — same.
 - Security surface: the root of trust for the updater chain shifts to whatever environment signs in CI. If the private key leaks, an attacker can sign a malicious bundle that existing installs will accept. Mitigation is policy + rotation (documented in the runbook), not CI-side enforcement.
 - Out of scope:
-  - Generating the ed25519 keypair (operator step).
-  - Replacing the placeholder pubkey in `tauri.conf.json` (operator step, blocked on the secrets being populated).
+  - Generating the ed25519 keypair (already done by the operator).
+  - Replacing the placeholder pubkey in `tauri.conf.json` (landed on PR #18 alongside the GUI integration).
   - Hosting `latest.json` — Prompt 3.
   - End-to-end validation of a signed release installing on a customer machine; this change enables it but verification happens on the first real release after merge.
