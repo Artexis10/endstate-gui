@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   type StatusKey,
-  type SemanticColor,
   getColorClasses,
   getPhaseAwareStatusForEvent,
 } from '@/lib/apply-utils';
@@ -294,14 +293,14 @@ export function ScreenshotHarness() {
       <div className="fixed top-0 left-0 right-0 z-50 bg-card border-b px-4 py-2 flex items-center gap-3">
         <span className="text-xs text-muted-foreground font-medium">SCREENSHOT HARNESS</span>
         <Button
-          variant={view === 'save' ? 'default' : 'ghost'}
+          variant={view === 'save' ? 'primary' : 'ghost'}
           size="sm"
           onClick={() => setView('save')}
         >
           Save Flow
         </Button>
         <Button
-          variant={view === 'setup' ? 'default' : 'ghost'}
+          variant={view === 'setup' ? 'primary' : 'ghost'}
           size="sm"
           onClick={() => setView('setup')}
         >
