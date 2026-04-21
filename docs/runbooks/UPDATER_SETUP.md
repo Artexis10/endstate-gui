@@ -9,7 +9,7 @@ The Tauri v2 updater verifies every downloaded bundle against an ed25519 signatu
 - **Public key** — committed in `src-tauri/tauri.conf.json` under `plugins.updater.pubkey`. Safe to commit.
 - **Private key** — used by CI to sign release artifacts. **Never commit.** Stored in a password manager and as a GitHub Actions secret.
 
-The GUI repo ships with a placeholder public key (`REPLACE_WITH_ACTUAL_PUBLIC_KEY`) so the updater config validates but no real update will ever verify. Replace it before the first signed release.
+The GUI repo ships with the real public key committed under `plugins.updater.pubkey`. A placeholder (`REPLACE_WITH_ACTUAL_PUBLIC_KEY`) was used during initial wiring; see Step 3 below for the format if you ever need to regenerate.
 
 ## Prerequisites
 
@@ -41,21 +41,21 @@ The terminal also prints the same public key. Copy it — you'll paste it into `
 
 ## Step 2 — Store the private key securely
 
-1. Save the contents of `~/.tauri/endstate-updater.key` in the team password manager as **`TAURI_UPDATER_PRIVATE_KEY`**.
-2. Save the password you chose in Step 1 as **`TAURI_UPDATER_KEY_PASSWORD`**.
+1. Save the contents of `~/.tauri/endstate-updater.key` in the team password manager.
+2. Save the password you chose in Step 1 alongside it.
 3. Do **not** commit the key file. Do **not** email or paste it into chat. `~/.tauri/` should be outside any synced folder.
 
-Once stored, add both as GitHub Actions secrets on the `endstate-gui` repo:
+Once stored, add both as GitHub Actions secrets on the `endstate-gui` repo. The secret names match the Tauri CLI's expected env vars exactly, so the release workflow can reference them 1:1 without translation:
 
 1. Go to **Settings → Secrets and variables → Actions → New repository secret**.
-2. Name: `TAURI_UPDATER_PRIVATE_KEY`. Value: the full contents of `endstate-updater.key` (including `untrusted comment:` header).
-3. Name: `TAURI_UPDATER_KEY_PASSWORD`. Value: the password from Step 1.
+2. Name: `TAURI_SIGNING_PRIVATE_KEY`. Value: the full contents of `endstate-updater.key` (including `untrusted comment:` header).
+3. Name: `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Value: the password from Step 1.
 
-The release workflow (set up in a later change) will read these as `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` env vars during `tauri build`.
+The release workflow will consume these as `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` env vars during `tauri build`.
 
 ## Step 3 — Update `tauri.conf.json`
 
-Open `src-tauri/tauri.conf.json` and replace the placeholder:
+Paste the public key from Step 1 into `src-tauri/tauri.conf.json` as a single line:
 
 ```json
 "plugins": {
@@ -65,16 +65,12 @@ Open `src-tauri/tauri.conf.json` and replace the placeholder:
       "https://substratesystems.io/updates/latest.json"
     ],
     "dialog": false,
-    "pubkey": "REPLACE_WITH_ACTUAL_PUBLIC_KEY"
+    "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgM0E1Qjc4...=="
   }
 }
 ```
 
-Paste the public key from Step 1 as a single line into the `pubkey` field. Example:
-
-```json
-"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgM0E1Qjc4...=="
-```
+The `pubkey` value is the base64 of the entire `.pub` file (two lines: the `untrusted comment:` header plus the key itself). Tauri expects this exact format.
 
 Commit the change. The public key is safe to share publicly — it only lets clients verify signatures, not create them.
 
