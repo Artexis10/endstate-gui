@@ -4,6 +4,8 @@ Endstate GUI is the official desktop application for **Endstate**, providing a g
 
 The GUI is designed to consume Endstate strictly through its public CLI interface, ensuring a clear separation between the engine and the user interface.
 
+Endstate is governed by a set of public principles documented in the engine repository: [Endstate Principles](https://github.com/Artexis10/endstate/blob/main/PRINCIPLES.md). These apply to both the engine and the GUI and constrain product, pricing, and architecture decisions.
+
 ## Status
 
 Endstate GUI is in active development approaching v1.0 release.
