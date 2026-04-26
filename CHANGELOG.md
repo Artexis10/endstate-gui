@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.0.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.7.2...gui-v2.0.0) (2026-04-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* License activation has been removed. Users who previously activated against substratesystems.io are silently transitioned to free unlocked. Existing %APPDATA%\com.substratesystems.endstate\license.json cache files become orphaned but harmless and are no longer read by any code path. Three Tauri commands are gone (activate_license, check_license, deactivate_license), as is the entire license-gate capability spec.
+
+### Features
+
+* app starts without license activation ([1ea23fb](https://github.com/Artexis10/endstate-gui/commit/1ea23fbd37ad33dae0bd2e4cf1c51f1f0e3b07e6))
+
 ## [1.7.2](https://github.com/Artexis10/endstate-gui/compare/gui-v1.7.1...gui-v1.7.2) (2026-04-21)
 
 
