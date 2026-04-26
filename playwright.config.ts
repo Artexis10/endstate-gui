@@ -22,8 +22,6 @@ export default defineConfig({
       VITE_STORAGE_NS: 'test',
       // Enable test-only hooks
       VITE_E2E: '1',
-      // Bypass license gate for E2E tests (requires DEV mode)
-      VITE_DEV_BYPASS_LICENSE: '1',
     },
   },
 });

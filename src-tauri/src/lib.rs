@@ -7,8 +7,6 @@
 pub(crate) mod cmd_impl;
 mod engine_adapter;
 mod event_broadcast;
-mod license;
-mod license_pubkey;
 #[cfg(all(debug_assertions, feature = "dev-server"))]
 mod dev_server;
 
@@ -17,7 +15,7 @@ use event_broadcast::EventBroadcaster;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 /// Result of CLI execution returned to the frontend.
 #[derive(Debug, Serialize, Deserialize)]
@@ -1274,25 +1272,6 @@ async fn run_endstate_streaming(
     Ok(result)
 }
 
-// ---------------------------------------------------------------------------
-// License commands
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-async fn activate_license(key: String) -> Result<license::LicenseStatus, String> {
-    license::activate(key).await
-}
-
-#[tauri::command]
-async fn check_license() -> Result<license::LicenseStatus, String> {
-    license::check().await
-}
-
-#[tauri::command]
-async fn deactivate_license() -> Result<(), String> {
-    license::deactivate().await
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1343,10 +1322,7 @@ pub fn run() {
             rename_file,
             copy_file,
             cleanup_capture_cache,
-            validate_profile,
-            activate_license,
-            check_license,
-            deactivate_license
+            validate_profile
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
