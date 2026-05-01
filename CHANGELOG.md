@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.1.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.1.0...gui-v2.1.1) (2026-05-01)
+
+
+### Bug Fixes
+
+* repair tauri auto-updater pipeline ([4e8a8a3](https://github.com/Artexis10/endstate-gui/commit/4e8a8a3ec95c97f9a04ce49fb73f22c0426c831a))
+
 ## [2.1.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.0.0...gui-v2.1.0) (2026-05-01)
 
 
