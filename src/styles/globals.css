@@ -145,3 +145,13 @@
   border-color: hsl(var(--border)) !important;
 }
 
+/* Toasts with action+cancel buttons: wrap buttons below text content */
+.endstate-sonner [data-sonner-toast]:has([data-cancel]) {
+  flex-wrap: wrap !important;
+  align-items: flex-start !important;
+  gap: 10px 8px !important;
+}
+.endstate-sonner [data-sonner-toast]:has([data-cancel]) > div:first-child {
+  flex: 1 1 100% !important;
+}
+
