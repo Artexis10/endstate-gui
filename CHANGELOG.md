@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.2.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.1.1...gui-v2.2.0) (2026-05-01)
+
+
+### Features
+
+* show GUI version inline in Settings ([efb4a89](https://github.com/Artexis10/endstate-gui/commit/efb4a8955d6e6045db7c9b6802f3a17447855e03))
+
 ## [2.1.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.1.0...gui-v2.1.1) (2026-05-01)
 
 
