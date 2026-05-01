@@ -1,3 +1,10 @@
+# tauri-updater-pipeline Specification
+
+## Purpose
+Ensures the Tauri auto-updater pipeline is correctly wired end-to-end: the updater endpoint points to the canonical GitHub Releases manifest, the release workflow hard-fails if that manifest is absent, and the version field in the manifest uses bare semver so the installed app can detect upgrades.
+
+## Requirements
+
 ### Requirement: Update endpoint resolves to current manifest
 The `plugins.updater.endpoints` array in `src-tauri/tauri.conf.json` SHALL contain the GitHub Releases URL that always serves the most recently published `latest.json` for this repository. It SHALL NOT point to any manually-maintained external service.
 
