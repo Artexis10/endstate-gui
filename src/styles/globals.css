@@ -157,5 +157,6 @@
 .endstate-sonner [data-sonner-toast] [data-cancel] {
   background-color: transparent !important;
   color: hsl(var(--muted-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
 }
 
