@@ -63,6 +63,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             error: "!border-l-2 !border-l-danger",
             warning: "!border-l-2 !border-l-warning",
             info: "!border-l-2 !border-l-primary",
+            actionButton: "!ml-2",
           },
         }}
       />
