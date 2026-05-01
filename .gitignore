@@ -64,6 +64,9 @@ playwright-report/
 # Bundled engine (resolved at build time from sibling repo)
 src-tauri/engine/
 
+# Downloaded engine sidecar binaries (placed by CI download step, never committed)
+src-tauri/binaries/*.exe
+
 # Generated build-time constants
 src/generated/
 

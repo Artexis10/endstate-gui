@@ -35,13 +35,13 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "../../endstate/go-engine/endstate"
+      "binaries/endstate"
     ],
     "resources": {
-      "../../endstate/modules/": "engine/modules/",
-      "../../endstate/payload/": "engine/payload/",
-      "../../endstate/VERSION": "engine/VERSION",
-      "../../endstate/SCHEMA_VERSION": "engine/SCHEMA_VERSION"
+      "../endstate/modules/": "engine/modules/",
+      "../endstate/payload/": "engine/payload/",
+      "../endstate/VERSION": "engine/VERSION",
+      "../endstate/SCHEMA_VERSION": "engine/SCHEMA_VERSION"
     },
     "windows": {
       "nsis": {

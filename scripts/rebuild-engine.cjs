@@ -6,6 +6,9 @@
 //   SKIP_ENGINE_BUILD=1    — skip the Go build step, just copy existing binary
 //   STRICT_ENGINE_BUILD=1  — fail the build if Go compilation fails (set by prebuild)
 //   ENDSTATE_ENGINE_DIR    — override the engine repo location (default: ../../endstate/go-engine)
+//
+// CI download mode: when CI pre-places the binary at SIDECAR_TRIPLE before this
+// script runs, the Go build is skipped automatically — no env var needed.
 
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -16,15 +19,23 @@ const strict = process.env.STRICT_ENGINE_BUILD === '1';
 const ENGINE_DIR = process.env.ENDSTATE_ENGINE_DIR
   ? path.resolve(process.env.ENDSTATE_ENGINE_DIR)
   : path.resolve(__dirname, '../../endstate/go-engine');
+
+// Canonical sidecar location (src-tauri/binaries/) — Tauri externalBin resolution.
+// In CI this is pre-placed by the "Acquire engine binary" workflow step.
+// For local dev it is written by Step 2 below after a source build.
+const SIDECAR_TRIPLE = path.resolve(__dirname, '../src-tauri/binaries/endstate-x86_64-pc-windows-msvc.exe');
 const ENGINE_EXE = path.join(ENGINE_DIR, 'endstate.exe');
-const SIDECAR_TRIPLE = path.join(ENGINE_DIR, 'endstate-x86_64-pc-windows-msvc.exe');
 const DEBUG_EXE = path.resolve(__dirname, '../src-tauri/target/debug/endstate.exe');
 const RELEASE_EXE = path.resolve(__dirname, '../src-tauri/target/release/endstate.exe');
 
 // ---------------------------------------------------------------------------
-// Step 1: Build the Go engine (unless skipped)
+// Step 1: Build the Go engine (unless skipped or pre-placed binary detected)
 // ---------------------------------------------------------------------------
-if (process.env.SKIP_ENGINE_BUILD === '1') {
+const prePlaced = fs.existsSync(SIDECAR_TRIPLE);
+
+if (prePlaced) {
+  console.log('Pre-placed engine binary detected at sidecar location — skipping Go build.');
+} else if (process.env.SKIP_ENGINE_BUILD === '1') {
   console.log('SKIP_ENGINE_BUILD=1 — skipping Go build.');
 } else {
   // Read version files for ldflags embedding
@@ -87,25 +98,39 @@ if (process.env.SKIP_ENGINE_BUILD === '1') {
 // ---------------------------------------------------------------------------
 // Step 2: Copy to sidecar locations
 // ---------------------------------------------------------------------------
-if (!fs.existsSync(ENGINE_EXE)) {
+// SOURCE_EXE: the binary to copy FROM.
+// If the sidecar triple was pre-placed (CI download mode), use it directly.
+// Otherwise use the freshly-built ENGINE_EXE.
+const SOURCE_EXE = prePlaced ? SIDECAR_TRIPLE : ENGINE_EXE;
+
+if (!fs.existsSync(SOURCE_EXE)) {
   if (strict) {
-    console.error(`ERROR: Engine binary not found at ${ENGINE_EXE}`);
+    console.error(`ERROR: Engine binary not found at ${SOURCE_EXE}`);
     process.exit(1);
   }
   console.log('WARNING: No engine binary to copy.');
   process.exit(0);
 }
 
-// Sidecar triple (Tauri externalBin resolution in production installs)
-fs.copyFileSync(ENGINE_EXE, SIDECAR_TRIPLE);
-console.log('Copied to sidecar triple location.');
+// Sidecar triple (Tauri externalBin resolution in production installs).
+// Ensure binaries/ directory exists for local dev (CI has it via .gitkeep).
+const sidecarDir = path.dirname(SIDECAR_TRIPLE);
+if (!fs.existsSync(sidecarDir)) {
+  fs.mkdirSync(sidecarDir, { recursive: true });
+}
+if (SOURCE_EXE !== SIDECAR_TRIPLE) {
+  fs.copyFileSync(SOURCE_EXE, SIDECAR_TRIPLE);
+  console.log('Copied to sidecar triple location.');
+} else {
+  console.log('Sidecar triple already in place (pre-placed by CI).');
+}
 
 // Debug target (tauri dev sidecar resolution)
 const debugDir = path.dirname(DEBUG_EXE);
 if (!fs.existsSync(debugDir)) {
   fs.mkdirSync(debugDir, { recursive: true });
 }
-fs.copyFileSync(ENGINE_EXE, DEBUG_EXE);
+fs.copyFileSync(SOURCE_EXE, DEBUG_EXE);
 console.log('Copied to debug sidecar location.');
 
 // Release target (tauri build sidecar resolution)
@@ -113,7 +138,7 @@ const releaseDir = path.dirname(RELEASE_EXE);
 if (!fs.existsSync(releaseDir)) {
   fs.mkdirSync(releaseDir, { recursive: true });
 }
-fs.copyFileSync(ENGINE_EXE, RELEASE_EXE);
+fs.copyFileSync(SOURCE_EXE, RELEASE_EXE);
 console.log('Copied to release sidecar location.');
 
 // ---------------------------------------------------------------------------
@@ -122,7 +147,7 @@ console.log('Copied to release sidecar location.');
 let cliVersion = 'unknown';
 let schemaVersion = 'unknown';
 try {
-  const raw = execSync(`"${ENGINE_EXE}" capabilities --json`, {
+  const raw = execSync(`"${SIDECAR_TRIPLE}" capabilities --json`, {
     encoding: 'utf8',
     timeout: 10000,
     windowsHide: true,
