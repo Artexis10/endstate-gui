@@ -154,4 +154,9 @@
 .endstate-sonner [data-sonner-toast]:has([data-cancel]) > div:first-child {
   flex: 1 1 100% !important;
 }
+.endstate-sonner [data-sonner-toast]:has([data-cancel]) [data-cancel],
+.endstate-sonner [data-sonner-toast]:has([data-cancel]) [data-action] {
+  flex: 1 !important;
+  justify-content: center !important;
+}
 
