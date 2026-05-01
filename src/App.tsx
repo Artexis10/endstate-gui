@@ -2767,11 +2767,10 @@ function AppContent() {
                 <CardTitle>Engine Configuration</CardTitle>
                 <CardDescription className="flex items-center gap-2">
                   Choose how to run the endstate engine
-                  {state.capabilities?.cliVersion && (
-                    <span className="text-xs font-mono text-muted-foreground/70">
-                      (engine v{state.capabilities.cliVersion})
-                    </span>
-                  )}
+                  <span className="text-xs font-mono text-muted-foreground/70">
+                    Endstate v{__APP_VERSION__}
+                    {state.capabilities?.cliVersion && ` · engine v${state.capabilities.cliVersion}`}
+                  </span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
