@@ -8,6 +8,8 @@ Endstate is governed by a set of public principles documented in the engine repo
 
 ## Status
 
+![engine pin](https://img.shields.io/badge/engine-v1.8.0-blue)
+
 Endstate GUI is in active development approaching v1.0 release.
 
 ## Development Prerequisites
