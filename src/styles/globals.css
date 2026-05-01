@@ -145,18 +145,3 @@
   border-color: hsl(var(--border)) !important;
 }
 
-.endstate-sonner [data-sonner-toast] [data-description] {
-  color: hsl(var(--muted-foreground)) !important;
-}
-
-.endstate-sonner [data-sonner-toast] [data-button] {
-  background-color: hsl(var(--secondary)) !important;
-  color: hsl(var(--secondary-foreground)) !important;
-}
-
-.endstate-sonner [data-sonner-toast] [data-cancel] {
-  background-color: transparent !important;
-  color: hsl(var(--muted-foreground)) !important;
-  border: 1px solid hsl(var(--border)) !important;
-}
-

@@ -44,6 +44,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <Sonner
         position="bottom-right"
         closeButton={false}
+        theme="dark"
         className="endstate-sonner"
         icons={{
           success: <CircleCheckIcon className="size-4 text-success" />,
