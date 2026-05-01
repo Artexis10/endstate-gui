@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.1.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.0.0...gui-v2.1.0) (2026-05-01)
+
+
+### Features
+
+* add engine drift detection workflow ([ae77e75](https://github.com/Artexis10/endstate-gui/commit/ae77e75897008547f450d4a0b0e7adda6192d54e))
+* pin engine version via ENGINE_VERSION file ([3f8f3c6](https://github.com/Artexis10/endstate-gui/commit/3f8f3c614dfd2302c6cbce58c1d5a514324bfa51))
+
 ## [2.0.0](https://github.com/Artexis10/endstate-gui/compare/gui-v1.7.2...gui-v2.0.0) (2026-04-26)
 
 
