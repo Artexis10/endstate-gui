@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.2.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.2.0...gui-v2.2.1) (2026-05-01)
+
+
+### Bug Fixes
+
+* add border to cancel toast button so it reads as a button ([a4d379c](https://github.com/Artexis10/endstate-gui/commit/a4d379cc221576176fe114fde139dac823e2168a))
+* add gap between toast action and cancel buttons ([d018e2b](https://github.com/Artexis10/endstate-gui/commit/d018e2b06624a9c1c35b984d7ec775ad8f46d39c))
+* fix toast description and button contrast on dark theme ([434d59e](https://github.com/Artexis10/endstate-gui/commit/434d59e977ca385186d969a9ca30bd2a585feb34))
+* improve toast layout and description contrast ([034edf7](https://github.com/Artexis10/endstate-gui/commit/034edf701d4931b1144eb6b518845d728375dd13))
+* set Sonner theme=dark to fix toast description and button contrast ([a88c18c](https://github.com/Artexis10/endstate-gui/commit/a88c18cd1a010805402e62b7760188fce337725d))
+* stretch toast action buttons to fill available width ([80f3bdf](https://github.com/Artexis10/endstate-gui/commit/80f3bdf5ca2974e5c462ee7135d8d14f85a0c9c5))
+
 ## [2.2.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.1.1...gui-v2.2.0) (2026-05-01)
 
 
