@@ -168,3 +168,17 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
+
+      - name: Verify latest.json uploaded
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
+        run: |
+          ASSETS=$(gh release view "$TAG" --repo Artexis10/endstate-gui --json assets --jq '[.assets[].name] | join(" ")')
+          if ! echo "$ASSETS" | grep -qF "latest.json"; then
+            echo "::error::Release $TAG is missing latest.json — updater endpoint will be broken." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "latest.json confirmed in release $TAG." | tee -a "$GITHUB_STEP_SUMMARY"
