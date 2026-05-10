@@ -16,7 +16,14 @@ export const STREAMING_EVENT_VERSION = 1;
 /**
  * Engine execution phases
  */
-export type EnginePhase = 'plan' | 'apply' | 'verify' | 'capture' | 'restore';
+export type EnginePhase =
+  | 'plan'
+  | 'apply'
+  | 'verify'
+  | 'capture'
+  | 'restore'
+  | 'backup-push'
+  | 'backup-pull';
 
 /**
  * Item status values from the engine
@@ -109,6 +116,39 @@ export interface ArtifactEvent extends BaseStreamingEvent {
 }
 
 /**
+ * Hosted-backup chunk status values from the engine.
+ *
+ * Push (`backup-push` phase): `uploading` -> `uploaded`, with `failed` on error.
+ * Pull (`backup-pull` phase): `downloading` -> `verified` (sha256 match) -> `decrypted`,
+ * with `failed` on error.
+ */
+export type BackupChunkStatus =
+  | 'uploading'
+  | 'uploaded'
+  | 'downloading'
+  | 'verified'
+  | 'decrypted'
+  | 'failed';
+
+/**
+ * Hosted-backup chunk progress event.
+ *
+ * Emitted by `endstate backup push --events jsonl` and
+ * `endstate backup pull --events jsonl` for each chunk transfer step.
+ */
+export interface BackupChunkEvent extends BaseStreamingEvent {
+  event: 'backup-chunk';
+  /** 0-based chunk index, or -1 for the manifest blob */
+  chunkIndex: number;
+  /** Total number of chunks in the version (excluding manifest) */
+  totalChunks: number;
+  /** Encrypted size of the chunk in bytes */
+  encryptedSize: number;
+  status: BackupChunkStatus;
+  message?: string;
+}
+
+/**
  * Restore item status values from the engine
  */
 export type RestoreItemStatus =
@@ -138,7 +178,14 @@ export interface RestoreItemEvent extends BaseStreamingEvent {
 /**
  * Union type for all streaming events
  */
-export type StreamingEvent = PhaseEvent | ItemEvent | SummaryEvent | ErrorEvent | ArtifactEvent | RestoreItemEvent;
+export type StreamingEvent =
+  | PhaseEvent
+  | ItemEvent
+  | SummaryEvent
+  | ErrorEvent
+  | ArtifactEvent
+  | RestoreItemEvent
+  | BackupChunkEvent;
 
 /**
  * Type guards for event types
@@ -165,6 +212,10 @@ export function isArtifactEvent(event: StreamingEvent): event is ArtifactEvent {
 
 export function isRestoreItemEvent(event: StreamingEvent): event is RestoreItemEvent {
   return event.event === 'restore-item';
+}
+
+export function isBackupChunkEvent(event: StreamingEvent): event is BackupChunkEvent {
+  return event.event === 'backup-chunk';
 }
 
 /**
@@ -197,7 +248,15 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
     }
 
     // Validate event type
-    const validEventTypes = ['phase', 'item', 'summary', 'error', 'artifact', 'restore-item'];
+    const validEventTypes = [
+      'phase',
+      'item',
+      'summary',
+      'error',
+      'artifact',
+      'restore-item',
+      'backup-chunk',
+    ];
     if (!validEventTypes.includes(parsed.event)) {
       return null;
     }

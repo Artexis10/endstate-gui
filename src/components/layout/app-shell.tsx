@@ -1,11 +1,12 @@
 import { ReactNode } from 'react';
 import markUrl from '../../../assets/brand/mark-sidebar.svg?url';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FileText, 
-  Settings, 
+import {
+  FileText,
+  Settings,
   Command,
   Home,
+  HardDrive,
   PanelLeftOpen,
   PanelLeftClose,
   ArrowLeft
@@ -18,7 +19,7 @@ interface NavIndicator {
   tooltip?: string;
 }
 
-type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings';
+type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 'backup';
 
 interface AppShellProps {
   children: ReactNode;
@@ -28,11 +29,14 @@ interface AppShellProps {
   pageTitle?: string;
   pageSubtitle?: string;
   actions?: ReactNode;
-  navIndicators?: Partial<Record<'report', NavIndicator>>;
+  navIndicators?: Partial<Record<'report' | 'backup', NavIndicator>>;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
   previousPage?: PageType | null;
   onBack?: () => void;
+  /** When true, show the Backup entry in the sidebar (gated on
+   *  `capabilities.features.hostedBackup.supported`). */
+  showBackupNav?: boolean;
 }
 
 export function AppShell({
@@ -48,6 +52,7 @@ export function AppShell({
   onToggleSidebar,
   previousPage,
   onBack,
+  showBackupNav,
 }: AppShellProps) {
   // ADR-001: Intent pages (landing, save, setup) use full viewport — no sidebar or navigation chrome
   const isIntentPage = currentPage === 'landing' || currentPage === 'save' || currentPage === 'setup';
@@ -55,6 +60,9 @@ export function AppShell({
 
   const navItems = [
     { id: 'landing' as const, label: 'Home', icon: Home },
+    ...(showBackupNav
+      ? [{ id: 'backup' as const, label: 'Backup', icon: HardDrive }]
+      : []),
     { id: 'report' as const, label: 'Reports', icon: FileText },
     { id: 'settings' as const, label: 'Settings', icon: Settings },
   ];

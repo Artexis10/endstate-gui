@@ -113,11 +113,22 @@ export async function subscribeToEvents(
  * 
  * @param exe - Path to the executable (typically "endstate")
  * @param args - Command line arguments
+ * @param stdinInput - Optional payload written to child stdin and closed.
+ *                     Used by hosted-backup auth commands (signup, login, recover)
+ *                     that accept secrets via stdin instead of flags.
  * @returns The runId of the started run
  * @throws Error if the process fails to start or another run is active
  */
-export async function engineRun(exe: string, args: string[]): Promise<string> {
-  return invoke<string>('engine_run', { exe, args });
+export async function engineRun(
+  exe: string,
+  args: string[],
+  stdinInput?: string,
+): Promise<string> {
+  const params: { exe: string; args: string[]; stdinInput?: string } = { exe, args };
+  if (stdinInput !== undefined) {
+    params.stdinInput = stdinInput;
+  }
+  return invoke<string>('engine_run', params);
 }
 
 /**

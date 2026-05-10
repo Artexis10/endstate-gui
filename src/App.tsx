@@ -48,9 +48,15 @@ import { useMicroFeedback } from './lib/micro-feedback';
 import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
 import { copyText } from './lib/clipboard';
 import { UpdatePrompt, runUpdateCheck } from './components/UpdatePrompt';
+import { AuthPane } from './components/app/auth/auth-pane';
+import { BackupPane } from './components/app/backup/backup-pane';
+import { RestoreWizard } from './components/app/backup/restore-wizard';
+import { AccountSection } from './components/app/account/account-section';
+import { backupStatus, BackupCommandError } from './lib/backup-bridge';
+import type { BackupStatusData } from './types';
 
 type AppStatus = 'loading' | 'ready' | 'error';
-type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings';
+type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 'backup';
 
 interface AppState {
   status: AppStatus;
@@ -154,6 +160,16 @@ function AppContent() {
   
   // Global lifecycle state - tracks last capture, preview, apply, verify
   const [lifecycleState, setLifecycleState] = useState<LifecycleState>(loadLifecycleState());
+
+  // Hosted Backup (per Hosted Backup contract v2.0):
+  // - hostedBackupSupported: derived from `capabilities.features.hostedBackup.supported`.
+  //   When false, all hosted-backup UI is hidden (auth pane, Backup nav, Account section).
+  // - backupStatusData: snapshot from `endstate backup status`; refreshed after auth events.
+  // - restoreWizardOpen: triggered after sign-in when remote backups exist but the
+  //   local profiles directory is empty (Phase 6 wizard).
+  const [hostedBackupSupported, setHostedBackupSupported] = useState<boolean>(false);
+  const [backupStatusData, setBackupStatusData] = useState<BackupStatusData | null>(null);
+  const [restoreWizardOpen, setRestoreWizardOpen] = useState(false);
   
   // Overview action state - tracks which action is running and its status
   type OverviewActionType = 'capture' | 'setup' | 'check' | null;
@@ -1088,6 +1104,29 @@ function AppContent() {
         report: reportResult.success ? reportResult.envelope : null,
         verify: verifyResult,
       });
+
+      // Hosted Backup compatibility gate (Phase 8): only expose hosted-backup
+      // surfaces when the bundled engine advertises support. Refresh status
+      // here on initial boot; subsequent refreshes happen on auth events.
+      const supported = capResult.envelope.data?.features?.hostedBackup?.supported === true;
+      setHostedBackupSupported(supported);
+      if (supported) {
+        try {
+          const status = await backupStatus(settings);
+          setBackupStatusData(status);
+        } catch (err) {
+          // A status fetch failure should not block the rest of the app —
+          // surface a soft warning and leave hostedBackupSupported on so the
+          // user can still try the auth pane.
+          if (err instanceof BackupCommandError) {
+            console.warn('backup status failed:', err.message);
+          } else {
+            console.warn('backup status failed:', err);
+          }
+        }
+      } else {
+        setBackupStatusData(null);
+      }
     } catch (err) {
       // Catch any unexpected errors (timeouts, network issues, etc.)
       const fallbackCmd = await buildEngineCommand(settings, ['capabilities', '--json']);
@@ -2255,6 +2294,104 @@ function AppContent() {
       case 'setup':
         return null;
 
+      case 'auth':
+        if (!hostedBackupSupported) {
+          // Defensive: gate hides the entry, but if the user lands here
+          // somehow, route them home rather than rendering a bare pane.
+          return (
+            <div className="m-6 text-sm text-muted-foreground">
+              Hosted Backup is not available with the bundled engine. Update Endstate to
+              enable Hosted Backup.
+            </div>
+          );
+        }
+        return (
+          <>
+            {errorBanner}
+            <AuthPane
+              settings={settings}
+              onAuthenticated={async (result) => {
+                // Refresh hosted-backup status; on success, route to the
+                // backup pane. The signed-up flow has already passed through
+                // the recovery-key dialog by the time the AuthPane fires
+                // `kind === 'signed-up'`, so we just continue.
+                try {
+                  const status = await backupStatus(settings);
+                  setBackupStatusData(status);
+                  // Restore-on-new-machine wizard trigger:
+                  //   - we know the user just signed in / recovered
+                  //   - have a `lastBackupAt` (i.e. remote backups exist), and
+                  //   - local profiles directory is empty
+                  // The kindness here is a one-prompt wizard rather than a
+                  // dropdown they have to discover. See contract §6 / Phase 6.
+                  if (
+                    result.kind !== 'signed-up' &&
+                    status.signedIn &&
+                    status.lastBackupAt &&
+                    profiles.length === 0
+                  ) {
+                    setRestoreWizardOpen(true);
+                  }
+                } catch (err) {
+                  // Non-fatal — fall through to the backup pane and let it
+                  // surface the error.
+                  console.warn('post-auth status refresh failed:', err);
+                }
+                handleNavigate('backup');
+              }}
+            />
+          </>
+        );
+
+      case 'backup':
+        if (!hostedBackupSupported) {
+          return (
+            <div className="m-6 text-sm text-muted-foreground">
+              Hosted Backup is not available with the bundled engine. Update Endstate to
+              enable Hosted Backup.
+            </div>
+          );
+        }
+        // Signed-out → defer to the auth pane. Keeping this as a redirect
+        // rather than rendering AuthPane here so the URL/page stays in sync.
+        if (!backupStatusData?.signedIn) {
+          return (
+            <div className="m-6 flex flex-col gap-2 text-sm text-muted-foreground">
+              <p>Sign in to view your hosted backups.</p>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => handleNavigate('auth')}
+                className="self-start"
+              >
+                Sign in
+              </Button>
+            </div>
+          );
+        }
+        return (
+          <>
+            {errorBanner}
+            <BackupPane
+              settings={settings}
+              selectedProfilePath={selectedProfilePath || null}
+              selectedProfileName={selectedProfile || null}
+            />
+            <RestoreWizard
+              open={restoreWizardOpen}
+              settings={settings}
+              defaultDestination={profilesDirectory}
+              onDismiss={() => setRestoreWizardOpen(false)}
+              onComplete={() => {
+                setRestoreWizardOpen(false);
+                // Refresh local profiles list after a wizard restore so the
+                // newly-restored profile appears in the Home overview.
+                void refreshProfiles();
+              }}
+            />
+          </>
+        );
+
       case 'report':
         // Build recent runs from lifecycle state and last run data
         // Use artifactPaths from lifecycle events directly (source of truth)
@@ -2870,6 +3007,38 @@ function AppContent() {
               </CardContent>
             </Card>
 
+            {/* Hosted Backup account section (Phase 7) — only visible when
+                hosted backup is supported by the bundled engine AND the user
+                is signed in. The signed-out / unsupported cases are handled
+                by the auth pane and capabilities gate. */}
+            {hostedBackupSupported && backupStatusData?.signedIn && (
+              <AccountSection
+                settings={settings}
+                status={backupStatusData}
+                onSignedOut={async () => {
+                  // Refresh status + route to auth pane.
+                  try {
+                    const next = await backupStatus(settings);
+                    setBackupStatusData(next);
+                  } catch (err) {
+                    console.warn('post-logout status refresh failed:', err);
+                  }
+                  handleNavigate('auth');
+                }}
+                onDeleted={async () => {
+                  // After delete the engine clears its session; refresh and
+                  // route to auth pane (signed-out state).
+                  try {
+                    const next = await backupStatus(settings);
+                    setBackupStatusData(next);
+                  } catch {
+                    setBackupStatusData(null);
+                  }
+                  handleNavigate('auth');
+                }}
+              />
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Updates</CardTitle>
@@ -2912,6 +3081,8 @@ function AppContent() {
       case 'setup': return '';
       case 'report': return 'Reports';
       case 'settings': return 'Settings';
+      case 'auth': return 'Hosted Backup';
+      case 'backup': return 'Hosted Backup';
       default: return '';
     }
   };
@@ -2928,6 +3099,7 @@ function AppContent() {
         onToggleSidebar={handleToggleSidebar}
         previousPage={previousPage}
         onBack={handleBack}
+        showBackupNav={hostedBackupSupported}
       >
         {renderPersistentFlows()}
         {renderPage()}

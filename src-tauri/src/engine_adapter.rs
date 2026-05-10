@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -311,6 +311,10 @@ pub fn extract_command_name_pub(args: &[String]) -> String {
 /// * `exe` - Path to the executable (typically "endstate")
 /// * `args` - Command line arguments
 /// * `run_state` - Shared state for tracking the running process
+/// * `stdin_input` - Optional payload written to the child's stdin and then closed.
+///                   Used by hosted-backup commands (signup, login, recover) that
+///                   accept secrets via stdin to avoid leaking them via flags or
+///                   shell history.
 ///
 /// # Returns
 /// * `Ok(String)` - The runId of the completed run
@@ -321,6 +325,7 @@ pub fn run_engine(
     args: &[String],
     run_state: &SharedRunState,
     broadcaster: &EventBroadcaster,
+    stdin_input: Option<String>,
 ) -> Result<String, EngineError> {
     // Generate runId and extract command name
     let run_id = generate_run_id();
@@ -366,7 +371,10 @@ pub fn run_engine(
     };
     cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    
+    if stdin_input.is_some() {
+        cmd.stdin(Stdio::piped());
+    }
+
     let spawn_result = cmd.spawn();
 
     let mut child = match spawn_result {
@@ -381,6 +389,15 @@ pub fn run_engine(
             return Err(e.into());
         }
     };
+
+    // If caller supplied stdin_input, write and close stdin before reading output.
+    // Closing the pipe (drop) signals EOF to the child.
+    if let Some(input) = stdin_input.as_ref() {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(input.as_bytes());
+            // dropping stdin here closes the pipe
+        }
+    }
 
     // Take ownership of stdout/stderr before storing child
     let stdout = child.stdout.take().expect("stdout was piped");

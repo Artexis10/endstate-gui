@@ -807,7 +807,7 @@ dependencies = [
 
 [[package]]
 name = "endstate-gui"
-version = "1.7.2"
+version = "2.2.1"
 dependencies = [
  "axum",
  "base64 0.22.1",

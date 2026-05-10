@@ -18,6 +18,13 @@ export interface EndstateError {
   hint?: string;
 }
 
+export interface EndstateHostedBackupCapability {
+  supported: boolean;
+  minSchemaVersion?: string;
+  issuerUrl?: string;
+  audience?: string;
+}
+
 export interface EndstateCapabilitiesData {
   supportedSchemaVersions?: {
     min: string;
@@ -30,6 +37,7 @@ export interface EndstateCapabilitiesData {
     configModules?: boolean;
     jsonOutput?: boolean;
     manualApps?: boolean;
+    hostedBackup?: EndstateHostedBackupCapability;
   };
   platform?: {
     os: string;
@@ -38,6 +46,120 @@ export interface EndstateCapabilitiesData {
   gitCommit?: string | null;
   gitDirty?: boolean;
   bootstrapTimestamp?: string | null;
+}
+
+/**
+ * Hosted-backup subscription state per contract §10.
+ * - `none`: never subscribed or fully cancelled past retention
+ * - `active`: subscription paid, current
+ * - `grace`: payment failed, in 30-day grace window (read OK, write blocked)
+ * - `cancelled`: user cancelled, in 30-day retention (read OK, write blocked)
+ */
+export type SubscriptionStatus = 'none' | 'active' | 'grace' | 'cancelled';
+
+/** Response shape for `endstate backup signup --json`. */
+export interface BackupSignupData {
+  userId: string;
+  email: string;
+  subscriptionStatus?: SubscriptionStatus;
+  /** Absolute path to the temp file the engine wrote the 24-word mnemonic to. */
+  recoveryKeySavedTo: string;
+}
+
+/** Response shape for `endstate backup login --json`. */
+export interface BackupLoginData {
+  userId: string;
+  email: string;
+  subscriptionStatus?: SubscriptionStatus;
+}
+
+/** Response shape for `endstate backup logout --json`. */
+export interface BackupLogoutData {
+  signedOut: boolean;
+}
+
+/** Response shape for `endstate backup status --json`. */
+export interface BackupStatusData {
+  signedIn: boolean;
+  email?: string;
+  userId?: string;
+  subscriptionStatus?: SubscriptionStatus;
+  issuerUrl: string;
+  /** ISO 8601 timestamp of the most recent successful push, if any. */
+  lastBackupAt?: string;
+  /** Set when the OS keychain failed; auth still works but session won't persist. */
+  keychainError?: string;
+}
+
+/** A single backup row from `endstate backup list --json`. */
+export interface BackupListItem {
+  id: string;
+  name: string;
+  latestVersionId?: string;
+  versionCount: number;
+  totalSize: number;
+  /** ISO 8601 timestamp of the latest version. */
+  updatedAt: string;
+}
+
+/** Response shape for `endstate backup list --json`. */
+export interface BackupListData {
+  backups: BackupListItem[];
+}
+
+/** A single version row from `endstate backup versions --json`. */
+export interface BackupVersionItem {
+  versionId: string;
+  /** ISO 8601 timestamp of version creation. */
+  createdAt: string;
+  /** Encrypted size in bytes. */
+  size: number;
+  /** SHA-256 of the encrypted manifest blob, hex-encoded. */
+  manifestSha256: string;
+}
+
+/** Response shape for `endstate backup versions --json`. */
+export interface BackupVersionsData {
+  backupId: string;
+  versions: BackupVersionItem[];
+}
+
+/** Response shape for `endstate backup push --json`. */
+export interface BackupPushData {
+  backupId: string;
+  versionId: string;
+}
+
+/** Response shape for `endstate backup pull --json`. */
+export interface BackupPullData {
+  backupId: string;
+  versionId: string;
+  /** Absolute path the profile was restored to. */
+  writtenTo: string;
+}
+
+/** Response shape for `endstate backup delete --json`. */
+export interface BackupDeleteData {
+  backupId: string;
+  deleted: boolean;
+}
+
+/** Response shape for `endstate backup delete-version --json`. */
+export interface BackupDeleteVersionData {
+  backupId: string;
+  versionId: string;
+  deleted: boolean;
+}
+
+/** Response shape for `endstate backup recover --json`. */
+export interface BackupRecoverData {
+  userId: string;
+  email: string;
+}
+
+/** Response shape for `endstate account delete --json`. */
+export interface AccountDeleteData {
+  deleted: boolean;
 }
 
 export interface VerifyItem {
