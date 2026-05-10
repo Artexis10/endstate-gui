@@ -103,15 +103,20 @@ function hasMockEngine(): boolean {
 
 /**
  * Run an endstate command once (non-streaming).
- * 
+ *
  * In Tauri runtime: executes via endstate_exec command
  * In web runtime with mock: returns mock response
  * In web runtime without mock: returns typed error
+ *
+ * @param stdinInput - Optional payload written to child stdin and closed.
+ *                     Used by hosted-backup auth commands (signup, login, recover)
+ *                     that accept secrets via stdin instead of flags.
  */
 export async function runEndstateOnce<T>(
   settings: AppSettings,
   command: string,
-  args: string[] = []
+  args: string[] = [],
+  stdinInput?: string,
 ): Promise<EngineExecResult<T>> {
   const fullArgs = [command, '--json', ...args];
   const engineCmd = await buildEngineCommand(settings, fullArgs);
@@ -151,10 +156,14 @@ export async function runEndstateOnce<T>(
   
   // Tauri runtime - execute via endstate_exec
   try {
-    const result = await invoke<ExecResult>('endstate_exec', {
+    const invokeParams: { exe: string; args: string[]; stdinInput?: string } = {
       exe: engineCmd.exe,
       args: engineCmd.args,
-    });
+    };
+    if (stdinInput !== undefined) {
+      invokeParams.stdinInput = stdinInput;
+    }
+    const result = await invoke<ExecResult>('endstate_exec', invokeParams);
     
     // Check for command not found (typically exit code 1 with specific stderr)
     if (result.exitCode !== 0) {

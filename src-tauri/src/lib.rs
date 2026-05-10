@@ -102,6 +102,9 @@ fn endstate_exec(app: AppHandle, exe: String, args: Vec<String>) -> Result<ExecR
 /// * `app` - Tauri app handle for emitting events
 /// * `exe` - Path to the executable (typically "endstate")
 /// * `args` - Command line arguments to pass to the CLI
+/// * `stdin_input` - Optional payload written to child stdin and then closed.
+///                   Used by hosted-backup auth commands (signup, login, recover)
+///                   that accept secrets via stdin instead of flags.
 /// * `run_state` - Shared state for tracking the running process
 ///
 /// # Returns
@@ -112,15 +115,16 @@ async fn engine_run(
     app: AppHandle,
     exe: String,
     args: Vec<String>,
+    stdin_input: Option<String>,
     run_state: State<'_, SharedRunState>,
     broadcaster: State<'_, EventBroadcaster>,
 ) -> Result<String, String> {
     let run_state = Arc::clone(&run_state);
     let broadcaster = broadcaster.inner().clone();
-    
+
     // Run in a blocking task to avoid blocking the async runtime
     let result = tauri::async_runtime::spawn_blocking(move || {
-        engine_adapter::run_engine(&app, &exe, &args, &run_state, &broadcaster)
+        engine_adapter::run_engine(&app, &exe, &args, &run_state, &broadcaster, stdin_input)
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?;
@@ -567,6 +571,25 @@ fn read_text_file(path: String) -> Result<String, String> {
     
     fs::read_to_string(file_path)
         .map_err(|e| format!("Failed to read file: {}", e))
+}
+
+/// Write base64-encoded bytes to a file (binary).
+///
+/// Used by the recovery-key dialog to write a generated PDF without bundling
+/// `@tauri-apps/plugin-fs`. Decodes base64 in Rust and writes the raw bytes.
+#[tauri::command]
+fn write_file_base64(path: String, data_base64: String) -> Result<(), String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let bytes = STANDARD
+        .decode(&data_base64)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+        }
+    }
+    fs::write(&path, &bytes).map_err(|e| format!("Failed to write file: {}", e))
 }
 
 /// Read a binary file and return its contents as base64.
@@ -1315,6 +1338,7 @@ pub fn run() {
             open_folder,
             read_text_file,
             read_file_base64,
+            write_file_base64,
             write_text_file,
             write_text_file_debug,
             delete_file,

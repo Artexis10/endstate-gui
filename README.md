@@ -169,6 +169,69 @@ See `docs/ai/PROJECT_RULES.md` in the endstate repository for the authoritative 
 
 ---
 
+## Hosted Backup
+
+Endstate GUI surfaces the hosted-backup capability of the bundled engine
+(`endstate backup *`, available from engine v2.0.0). All cryptography, HTTP,
+JWT validation, and keychain access live in the engine — the GUI is a thin
+presentation layer per the [Hosted Backup contract](https://github.com/Artexis10/endstate/blob/main/docs/contracts/hosted-backup-contract.md).
+
+### Surfaces
+
+- **Hosted Backup pane** — listed in the sidebar when the bundled engine
+  advertises `features.hostedBackup.supported = true`. Hidden otherwise.
+- **Sign-in / Sign-up / Recover** — three-tab auth pane. Sign-up generates a
+  24-word recovery key; the user must save it via at least two of three
+  methods (file, PDF, clipboard) before continuing. **There is no skip
+  button**: per the contract trust model, a user who skips the recovery key
+  and forgets their passphrase loses their data with no recourse from us.
+- **Backup pane** — subscription banner (`active` / `grace` / `cancelled` /
+  `none`), backup list, version list, push / restore / delete with
+  streaming progress dialogs.
+- **Restore-on-new-machine wizard** — auto-prompts when a signed-in user
+  has remote backups but zero local profiles.
+- **Account section in Settings** — email, subscription pill, manage link,
+  sign-out, delete-account confirmation (email-match gate).
+
+### Subscription portal
+
+For v1, the Subscribe / Manage links go to:
+
+- `https://substratesystems.io/#pricing` — Subscribe (state `none`)
+- `https://substratesystems.io/account` — Manage subscription
+  (state `active` / `grace` / `cancelled`)
+
+Both open via Tauri's shell plugin (`@tauri-apps/plugin-shell`).
+
+### Engine compatibility gate
+
+On boot, the GUI reads `endstate capabilities --json` and checks
+`features.hostedBackup.supported`. If absent or `false`, the auth pane,
+Backup nav entry, and Account section are all hidden, and the user sees
+"Update Endstate to enable Hosted Backup." Local provisioning continues to
+work.
+
+### Smoke-test plan (manual)
+
+After install on a clean machine:
+
+1. Sign up with a throwaway email + 12+ char passphrase
+2. Save the recovery key via two of {file, PDF, copy} — confirm the dialog
+   does not let you Continue with fewer than two saves and does not close on
+   Escape
+3. Land on the backup pane; confirm the subscription banner reflects the
+   real state from substrate
+4. Push a small test profile; cancel mid-push and confirm the toast
+5. Pull to a different location; verify byte-equal round-trip
+6. Sign out, sign back in on a different machine; confirm the wizard
+   prompts to restore
+7. Sign out again, choose "I forgot my passphrase", paste the saved
+   24-word recovery key, set a new passphrase
+8. Confirm the new passphrase signs in and the OLD passphrase no longer
+   works (negative test — the recovery flow rotated keys)
+9. From the account section, type the email exactly to enable the Confirm
+   button; delete the account and confirm signed-out state
+
 ## Code Signing Policy
 
 Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
