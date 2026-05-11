@@ -1,9 +1,11 @@
 /**
- * HTTP Bridge for Tidewave mode.
+ * HTTP bridge for browser-bridge mode.
  *
- * When running in a browser (not Tauri webview) with TIDEWAVE_ENABLED=1,
- * this module routes invoke() calls through HTTP and listen() through SSE
- * to the dev-only HTTP server running in the Tauri backend.
+ * When running in a regular browser tab (not the Tauri webview) with
+ * VITE_BROWSER_BRIDGE=1, this module routes invoke() calls through HTTP
+ * and listen() through SSE to the dev-only HTTP server running in the
+ * Tauri backend (port 9876). Used for browser-based dev / Playwright
+ * automation against the real engine.
  */
 
 const BRIDGE_URL = 'http://127.0.0.1:9876';

@@ -1307,11 +1307,13 @@ pub fn run() {
         .setup(|_app| {
             #[cfg(all(debug_assertions, feature = "dev-server"))]
             {
-                if std::env::var("TIDEWAVE_ENABLED").unwrap_or_default() == "1" {
+                use tauri::Manager;
+                if std::env::var("ENDSTATE_BROWSER_BRIDGE").unwrap_or_default() == "1" {
                     let broadcaster = _app.state::<EventBroadcaster>().inner().clone();
                     let run_state = _app.state::<SharedRunState>().inner().clone();
+                    let app_handle = _app.handle().clone();
                     tauri::async_runtime::spawn(async move {
-                        if let Err(e) = dev_server::start(run_state, broadcaster).await {
+                        if let Err(e) = dev_server::start(app_handle, run_state, broadcaster).await {
                             eprintln!("Dev server failed: {}", e);
                         }
                     });
