@@ -97,20 +97,23 @@ export function SignInForm({ settings, onSignedIn, onSwitchTab }: SignInFormProp
           'Sign in'
         )}
       </Button>
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
+      <div className="space-y-2 pt-1 text-center text-sm">
+        <div className="text-muted-foreground">
+          New to Endstate?{' '}
+          <button
+            type="button"
+            onClick={() => onSwitchTab('sign-up')}
+            className="text-primary underline-offset-2 hover:underline"
+          >
+            Create an account
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => onSwitchTab('recover')}
-          className="text-primary underline-offset-2 hover:underline"
+          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
         >
           I forgot my passphrase
-        </button>
-        <button
-          type="button"
-          onClick={() => onSwitchTab('sign-up')}
-          className="text-primary underline-offset-2 hover:underline"
-        >
-          Create an account
         </button>
       </div>
     </form>

@@ -1,12 +1,14 @@
 /**
  * Hosted-backup auth pane.
  *
- * Three-tab shell (Sign in / Sign up / Recover) plus the load-bearing
- * recovery-key dialog launched after a successful sign-up.
+ * Single-view shell: sign-in is the default. Sign-up and recover are reached
+ * via text links in the sign-in form footer; each presents its own form with
+ * a "back to sign in" link. No tabs — recover is a serious action and should
+ * not sit at equal visual weight with sign-in.
  */
 
 import { useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuthState, AuthTab } from './use-auth-state';
 import { SignInForm } from './sign-in-form';
 import { SignUpForm } from './sign-up-form';
@@ -17,6 +19,10 @@ import type { AppSettings } from '@/settings';
 
 export interface AuthPaneProps {
   settings: AppSettings;
+  /** Initial view: 'sign-in' (default), 'sign-up', or 'recover'. The
+   *  signed-out Backup pane sets this to 'sign-up' when the user clicks
+   *  "Create account" so they don't have to switch tabs after arriving. */
+  initialTab?: AuthTab;
   /** Called when the user has been authenticated (sign-in, signed-up + saved
    *  recovery key, or recovered via mnemonic). The handler should fetch
    *  `backupStatus` and route to the backup pane. */
@@ -28,8 +34,14 @@ export interface AuthPaneProps {
   ) => void;
 }
 
-export function AuthPane({ settings, onAuthenticated }: AuthPaneProps) {
-  const { activeTab, setActiveTab } = useAuthState('sign-in');
+const HEADINGS = {
+  'sign-in': { title: 'Sign in to Endstate', description: 'Access your hosted backups.' },
+  'sign-up': { title: 'Create your account', description: 'You\'ll get a recovery key in the next step.' },
+  'recover': { title: 'Recover your account', description: 'You\'ll need the 24-word recovery key you saved at sign-up.' },
+} as const;
+
+export function AuthPane({ settings, initialTab = 'sign-in', onAuthenticated }: AuthPaneProps) {
+  const { activeTab, setActiveTab } = useAuthState(initialTab);
   const [pendingSignup, setPendingSignup] = useState<BackupSignupData | null>(null);
 
   const handleSignedIn = useCallback(
@@ -50,12 +62,14 @@ export function AuthPane({ settings, onAuthenticated }: AuthPaneProps) {
     onAuthenticated({ kind: 'signed-up', data });
   }, [pendingSignup, onAuthenticated]);
 
+  const heading = HEADINGS[activeTab];
+
   return (
     <div className="flex w-full justify-center p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Endstate Hosted Backup</CardTitle>
-          <TabsHeader activeTab={activeTab} onChange={setActiveTab} />
+          <CardTitle>{heading.title}</CardTitle>
+          <CardDescription>{heading.description}</CardDescription>
         </CardHeader>
         <CardContent>
           {activeTab === 'sign-in' && (
@@ -89,41 +103,6 @@ export function AuthPane({ settings, onAuthenticated }: AuthPaneProps) {
           onContinue={handleRecoveryDialogContinue}
         />
       )}
-    </div>
-  );
-}
-
-function TabsHeader({
-  activeTab,
-  onChange,
-}: {
-  activeTab: AuthTab;
-  onChange: (tab: AuthTab) => void;
-}) {
-  const tabs: { id: AuthTab; label: string }[] = [
-    { id: 'sign-in', label: 'Sign in' },
-    { id: 'sign-up', label: 'Sign up' },
-    { id: 'recover', label: 'Recover' },
-  ];
-  return (
-    <div role="tablist" aria-label="Auth options" className="flex gap-1 mt-2 border-b border-border">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          role="tab"
-          aria-selected={activeTab === tab.id}
-          aria-controls={`auth-tab-panel-${tab.id}`}
-          data-testid={`auth-tab-${tab.id}`}
-          onClick={() => onChange(tab.id)}
-          className={
-            activeTab === tab.id
-              ? 'px-3 py-2 text-sm font-medium border-b-2 border-primary text-foreground'
-              : 'px-3 py-2 text-sm text-muted-foreground hover:text-foreground'
-          }
-        >
-          {tab.label}
-        </button>
-      ))}
     </div>
   );
 }

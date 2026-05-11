@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2 } from 'lucide-react';
+import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2, Cloud } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
@@ -18,7 +18,8 @@ import {
   getPhaseAwareStatusForEvent,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
-import type { CaptureConfigModule } from '@/types';
+import type { CaptureConfigModule, SubscriptionStatus } from '@/types';
+import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 
 type CapturePhase = 'idle' | 'scanning' | 'done' | 'error' | 'saving';
 
@@ -53,6 +54,21 @@ export interface SaveFlowProps {
   resetKey?: number;
   /** Called when the flow returns to idle (save completed, scan again, etc.) */
   onFlowReset?: () => void;
+  /**
+   * When set, render a secondary "Push to hosted backup" button in the done
+   * card that invokes this handler with the captured manifest path. Parent
+   * gates visibility via subscription state — if undefined, the button is
+   * hidden entirely (no soft upsell). See plan §1 decision 3.
+   */
+  onPushToHostedBackup?: (capturedPath: string) => void;
+  /** Hosted-backup capability gate. False → hide the toolbar chip. */
+  hostedBackupSupported?: boolean;
+  /** Whether the user is signed in to Hosted Backup. */
+  hostedBackupSignedIn?: boolean;
+  /** Current subscription status, if known. */
+  hostedBackupSubscriptionStatus?: SubscriptionStatus;
+  /** Routes to the Backup pane (sidebar). The chip click handler uses this. */
+  onOpenHostedBackup?: () => void;
 }
 
 export function SaveFlow({
@@ -65,6 +81,11 @@ export function SaveFlow({
   onSaveToFile,
   resetKey,
   onFlowReset,
+  onPushToHostedBackup,
+  hostedBackupSupported = false,
+  hostedBackupSignedIn = false,
+  hostedBackupSubscriptionStatus,
+  onOpenHostedBackup,
 }: SaveFlowProps) {
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [result, setResult] = useState<CaptureResult | null>(null);
@@ -223,16 +244,26 @@ export function SaveFlow({
       </button>
 
       {/* Flow header */}
-      <div className="flex items-center gap-3 mb-8">
-        <div className="p-3 rounded-xl bg-blue-500/10">
-          <HardDrive className="h-6 w-6 text-blue-500" />
+      <div className="flex items-center justify-between gap-3 mb-8">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-blue-500/10">
+            <HardDrive className="h-6 w-6 text-blue-500" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-semibold">Save this computer</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Scan your apps and settings, then save everything as a portable file
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-semibold">Save this computer</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Scan your apps and settings, then save everything as a portable file
-          </p>
-        </div>
+        {phase === 'idle' && onOpenHostedBackup && (
+          <HostedBackupChip
+            hostedBackupSupported={hostedBackupSupported}
+            signedIn={hostedBackupSignedIn}
+            subscriptionStatus={hostedBackupSubscriptionStatus}
+            onOpen={onOpenHostedBackup}
+          />
+        )}
       </div>
 
       <AnimatePresence mode="wait">
@@ -431,6 +462,17 @@ export function SaveFlow({
                       </>
                     )}
                   </Button>
+                  {onPushToHostedBackup && result.outputPath && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => onPushToHostedBackup(result.outputPath!)}
+                      disabled={phase === 'saving'}
+                      data-testid="save-flow-push-to-backup"
+                    >
+                      <Cloud className="h-4 w-4 mr-2" />
+                      Push to hosted backup
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     onClick={handleScanAgain}

@@ -18,10 +18,11 @@ import { open as openExternal } from '@tauri-apps/plugin-shell';
 import type { SubscriptionStatus } from '@/types';
 import { CheckCircle2, AlertTriangle, OctagonX, Sparkles } from 'lucide-react';
 
-const SUBSCRIBE_URL = 'https://substratesystems.io/#pricing';
-// TODO(substrate): substrate-side `/account` route is a follow-up task; if it
-// ever moves, update this constant. The GUI ships with this link regardless.
-const MANAGE_URL = 'https://substratesystems.io/account';
+const SUBSCRIBE_URL = 'https://substratesystems.io/endstate';
+// Until substrate ships a dedicated customer-portal route, both Subscribe
+// and Manage point at the product page — it links to checkout / billing
+// from there.
+const MANAGE_URL = 'https://substratesystems.io/endstate';
 
 export interface SubscriptionBannerProps {
   status?: SubscriptionStatus;
@@ -100,9 +101,9 @@ export function SubscriptionBanner({ status }: SubscriptionBannerProps) {
             type="button"
             variant="primary"
             onClick={() => openUrl(MANAGE_URL)}
-            data-testid="subscription-manage"
+            data-testid="subscription-renew"
           >
-            Manage subscription
+            Renew subscription
           </Button>
         }
       />
