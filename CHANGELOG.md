@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.3.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.2.1...gui-v2.3.0) (2026-05-12)
+
+
+### Features
+
+* **backup:** Hosted Backup GUI ([#38](https://github.com/Artexis10/endstate-gui/issues/38)) ([2446a86](https://github.com/Artexis10/endstate-gui/commit/2446a86a4bd0a590201aca4c0d7eb1178041d598))
+* **backup:** hosted-backup GUI flows (auth, backup pane, account) ([#36](https://github.com/Artexis10/endstate-gui/issues/36)) ([e542a18](https://github.com/Artexis10/endstate-gui/commit/e542a18e5af68786cb54a79f6524a28f5012241e))
+
 ## [2.2.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.2.0...gui-v2.2.1) (2026-05-01)
 
 
