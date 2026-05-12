@@ -291,6 +291,62 @@ ${JSON.stringify(validEnvelope)}`;
         expect(result.stdout).toBe('some output');
       }
     });
+
+    // Regression: hosted-backup commands exit non-zero on domain failures
+    // (SUBSCRIPTION_REQUIRED, AUTH_REQUIRED) but still emit a full envelope.
+    // The wrapper must surface that envelope so callers see the structured
+    // error code instead of "Command failed with exit code 1".
+    it('attaches envelope on non-zero exit when stdout contains JSON', async () => {
+      const failEnvelope = {
+        ...validEnvelope,
+        success: false,
+        data: {},
+        error: {
+          code: 'SUBSCRIPTION_REQUIRED',
+          message: 'no subscription on file',
+          remediation: 'Subscribe to Endstate Hosted Backup',
+          docsKey: 'errors/subscription-required',
+        },
+      };
+      mockInvoke.mockResolvedValue({
+        stdout: JSON.stringify(failEnvelope),
+        stderr: '',
+        exitCode: 1,
+      });
+
+      const result = await runEndstateOnce(baseSettings, 'backup');
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.kind).toBe('command_failed');
+        expect(result.error.message).toBe('no subscription on file');
+        expect(result.envelope).toBeDefined();
+        const envObj = result.envelope as Record<string, unknown>;
+        const envErr = envObj.error as { code?: string };
+        expect(envErr.code).toBe('SUBSCRIPTION_REQUIRED');
+      }
+    });
+
+    it('maps VERIFY_FAILED envelope on non-zero exit to verify_failed kind', async () => {
+      const failEnvelope = {
+        ...validEnvelope,
+        success: false,
+        error: { code: 'VERIFY_FAILED', message: '2 apps missing' },
+      };
+      mockInvoke.mockResolvedValue({
+        stdout: JSON.stringify(failEnvelope),
+        stderr: '',
+        exitCode: 1,
+      });
+
+      const result = await runEndstateOnce(baseSettings, 'verify');
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.kind).toBe('verify_failed');
+        expect(result.envelope).toBeDefined();
+      }
+    });
   });
 
   describe('empty or no-JSON stdout', () => {

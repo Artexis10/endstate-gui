@@ -445,8 +445,18 @@ async fn handle_invoke(
                 })
                 .unwrap_or_default();
 
+            let stdin_input = req
+                .args
+                .get("stdinInput")
+                .or_else(|| req.args.get("stdin_input"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
             let app = state.app.clone();
             match tokio::task::spawn_blocking(move || {
+                use std::io::Write as _;
+                use std::process::Stdio;
+
                 let mut cmd = if exe == "__bundled__" {
                     match crate::engine_adapter::build_bundled_command(&app, &args) {
                         Ok(c) => c,
@@ -460,7 +470,18 @@ async fn handle_invoke(
                 } else {
                     crate::cmd_impl::build_engine_command(&exe, &args)
                 };
-                let output = cmd.output()?;
+                let output = if let Some(input) = stdin_input {
+                    cmd.stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::piped());
+                    let mut child = cmd.spawn()?;
+                    if let Some(mut stdin) = child.stdin.take() {
+                        stdin.write_all(input.as_bytes())?;
+                    }
+                    child.wait_with_output()?
+                } else {
+                    cmd.output()?
+                };
                 Ok(crate::cmd_impl::ExecResult {
                     stdout: String::from_utf8_lossy(&output.stdout).to_string(),
                     stderr: String::from_utf8_lossy(&output.stderr).to_string(),

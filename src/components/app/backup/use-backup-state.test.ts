@@ -6,28 +6,37 @@
  * trivially testable and the dialog rendering depends on it.
  */
 
-import { describe, expect, it } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useBackupState } from './use-backup-state';
 import type { AppSettings } from '@/settings';
 import type { StreamingEvent } from '@/lib/streaming-events';
+import type { BackupStatusData } from '@/types';
 
-vi.mock('@/lib/backup-bridge', () => ({
-  backupStatus: vi.fn().mockResolvedValue({
-    signedIn: false,
-    issuerUrl: 'https://substratesystems.io',
-  }),
-  backupList: vi.fn().mockResolvedValue({ backups: [] }),
-  backupVersions: vi.fn().mockResolvedValue({ backupId: 'b1', versions: [] }),
-  BackupCommandError: class BackupCommandError extends Error {
-    code = '';
+vi.mock('@/lib/backup-bridge', () => {
+  class BackupCommandError extends Error {
+    code: string;
     remediation?: string;
     docsKey?: string;
     detail?: Record<string, unknown>;
-  },
-}));
+    constructor(args: { code: string; message: string }) {
+      super(args.message);
+      this.code = args.code;
+    }
+  }
+  return {
+    backupStatus: vi.fn().mockResolvedValue({
+      signedIn: false,
+      issuerUrl: 'https://substratesystems.io',
+    }),
+    backupList: vi.fn().mockResolvedValue({ backups: [] }),
+    backupVersions: vi.fn().mockResolvedValue({ backupId: 'b1', versions: [] }),
+    BackupCommandError,
+  };
+});
 
-import { vi } from 'vitest';
+import { backupList } from '@/lib/backup-bridge';
+const mockBackupList = vi.mocked(backupList);
 
 const SETTINGS: AppSettings = {
   engineMode: 'bundled',
@@ -94,6 +103,77 @@ describe('useBackupState progress reducers', () => {
     expect(result.current.pullProgress.subPhase).toBe('decrypting');
     expect(result.current.pullProgress.decryptedChunks).toBe(1);
     expect(result.current.pullProgress.currentChunkIndex).toBeNull();
+  });
+
+  it('skips backupList when initialStatus.subscriptionStatus is none', async () => {
+    const initialStatus: BackupStatusData = {
+      signedIn: true,
+      email: 'user@example.com',
+      userId: 'u-1',
+      subscriptionStatus: 'none',
+      issuerUrl: 'https://substratesystems.io',
+    };
+    mockBackupList.mockClear();
+
+    const { result } = renderHook(() => useBackupState(SETTINGS, { initialStatus }));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(mockBackupList).not.toHaveBeenCalled();
+    expect(result.current.backups).toEqual([]);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('seeds backups from initialBackups and renders without loading flash', async () => {
+    const seeded = [
+      {
+        id: 'b-1',
+        name: 'work',
+        latestVersionId: 'v-1',
+        versionCount: 3,
+        totalSize: 1234,
+        updatedAt: '2026-05-11T00:00:00Z',
+      },
+    ];
+    const initialStatus: BackupStatusData = {
+      signedIn: true,
+      email: 'user@example.com',
+      userId: 'u-1',
+      subscriptionStatus: 'active',
+      issuerUrl: 'https://substratesystems.io',
+    };
+    mockBackupList.mockResolvedValue({ backups: seeded });
+
+    const { result } = renderHook(() =>
+      useBackupState(SETTINGS, { initialStatus, initialBackups: seeded }),
+    );
+
+    // Cached state is visible synchronously — no spinner.
+    expect(result.current.loading).toBe(false);
+    expect(result.current.backups).toEqual(seeded);
+    expect(result.current.selectedBackupId).toBe('b-1');
+    // Background revalidation still fires.
+    await waitFor(() => expect(mockBackupList).toHaveBeenCalledTimes(1));
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('treats SUBSCRIPTION_REQUIRED from backupList as a soft state', async () => {
+    const { BackupCommandError } = await import('@/lib/backup-bridge');
+    mockBackupList.mockRejectedValueOnce(
+      new BackupCommandError({ code: 'SUBSCRIPTION_REQUIRED', message: 'no sub' }),
+    );
+    const initialStatus: BackupStatusData = {
+      signedIn: true,
+      email: 'user@example.com',
+      userId: 'u-1',
+      subscriptionStatus: 'cancelled',
+      issuerUrl: 'https://substratesystems.io',
+    };
+
+    const { result } = renderHook(() => useBackupState(SETTINGS, { initialStatus }));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBeNull();
+    expect(result.current.backups).toEqual([]);
   });
 
   it('phase event for backup-push resets push counters', () => {

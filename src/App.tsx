@@ -52,12 +52,12 @@ import { AuthPane } from './components/app/auth/auth-pane';
 import { BackupPane } from './components/app/backup/backup-pane';
 import { RestoreWizard } from './components/app/backup/restore-wizard';
 import { AccountSection } from './components/app/account/account-section';
-import { backupStatus, backupPush, BackupCommandError } from './lib/backup-bridge';
+import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
 import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
 import { isBackupChunkEvent } from './lib/streaming-events';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
-import type { BackupStatusData } from './types';
+import type { BackupListItem, BackupStatusData } from './types';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 'backup';
@@ -173,6 +173,11 @@ function AppContent() {
   //   local profiles directory is empty (Phase 6 wizard).
   const [hostedBackupSupported, setHostedBackupSupported] = useState<boolean>(false);
   const [backupStatusData, setBackupStatusData] = useState<BackupStatusData | null>(null);
+  // Boot-time prefetch of `backup list`. Engine subprocess spawns cost
+  // ~300ms–2s on Windows, so by the time the user opens the Backup pane the
+  // list is warm and the pane renders instantly (SWR — pane revalidates
+  // silently in the background).
+  const [backupListData, setBackupListData] = useState<BackupListItem[] | null>(null);
   const [restoreWizardOpen, setRestoreWizardOpen] = useState(false);
   // Which tab the auth pane opens in when reached from the Backup pane CTAs.
   // Reset to 'sign-in' on most nav transitions; "Create account" sets it to
@@ -1141,18 +1146,37 @@ function AppContent() {
         try {
           const status = await backupStatus(settings);
           setBackupStatusData(status);
+          // Fire `backup list` in the background once we know we're signed in
+          // with a paid subscription. The Backup pane reads this cached list
+          // on first render so navigation feels instant. `none` is skipped
+          // because the engine returns SUBSCRIPTION_REQUIRED for list in that
+          // state (contract §10 — read is blocked).
+          if (status.signedIn && status.subscriptionStatus !== 'none') {
+            void backupList(settings)
+              .then((data) => setBackupListData(data.backups))
+              .catch((err) => {
+                // Prefetch failures are silent; the pane re-fetches on mount.
+                console.warn('backup list prefetch failed:', err);
+              });
+          }
         } catch (err) {
           // A status fetch failure should not block the rest of the app —
           // surface a soft warning and leave hostedBackupSupported on so the
           // user can still try the auth pane.
           if (err instanceof BackupCommandError) {
             console.warn('backup status failed:', err.message);
+            // Tombstoned keychain from pre-F4 builds (or any other expired
+            // session) — gently nudge the user back into the sign-in flow.
+            if (err.code === 'AUTH_REQUIRED') {
+              showToast('Session expired. Please sign in again.', 'info');
+            }
           } else {
             console.warn('backup status failed:', err);
           }
         }
       } else {
         setBackupStatusData(null);
+        setBackupListData(null);
       }
     } catch (err) {
       // Catch any unexpected errors (timeouts, network issues, etc.)
@@ -2397,6 +2421,16 @@ function AppContent() {
                 try {
                   const status = await backupStatus(settings);
                   setBackupStatusData(status);
+                  // Warm the list cache so the Backup pane lands instantly.
+                  if (status.signedIn && status.subscriptionStatus !== 'none') {
+                    void backupList(settings)
+                      .then((data) => setBackupListData(data.backups))
+                      .catch((err) => {
+                        console.warn('post-auth list prefetch failed:', err);
+                      });
+                  } else {
+                    setBackupListData(null);
+                  }
                   // Restore-on-new-machine wizard trigger:
                   //   - we know the user just signed in / recovered
                   //   - have a `lastBackupAt` (i.e. remote backups exist), and
@@ -2492,6 +2526,13 @@ function AppContent() {
               settings={settings}
               selectedProfilePath={selectedProfilePath || null}
               selectedProfileName={selectedProfile || null}
+              initialStatus={backupStatusData}
+              initialBackups={backupListData}
+              onAuthLost={() => {
+                setBackupStatusData(null);
+                setBackupListData(null);
+                showToast('Session expired. Please sign in again.', 'info');
+              }}
             />
             <RestoreWizard
               open={restoreWizardOpen}
@@ -3132,7 +3173,9 @@ function AppContent() {
                 settings={settings}
                 status={backupStatusData}
                 onSignedOut={async () => {
-                  // Refresh status + route to auth pane.
+                  // Refresh status + route to auth pane. Drop the prefetched
+                  // list — it's per-user data and would leak across accounts.
+                  setBackupListData(null);
                   try {
                     const next = await backupStatus(settings);
                     setBackupStatusData(next);
@@ -3144,6 +3187,7 @@ function AppContent() {
                 onDeleted={async () => {
                   // After delete the engine clears its session; refresh and
                   // route to auth pane (signed-out state).
+                  setBackupListData(null);
                   try {
                     const next = await backupStatus(settings);
                     setBackupStatusData(next);

@@ -26,11 +26,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Button } from '@/components/ui/button';
-import { invoke } from '@/lib/tauri-bridge';
-import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { invoke, isTauriRuntime } from '@/lib/tauri-bridge';
 import jsPDF from 'jspdf';
 import { Copy, Download, FileText, Check, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
+
+/**
+ * Trigger a browser-side download with the given Blob + filename. Used in
+ * browser-bridge mode where @tauri-apps/plugin-dialog isn't available.
+ */
+function browserDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export interface RecoveryKeyDialogProps {
   open: boolean;
@@ -68,8 +80,16 @@ export function RecoveryKeyDialog({
           path: recoveryKeySavedTo,
         });
         if (cancelled) return;
+        // Engine v2.0.0 writes a header of `#`-prefixed comment lines
+        // before the mnemonic. Skip those and blank lines, then collect
+        // whitespace-separated tokens from the remaining body.
         const parsed = content
-          .trim()
+          .split(/\r?\n/)
+          .filter((line) => {
+            const trimmed = line.trim();
+            return trimmed.length > 0 && !trimmed.startsWith('#');
+          })
+          .join(' ')
           .split(/\s+/)
           .filter((w) => w.length > 0);
         if (parsed.length !== TOTAL_WORDS) {
@@ -78,6 +98,7 @@ export function RecoveryKeyDialog({
           );
           return;
         }
+        setLoadError(null);
         setWords(parsed);
       } catch (err) {
         if (cancelled) return;
@@ -104,13 +125,22 @@ export function RecoveryKeyDialog({
   const handleSaveFile = useCallback(async () => {
     if (words.length !== TOTAL_WORDS) return;
     try {
-      const target = await saveDialog({
-        title: 'Save recovery key',
-        defaultPath: 'endstate-recovery-key.txt',
-        filters: [{ name: 'Text', extensions: ['txt'] }],
-      });
-      if (!target) return; // user cancelled
-      await invoke('write_text_file', { path: target, content: wordsJoined + '\n' });
+      if (isTauriRuntime()) {
+        const { save: saveDialog } = await import('@tauri-apps/plugin-dialog');
+        const target = await saveDialog({
+          title: 'Save recovery key',
+          defaultPath: 'endstate-recovery-key.txt',
+          filters: [{ name: 'Text', extensions: ['txt'] }],
+        });
+        if (!target) return; // user cancelled
+        await invoke('write_text_file', { path: target, content: wordsJoined + '\n' });
+      } else {
+        // Browser-bridge mode: trigger a browser download instead.
+        browserDownload(
+          new Blob([wordsJoined + '\n'], { type: 'text/plain' }),
+          'endstate-recovery-key.txt',
+        );
+      }
       setSavedFile(true);
       showToast('Recovery key saved to file', 'info');
     } catch (err) {
@@ -124,12 +154,16 @@ export function RecoveryKeyDialog({
   const handleSavePdf = useCallback(async () => {
     if (words.length !== TOTAL_WORDS) return;
     try {
-      const target = await saveDialog({
-        title: 'Save recovery key as PDF',
-        defaultPath: 'endstate-recovery-key.pdf',
-        filters: [{ name: 'PDF', extensions: ['pdf'] }],
-      });
-      if (!target) return;
+      let target: string | null = null;
+      if (isTauriRuntime()) {
+        const { save: saveDialog } = await import('@tauri-apps/plugin-dialog');
+        target = await saveDialog({
+          title: 'Save recovery key as PDF',
+          defaultPath: 'endstate-recovery-key.pdf',
+          filters: [{ name: 'PDF', extensions: ['pdf'] }],
+        });
+        if (!target) return;
+      }
       const doc = new jsPDF({ unit: 'pt', format: 'letter' });
       const pageWidth = doc.internal.pageSize.getWidth();
       doc.setFont('helvetica', 'bold');
@@ -160,18 +194,23 @@ export function RecoveryKeyDialog({
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.text(
-        'Save this somewhere safe. If you forget your passphrase, this is the only way back in. Endstate cannot recover it for you.',
+        'Save this somewhere safe. If you forget your password, this is the only way back in. Endstate cannot recover it for you.',
         pageWidth / 2,
         startY + 6 * rowHeight + 30,
         { align: 'center', maxWidth: pageWidth - 120 },
       );
 
-      // jsPDF returns the PDF as a data-URI string; strip the prefix and
-      // hand the base64 payload to the small `write_file_base64` Tauri
-      // command that decodes and writes raw bytes.
-      const dataUri = doc.output('datauristring');
-      const dataBase64 = dataUri.split(',', 2)[1] ?? '';
-      await invoke('write_file_base64', { path: target, dataBase64 });
+      if (target) {
+        // Tauri runtime: hand the base64 payload to the small
+        // `write_file_base64` Tauri command that decodes and writes raw bytes.
+        const dataUri = doc.output('datauristring');
+        const dataBase64 = dataUri.split(',', 2)[1] ?? '';
+        await invoke('write_file_base64', { path: target, dataBase64 });
+      } else {
+        // Browser-bridge mode: blob download.
+        const blob = doc.output('blob');
+        browserDownload(blob, 'endstate-recovery-key.pdf');
+      }
       setSavedPdf(true);
       showToast('Recovery key saved as PDF', 'info');
     } catch (err) {
@@ -225,7 +264,7 @@ export function RecoveryKeyDialog({
             id="recovery-key-description"
             className="text-sm text-muted-foreground"
           >
-            Save your recovery key somewhere safe. If you forget your passphrase, this is
+            Save your recovery key somewhere safe. If you forget your password, this is
             the only way back in. We can&apos;t recover it for you.
           </DialogPrimitive.Description>
 

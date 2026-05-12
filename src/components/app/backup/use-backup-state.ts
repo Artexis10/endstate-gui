@@ -60,9 +60,22 @@ const EMPTY_PULL: PullProgress = {
   currentChunkIndex: null,
 };
 
+/**
+ * Structured fetch error surfaced from the hook to the pane. `message` is the
+ * engine's user-facing copy; `remediation` is its curated next-step hint;
+ * `code` lets the UI map specific failures (NETWORK_ERROR, TIMEOUT, …) to a
+ * friendlier headline. All three may be undefined for non-BackupCommandError
+ * failures (spawn errors, JSON parse errors).
+ */
+export interface BackupStateError {
+  message: string;
+  remediation?: string;
+  code?: string;
+}
+
 export interface UseBackupStateResult {
   loading: boolean;
-  error: string | null;
+  error: BackupStateError | null;
   status: BackupStatusData | null;
   backups: BackupListItem[];
   versions: BackupVersionItem[];
@@ -85,17 +98,115 @@ export interface UseBackupStateResult {
   pullOnEvent: (event: StreamingEvent) => void;
 }
 
-export function useBackupState(settings: AppSettings): UseBackupStateResult {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<BackupStatusData | null>(null);
-  const [backups, setBackups] = useState<BackupListItem[]>([]);
+export interface UseBackupStateOptions {
+  /**
+   * Called when a status fetch returns AUTH_REQUIRED, i.e. the engine's
+   * session is gone (token revoked, refresh expired, keychain wiped).
+   * The hook stops surfacing this as a hard error so the parent can route
+   * the user back to the sign-in flow with a calm toast. If omitted, the
+   * AUTH_REQUIRED is exposed via `error` like any other failure.
+   */
+  onAuthLost?: () => void;
+  /**
+   * Pre-fetched status from the parent (App.tsx already fetches it during
+   * the auth flow). When set, the hook skips its own mount-time status
+   * fetch and only loads the backup list — saving a redundant subprocess
+   * spawn. Subsequent refresh() calls still hit the engine.
+   */
+  initialStatus?: BackupStatusData | null;
+  /**
+   * Pre-fetched backup list from the parent. App.tsx prefetches this in
+   * parallel with auth so the Backup pane can render instantly on re-entry.
+   * When set, the hook renders the cached list immediately (loading: false)
+   * and silently revalidates in the background — stale-while-revalidate.
+   * Engine subprocess spawns dominate latency (~300ms–2s on Windows); SWR
+   * makes pane re-entry feel instant after the first session warm-up.
+   */
+  initialBackups?: BackupListItem[] | null;
+}
+
+export function useBackupState(
+  settings: AppSettings,
+  options: UseBackupStateOptions = {},
+): UseBackupStateResult {
+  // Seed loading from cache presence — if the parent has both status and
+  // backups warm, mount with loading=false so the pane renders instantly.
+  const hasSeedData =
+    !!options.initialStatus && Array.isArray(options.initialBackups);
+  const [loading, setLoading] = useState(!hasSeedData);
+  const [error, setError] = useState<BackupStateError | null>(null);
+  const [status, setStatus] = useState<BackupStatusData | null>(
+    options.initialStatus ?? null,
+  );
+  const [backups, setBackups] = useState<BackupListItem[]>(
+    options.initialBackups ?? [],
+  );
   const [versions, setVersions] = useState<BackupVersionItem[]>([]);
-  const [selectedBackupId, setSelectedBackupId] = useState<string | null>(null);
+  const [selectedBackupId, setSelectedBackupId] = useState<string | null>(
+    options.initialBackups && options.initialBackups.length > 0
+      ? options.initialBackups[0].id
+      : null,
+  );
   const [pushOpen, setPushOpen] = useState(false);
   const [pushProgress, setPushProgress] = useState<PushProgress>(EMPTY_PUSH);
   const [pullOpen, setPullOpen] = useState(false);
   const [pullProgress, setPullProgress] = useState<PullProgress>(EMPTY_PULL);
+
+  // Pure error handling shared between full refresh() and the
+  // backup-list-only path taken when initialStatus was provided.
+  const handleFetchError = useCallback(
+    (err: unknown) => {
+      if (err instanceof BackupCommandError && err.code === 'AUTH_REQUIRED') {
+        setStatus(null);
+        setBackups([]);
+        options.onAuthLost?.();
+      } else if (err instanceof BackupCommandError) {
+        setError({
+          message: err.message,
+          remediation: err.remediation,
+          code: err.code,
+        });
+      } else {
+        setError({
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [options],
+  );
+
+  const fetchBackupListFor = useCallback(
+    async (currentStatus: BackupStatusData | null) => {
+      if (!currentStatus?.signedIn) {
+        setBackups([]);
+        return;
+      }
+      // With no subscription on file the engine returns SUBSCRIPTION_REQUIRED
+      // for `backup list` (read is blocked in the `none` state per contract §10).
+      // Skip the call — the subscription banner already prompts the user to
+      // subscribe and there is no list to show anyway.
+      if (currentStatus.subscriptionStatus === 'none') {
+        setBackups([]);
+        return;
+      }
+      try {
+        const list = await backupList(settings);
+        setBackups(list.backups);
+        if (list.backups.length > 0 && !selectedBackupId) {
+          setSelectedBackupId(list.backups[0].id);
+        }
+      } catch (err) {
+        // SUBSCRIPTION_REQUIRED is a soft state — surfacing it as a hard error
+        // hides the subscription banner. Treat as empty list, no error.
+        if (err instanceof BackupCommandError && err.code === 'SUBSCRIPTION_REQUIRED') {
+          setBackups([]);
+          return;
+        }
+        handleFetchError(err);
+      }
+    },
+    [settings, selectedBackupId, handleFetchError],
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -103,25 +214,13 @@ export function useBackupState(settings: AppSettings): UseBackupStateResult {
     try {
       const s = await backupStatus(settings);
       setStatus(s);
-      if (s.signedIn) {
-        const list = await backupList(settings);
-        setBackups(list.backups);
-        if (list.backups.length > 0 && !selectedBackupId) {
-          setSelectedBackupId(list.backups[0].id);
-        }
-      } else {
-        setBackups([]);
-      }
+      await fetchBackupListFor(s);
     } catch (err) {
-      if (err instanceof BackupCommandError) {
-        setError(err.message);
-      } else {
-        setError(err instanceof Error ? err.message : String(err));
-      }
+      handleFetchError(err);
     } finally {
       setLoading(false);
     }
-  }, [settings, selectedBackupId]);
+  }, [settings, fetchBackupListFor, handleFetchError]);
 
   const refreshVersions = useCallback(
     async (backupId: string) => {
@@ -130,9 +229,15 @@ export function useBackupState(settings: AppSettings): UseBackupStateResult {
         setVersions(data.versions);
       } catch (err) {
         if (err instanceof BackupCommandError) {
-          setError(err.message);
+          setError({
+            message: err.message,
+            remediation: err.remediation,
+            code: err.code,
+          });
         } else {
-          setError(err instanceof Error ? err.message : String(err));
+          setError({
+            message: err instanceof Error ? err.message : String(err),
+          });
         }
         setVersions([]);
       }
@@ -152,10 +257,32 @@ export function useBackupState(settings: AppSettings): UseBackupStateResult {
     void refreshVersions(selectedBackupId);
   }, [selectedBackupId, refreshVersions]);
 
-  // Initial load
+  // Initial load — three paths:
+  //   1. Both status and backups pre-fetched: render cached state instantly,
+  //      revalidate the list in the background (SWR — no spinner).
+  //   2. Only status pre-fetched: skip the status spawn, fetch only the list.
+  //   3. Cold mount: do the full status+list fetch.
+  const initialStatusOnMountRef = useRef(options.initialStatus ?? null);
+  const initialBackupsOnMountRef = useRef(options.initialBackups ?? null);
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    const seededStatus = initialStatusOnMountRef.current;
+    const seededBackups = initialBackupsOnMountRef.current;
+    if (seededStatus && seededBackups) {
+      // SWR — already painted, revalidate silently. Don't flip `loading`,
+      // don't clear `error` (cached data is already shown).
+      void fetchBackupListFor(seededStatus);
+    } else if (seededStatus) {
+      setLoading(true);
+      setError(null);
+      fetchBackupListFor(seededStatus).finally(() => setLoading(false));
+    } else {
+      void refresh();
+    }
+    // Intentionally not depending on refresh/fetchBackupListFor — this
+    // runs once on mount; later calls go through refresh() or refresh
+    // triggered by selectedBackupId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const resetPushProgress = useCallback(() => setPushProgress(EMPTY_PUSH), []);
   const resetPullProgress = useCallback(() => setPullProgress(EMPTY_PULL), []);

@@ -22,7 +22,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CloudOff, WifiOff } from 'lucide-react';
 import { SubscriptionBanner } from './subscription-banner';
 import { BackupList } from './backup-list';
 import { VersionList } from './version-list';
@@ -38,6 +38,7 @@ import {
   BackupCommandError,
 } from '@/lib/backup-bridge';
 import type { AppSettings } from '@/settings';
+import type { BackupListItem, BackupStatusData } from '@/types';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
@@ -48,6 +49,17 @@ export interface BackupPaneProps {
   /** Absolute path to the profile JSON file the user wants to push. */
   selectedProfilePath: string | null;
   selectedProfileName: string | null;
+  /** Called when the engine reports AUTH_REQUIRED — session expired/revoked.
+   *  Parent should clear hosted-backup state and route back to the disclosure
+   *  / sign-in flow with a calm toast. */
+  onAuthLost?: () => void;
+  /** Pre-fetched status from the parent. When set the pane skips its own
+   *  mount-time status fetch (one less subprocess spawn). */
+  initialStatus?: BackupStatusData | null;
+  /** Pre-fetched backup list from the parent's boot prefetch. When set,
+   *  the pane renders the cached list immediately and revalidates in the
+   *  background (stale-while-revalidate). */
+  initialBackups?: BackupListItem[] | null;
 }
 
 interface DeleteTarget {
@@ -61,8 +73,15 @@ export function BackupPane({
   settings,
   selectedProfilePath,
   selectedProfileName,
+  onAuthLost,
+  initialStatus,
+  initialBackups,
 }: BackupPaneProps) {
-  const state = useBackupState(settings);
+  const state = useBackupState(settings, {
+    onAuthLost,
+    initialStatus,
+    initialBackups,
+  });
   const { showToast } = useToast();
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
@@ -191,21 +210,59 @@ export function BackupPane({
     );
   }
 
-  if (state.error) {
-    return (
-      <div
-        role="alert"
-        className="m-6 rounded-md border border-danger/30 bg-danger/10 p-4 text-sm text-danger-foreground"
-      >
-        <p className="font-medium">Could not load backup status.</p>
-        <p className="text-xs text-muted-foreground">{state.error}</p>
-        <div className="mt-3">
-          <Button type="button" variant="ghost" onClick={() => state.refresh()}>
-            Retry
-          </Button>
+  // Friendlier headlines for the common error codes — falls back to a calm
+  // generic title. The engine's `message` and `remediation` still appear
+  // underneath so the user can act on the specifics.
+  //
+  // We only call out a real network outage when status itself failed; if the
+  // status fetch succeeded then we just talked to the server, so a follow-up
+  // list/versions failure is most likely a transient blip — claiming the
+  // servers are unreachable would contradict the signed-in chip.
+  const errorView = state.error ? (
+    (() => {
+      const statusKnown = !!state.status;
+      const isNetwork =
+        !statusKnown &&
+        (state.error?.code === 'NETWORK_ERROR' ||
+          state.error?.code === 'TIMEOUT' ||
+          /network|timeout|reach/i.test(state.error?.message ?? ''));
+      const headline = isNetwork
+        ? "Can't reach Endstate's servers"
+        : "Couldn't load your backups";
+      const Icon = isNetwork ? WifiOff : CloudOff;
+      return (
+        <div
+          role="alert"
+          className="rounded-lg border border-border bg-card p-6 text-center shadow-sm"
+          data-testid="backup-pane-error"
+        >
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+            <Icon className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
+          </div>
+          <h3 className="mt-4 text-base font-semibold">{headline}</h3>
+          <p className="mt-2 text-sm text-muted-foreground">{state.error?.message}</p>
+          {state.error?.remediation && (
+            <p className="mt-2 text-xs text-muted-foreground">{state.error.remediation}</p>
+          )}
+          <div className="mt-5 flex justify-center gap-2">
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => state.refresh()}
+              data-testid="backup-pane-retry"
+            >
+              Try again
+            </Button>
+          </div>
         </div>
-      </div>
-    );
+      );
+    })()
+  ) : null;
+
+  // Status itself failed — we can't render the signed-in pane (no chip,
+  // banner, or list data). Centre the error card in the pane.
+  if (state.error && !state.status) {
+    return <div className="flex items-center justify-center p-12">{errorView}</div>;
   }
 
   if (!state.status?.signedIn) {
@@ -231,19 +288,21 @@ export function BackupPane({
         </div>
       )}
 
-      <BackupList
-        backups={state.backups}
-        canWrite={canWrite && !!selectedProfilePath}
-        canRestore={canRestore}
-        canDelete={canDelete}
-        onPush={handlePush}
-        onRestore={(id) => handleRestore(id)}
-        onDelete={handleDelete}
-        onSelect={(id) => state.setSelectedBackupId(id)}
-        selectedBackupId={state.selectedBackupId}
-      />
+      {errorView ?? (
+        <BackupList
+          backups={state.backups}
+          canWrite={canWrite && !!selectedProfilePath}
+          canRestore={canRestore}
+          canDelete={canDelete}
+          onPush={handlePush}
+          onRestore={(id) => handleRestore(id)}
+          onDelete={handleDelete}
+          onSelect={(id) => state.setSelectedBackupId(id)}
+          selectedBackupId={state.selectedBackupId}
+        />
+      )}
 
-      {selectedBackup && (
+      {!errorView && selectedBackup && (
         <section aria-label={`Versions of ${selectedBackup.name}`} className="flex flex-col gap-2">
           <h3 className="text-sm font-medium">Versions</h3>
           <VersionList

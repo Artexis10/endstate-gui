@@ -61,16 +61,37 @@ impl From<std::io::Error> for ExecError {
 /// * `Ok(ExecResult)` - Execution completed (check exit_code for success)
 /// * `Err(ExecError)` - Execution failed to start (e.g., CLI not found)
 #[tauri::command]
-fn endstate_exec(app: AppHandle, exe: String, args: Vec<String>) -> Result<ExecResult, ExecError> {
-    let output = if exe == "__bundled__" {
+fn endstate_exec(
+    app: AppHandle,
+    exe: String,
+    args: Vec<String>,
+    stdin_input: Option<String>,
+) -> Result<ExecResult, ExecError> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut cmd = if exe == "__bundled__" {
         engine_adapter::build_bundled_command(&app, &args)
             .map_err(|e| ExecError {
                 code: e.code,
                 message: e.message,
             })?
-            .output()?
     } else {
-        cmd_impl::build_engine_command(&exe, &args).output()?
+        cmd_impl::build_engine_command(&exe, &args)
+    };
+
+    let output = if let Some(input) = stdin_input {
+        cmd.stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = cmd.spawn()?;
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(input.as_bytes())?;
+            // Drop closes stdin so the child sees EOF.
+        }
+        child.wait_with_output()?
+    } else {
+        cmd.output()?
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
