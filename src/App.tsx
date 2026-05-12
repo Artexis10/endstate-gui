@@ -52,8 +52,12 @@ import { AuthPane } from './components/app/auth/auth-pane';
 import { BackupPane } from './components/app/backup/backup-pane';
 import { RestoreWizard } from './components/app/backup/restore-wizard';
 import { AccountSection } from './components/app/account/account-section';
-import { backupStatus, BackupCommandError } from './lib/backup-bridge';
-import type { BackupStatusData } from './types';
+import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
+import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
+import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
+import { isBackupChunkEvent } from './lib/streaming-events';
+import { open as openExternal } from '@tauri-apps/plugin-shell';
+import type { BackupListItem, BackupStatusData } from './types';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 'backup';
@@ -169,7 +173,35 @@ function AppContent() {
   //   local profiles directory is empty (Phase 6 wizard).
   const [hostedBackupSupported, setHostedBackupSupported] = useState<boolean>(false);
   const [backupStatusData, setBackupStatusData] = useState<BackupStatusData | null>(null);
+  // Boot-time prefetch of `backup list`. Engine subprocess spawns cost
+  // ~300ms–2s on Windows, so by the time the user opens the Backup pane the
+  // list is warm and the pane renders instantly (SWR — pane revalidates
+  // silently in the background).
+  const [backupListData, setBackupListData] = useState<BackupListItem[] | null>(null);
   const [restoreWizardOpen, setRestoreWizardOpen] = useState(false);
+  // Which tab the auth pane opens in when reached from the Backup pane CTAs.
+  // Reset to 'sign-in' on most nav transitions; "Create account" sets it to
+  // 'sign-up' just before routing.
+  const [authInitialTab, setAuthInitialTab] = useState<'sign-in' | 'sign-up' | 'recover'>('sign-in');
+
+  // Post-save "Push to hosted backup" — fires the existing backupPush wrapper
+  // from outside the Backup pane and renders the same PushProgressDialog as
+  // an app-level modal so the user stays in the Save flow. State is local
+  // (not in useBackupState) because the Save flow has no reason to know
+  // about that hook's other concerns.
+  const [pushDialogOpen, setPushDialogOpen] = useState(false);
+  const [pushTotalChunks, setPushTotalChunks] = useState(0);
+  const [pushUploadedChunks, setPushUploadedChunks] = useState(0);
+  const [pushCurrentChunkIndex, setPushCurrentChunkIndex] = useState<number | null>(null);
+
+  // Index of remote backups keyed by profile name. Used by SetupFlow to render
+  // a cloud badge on profile cards that have a corresponding hosted backup.
+  // Fetch is enabled only when hosted backup is supported AND the user is
+  // signed in — otherwise the call would just fail with AUTH_REQUIRED.
+  const cloudBackupIndex = useBackupNameIndex(
+    settings,
+    hostedBackupSupported && !!backupStatusData?.signedIn,
+  );
   
   // Overview action state - tracks which action is running and its status
   type OverviewActionType = 'capture' | 'setup' | 'check' | null;
@@ -1114,18 +1146,37 @@ function AppContent() {
         try {
           const status = await backupStatus(settings);
           setBackupStatusData(status);
+          // Fire `backup list` in the background once we know we're signed in
+          // with a paid subscription. The Backup pane reads this cached list
+          // on first render so navigation feels instant. `none` is skipped
+          // because the engine returns SUBSCRIPTION_REQUIRED for list in that
+          // state (contract §10 — read is blocked).
+          if (status.signedIn && status.subscriptionStatus !== 'none') {
+            void backupList(settings)
+              .then((data) => setBackupListData(data.backups))
+              .catch((err) => {
+                // Prefetch failures are silent; the pane re-fetches on mount.
+                console.warn('backup list prefetch failed:', err);
+              });
+          }
         } catch (err) {
           // A status fetch failure should not block the rest of the app —
           // surface a soft warning and leave hostedBackupSupported on so the
           // user can still try the auth pane.
           if (err instanceof BackupCommandError) {
             console.warn('backup status failed:', err.message);
+            // Tombstoned keychain from pre-F4 builds (or any other expired
+            // session) — gently nudge the user back into the sign-in flow.
+            if (err.code === 'AUTH_REQUIRED') {
+              showToast('Session expired. Please sign in again.', 'info');
+            }
           } else {
             console.warn('backup status failed:', err);
           }
         }
       } else {
         setBackupStatusData(null);
+        setBackupListData(null);
       }
     } catch (err) {
       // Catch any unexpected errors (timeouts, network issues, etc.)
@@ -2112,6 +2163,52 @@ function AppContent() {
               isRunning={isRunning}
               captureProgress={actionProgressByAction['capture'] ?? null}
               liveAppEvents={liveAppEvents}
+              hostedBackupSupported={hostedBackupSupported}
+              hostedBackupSignedIn={!!backupStatusData?.signedIn}
+              hostedBackupSubscriptionStatus={backupStatusData?.subscriptionStatus}
+              onOpenHostedBackup={() => handleNavigate('backup')}
+              onPushToHostedBackup={
+                hostedBackupSupported
+                && backupStatusData?.signedIn
+                && backupStatusData.subscriptionStatus === 'active'
+                  ? async (capturedPath: string) => {
+                      // Reset counters and open the dialog before kicking off
+                      // the push so the first chunk event lands into clean state.
+                      setPushTotalChunks(0);
+                      setPushUploadedChunks(0);
+                      setPushCurrentChunkIndex(null);
+                      setPushDialogOpen(true);
+                      try {
+                        await backupPush(settings, {
+                          profile: capturedPath,
+                          onEvent: (event) => {
+                            if (!isBackupChunkEvent(event)) return;
+                            setPushTotalChunks(event.totalChunks);
+                            if (event.status === 'uploading') {
+                              setPushCurrentChunkIndex(event.chunkIndex);
+                            } else if (event.status === 'uploaded') {
+                              setPushUploadedChunks((prev) => prev + 1);
+                            }
+                          },
+                        });
+                        showToast('Pushed to hosted backup.', 'success');
+                        // Refresh the cloud index so the new backup gets a
+                        // cloud badge in Setup immediately.
+                        void cloudBackupIndex.refresh();
+                      } catch (err) {
+                        const msg =
+                          err instanceof BackupCommandError
+                            ? `${err.code}: ${err.message}`
+                            : err instanceof Error
+                              ? err.message
+                              : String(err);
+                        showToast(`Push failed — ${msg}`, 'error');
+                      } finally {
+                        setPushDialogOpen(false);
+                      }
+                    }
+                  : undefined
+              }
               onStartCapture={async () => {
                 setIsRunning(true);
                 setLiveAppEvents([]);
@@ -2157,7 +2254,7 @@ function AppContent() {
                     await invoke('write_text_file', { path: savePath, content: captureResult.draftText });
                   }
                 } else {
-                  // Web/Tidewave: browser download
+                  // Web / browser-bridge: browser download
                   let blob: Blob;
                   let downloadName = defaultName;
                   if (isZip) {
@@ -2191,6 +2288,11 @@ function AppContent() {
             {errorBanner}
             <SetupFlow
               profiles={profiles}
+              cloudBackupIndex={cloudBackupIndex.index}
+              hostedBackupSupported={hostedBackupSupported}
+              hostedBackupSignedIn={!!backupStatusData?.signedIn}
+              hostedBackupSubscriptionStatus={backupStatusData?.subscriptionStatus}
+              onOpenHostedBackup={() => handleNavigate('backup')}
               onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, setup: false })); setSetupFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={setupFlowResetKey}
               onFlowReset={() => setFlowHasWork(prev => ({ ...prev, setup: false }))}
@@ -2310,6 +2412,7 @@ function AppContent() {
             {errorBanner}
             <AuthPane
               settings={settings}
+              initialTab={authInitialTab}
               onAuthenticated={async (result) => {
                 // Refresh hosted-backup status; on success, route to the
                 // backup pane. The signed-up flow has already passed through
@@ -2318,6 +2421,16 @@ function AppContent() {
                 try {
                   const status = await backupStatus(settings);
                   setBackupStatusData(status);
+                  // Warm the list cache so the Backup pane lands instantly.
+                  if (status.signedIn && status.subscriptionStatus !== 'none') {
+                    void backupList(settings)
+                      .then((data) => setBackupListData(data.backups))
+                      .catch((err) => {
+                        console.warn('post-auth list prefetch failed:', err);
+                      });
+                  } else {
+                    setBackupListData(null);
+                  }
                   // Restore-on-new-machine wizard trigger:
                   //   - we know the user just signed in / recovered
                   //   - have a `lastBackupAt` (i.e. remote backups exist), and
@@ -2352,20 +2465,57 @@ function AppContent() {
             </div>
           );
         }
-        // Signed-out → defer to the auth pane. Keeping this as a redirect
-        // rather than rendering AuthPane here so the URL/page stays in sync.
+        // Signed-out → show the disclosure card with two CTAs. Sign-in is
+        // primary (existing users); Create account is secondary (new users
+        // who need to know it's a paid subscription before committing).
         if (!backupStatusData?.signedIn) {
           return (
-            <div className="m-6 flex flex-col gap-2 text-sm text-muted-foreground">
-              <p>Sign in to view your hosted backups.</p>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => handleNavigate('auth')}
-                className="self-start"
-              >
-                Sign in
-              </Button>
+            <div className="m-6 max-w-xl" data-testid="backup-pane-signed-out">
+              <div className="rounded-lg border border-border bg-card p-6">
+                <h2 className="text-lg font-semibold">Hosted Backup</h2>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Save your machine setup to encrypted cloud storage. Restore it on any machine.
+                </p>
+                <p className="mt-4 text-sm">
+                  <span className="font-medium">€4/month</span>
+                  <span className="text-muted-foreground"> — billed monthly, cancel anytime.</span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void openExternal('https://substratesystems.io/endstate');
+                    }}
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    Learn more → substratesystems.io/endstate
+                  </button>
+                </p>
+                <div className="mt-6 flex gap-3">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => {
+                      setAuthInitialTab('sign-in');
+                      handleNavigate('auth');
+                    }}
+                    data-testid="backup-pane-signin"
+                  >
+                    Sign in
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setAuthInitialTab('sign-up');
+                      handleNavigate('auth');
+                    }}
+                    data-testid="backup-pane-create-account"
+                  >
+                    Create account
+                  </Button>
+                </div>
+              </div>
             </div>
           );
         }
@@ -2376,6 +2526,13 @@ function AppContent() {
               settings={settings}
               selectedProfilePath={selectedProfilePath || null}
               selectedProfileName={selectedProfile || null}
+              initialStatus={backupStatusData}
+              initialBackups={backupListData}
+              onAuthLost={() => {
+                setBackupStatusData(null);
+                setBackupListData(null);
+                showToast('Session expired. Please sign in again.', 'info');
+              }}
             />
             <RestoreWizard
               open={restoreWizardOpen}
@@ -3016,7 +3173,9 @@ function AppContent() {
                 settings={settings}
                 status={backupStatusData}
                 onSignedOut={async () => {
-                  // Refresh status + route to auth pane.
+                  // Refresh status + route to auth pane. Drop the prefetched
+                  // list — it's per-user data and would leak across accounts.
+                  setBackupListData(null);
                   try {
                     const next = await backupStatus(settings);
                     setBackupStatusData(next);
@@ -3028,6 +3187,7 @@ function AppContent() {
                 onDeleted={async () => {
                   // After delete the engine clears its session; refresh and
                   // route to auth pane (signed-out state).
+                  setBackupListData(null);
                   try {
                     const next = await backupStatus(settings);
                     setBackupStatusData(next);
@@ -3109,10 +3269,22 @@ function AppContent() {
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
         onNavigate={handleNavigate}
+        showBackupNav={hostedBackupSupported}
         onUndoSettings={() => {
           setSetupPendingUndo(true);
           setCurrentPage('setup');
         }}
+      />
+
+      {/* App-level push progress dialog — driven from the post-save inline
+          CTA in SaveFlow. The Backup pane uses its own instance via
+          useBackupState; this one is independent so the Save flow doesn't
+          need to navigate away while pushing. */}
+      <PushProgressDialog
+        open={pushDialogOpen}
+        totalChunks={pushTotalChunks}
+        uploadedChunks={pushUploadedChunks}
+        currentChunkIndex={pushCurrentChunkIndex}
       />
 
       {/* Folder Path Modal (web fallback) */}

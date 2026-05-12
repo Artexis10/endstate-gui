@@ -41,7 +41,7 @@ const CASES: Case[] = [
     status: 'cancelled',
     tone: 'error',
     expectedTextIncludes: 'Subscription cancelled',
-    expectedActionLabel: 'Manage subscription',
+    expectedActionLabel: 'Renew subscription',
   },
   {
     status: 'none',

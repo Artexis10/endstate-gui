@@ -54,9 +54,9 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
   let inlineError: string | null = null;
   if (email.length > 0 && !emailValid) inlineError = 'Enter a valid email address.';
   else if (passphrase.length > 0 && !passphraseLongEnough)
-    inlineError = `Passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters.`;
+    inlineError = `Password must be at least ${MIN_PASSPHRASE_LENGTH} characters.`;
   else if (confirm.length > 0 && !passphrasesMatch)
-    inlineError = 'Passphrases do not match.';
+    inlineError = 'Passwords do not match.';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -98,7 +98,7 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
         />
       </label>
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">Passphrase</span>
+        <span className="text-sm font-medium">Password</span>
         <Input
           type="password"
           autoComplete="new-password"
@@ -111,7 +111,7 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
         </span>
       </label>
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">Confirm passphrase</span>
+        <span className="text-sm font-medium">Confirm password</span>
         <Input
           type="password"
           autoComplete="new-password"

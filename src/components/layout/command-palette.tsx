@@ -12,6 +12,7 @@ import {
   FolderOpen,
   Home,
   RotateCcw,
+  HardDrive,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +27,9 @@ interface Command {
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onNavigate: (page: 'landing' | 'report' | 'settings') => void;
+  onNavigate: (page: 'landing' | 'report' | 'settings' | 'backup') => void;
+  /** When true, the Hosted Backup entry is included in the navigation list. */
+  showBackupNav?: boolean;
   onOpenLogsFolder?: () => void;
   onOpenOutputFolder?: () => void;
   onUndoSettings?: () => void;
@@ -36,6 +39,7 @@ export function CommandPalette({
   open,
   onOpenChange,
   onNavigate,
+  showBackupNav = false,
   onOpenLogsFolder,
   onOpenOutputFolder,
   onUndoSettings,
@@ -75,6 +79,21 @@ export function CommandPalette({
       category: 'navigate',
     },
   ];
+
+  if (showBackupNav) {
+    // Insert Backup right after Home so it sits alongside the main feature
+    // entries rather than below Settings.
+    commands.splice(1, 0, {
+      id: 'nav-backup',
+      label: 'Go to Backup',
+      icon: HardDrive,
+      action: () => {
+        onNavigate('backup');
+        onOpenChange(false);
+      },
+      category: 'navigate',
+    });
+  }
 
   if (onOpenLogsFolder) {
     commands.push({

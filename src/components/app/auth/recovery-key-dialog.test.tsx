@@ -23,6 +23,10 @@ const invokeMock = vi.fn();
 
 vi.mock('@/lib/tauri-bridge', () => ({
   invoke: (cmd: string, args?: Record<string, unknown>) => invokeMock(cmd, args),
+  // Tests exercise the Tauri-runtime path (plugin-dialog + invoke). The
+  // dialog has a separate browser-bridge fallback that uses Blob downloads;
+  // not asserted here.
+  isTauriRuntime: () => true,
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({

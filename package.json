@@ -6,8 +6,8 @@
   "scripts": {
     "predev": "node scripts/rebuild-engine.cjs",
     "dev": "vite",
-    "dev:tidewave": "cross-env VITE_TIDEWAVE_ENABLED=1 vite",
-    "tauri:dev:tidewave": "cross-env TIDEWAVE_ENABLED=1 VITE_TIDEWAVE_ENABLED=1 tauri dev --features dev-server",
+    "dev:browser": "cross-env VITE_BROWSER_BRIDGE=1 VITE_TIDEWAVE_ENABLED=1 vite",
+    "tauri:dev:browser": "cross-env ENDSTATE_BROWSER_BRIDGE=1 VITE_BROWSER_BRIDGE=1 VITE_TIDEWAVE_ENABLED=1 tauri dev --features dev-server",
     "prebuild": "cross-env STRICT_ENGINE_BUILD=1 node scripts/rebuild-engine.cjs",
     "build": "tsc && vite build",
     "preview": "vite preview",

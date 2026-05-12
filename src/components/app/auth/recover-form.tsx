@@ -59,9 +59,9 @@ export function RecoverForm({ settings, onRecovered, onSwitchTab }: RecoverFormP
   else if (mnemonic.length > 0 && !mnemonicValid)
     inlineError = `Recovery key must be ${MNEMONIC_WORD_COUNT} words (you typed ${wordCount}).`;
   else if (newPassphrase.length > 0 && !passphraseLongEnough)
-    inlineError = `New passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters.`;
+    inlineError = `New password must be at least ${MIN_PASSPHRASE_LENGTH} characters.`;
   else if (confirm.length > 0 && !passphrasesMatch)
-    inlineError = 'Passphrases do not match.';
+    inlineError = 'Passwords do not match.';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -119,7 +119,7 @@ export function RecoverForm({ settings, onRecovered, onSwitchTab }: RecoverFormP
         </span>
       </label>
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">New passphrase</span>
+        <span className="text-sm font-medium">New password</span>
         <Input
           type="password"
           autoComplete="new-password"
@@ -129,7 +129,7 @@ export function RecoverForm({ settings, onRecovered, onSwitchTab }: RecoverFormP
         />
       </label>
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">Confirm new passphrase</span>
+        <span className="text-sm font-medium">Confirm new password</span>
         <Input
           type="password"
           autoComplete="new-password"
@@ -153,10 +153,10 @@ export function RecoverForm({ settings, onRecovered, onSwitchTab }: RecoverFormP
         {busy ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Resetting passphrase
+            Resetting password
           </>
         ) : (
-          'Reset passphrase'
+          'Reset password'
         )}
       </Button>
       <div className="text-xs text-muted-foreground text-center">

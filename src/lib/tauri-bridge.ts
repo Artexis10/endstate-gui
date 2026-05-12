@@ -1,12 +1,15 @@
 /**
  * Tauri Bridge - Safe wrapper for Tauri APIs with web fallbacks
- * 
+ *
  * ONLY this file may import @tauri-apps/api/*
  * All other code must use this bridge to avoid web-only boot crashes.
- * 
+ *
  * Strategy:
  * 1. If test mock exists (window.__TAURI__.core.invoke is a function), use it exclusively
- * 2. If in Tidewave mode (web browser + VITE_TIDEWAVE_ENABLED=1), route through HTTP bridge
+ * 2. If browser-bridge mode is enabled (VITE_BROWSER_BRIDGE=1) and we're in a
+ *    web browser, route invoke/listen through the dev-only HTTP server in the
+ *    Tauri backend (port 9876). This lets us drive the GUI from a regular
+ *    Chrome tab during development.
  * 3. Otherwise, if in Tauri runtime, use real @tauri-apps/api/* - errors are fatal
  * 4. Only use web fallbacks when NOT in Tauri runtime (pure web browser)
  */
@@ -72,20 +75,22 @@ export function isTauriRuntime(): boolean {
 }
 
 /**
- * Check if we're in Tidewave dev mode (web browser + bridge available).
+ * Check if we're in browser-bridge mode — a regular Chrome tab pointed at the
+ * Vite dev server, with a sibling Tauri process exposing the engine via the
+ * dev-only HTTP bridge on port 9876.
  */
-export function isTidewaveMode(): boolean {
+export function isBrowserBridgeMode(): boolean {
   if (typeof window === 'undefined') return false;
-  return !isTauriRuntime() && import.meta.env.VITE_TIDEWAVE_ENABLED === '1';
+  return !isTauriRuntime() && import.meta.env.VITE_BROWSER_BRIDGE === '1';
 }
 
 /**
- * Check if an engine backend is available (Tauri runtime OR Tidewave HTTP bridge).
+ * Check if an engine backend is available (Tauri runtime OR browser bridge).
  * Use this instead of isTauriRuntime() when guarding engine functionality
- * that should also work in Tidewave mode.
+ * that should also work from a browser tab during development.
  */
 export function isEngineAvailable(): boolean {
-  return isTauriRuntime() || isTidewaveMode();
+  return isTauriRuntime() || isBrowserBridgeMode();
 }
 
 export async function safeInvoke<T = any>(cmd: string, args?: Record<string, any>): Promise<T> {
@@ -94,8 +99,8 @@ export async function safeInvoke<T = any>(cmd: string, args?: Record<string, any
     return await (window as any).__TAURI__.core.invoke(cmd, args);
   }
 
-  // Tidewave HTTP bridge: route through dev server
-  if (isTidewaveMode()) {
+  // Browser-bridge mode: route invoke through the dev HTTP server
+  if (isBrowserBridgeMode()) {
     return httpInvoke<T>(cmd, args);
   }
   
@@ -132,8 +137,8 @@ export async function safeListen<T = any>(
     return () => {};
   }
 
-  // Tidewave HTTP bridge: route through SSE
-  if (isTidewaveMode()) {
+  // Browser-bridge mode: route listen through SSE
+  if (isBrowserBridgeMode()) {
     return httpListen<T>(event, handler);
   }
 

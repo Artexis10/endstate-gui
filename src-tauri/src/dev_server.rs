@@ -1,9 +1,11 @@
-//! Dev-only HTTP server for Tidewave integration.
+//! Dev-only HTTP server for browser-based engine access.
 //!
-//! Mirrors Tauri IPC commands as REST endpoints so the browser-based
-//! Tidewave tool can call engine functions without Tauri IPC.
+//! Mirrors Tauri IPC commands as REST endpoints so a browser tab pointed at
+//! the Vite dev server can call engine functions without Tauri IPC. The
+//! original consumer was the Tidewave inspector but the bridge itself is
+//! generic — any browser process can use it during development.
 //!
-//! Activated only when: debug build + TIDEWAVE_ENABLED=1
+//! Activated only when: debug build + ENDSTATE_BROWSER_BRIDGE=1
 
 use axum::{
     extract::State,
@@ -31,6 +33,7 @@ use crate::event_broadcast::EventBroadcaster;
 struct AppState {
     run_state: SharedRunState,
     broadcaster: EventBroadcaster,
+    app: tauri::AppHandle,
 }
 
 /// Generic invoke request (mirrors Tauri's invoke model)
@@ -66,9 +69,10 @@ fn err_response(msg: impl ToString) -> Json<InvokeResponse> {
     })
 }
 
-/// Run engine via HTTP bridge (no AppHandle needed).
+/// Run engine via HTTP bridge.
 /// Emits events only through the broadcaster (SSE).
 fn run_engine_http(
+    app: &tauri::AppHandle,
     exe: &str,
     args: &[String],
     run_state: &SharedRunState,
@@ -94,8 +98,22 @@ fn run_engine_http(
         state.cancel_requested.store(false, Ordering::SeqCst);
     }
 
-    // Spawn the process
-    let mut cmd = crate::cmd_impl::build_engine_command(exe, args);
+    // Spawn the process (resolve __bundled__ to the sidecar binary if needed)
+    let mut cmd = if exe == "__bundled__" {
+        match crate::engine_adapter::build_bundled_command(app, args) {
+            Ok(c) => c,
+            Err(e) => {
+                if let Ok(mut state) = run_state.lock() {
+                    state.run_id = None;
+                    state.command = None;
+                    state.child = None;
+                }
+                return Err(format!("{}: {}", e.code, e.message));
+            }
+        }
+    } else {
+        crate::cmd_impl::build_engine_command(exe, args)
+    };
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let mut child = match cmd.spawn() {
@@ -244,15 +262,21 @@ fn cancel_engine_http(
     Ok(())
 }
 
-/// Run endstate streaming via HTTP bridge (no AppHandle needed).
+/// Run endstate streaming via HTTP bridge.
 /// Emits stdout/stderr/exit events through the broadcaster only.
 fn run_streaming_http(
+    app: &tauri::AppHandle,
     exe: &str,
     args: &[String],
     event_channel: &str,
     broadcaster: &EventBroadcaster,
 ) -> Result<(), String> {
-    let mut cmd = crate::cmd_impl::build_engine_command(exe, args);
+    let mut cmd = if exe == "__bundled__" {
+        crate::engine_adapter::build_bundled_command(app, args)
+            .map_err(|e| format!("{}: {}", e.code, e.message))?
+    } else {
+        crate::cmd_impl::build_engine_command(exe, args)
+    };
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let mut child = cmd
@@ -347,9 +371,10 @@ async fn handle_invoke(
 
             let run_state = state.run_state.clone();
             let broadcaster = state.broadcaster.clone();
+            let app = state.app.clone();
 
             match tokio::task::spawn_blocking(move || {
-                run_engine_http(&exe, &args, &run_state, &broadcaster)
+                run_engine_http(&app, &exe, &args, &run_state, &broadcaster)
             })
             .await
             {
@@ -390,9 +415,10 @@ async fn handle_invoke(
                 .to_string();
 
             let broadcaster = state.broadcaster.clone();
+            let app = state.app.clone();
 
             match tokio::task::spawn_blocking(move || {
-                run_streaming_http(&exe, &args, &event_channel, &broadcaster)
+                run_streaming_http(&app, &exe, &args, &event_channel, &broadcaster)
             })
             .await
             {
@@ -419,7 +445,51 @@ async fn handle_invoke(
                 })
                 .unwrap_or_default();
 
-            match tokio::task::spawn_blocking(move || crate::cmd_impl::endstate_exec(exe, args)).await {
+            let stdin_input = req
+                .args
+                .get("stdinInput")
+                .or_else(|| req.args.get("stdin_input"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            let app = state.app.clone();
+            match tokio::task::spawn_blocking(move || {
+                use std::io::Write as _;
+                use std::process::Stdio;
+
+                let mut cmd = if exe == "__bundled__" {
+                    match crate::engine_adapter::build_bundled_command(&app, &args) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            return Err(crate::cmd_impl::ExecError {
+                                code: e.code,
+                                message: e.message,
+                            });
+                        }
+                    }
+                } else {
+                    crate::cmd_impl::build_engine_command(&exe, &args)
+                };
+                let output = if let Some(input) = stdin_input {
+                    cmd.stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::piped());
+                    let mut child = cmd.spawn()?;
+                    if let Some(mut stdin) = child.stdin.take() {
+                        stdin.write_all(input.as_bytes())?;
+                    }
+                    child.wait_with_output()?
+                } else {
+                    cmd.output()?
+                };
+                Ok(crate::cmd_impl::ExecResult {
+                    stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                    exit_code: output.status.code().unwrap_or(-1),
+                })
+            })
+            .await
+            {
                 Ok(Ok(result)) => {
                     ok_response(serde_json::to_value(result).unwrap_or_default())
                 }
@@ -812,12 +882,14 @@ async fn handle_events(
 }
 
 pub async fn start(
+    app: tauri::AppHandle,
     run_state: SharedRunState,
     broadcaster: EventBroadcaster,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         run_state,
         broadcaster,
+        app,
     };
 
     let cors = CorsLayer::new()
@@ -835,13 +907,13 @@ pub async fn start(
         Ok(l) => l,
         Err(e) => {
             eprintln!(
-                "Tidewave HTTP bridge failed to bind port 9876: {}. Continuing without bridge.",
+                "Browser bridge failed to bind port 9876: {}. Continuing without bridge.",
                 e
             );
             return Ok(());
         }
     };
-    eprintln!("Tidewave HTTP bridge listening on http://127.0.0.1:9876");
+    eprintln!("Browser bridge listening on http://127.0.0.1:9876");
     axum::serve(listener, app).await?;
     Ok(())
 }

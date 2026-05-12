@@ -102,6 +102,32 @@ function hasMockEngine(): boolean {
 }
 
 /**
+ * Pull the last JSON object out of an engine stdout buffer.
+ *
+ * The engine may emit log lines before the terminal envelope; the envelope
+ * starts at the last line beginning with `{`. Returns `undefined` if no JSON
+ * is present or parsing fails (callers fall back to runtime-error handling).
+ */
+function tryParseEnvelope<T>(stdout: string | undefined): T | undefined {
+  if (!stdout || !stdout.trim()) return undefined;
+  const lines = stdout.split('\n');
+  let jsonStr = '';
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (line.startsWith('{')) {
+      jsonStr = lines.slice(i).join('\n');
+      break;
+    }
+  }
+  if (!jsonStr) return undefined;
+  try {
+    return JSON.parse(jsonStr) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Run an endstate command once (non-streaming).
  *
  * In Tauri runtime: executes via endstate_exec command
@@ -167,13 +193,13 @@ export async function runEndstateOnce<T>(
     
     // Check for command not found (typically exit code 1 with specific stderr)
     if (result.exitCode !== 0) {
-      const isNotFound = result.stderr?.includes('not recognized') || 
+      const isNotFound = result.stderr?.includes('not recognized') ||
                          result.stderr?.includes('not found') ||
                          result.stderr?.includes('CommandNotFoundException');
-      
+
       if (isNotFound) {
         const message = 'endstate command not found. Check that it is installed and in PATH.';
-        
+
         return {
           success: false,
           error: {
@@ -188,7 +214,31 @@ export async function runEndstateOnce<T>(
           exitCode: result.exitCode,
         };
       }
-      
+
+      // The engine exits non-zero on domain failures (e.g. SUBSCRIPTION_REQUIRED,
+      // AUTH_REQUIRED) but still emits a full envelope on stdout. Try to surface
+      // that envelope so callers see structured error codes instead of a generic
+      // "Command failed with exit code N".
+      const envelope = tryParseEnvelope<T>(result.stdout);
+      if (envelope) {
+        const envelopeObj = envelope as Record<string, unknown>;
+        const errorObj = envelopeObj.error as { code?: string; message?: string } | undefined;
+        return {
+          success: false,
+          error: {
+            kind: errorObj?.code === 'VERIFY_FAILED' ? 'verify_failed' : 'command_failed',
+            message: errorObj?.message ?? `Command failed with exit code ${result.exitCode}`,
+            command: commandStr,
+            exitCode: result.exitCode,
+            stderr: result.stderr,
+          },
+          envelope,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+        };
+      }
+
       return {
         success: false,
         error: {

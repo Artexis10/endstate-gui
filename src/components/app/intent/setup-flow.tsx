@@ -6,7 +6,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info } from 'lucide-react';
+import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info, Cloud } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,7 +14,7 @@ import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 import { DropZone } from './drop-zone';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import type { DiscoveredProfile } from '@/file-discovery';
-import type { EndstateEnvelope, EndstateRevertData, RestoreIntent, RestoreModuleRef } from '@/types';
+import type { EndstateEnvelope, EndstateRevertData, RestoreIntent, RestoreModuleRef, BackupListItem } from '@/types';
 import type { EngineExecResult } from '@/lib/engine-exec';
 import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
 import { ConfigModuleSelector } from '@/components/app/overview/components/config-module-selector';
@@ -25,7 +25,10 @@ import {
   getPhaseAwareStatusForEvent,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
-import type { ConfigModuleInfo } from '@/types';
+import type { ConfigModuleInfo, SubscriptionStatus } from '@/types';
+import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
+import { formatRelativeTime } from '@/lib/lifecycle-state';
+import { formatCount } from '@/lib/pluralize';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
@@ -84,6 +87,20 @@ export interface SetupFlowProps {
   resetKey?: number;
   /** Called when the flow returns to browse (start over, etc.) */
   onFlowReset?: () => void;
+  /**
+   * Index of remote backups keyed by profile name. When provided, profile
+   * cards whose `name` matches a key get an inline "Backed up · N versions ·
+   * M ago" subtitle. Pass `undefined` (or an empty map) to hide entirely.
+   */
+  cloudBackupIndex?: Map<string, BackupListItem>;
+  /** Hosted-backup capability gate. False → hide the chip entirely. */
+  hostedBackupSupported?: boolean;
+  /** Whether the user is signed in to Hosted Backup. */
+  hostedBackupSignedIn?: boolean;
+  /** Current subscription status, if known. */
+  hostedBackupSubscriptionStatus?: SubscriptionStatus;
+  /** Routes to the Backup pane (sidebar). The chip click handler uses this. */
+  onOpenHostedBackup?: () => void;
 }
 
 export function SetupFlow({
@@ -107,6 +124,11 @@ export function SetupFlow({
   onPendingUndoConsumed,
   resetKey,
   onFlowReset,
+  cloudBackupIndex,
+  hostedBackupSupported = false,
+  hostedBackupSignedIn = false,
+  hostedBackupSubscriptionStatus,
+  onOpenHostedBackup,
 }: SetupFlowProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<SetupPhase>('browse');
@@ -330,20 +352,30 @@ export function SetupFlow({
       </button>
 
       {/* Flow header */}
-      <div className="flex items-center gap-3 mb-8">
-        <div className="p-3 rounded-xl bg-green-500/10">
-          <Download className="h-6 w-6 text-green-500" />
+      <div className="flex items-center justify-between gap-3 mb-8">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-green-500/10">
+            <Download className="h-6 w-6 text-green-500" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-semibold">Set up this computer</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {phase === 'browse'
+                ? 'Import a saved setup or choose a profile to install your apps'
+                : phase.startsWith('undo')
+                ? 'Undo settings changes from your last setup'
+                : `Setting up from ${selectedProfile?.displayName || selectedProfile?.name || 'profile'}`}
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-semibold">Set up this computer</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {phase === 'browse'
-              ? 'Import a saved setup or choose a profile to install your apps'
-              : phase.startsWith('undo')
-              ? 'Undo settings changes from your last setup'
-              : `Setting up from ${selectedProfile?.displayName || selectedProfile?.name || 'profile'}`}
-          </p>
-        </div>
+        {phase === 'browse' && onOpenHostedBackup && (
+          <HostedBackupChip
+            hostedBackupSupported={hostedBackupSupported}
+            signedIn={hostedBackupSignedIn}
+            subscriptionStatus={hostedBackupSubscriptionStatus}
+            onOpen={onOpenHostedBackup}
+          />
+        )}
       </div>
 
       <AnimatePresence mode="wait">
@@ -389,7 +421,11 @@ export function SetupFlow({
 
               {profiles.length > 0 ? (
                 <div className="grid gap-3">
-                  {profiles.map((profile) => (
+                  {profiles.map((profile) => {
+                    const cloudEntry = cloudBackupIndex?.get(profile.name);
+                    const showSecondaryName =
+                      !!profile.displayName && profile.displayName !== profile.name;
+                    return (
                     <Card
                       key={profile.name}
                       className="cursor-pointer hover:border-green-500/50 hover:shadow-md transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-green-500/50"
@@ -410,9 +446,20 @@ export function SetupFlow({
                             <p className="text-sm font-medium">
                               {profile.displayName || profile.name}
                             </p>
-                            {profile.displayName && profile.displayName !== profile.name && (
+                            {showSecondaryName && (
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {profile.name}
+                              </p>
+                            )}
+                            {cloudEntry && (
+                              <p
+                                className="mt-1 inline-flex items-center gap-1 text-xs text-primary"
+                                data-testid={`profile-card-${profile.name}-cloud-badge`}
+                              >
+                                <Cloud className="h-3 w-3" aria-hidden="true" />
+                                <span>
+                                  Backed up · {formatCount(cloudEntry.versionCount, 'version')} · {formatRelativeTime(cloudEntry.updatedAt)}
+                                </span>
                               </p>
                             )}
                           </div>
@@ -440,7 +487,8 @@ export function SetupFlow({
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <Card className="border-dashed">
