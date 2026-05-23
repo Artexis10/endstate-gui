@@ -78,11 +78,23 @@ log shows `STATUS_HEAP_CORRUPTION` or `STATUS_ILLEGAL_INSTRUCTION`:
    ```
    Compare the envelope to step 2's ground-truth bytes — they should match.
 
-**Drive Chrome MCP (only if the bridge is still alive)**
+**Drive the browser (only if the bridge is still alive)**
+
+**Tool choice — chrome-devtools MCP is primary, playwright MCP is fallback.**
+First check `ToolSearch` with `+chrome devtools` to see if the
+`mcp__plugin_chrome-devtools-mcp_*` tools are loaded. If yes, use them
+(better DevTools artifacts: real network panel via `list_network_requests`,
+console via `list_console_messages`, a11y snapshot with uids). If they're
+not loaded this session, use `mcp__plugin_playwright_playwright__*` and
+note that fact in the report so the user can reconnect chrome-devtools.
+Don't mix the two in one session.
 
 7. Open the GUI in a real Chromium tab (separate from the Tauri webview):
    ```
+   # Primary
    mcp__plugin_chrome-devtools-mcp_chrome-devtools__new_page(url="http://127.0.0.1:1420")
+   # Fallback
+   mcp__plugin_playwright_playwright__browser_navigate(url="http://127.0.0.1:1420")
    ```
 8. Wait for first-paint signal, then navigate to the target pane. The
    sidebar is hidden on landing/save/setup (intent pages), so use the
