@@ -32,17 +32,37 @@ in the real app?" matters.
 
 **Launch the bridge**
 
-3. Run `SKIP_ENGINE_BUILD=1 npm run tauri:dev:browser` in the background.
+3. **Clear orphan listeners on 1420 + 9876 first.** Earlier crashed runs
+   often leave Vite still listening on 1420 (npm doesn't reap it) or
+   stranded sockets on 9876. Without this check, the launch fails silently:
+   Vite errors out on bind ("Port 1420 is already in use") and exits via
+   `beforeDevCommand`, OR the Tauri bridge fails to bind and continues
+   without it (you get a running Tauri with no bridge — no crash signal,
+   no success signal):
+   ```bash
+   for P in $(netstat -ano | grep "LISTENING" | grep -E ":(1420|9876) " | awk '{print $NF}' | sort -u); do
+     taskkill //F //PID "$P" 2>/dev/null || true
+   done
+   sleep 1
+   netstat -ano | grep "LISTENING" | grep -E ":(1420|9876) " || echo "ports clear"
+   ```
+   The `awk '{print $NF}'` is load-bearing — `$5` is `LISTENING`, not the
+   PID. On Git Bash, `//F //PID` (double-slash) prevents Msys from mangling
+   the args into paths.
+4. Run `SKIP_ENGINE_BUILD=1 npm run tauri:dev:browser` in the background.
    This starts Vite (1420) + the Tauri binary, which boots an HTTP server
    on 9876 (debug build + `--features dev-server` + `ENDSTATE_BROWSER_BRIDGE=1`).
-4. **Arm a single-shot watcher** that emits when either the success or
-   failure signal lands — silence after a crash will fool you:
+5. **Arm a single-shot watcher** that emits when ANY of these signals
+   land — silence after a crash will fool you, and so will the
+   bind-failure-but-keep-running case:
    ```bash
-   until grep -qE "Browser bridge listening|STATUS_|error\[|terminated with" /tmp/tauri-dev-browser.log; do
+   until grep -qE "Browser bridge listening|Browser bridge failed to bind|STATUS_|error\[|terminated with" /tmp/tauri-dev-browser.log; do
      sleep 2
    done
    ```
-   Run that in `run_in_background:true` with a 5-minute timeout.
+   Run that in `run_in_background:true` with a 5-minute timeout. The
+   bind-failure literal is `Browser bridge failed to bind port 9876` —
+   match the prefix so it works across error messages from the OS.
 
 **KNOWN HAZARD — Tauri dev-server is intermittently unstable on this
 Windows box.** See `memory/project_tauri_dev_server_crash.md`. The Tauri
@@ -56,7 +76,7 @@ Response policy when the watcher reports `STATUS_HEAP_CORRUPTION` or
 - **Restart once.** A clean retry often boots into a stable session (the
   successful 2026-05-23 drive landed on the third attempt). Don't retry
   more than that — pattern is intermittent, not transient.
-- **Curl is enough for envelope-shape verification** (see step 6). Run
+- **Curl is enough for envelope-shape verification** (see step 7). Run
   those checks before attempting the UI drive so you have the protocol
   proof regardless of whether the live drive lands.
 - **If the second restart also crashes**, fall back to the wiring e2e
@@ -65,14 +85,14 @@ Response policy when the watcher reports `STATUS_HEAP_CORRUPTION` or
 
 **Curl round-trip (always do this — it's the load-bearing check)**
 
-5. Verify the bridge accepts an invoke:
+6. Verify the bridge accepts an invoke:
    ```bash
    curl -sS -X POST http://127.0.0.1:9876/api/invoke \
      -H 'Content-Type: application/json' \
      -d '{"cmd":"engine_is_running","args":{}}'
    ```
    Expect `{"ok":true,"data":false}`.
-6. Round-trip the actual engine command. The dispatch goes through the
+7. Round-trip the actual engine command. The dispatch goes through the
    `endstate_exec` Tauri command — `exe` is `__bundled__` in bundled mode,
    `args` are the engine subcommand flags. The response embeds the engine
    envelope in `data.stdout` as a JSON string:
@@ -95,14 +115,14 @@ not loaded this session, use `mcp__plugin_playwright_playwright__*` and
 note that fact in the report so the user can reconnect chrome-devtools.
 Don't mix the two in one session.
 
-7. Open the GUI in a real Chromium tab (separate from the Tauri webview):
+8. Open the GUI in a real Chromium tab (separate from the Tauri webview):
    ```
    # Primary
    mcp__plugin_chrome-devtools-mcp_chrome-devtools__new_page(url="http://127.0.0.1:1420")
    # Fallback
    mcp__plugin_playwright_playwright__browser_navigate(url="http://127.0.0.1:1420")
    ```
-8. Wait for first-paint signal, then navigate to the target pane. The
+9. Wait for first-paint signal, then navigate to the target pane. The
    sidebar is hidden on landing/save/setup (intent pages), so use the
    command palette:
    ```
@@ -111,28 +131,28 @@ Don't mix the two in one session.
    click(<uid>)
    wait_for_testid("backup-pane")
    ```
-9. Take a snapshot (not screenshot — a11y snapshot is cheaper and gives
+10. Take a snapshot (not screenshot — a11y snapshot is cheaper and gives
    uids for clicks):
    ```
    take_snapshot()
    ```
-10. Click the target affordance, then immediately check
+11. Click the target affordance, then immediately check
     `list_network_requests` filtered to `:9876` — that's proof the click
     triggered a real bridge round-trip:
     ```
     list_network_requests({resourceTypes: ["fetch"]})
     ```
     Look for POST to `http://127.0.0.1:9876/api/invoke`.
-11. Capture final state via screenshot for the report:
+12. Capture final state via screenshot for the report:
     ```
     take_screenshot({filePath: ".claude/scratch/bridge-smoke-<step>.png", fullPage: true})
     ```
 
 **Teardown**
 
-12. Stop the background `tauri:dev:browser` task with `TaskStop` (or its
+13. Stop the background `tauri:dev:browser` task with `TaskStop` (or its
     natural crash will reap it).
-13. If the sibling engine was checked out to a specific tag for this run,
+14. If the sibling engine was checked out to a specific tag for this run,
     note the original branch so the user can switch back:
     `git -C ../endstate switch <previous-branch>`.
 
