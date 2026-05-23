@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders, screen } from '@/test/test-utils';
 import { SubscriptionBanner } from './subscription-banner';
 import type { SubscriptionStatus } from '@/types';
@@ -71,4 +72,31 @@ describe('SubscriptionBanner', () => {
       unmount();
     },
   );
+
+  it('invokes onCheckout when Subscribe is clicked (none state)', async () => {
+    const onCheckout = vi.fn();
+    renderWithProviders(
+      <SubscriptionBanner status="none" onCheckout={onCheckout} />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Subscribe' }));
+    expect(onCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes onCheckout when Renew is clicked (cancelled state)', async () => {
+    const onCheckout = vi.fn();
+    renderWithProviders(
+      <SubscriptionBanner status="cancelled" onCheckout={onCheckout} />,
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Renew subscription' }),
+    );
+    expect(onCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables Subscribe while a checkout is pending', () => {
+    renderWithProviders(
+      <SubscriptionBanner status="none" onCheckout={vi.fn()} checkoutPending />,
+    );
+    expect(screen.getByRole('button', { name: 'Subscribe' })).toBeDisabled();
+  });
 });

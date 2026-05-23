@@ -35,6 +35,7 @@ import {
   backupDeleteVersion,
   backupPush,
   backupPull,
+  backupSubscribe,
   BackupCommandError,
 } from '@/lib/backup-bridge';
 import type { AppSettings } from '@/settings';
@@ -84,11 +85,36 @@ export function BackupPane({
   });
   const { showToast } = useToast();
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [checkoutPending, setCheckoutPending] = useState(false);
 
   const subscriptionStatus = state.status?.subscriptionStatus ?? 'none';
   const canWrite = subscriptionStatus === 'active';
   const canRestore = subscriptionStatus !== 'none';
   const canDelete = subscriptionStatus !== 'none';
+
+  // Subscribe / Renew: the engine mints a Paddle checkout transaction and
+  // returns its URL; we open it in the system browser. We never render the
+  // Paddle overlay in-app — substrate's /endstate landing handles `_ptxn`
+  // (hosted-backup contract §7). Guarded against double-mint via checkoutPending.
+  const handleCheckout = useCallback(async () => {
+    setCheckoutPending(true);
+    try {
+      const { checkoutUrl } = await backupSubscribe(settings);
+      await openExternal(checkoutUrl);
+    } catch (err) {
+      if (err instanceof BackupCommandError && err.code === 'AUTH_REQUIRED') {
+        onAuthLost?.();
+        return;
+      }
+      if (err instanceof BackupCommandError) {
+        showToast(err.message, 'error');
+      } else {
+        showToast(err instanceof Error ? err.message : String(err), 'error');
+      }
+    } finally {
+      setCheckoutPending(false);
+    }
+  }, [settings, onAuthLost, showToast]);
 
   const handlePush = useCallback(
     async (backupId: string) => {
@@ -277,7 +303,11 @@ export function BackupPane({
 
   return (
     <div className="flex flex-col gap-4 p-4" data-testid="backup-pane">
-      <SubscriptionBanner status={subscriptionStatus} />
+      <SubscriptionBanner
+        status={subscriptionStatus}
+        onCheckout={handleCheckout}
+        checkoutPending={checkoutPending}
+      />
 
       {state.status.keychainError && (
         <div

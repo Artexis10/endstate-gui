@@ -162,6 +162,22 @@ export interface AccountDeleteData {
   deleted: boolean;
 }
 
+/**
+ * Response shape for `endstate backup subscribe --json`.
+ *
+ * The engine calls substrate's checkout endpoint with the user's session and
+ * returns a Paddle checkout URL. The GUI opens `checkoutUrl` in the system
+ * browser; substrate's `/endstate` landing renders the Paddle overlay from the
+ * `_ptxn` param. The GUI never renders checkout itself (see hosted-backup
+ * contract §7).
+ */
+export interface BackupSubscribeData {
+  /** Paddle default-payment-link URL, e.g. `https://…/endstate?_ptxn=<txn>`. */
+  checkoutUrl: string;
+  /** Paddle transaction id minted for this checkout. */
+  transactionId: string;
+}
+
 export interface VerifyItem {
   id: string;
   driver: string;

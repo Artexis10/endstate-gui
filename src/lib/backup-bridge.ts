@@ -31,6 +31,7 @@ import {
   BackupDeleteData,
   BackupDeleteVersionData,
   BackupRecoverData,
+  BackupSubscribeData,
   AccountDeleteData,
 } from '../types';
 
@@ -169,6 +170,20 @@ export async function backupLogout(settings: AppSettings): Promise<BackupLogoutD
 /** Report the current hosted-backup session state. */
 export async function backupStatus(settings: AppSettings): Promise<BackupStatusData> {
   return runBackupOnce<BackupStatusData>(settings, 'backup', ['status']);
+}
+
+/**
+ * Begin a Hosted Backup subscription checkout.
+ *
+ * Requires an active session — the engine calls substrate's checkout endpoint
+ * with the persisted access token and returns `{ checkoutUrl, transactionId }`.
+ * The GUI opens `checkoutUrl` in the system browser; it never renders checkout
+ * itself (hosted-backup contract §7). Signed out → `AUTH_REQUIRED`.
+ */
+export async function backupSubscribe(
+  settings: AppSettings,
+): Promise<BackupSubscribeData> {
+  return runBackupOnce<BackupSubscribeData>(settings, 'backup', ['subscribe']);
 }
 
 export interface RecoverArgs {

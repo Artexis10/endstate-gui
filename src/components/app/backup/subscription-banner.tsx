@@ -18,14 +18,22 @@ import { open as openExternal } from '@tauri-apps/plugin-shell';
 import type { SubscriptionStatus } from '@/types';
 import { CheckCircle2, AlertTriangle, OctagonX, Sparkles } from 'lucide-react';
 
-const SUBSCRIBE_URL = 'https://substratesystems.io/endstate';
-// Until substrate ships a dedicated customer-portal route, both Subscribe
-// and Manage point at the product page — it links to checkout / billing
-// from there.
+// Until substrate ships a dedicated customer-portal route, "Manage" points at
+// the product page. Subscribe/Renew no longer use a static URL — they invoke
+// the engine's `backup subscribe` command (via `onCheckout`) to mint a real
+// Paddle checkout transaction and open the returned URL.
 const MANAGE_URL = 'https://substratesystems.io/endstate';
 
 export interface SubscriptionBannerProps {
   status?: SubscriptionStatus;
+  /**
+   * Begin a checkout. Wired by the pane to call `backup subscribe` and open
+   * the returned `checkoutUrl`. Used by the Subscribe (`none`) and Renew
+   * (`cancelled`) actions. Optional so the render-only test can omit it.
+   */
+  onCheckout?: () => void;
+  /** Disables the Subscribe/Renew button while a checkout is in flight. */
+  checkoutPending?: boolean;
 }
 
 async function openUrl(url: string): Promise<void> {
@@ -44,7 +52,11 @@ async function openUrl(url: string): Promise<void> {
   }
 }
 
-export function SubscriptionBanner({ status }: SubscriptionBannerProps) {
+export function SubscriptionBanner({
+  status,
+  onCheckout,
+  checkoutPending = false,
+}: SubscriptionBannerProps) {
   const effective = status ?? 'none';
 
   if (effective === 'active') {
@@ -100,7 +112,8 @@ export function SubscriptionBanner({ status }: SubscriptionBannerProps) {
           <Button
             type="button"
             variant="primary"
-            onClick={() => openUrl(MANAGE_URL)}
+            onClick={onCheckout}
+            disabled={checkoutPending}
             data-testid="subscription-renew"
           >
             Renew subscription
@@ -121,7 +134,8 @@ export function SubscriptionBanner({ status }: SubscriptionBannerProps) {
         <Button
           type="button"
           variant="primary"
-          onClick={() => openUrl(SUBSCRIBE_URL)}
+          onClick={onCheckout}
+          disabled={checkoutPending}
           data-testid="subscription-subscribe"
         >
           Subscribe

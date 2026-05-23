@@ -59,6 +59,7 @@
 - [ ] 6.8 Create `delete-confirmation-modal.tsx` (reused for backup + version delete)
 - [ ] 6.9 Wire cancel buttons to `engine_cancel` with calm toast
 - [ ] 6.10 Subscription gating: write disabled in grace/cancelled/none; delete allowed in any non-none
+- [x] 6.11 Wire Subscribe/Renew to `backup subscribe` (engine ≥ v2.1.0): open returned `checkoutUrl`, route `AUTH_REQUIRED` to `onAuthLost`, guard double-mint (supersedes hardcoded URL in 6.3)
 
 ## 7. Restore-on-new-machine wizard (Phase 6)
 
