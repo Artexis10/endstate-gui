@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.4.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.3.0...gui-v2.4.0) (2026-05-23)
+
+
+### Features
+
+* **backup:** wire Subscribe/Renew to engine `backup subscribe` (engine v2.1.0) ([#39](https://github.com/Artexis10/endstate-gui/issues/39)) ([30e378f](https://github.com/Artexis10/endstate-gui/commit/30e378f808945192b463ce22b35518b1544e0342))
+
 ## [2.3.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.2.1...gui-v2.3.0) (2026-05-12)
 
 
