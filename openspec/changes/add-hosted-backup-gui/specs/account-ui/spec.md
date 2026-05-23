@@ -10,7 +10,7 @@ The settings page SHALL render an Account section when `capabilities.features.ho
 - **THEN** an Account section is visible
 - **AND** it shows `status.email`
 - **AND** it shows a subscription pill matching `status.subscriptionStatus`
-- **AND** a "Manage subscription" link opens `https://substratesystems.io/account` via the OS shell
+- **AND** a "Manage subscription" link opens the substrate billing portal via the OS shell (interim URL `https://substratesystems.io/account` until that route ships; the backup-pane's Manage link points at `/endstate` in the meantime — both interim destinations will converge on the same portal route once it lands)
 
 #### Scenario: Hidden when signed out or unsupported
 - **GIVEN** the user is signed out OR the engine does not advertise `features.hostedBackup.supported`

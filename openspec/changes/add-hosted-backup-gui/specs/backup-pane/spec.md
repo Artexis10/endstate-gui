@@ -24,18 +24,40 @@ The backup pane SHALL render a subscription-state banner reflecting `status.subs
 - **GIVEN** `status.subscriptionStatus === "grace"`
 - **WHEN** the backup pane renders
 - **THEN** the banner reads "Payment failed — fix billing within 30 days to keep backups" in warn colour
-- **AND** a Manage subscription link points at `https://substratesystems.io/account`
+- **AND** a Manage subscription link opens the substrate billing portal via the OS shell (interim URL `https://substratesystems.io/endstate` until the dedicated `/account` route ships — substrate-side follow-up)
 
 #### Scenario: Cancelled state
 - **GIVEN** `status.subscriptionStatus === "cancelled"`
 - **WHEN** the backup pane renders
 - **THEN** the banner reads "Subscription cancelled — backups read-only, purged in N days" in error colour
+- **AND** a Renew subscription button begins checkout (see "Subscription checkout via engine command")
 
 #### Scenario: None state
 - **GIVEN** `status.subscriptionStatus === "none"` or undefined
 - **WHEN** the backup pane renders
 - **THEN** the banner reads "Subscribe to enable hosted backup" with a Subscribe button
-- **AND** the Subscribe button opens `https://substratesystems.io/#pricing` via the OS shell
+- **AND** the Subscribe button begins checkout (see "Subscription checkout via engine command")
+
+### Requirement: Subscription checkout via engine command
+
+Subscribe (`none`) and Renew (`cancelled`) SHALL begin checkout by invoking `endstate backup subscribe` and opening the returned `checkoutUrl` in the system browser. The GUI SHALL NOT render the Paddle overlay in-app — substrate's `/endstate` landing handles the `_ptxn` param (hosted-backup contract §7). The GUI never calls substrate directly; the engine owns the authenticated checkout call (engine-as-source-of-truth). Requires engine ≥ v2.1.0.
+
+#### Scenario: Subscribe opens the minted checkout URL
+- **GIVEN** `status.subscriptionStatus === "none"`
+- **WHEN** the user clicks Subscribe
+- **THEN** `backup subscribe` is invoked
+- **AND** on success the returned `checkoutUrl` is opened via the OS shell
+
+#### Scenario: Session lost during checkout
+- **GIVEN** the engine returns `AUTH_REQUIRED` from `backup subscribe`
+- **WHEN** the user clicks Subscribe
+- **THEN** no error toast is shown
+- **AND** the pane's `onAuthLost` handler is invoked to route back to sign-in
+
+#### Scenario: Double-mint guard
+- **GIVEN** a checkout request is in flight
+- **WHEN** the banner re-renders
+- **THEN** the Subscribe/Renew button is disabled until the request settles
 
 ### Requirement: Subscription gating of write actions
 

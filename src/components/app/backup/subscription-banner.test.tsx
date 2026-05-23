@@ -5,17 +5,14 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders, screen } from '@/test/test-utils';
 import { SubscriptionBanner } from './subscription-banner';
 import type { SubscriptionStatus } from '@/types';
 
-vi.mock('@tauri-apps/plugin-shell', () => ({
-  open: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('@/lib/tauri-bridge', () => ({
-  invoke: vi.fn(),
-}));
+// Banner is presentational — no side-effecting imports to mock. Side effects
+// (shell.open, engine invoke) live in the pane and flow in via onCheckout /
+// onManage callbacks; tests below assert those are called.
 
 interface Case {
   status: SubscriptionStatus | undefined;
@@ -71,4 +68,41 @@ describe('SubscriptionBanner', () => {
       unmount();
     },
   );
+
+  it('invokes onCheckout when Subscribe is clicked (none state)', async () => {
+    const onCheckout = vi.fn();
+    renderWithProviders(
+      <SubscriptionBanner status="none" onCheckout={onCheckout} />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Subscribe' }));
+    expect(onCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes onCheckout when Renew is clicked (cancelled state)', async () => {
+    const onCheckout = vi.fn();
+    renderWithProviders(
+      <SubscriptionBanner status="cancelled" onCheckout={onCheckout} />,
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Renew subscription' }),
+    );
+    expect(onCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables Subscribe while a checkout is pending', () => {
+    renderWithProviders(
+      <SubscriptionBanner status="none" onCheckout={vi.fn()} checkoutPending />,
+    );
+    expect(screen.getByRole('button', { name: 'Subscribe' })).toBeDisabled();
+  });
+
+  it.each([
+    { status: 'active' as const, label: 'Manage subscription' },
+    { status: 'grace' as const, label: 'Manage subscription' },
+  ])('invokes onManage when Manage is clicked ($status state)', async ({ status, label }) => {
+    const onManage = vi.fn();
+    renderWithProviders(<SubscriptionBanner status={status} onManage={onManage} />);
+    await userEvent.click(screen.getByRole('button', { name: label }));
+    expect(onManage).toHaveBeenCalledTimes(1);
+  });
 });

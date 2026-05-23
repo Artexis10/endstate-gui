@@ -162,6 +162,23 @@ export interface AccountDeleteData {
   deleted: boolean;
 }
 
+/**
+ * Response shape for `endstate backup subscribe --json`.
+ *
+ * The engine calls substrate's checkout endpoint with the user's session and
+ * returns a checkout-transaction URL. The GUI opens `checkoutUrl` in the
+ * system browser; substrate's `/endstate` landing renders the payment overlay
+ * from the URL params. The GUI never renders checkout itself (see
+ * hosted-backup contract §7). Payment provider lives substrate-side and is
+ * not surfaced in this contract.
+ */
+export interface BackupSubscribeData {
+  /** Checkout-transaction URL, e.g. `https://…/endstate?_ptxn=<txn>`. */
+  checkoutUrl: string;
+  /** Transaction id minted for this checkout. */
+  transactionId: string;
+}
+
 export interface VerifyItem {
   id: string;
   driver: string;

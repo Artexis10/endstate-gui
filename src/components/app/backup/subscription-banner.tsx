@@ -7,44 +7,43 @@
  *   - `cancelled` — user cancelled, 30-day retention (read OK, write blocked)
  *   - `none` (or undefined) — never subscribed / fully cancelled past retention
  *
- * Subscription portal URLs are hardcoded for v1 per the design decision in
- * `openspec/changes/add-hosted-backup-gui/design.md`. Substrate's `/account`
- * route is a follow-up; the link ships regardless.
+ * Presentational only: side effects (opening URLs, invoking the engine) live
+ * in the pane and are passed in as callbacks. This keeps the banner trivial
+ * to render-test and lets the pane own the in-flight / toast / auth-lost
+ * routing.
  */
 
 import { Button } from '@/components/ui/button';
-import { invoke } from '@/lib/tauri-bridge';
-import { open as openExternal } from '@tauri-apps/plugin-shell';
 import type { SubscriptionStatus } from '@/types';
 import { CheckCircle2, AlertTriangle, OctagonX, Sparkles } from 'lucide-react';
 
-const SUBSCRIBE_URL = 'https://substratesystems.io/endstate';
-// Until substrate ships a dedicated customer-portal route, both Subscribe
-// and Manage point at the product page — it links to checkout / billing
-// from there.
-const MANAGE_URL = 'https://substratesystems.io/endstate';
-
 export interface SubscriptionBannerProps {
   status?: SubscriptionStatus;
+  /**
+   * Begin a checkout. Wired by the pane to call `backup subscribe` and open
+   * the returned `checkoutUrl`. Used by the Subscribe (`none`) and Renew
+   * (`cancelled`) actions. The pane's handler is `async` so the contract
+   * accepts `Promise<void>`; the banner does not await it (it observes
+   * progress via `checkoutPending`).
+   */
+  onCheckout?: () => void | Promise<void>;
+  /** Disables the Subscribe/Renew button while a checkout is in flight. */
+  checkoutPending?: boolean;
+  /**
+   * Open the substrate billing-portal URL for an existing subscription
+   * (active / grace). The pane resolves the URL; the banner doesn't know
+   * what it is. Different from `onCheckout` — Manage is a portal session,
+   * not a new checkout transaction.
+   */
+  onManage?: () => void | Promise<void>;
 }
 
-async function openUrl(url: string): Promise<void> {
-  // Prefer the Tauri shell plugin (already in lib.rs plugin list).
-  // Fallback to window.open for the web-mode test runtime.
-  try {
-    if (typeof invoke === 'function') {
-      await openExternal(url);
-      return;
-    }
-  } catch {
-    // ignore — fall through to window.open
-  }
-  if (typeof window !== 'undefined') {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-}
-
-export function SubscriptionBanner({ status }: SubscriptionBannerProps) {
+export function SubscriptionBanner({
+  status,
+  onCheckout,
+  checkoutPending = false,
+  onManage,
+}: SubscriptionBannerProps) {
   const effective = status ?? 'none';
 
   if (effective === 'active') {
@@ -58,7 +57,7 @@ export function SubscriptionBanner({ status }: SubscriptionBannerProps) {
           <Button
             type="button"
             variant="ghost"
-            onClick={() => openUrl(MANAGE_URL)}
+            onClick={onManage}
             data-testid="subscription-manage"
           >
             Manage subscription
@@ -79,7 +78,7 @@ export function SubscriptionBanner({ status }: SubscriptionBannerProps) {
           <Button
             type="button"
             variant="primary"
-            onClick={() => openUrl(MANAGE_URL)}
+            onClick={onManage}
             data-testid="subscription-manage"
           >
             Manage subscription
@@ -100,7 +99,8 @@ export function SubscriptionBanner({ status }: SubscriptionBannerProps) {
           <Button
             type="button"
             variant="primary"
-            onClick={() => openUrl(MANAGE_URL)}
+            onClick={onCheckout}
+            disabled={checkoutPending}
             data-testid="subscription-renew"
           >
             Renew subscription
@@ -121,7 +121,8 @@ export function SubscriptionBanner({ status }: SubscriptionBannerProps) {
         <Button
           type="button"
           variant="primary"
-          onClick={() => openUrl(SUBSCRIBE_URL)}
+          onClick={onCheckout}
+          disabled={checkoutPending}
           data-testid="subscription-subscribe"
         >
           Subscribe

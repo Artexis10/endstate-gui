@@ -32,9 +32,13 @@ This is intentionally user-hostile to skip — the alternative is a contract vio
 
 Single-page text layout (24 words + minimal instructions + date). `jspdf` is ~80 KB gzipped vs `pdf-lib`'s ~600 KB; the simpler API matches what we need.
 
-### Subscription portal links: hardcoded
+### Subscription checkout: engine command (updated 2026-05-23)
 
-For v1: hardcode the Subscribe URL (`https://substratesystems.io/#pricing`) and Manage Subscription URL (`https://substratesystems.io/account`). Open via Tauri `shell.open` (or whatever the existing external-URL pattern is). If the substrate `/account` route doesn't yet exist, leave a TODO comment — this is a substrate-side follow-up, not a GUI blocker. No engine work needed.
+The original v1 plan hardcoded a static Subscribe URL (`https://substratesystems.io/#pricing`) opened via `shell.open`, with "no engine work needed". That shipped as a placeholder but never started a real subscription — it just landed the user on the product page with no checkout transaction.
+
+Superseded once engine v2.1.0 added `endstate backup subscribe`: Subscribe (`none`) and Renew (`cancelled`) now invoke that command, which calls substrate's checkout endpoint with the persisted session and returns `{ checkoutUrl, transactionId }`. The GUI opens `checkoutUrl` via `shell.open`; substrate's `/endstate` landing renders the Paddle overlay from the `_ptxn` param. The GUI never calls substrate directly and never renders checkout in-app (engine-as-source-of-truth; hosted-backup contract §7). `AUTH_REQUIRED` routes through the existing `onAuthLost` path; an in-flight guard disables the button to prevent double-mint.
+
+Manage Subscription (active/grace) still opens the static `https://substratesystems.io/account` portal URL — that's a billing-portal link, not a new checkout, and stays hardcoded until substrate ships the route.
 
 ### Cancel during push/pull: existing `engine_cancel`
 
