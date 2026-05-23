@@ -1656,6 +1656,14 @@ function AppContent() {
     
     // Build apply command args with optional restore flags
     const applyArgs = ['--profile', profilePath];
+    // Honor the user's "dry run" preference. Without this the Setup-flow
+    // Apply button silently runs a real install (triggering UAC + winget
+    // installs) even when settings.dryRunEnabled is true — the preview
+    // path at line 1492 already passes --dry-run unconditionally; this
+    // path was missing the equivalent setting-driven flag.
+    if (settings.dryRunEnabled) {
+      applyArgs.push('--dry-run');
+    }
     if (restoreOptions?.restoreIntent === 'apps-and-settings' && restoreOptions.selectedModules && restoreOptions.selectedModules.length > 0) {
       applyArgs.push('--enable-restore');
       applyArgs.push('--restore-filter', restoreOptions.selectedModules.join(','));
