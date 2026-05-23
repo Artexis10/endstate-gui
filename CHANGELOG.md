@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.4.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.4.0...gui-v2.4.1) (2026-05-23)
+
+
+### Bug Fixes
+
+* **setup:** Setup flow Apply honors settings.dryRunEnabled ([#42](https://github.com/Artexis10/endstate-gui/issues/42)) ([433afb9](https://github.com/Artexis10/endstate-gui/commit/433afb9d477d1f6905a0731dc9013b4e5179853b))
+
 ## [2.4.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.3.0...gui-v2.4.0) (2026-05-23)
 
 
