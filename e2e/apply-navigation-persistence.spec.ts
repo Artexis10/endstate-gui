@@ -9,11 +9,30 @@ import { installTauriMock } from './helpers/tauri-mock';
  * so internal state should survive navigating to settings/reports and back.
  */
 
+/**
+ * `dryRunEnabled` defaults to true in settings.ts. Both describes below
+ * exercise the real-apply path (UI assertions around "Installing…" and
+ * the partial-failure surface), so they must force the setting to false
+ * — otherwise the GUI passes `--dry-run` (per the App.tsx fix) and the
+ * mocks take their dry-run branch, which short-circuits these tests.
+ */
+async function seedDryRunOff(page: import('@playwright/test').Page) {
+  await page.addInitScript(() => {
+    const KEY = 'test:endstate-gui-settings';
+    const existing = localStorage.getItem(KEY);
+    const settings = existing ? JSON.parse(existing) : {};
+    settings.dryRunEnabled = false;
+    localStorage.setItem(KEY, JSON.stringify(settings));
+  });
+}
+
 test.describe('Apply Navigation Persistence', () => {
   test.beforeEach(async ({ page }) => {
     await installTauriMock(page, {
       initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
     });
+
+    await seedDryRunOff(page);
 
     await page.addInitScript(() => {
       (window as any).__APPLY_STARTED__ = false;
@@ -187,6 +206,9 @@ test.describe('Apply Completion States', () => {
     await installTauriMock(page, {
       initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
     });
+
+    // Force real-apply path; this test asserts on partial-failure surface.
+    await seedDryRunOff(page);
 
     await page.addInitScript(() => {
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
