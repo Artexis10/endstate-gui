@@ -21,7 +21,7 @@
  * on rendering and the higher-level wizard can hand off cleanly.
  */
 
-import { useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, CloudOff, WifiOff } from 'lucide-react';
 import { SubscriptionBanner } from './subscription-banner';
 import { BackupList } from './backup-list';
@@ -87,15 +87,25 @@ export function BackupPane({
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [checkoutPending, setCheckoutPending] = useState(false);
 
+  // Track mount so the AUTH_REQUIRED path (which triggers parent unmount via
+  // `onAuthLost`) doesn't schedule setCheckoutPending(false) on an unmounted
+  // component. React 18 silently ignores it, but the guard removes the wart.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const subscriptionStatus = state.status?.subscriptionStatus ?? 'none';
   const canWrite = subscriptionStatus === 'active';
   const canRestore = subscriptionStatus !== 'none';
   const canDelete = subscriptionStatus !== 'none';
 
-  // Subscribe / Renew: the engine mints a Paddle checkout transaction and
-  // returns its URL; we open it in the system browser. We never render the
-  // Paddle overlay in-app — substrate's /endstate landing handles `_ptxn`
-  // (hosted-backup contract §7). Guarded against double-mint via checkoutPending.
+  // Subscribe / Renew: the engine returns a checkout-transaction URL and we
+  // open it in the system browser. The payment overlay renders on substrate's
+  // /endstate landing — never in-app (hosted-backup contract §7). Guarded
+  // against double-mint via checkoutPending.
   const handleCheckout = useCallback(async () => {
     setCheckoutPending(true);
     try {
@@ -112,9 +122,16 @@ export function BackupPane({
         showToast(err instanceof Error ? err.message : String(err), 'error');
       }
     } finally {
-      setCheckoutPending(false);
+      if (mountedRef.current) setCheckoutPending(false);
     }
   }, [settings, onAuthLost, showToast]);
+
+  // Manage subscription (active / grace): opens the substrate billing portal.
+  // Interim URL points at /endstate until the dedicated /account route ships
+  // — tracked on the `add-hosted-backup-gui` change.
+  const handleManage = useCallback(async () => {
+    await openExternal('https://substratesystems.io/endstate');
+  }, []);
 
   const handlePush = useCallback(
     async (backupId: string) => {
@@ -307,6 +324,7 @@ export function BackupPane({
         status={subscriptionStatus}
         onCheckout={handleCheckout}
         checkoutPending={checkoutPending}
+        onManage={handleManage}
       />
 
       {state.status.keychainError && (

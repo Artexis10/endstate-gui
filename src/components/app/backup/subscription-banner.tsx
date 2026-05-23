@@ -7,22 +7,15 @@
  *   - `cancelled` — user cancelled, 30-day retention (read OK, write blocked)
  *   - `none` (or undefined) — never subscribed / fully cancelled past retention
  *
- * Subscription portal URLs are hardcoded for v1 per the design decision in
- * `openspec/changes/add-hosted-backup-gui/design.md`. Substrate's `/account`
- * route is a follow-up; the link ships regardless.
+ * Presentational only: side effects (opening URLs, invoking the engine) live
+ * in the pane and are passed in as callbacks. This keeps the banner trivial
+ * to render-test and lets the pane own the in-flight / toast / auth-lost
+ * routing.
  */
 
 import { Button } from '@/components/ui/button';
-import { invoke } from '@/lib/tauri-bridge';
-import { open as openExternal } from '@tauri-apps/plugin-shell';
 import type { SubscriptionStatus } from '@/types';
 import { CheckCircle2, AlertTriangle, OctagonX, Sparkles } from 'lucide-react';
-
-// Until substrate ships a dedicated customer-portal route, "Manage" points at
-// the product page. Subscribe/Renew no longer use a static URL — they invoke
-// the engine's `backup subscribe` command (via `onCheckout`) to mint a real
-// Paddle checkout transaction and open the returned URL.
-const MANAGE_URL = 'https://substratesystems.io/endstate';
 
 export interface SubscriptionBannerProps {
   status?: SubscriptionStatus;
@@ -36,28 +29,20 @@ export interface SubscriptionBannerProps {
   onCheckout?: () => void | Promise<void>;
   /** Disables the Subscribe/Renew button while a checkout is in flight. */
   checkoutPending?: boolean;
-}
-
-async function openUrl(url: string): Promise<void> {
-  // Prefer the Tauri shell plugin (already in lib.rs plugin list).
-  // Fallback to window.open for the web-mode test runtime.
-  try {
-    if (typeof invoke === 'function') {
-      await openExternal(url);
-      return;
-    }
-  } catch {
-    // ignore — fall through to window.open
-  }
-  if (typeof window !== 'undefined') {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
+  /**
+   * Open the substrate billing-portal URL for an existing subscription
+   * (active / grace). The pane resolves the URL; the banner doesn't know
+   * what it is. Different from `onCheckout` — Manage is a portal session,
+   * not a new checkout transaction.
+   */
+  onManage?: () => void | Promise<void>;
 }
 
 export function SubscriptionBanner({
   status,
   onCheckout,
   checkoutPending = false,
+  onManage,
 }: SubscriptionBannerProps) {
   const effective = status ?? 'none';
 
@@ -72,7 +57,7 @@ export function SubscriptionBanner({
           <Button
             type="button"
             variant="ghost"
-            onClick={() => openUrl(MANAGE_URL)}
+            onClick={onManage}
             data-testid="subscription-manage"
           >
             Manage subscription
@@ -93,7 +78,7 @@ export function SubscriptionBanner({
           <Button
             type="button"
             variant="primary"
-            onClick={() => openUrl(MANAGE_URL)}
+            onClick={onManage}
             data-testid="subscription-manage"
           >
             Manage subscription

@@ -24,7 +24,7 @@ The backup pane SHALL render a subscription-state banner reflecting `status.subs
 - **GIVEN** `status.subscriptionStatus === "grace"`
 - **WHEN** the backup pane renders
 - **THEN** the banner reads "Payment failed — fix billing within 30 days to keep backups" in warn colour
-- **AND** a Manage subscription link points at `https://substratesystems.io/account`
+- **AND** a Manage subscription link opens the substrate billing portal via the OS shell (interim URL `https://substratesystems.io/endstate` until the dedicated `/account` route ships — substrate-side follow-up)
 
 #### Scenario: Cancelled state
 - **GIVEN** `status.subscriptionStatus === "cancelled"`

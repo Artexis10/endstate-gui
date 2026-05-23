@@ -97,6 +97,8 @@
 - [ ] 10.11 Unit: hostedBackup unsupported → all hosted-backup UI hidden
 - [ ] 10.12 Unit: type-guard tests for `isBackupChunkEvent`
 - [ ] 10.13 E2E: signup → recovery-key dialog (mocked engine deterministic mnemonic) → 2 saves → backup pane
+- [x] 10.14 Unit: subscription banner onCheckout / onManage / checkoutPending wiring (extends 10.9)
+- [x] 10.15 E2E: backup subscribe wiring — Subscribe + Renew open returned checkoutUrl; AUTH_REQUIRED → onAuthLost; double-mint guard (`e2e/backup-subscribe.spec.ts`, first backup-pane e2e in the repo — sets the harness pattern)
 
 ## 11. Verification
 

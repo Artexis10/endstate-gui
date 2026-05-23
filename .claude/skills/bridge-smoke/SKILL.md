@@ -44,18 +44,24 @@ in the real app?" matters.
    ```
    Run that in `run_in_background:true` with a 5-minute timeout.
 
-**KNOWN HAZARD — Tauri dev-server crash on this Windows box.** See
-`memory/project_tauri_dev_server_crash.md`. The Tauri main process can
-heap-corrupt or hit STATUS_ILLEGAL_INSTRUCTION within ~3s of `Browser bridge
-listening`. The bridge dies with it. Survival window is roughly enough for a
-few `curl` round-trips but **flaky for interactive Chrome drives**. If the
-log shows `STATUS_HEAP_CORRUPTION` or `STATUS_ILLEGAL_INSTRUCTION`:
-- Don't keep retrying blindly — three consecutive crashes happened in one
-  session before. The crash is reproducible, not transient.
-- For envelope-shape verification, **curl is enough** (see step 6).
-- For UI clicks, fall back to the wiring e2e
+**KNOWN HAZARD — Tauri dev-server is intermittently unstable on this
+Windows box.** See `memory/project_tauri_dev_server_crash.md`. The Tauri
+main process *sometimes* survives a full Playwright drive (150+ bridge
+invokes, observed 2026-05-23) and *sometimes* heap-corrupts or hits
+STATUS_ILLEGAL_INSTRUCTION within ~3s of `Browser bridge listening`. When
+it dies, the bridge goes with it.
+
+Response policy when the watcher reports `STATUS_HEAP_CORRUPTION` or
+`STATUS_ILLEGAL_INSTRUCTION`:
+- **Restart once.** A clean retry often boots into a stable session (the
+  successful 2026-05-23 drive landed on the third attempt). Don't retry
+  more than that — pattern is intermittent, not transient.
+- **Curl is enough for envelope-shape verification** (see step 6). Run
+  those checks before attempting the UI drive so you have the protocol
+  proof regardless of whether the live drive lands.
+- **If the second restart also crashes**, fall back to the wiring e2e
   (`e2e/backup-subscribe.spec.ts` pattern) and report the crash as the
-  remaining gap rather than fighting it.
+  remaining gap rather than fighting it through more retries.
 
 **Curl round-trip (always do this — it's the load-bearing check)**
 
