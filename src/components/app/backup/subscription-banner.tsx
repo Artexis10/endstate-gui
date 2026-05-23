@@ -29,9 +29,11 @@ export interface SubscriptionBannerProps {
   /**
    * Begin a checkout. Wired by the pane to call `backup subscribe` and open
    * the returned `checkoutUrl`. Used by the Subscribe (`none`) and Renew
-   * (`cancelled`) actions. Optional so the render-only test can omit it.
+   * (`cancelled`) actions. The pane's handler is `async` so the contract
+   * accepts `Promise<void>`; the banner does not await it (it observes
+   * progress via `checkoutPending`).
    */
-  onCheckout?: () => void;
+  onCheckout?: () => void | Promise<void>;
   /** Disables the Subscribe/Renew button while a checkout is in flight. */
   checkoutPending?: boolean;
 }

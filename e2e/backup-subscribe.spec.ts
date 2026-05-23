@@ -10,10 +10,16 @@ import { forceAdvancedMode } from './helpers/ui-mode';
  * separate manual smoke against a real Tauri build with the bundled v2.1.0
  * engine is required to validate the actual checkout flow.
  *
- * In test mode `isTauriRuntime()` returns false (the test mock is explicitly
- * distinguished from real Tauri at `tauri-bridge.ts:51-75`), so backup
- * commands take the `__ENDSTATE_MOCK_ENGINE__.runEndstateOnce` path — that's
- * what we install here, on top of the fixture's streaming-only default.
+ * Backup commands flow through `endstate_exec` in this harness. The
+ * mechanism (load-bearing for anyone copying this pattern): stubbing
+ * `window.__TAURI_INTERNALS__` (required so `@tauri-apps/plugin-shell`'s
+ * `open()` doesn't TypeError) also flips `isTauriRuntime()` to true at
+ * `tauri-bridge.ts:58`. That routes `runEndstateOnce` through the Tauri
+ * invoke path — i.e. `invoke('endstate_exec', ...)` — *not* the
+ * `__ENDSTATE_MOCK_ENGINE__.runEndstateOnce` branch. So we wrap
+ * `__TAURI__.core.invoke` to dispatch `endstate_exec`, and stub
+ * `__TAURI_INTERNALS__.invoke` to capture `plugin:shell|open`. Full
+ * mechanism comment is inline at `installBackupMock` below.
  *
  * Pattern for future backup specs:
  *  - per-test config on `window.__test_backupConfig` (status, subscribe
@@ -159,8 +165,12 @@ async function installBackupMock(page: Page, config: BackupConfig) {
       if (cmd === 'capabilities') return wrap(c.capabilities);
 
       if (cmd === 'backup') {
-        // Args shape: ['backup', '--json', '<sub>', ...]
-        const sub = args.find((a, i) => i > 0 && !a.startsWith('--'));
+        // Args shape from `runEndstateOnce` is [command, '--json', ...args]
+        // (engine-exec.ts:147), so the subcommand lives at position 2.
+        // Using a positional lookup (rather than a "first non-flag" heuristic)
+        // keeps the dispatcher robust if future wrappers pass a flag value
+        // with no `--` prefix.
+        const sub = args[2];
         if (sub === 'status') return wrap(c.status);
         if (sub === 'list') return wrap(c.list);
         if (sub === 'subscribe') {
@@ -341,6 +351,13 @@ test.describe('Hosted Backup — Subscribe / Renew checkout wiring', () => {
     const opened = await page.evaluate(() => (window as any).__test_shellOpenCalls);
     expect(opened).toHaveLength(0);
     await expect(page.getByTestId('backup-pane-error')).toHaveCount(0);
+
+    // Spec requirement: no error toast on AUTH_REQUIRED — handleCheckout's
+    // catch branch returns early and lets onAuthLost route to the calm
+    // signed-out fallback instead of surfacing a toast.
+    await expect(
+      page.getByRole('alert').filter({ hasText: /authentication required|sign in/i }),
+    ).toHaveCount(0);
   });
 
   test('double-mint guard: Subscribe button is disabled while a checkout is in flight', async ({ page }) => {
