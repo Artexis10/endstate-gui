@@ -55,6 +55,27 @@ export function friendlyAuthError(
         remediation:
           'Check for typos. The 24 words must be from the BIP39 list, in order.',
       };
+    case 'CLAIM_TOKEN_INVALID':
+      return {
+        message: "That claim code doesn't match any active link.",
+        remediation:
+          'Double-check the code from your purchase email. The link expires after 30 days.',
+      };
+    case 'CLAIM_TOKEN_EXPIRED':
+      return {
+        message: 'This claim link has expired.',
+        remediation: 'Email founder@substratesystems.io to request a fresh link.',
+      };
+    case 'CLAIM_TOKEN_CONSUMED':
+      return {
+        message: 'This claim code has already been used to create an account.',
+        cta: { label: 'Sign in', tab: 'sign-in' },
+      };
+    case 'KDF_TOO_WEAK':
+      return {
+        message: "Your password isn't strong enough.",
+        remediation: 'Use at least 12 characters.',
+      };
     default: {
       const cliJargon =
         err.remediation && CLI_JARGON_PATTERN.test(err.remediation);
