@@ -1,6 +1,6 @@
 [package]
 name = "endstate-gui"
-version = "2.4.1"
+version = "2.5.0"
 description = "Endstate GUI - Desktop application for Endstate"
 authors = ["Substrate Systems"]
 edition = "2021"
