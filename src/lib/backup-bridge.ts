@@ -144,6 +144,34 @@ export async function backupSignup(
   );
 }
 
+export interface ClaimArgs {
+  /** 43-char URL-safe base64 token from the buyer's claim email. */
+  token: string;
+  passphrase: string;
+  /** Absolute path the engine will write the 24-word mnemonic to. */
+  saveRecoveryTo: string;
+}
+
+/**
+ * Attach credentials to a Hosted Backup pre-account using a claim token.
+ *
+ * Mirrors `backupSignup`, except the engine reads the email from substrate's
+ * `claim_tokens` row (keyed by the bearer token) instead of taking it as a
+ * flag. The returned envelope's `email` is server-supplied; the GUI MUST NOT
+ * present any user-entered email as authoritative on this path.
+ */
+export async function backupClaim(
+  settings: AppSettings,
+  args: ClaimArgs,
+): Promise<BackupSignupData> {
+  return runBackupOnce<BackupSignupData>(
+    settings,
+    'backup',
+    ['claim', '--token', args.token, '--save-recovery-to', args.saveRecoveryTo],
+    `${args.passphrase}\n`,
+  );
+}
+
 export interface LoginArgs {
   email: string;
   passphrase: string;

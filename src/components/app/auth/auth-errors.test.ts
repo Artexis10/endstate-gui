@@ -53,4 +53,47 @@ describe('friendlyAuthError', () => {
     });
     expect(f.remediation).toBe('Please try again later.');
   });
+
+  it('maps CLAIM_TOKEN_INVALID to a friendly headline + helpful remediation, no CTA', () => {
+    const f = friendlyAuthError(
+      new BackupCommandError({
+        code: 'CLAIM_TOKEN_INVALID',
+        message: 'token not recognised',
+        remediation: 'Run `endstate backup claim` with a valid token.',
+      }),
+    );
+    expect(f.message).toMatch(/doesn't match/i);
+    expect(f.remediation).toMatch(/purchase email/i);
+    expect(f.remediation).not.toMatch(/`endstate /);
+    expect(f.cta).toBeUndefined();
+  });
+
+  it('maps CLAIM_TOKEN_EXPIRED to founder@ remediation with no CTA', () => {
+    const f = friendlyAuthError({
+      code: 'CLAIM_TOKEN_EXPIRED',
+      message: 'token expired',
+    });
+    expect(f.message).toMatch(/expired/i);
+    expect(f.remediation).toMatch(/founder@substratesystems\.io/);
+    expect(f.cta).toBeUndefined();
+  });
+
+  it('maps CLAIM_TOKEN_CONSUMED to a sign-in CTA', () => {
+    const f = friendlyAuthError({
+      code: 'CLAIM_TOKEN_CONSUMED',
+      message: 'already consumed',
+    });
+    expect(f.message).toMatch(/already been used/i);
+    expect(f.cta).toEqual({ label: 'Sign in', tab: 'sign-in' });
+  });
+
+  it('maps KDF_TOO_WEAK to a password-strength remediation', () => {
+    const f = friendlyAuthError({
+      code: 'KDF_TOO_WEAK',
+      message: 'argon2id parameters reject',
+    });
+    expect(f.message).toMatch(/password/i);
+    expect(f.remediation).toMatch(/12 characters/i);
+    expect(f.cta).toBeUndefined();
+  });
 });
