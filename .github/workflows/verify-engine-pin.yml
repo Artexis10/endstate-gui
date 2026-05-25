@@ -1,0 +1,66 @@
+name: Verify engine pin
+
+# Pre-merge guard for ENGINE_VERSION changes. Fails the PR check when the
+# pinned Artexis10/endstate release is missing endstate.exe or
+# endstate.exe.sha256 — i.e. the exact state that caused gui-v2.5.0 to ship
+# without installers. Mirrors the safeguard in engine-drift-check.yml so both
+# the auto-bump path and the manual-edit path are covered.
+
+on:
+  pull_request:
+    paths:
+      - 'ENGINE_VERSION'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-engine-pin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify pinned engine release has required binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          VERSION=$(cat ENGINE_VERSION | tr -d '[:space:]')
+          if [ -z "${VERSION}" ]; then
+            echo "::error file=ENGINE_VERSION::ENGINE_VERSION is empty — must be set to a semver like 1.8.0."
+            exit 1
+          fi
+          echo "Pinned engine version: v${VERSION}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if ! gh release view "v${VERSION}" --repo Artexis10/endstate > /dev/null 2>&1; then
+            echo "::error file=ENGINE_VERSION::GitHub Release v${VERSION} does not exist on Artexis10/endstate. Check available releases with: gh release list --repo Artexis10/endstate"
+            exit 1
+          fi
+
+          ASSET_NAMES=$(gh release view "v${VERSION}" --repo Artexis10/endstate \
+            --json assets --jq '[.assets[].name] | join(" ")')
+
+          MISSING=()
+          for REQUIRED in "endstate.exe" "endstate.exe.sha256"; do
+            if ! echo "${ASSET_NAMES}" | grep -qF "${REQUIRED}"; then
+              MISSING+=("${REQUIRED}")
+            fi
+          done
+
+          if [ "${#MISSING[@]}" -gt 0 ]; then
+            {
+              echo "Release v${VERSION} is missing required asset(s): ${MISSING[*]}"
+              echo ""
+              echo "Fix in Artexis10/endstate by uploading the missing asset(s) to release v${VERSION}, then re-run this check:"
+              echo "  gh release upload v${VERSION} endstate.exe endstate.exe.sha256 --repo Artexis10/endstate --clobber"
+              echo ""
+              echo "Why this matters: release-please.yml's build job downloads these assets from the pinned engine release."
+              echo "Without them, the GUI release ships without installers (this guard exists to prevent that recurrence)."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::error file=ENGINE_VERSION::Release v${VERSION} is missing required asset(s): ${MISSING[*]}. See job summary for remediation."
+            exit 1
+          fi
+
+          echo "All required assets present on v${VERSION}: ${ASSET_NAMES}" | tee -a "$GITHUB_STEP_SUMMARY"
