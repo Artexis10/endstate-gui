@@ -2370,6 +2370,54 @@ function AppContent() {
                 handleNavigate('backup');
                 setRestoreWizardOpen(true);
               }}
+              onPushProfileToCloud={
+                hostedBackupSupported &&
+                backupStatusData?.signedIn &&
+                backupStatusData.subscriptionStatus === 'active'
+                  ? async (profilePath: string, profileName: string) => {
+                      setPushTotalChunks(0);
+                      setPushUploadedChunks(0);
+                      setPushCurrentChunkIndex(null);
+                      setPushDialogOpen(true);
+                      try {
+                        await backupPush(settings, {
+                          profile: profilePath,
+                          name: profileName,
+                          onEvent: (event) => {
+                            if (!isBackupChunkEvent(event)) return;
+                            setPushTotalChunks(event.totalChunks);
+                            if (event.status === 'uploading') {
+                              setPushCurrentChunkIndex(event.chunkIndex);
+                            } else if (event.status === 'uploaded') {
+                              setPushUploadedChunks((prev) => prev + 1);
+                            }
+                          },
+                        });
+                        const pushEmail = backupStatusData?.email;
+                        if (!hasSeenFirstPushFor(pushEmail)) {
+                          showToast(
+                            'First backup saved to the cloud. Your settings are now safe across machines.',
+                            'success',
+                          );
+                          markFirstPushFor(pushEmail);
+                        } else {
+                          showToast(`"${profileName}" backed up to cloud.`, 'success');
+                        }
+                        void cloudBackupIndex.refresh();
+                      } catch (err) {
+                        const msg =
+                          err instanceof BackupCommandError
+                            ? `${err.code}: ${err.message}`
+                            : err instanceof Error
+                              ? err.message
+                              : String(err);
+                        showToast(`Push failed — ${msg}`, 'error');
+                      } finally {
+                        setPushDialogOpen(false);
+                      }
+                    }
+                  : undefined
+              }
               onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, setup: false })); setSetupFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={setupFlowResetKey}
               onFlowReset={() => setFlowHasWork(prev => ({ ...prev, setup: false }))}

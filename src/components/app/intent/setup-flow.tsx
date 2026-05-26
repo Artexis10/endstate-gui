@@ -107,6 +107,12 @@ export interface SetupFlowProps {
    *  discoverability gap — without it, a fresh install with no local profiles
    *  but a paid subscription has no obvious path to pull from the cloud. */
   onRestoreFromCloud?: () => void;
+  /** Push a local-only profile up to the cloud as a new backup. The card
+   *  surfaces a "Back up to cloud" link on local-only rows so the user can
+   *  cloud-protect any locally-captured profile without leaving the Setup
+   *  screen. Only rendered when the user is signed in + subscription is
+   *  active + the profile is not already in `cloudBackupIndex`. */
+  onPushProfileToCloud?: (profilePath: string, profileName: string) => void;
 }
 
 export function SetupFlow({
@@ -136,6 +142,7 @@ export function SetupFlow({
   hostedBackupSubscriptionStatus,
   onOpenHostedBackup,
   onRestoreFromCloud,
+  onPushProfileToCloud,
 }: SetupFlowProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<SetupPhase>('browse');
@@ -515,6 +522,23 @@ export function SetupFlow({
                                 />
                               </p>
                             )}
+                            {!cloudEntry &&
+                              hostedBackupSignedIn &&
+                              hostedBackupSubscriptionStatus === 'active' &&
+                              onPushProfileToCloud && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onPushProfileToCloud(profile.path, profile.name);
+                                  }}
+                                  className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline focus-visible:underline outline-none"
+                                  data-testid={`profile-card-${profile.name}-push-to-cloud`}
+                                >
+                                  <Cloud className="h-3 w-3" aria-hidden="true" />
+                                  Back up to cloud
+                                </button>
+                              )}
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Button

@@ -47,6 +47,12 @@ import { Button } from '@/components/ui/button';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { hasSeenFirstPushFor, markFirstPushFor } from '@/lib/first-push-flag';
+import {
+  hasSeenQuotaWarningFor,
+  markQuotaWarningFor,
+  clearQuotaWarningFor,
+} from '@/lib/quota-warning-flag';
+import { formatBytes } from '@/lib/format-bytes';
 
 export interface BackupPaneProps {
   settings: AppSettings;
@@ -110,6 +116,32 @@ export function BackupPane({
   const canWrite = subscriptionStatus === 'active';
   const canRestore = subscriptionStatus !== 'none';
   const canDelete = subscriptionStatus !== 'none';
+
+  // Quota approaching-cap warning — fires once per account at the 90% mark.
+  // Clears the flag when the user drops back under the threshold so the
+  // warning re-arms after a delete + grow cycle. Skipped entirely when the
+  // engine hasn't sent quota fields yet (older engine versions).
+  const quotaUsed = state.status?.quotaUsedBytes;
+  const quotaTotal = state.status?.quotaTotalBytes;
+  const statusEmail = state.status?.email;
+  useEffect(() => {
+    if (!statusEmail) return;
+    if (quotaTotal === undefined || quotaTotal <= 0) return;
+    if (quotaUsed === undefined) return;
+    const ratio = quotaUsed / quotaTotal;
+    if (ratio < 0.9) {
+      // Below threshold — re-arm the warning so a future climb will toast.
+      clearQuotaWarningFor(statusEmail);
+      return;
+    }
+    if (hasSeenQuotaWarningFor(statusEmail)) return;
+    const pct = Math.min(100, Math.round(ratio * 100));
+    showToast(
+      `Backup storage at ${pct}% — using ${formatBytes(quotaUsed)} of ${formatBytes(quotaTotal)}. Delete older versions to free space.`,
+      'warning',
+    );
+    markQuotaWarningFor(statusEmail);
+  }, [quotaUsed, quotaTotal, statusEmail, showToast]);
 
   // Subscribe / Renew: the engine returns a checkout-transaction URL and we
   // open it in the system browser. The payment overlay renders on substrate's
