@@ -99,7 +99,7 @@ export function PushProgressDialog({
         </div>
         {retryLabel && (
           <div
-            className="rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+            className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
             data-testid="push-retry-tag"
             role="status"
             aria-live="polite"
