@@ -7,9 +7,16 @@ name: Verify engine pin
 # the auto-bump path and the manual-edit path are covered.
 
 on:
+  # No `paths` filter — verify-engine-pin is a required status check in
+  # branch protection, so it MUST report on every PR (including
+  # release-please PRs that don't touch ENGINE_VERSION). The work itself
+  # is a single `gh release view` API call (~5s); always-running is
+  # strictly cheaper than the alternative (every non-pin-changing PR
+  # blocked, requiring admin bypass to merge). Continuously validating
+  # the current pin also catches drift where binaries get deleted from
+  # the engine release out of band.
   pull_request:
-    paths:
-      - 'ENGINE_VERSION'
+    branches: [main]
   workflow_dispatch:
 
 permissions:
