@@ -19,6 +19,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # Needed by the dispatch-ci job below to call `gh workflow run`.
+  actions: write
 
 jobs:
   release-please:
@@ -26,6 +28,7 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      prs_created: ${{ steps.release.outputs.prs_created }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -59,6 +62,44 @@ jobs:
             git commit -m "chore: sync version $VERSION to Tauri files"
             git push
           fi
+
+  # release-please-action opens its release PRs using GITHUB_TOKEN. Per
+  # GitHub's recursion-protection rule, GITHUB_TOKEN-triggered events do NOT
+  # fire other workflows (with `workflow_dispatch` and `repository_dispatch`
+  # as the documented exceptions). That means the `pull_request` triggers on
+  # ci.yml / verify-engine-pin.yml silently never fire on release-please PRs
+  # — branch protection then blocks the merge waiting for checks that will
+  # never arrive. This job closes the gap by explicitly dispatching ci.yml
+  # against every open release-please PR's branch.
+  dispatch-ci:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.prs_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Dispatch CI against each open release-please PR branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCHES=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --search "head:release-please" \
+            --state open \
+            --json headRefName \
+            --jq '.[].headRefName')
+          if [ -z "$BRANCHES" ]; then
+            echo "No open release-please PRs — nothing to dispatch."
+            exit 0
+          fi
+          while IFS= read -r BRANCH; do
+            [ -z "$BRANCH" ] && continue
+            echo "Dispatching ci.yml against $BRANCH"
+            gh workflow run ci.yml \
+              --repo "${{ github.repository }}" \
+              --ref "$BRANCH"
+          done <<< "$BRANCHES"
 
   build:
     needs: release-please
