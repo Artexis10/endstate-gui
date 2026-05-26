@@ -48,35 +48,10 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # If a release was created, also update tauri.conf.json and Cargo.toml
-      # (release-please only handles package.json for node type). Use the App
-      # token for the checkout + push so the sync commit fires CI normally
-      # (a GITHUB_TOKEN push would NOT trigger workflows on main).
-      - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs.release_created }}
-        with:
-          ref: main
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Sync version to Tauri files
-        if: ${{ steps.release.outputs.release_created }}
-        run: |
-          VERSION="${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}"
-
-          # Update tauri.conf.json
-          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
-
-          # Update Cargo.toml version
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-
-          # Commit if changes were made
-          if ! git diff --quiet; then
-            git config user.name "endstate-release-bot[bot]"
-            git config user.email "endstate-release-bot[bot]@users.noreply.github.com"
-            git add src-tauri/tauri.conf.json src-tauri/Cargo.toml
-            git commit -m "chore: sync version $VERSION to Tauri files"
-            git push
-          fi
+      # tauri.conf.json and Cargo.toml are updated as part of the Release PR
+      # itself via release-please-config.json's `extra-files`. No post-merge
+      # sync step required — this avoids a direct push to main that would
+      # otherwise need to bypass the verify-engine-pin required check.
 
   build:
     needs: release-please
