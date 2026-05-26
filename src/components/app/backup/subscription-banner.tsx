@@ -43,6 +43,8 @@ export interface SubscriptionBannerProps {
    * not a new checkout transaction.
    */
   onManage?: () => void | Promise<void>;
+  /** Disables the Manage button while the engine round-trip is in flight. */
+  managePending?: boolean;
 }
 
 function formatGraceDeadline(iso: string | undefined): string | null {
@@ -62,6 +64,7 @@ export function SubscriptionBanner({
   onCheckout,
   checkoutPending = false,
   onManage,
+  managePending = false,
 }: SubscriptionBannerProps) {
   const effective = status ?? 'none';
 
@@ -77,9 +80,10 @@ export function SubscriptionBanner({
             type="button"
             variant="ghost"
             onClick={onManage}
+            disabled={managePending}
             data-testid="subscription-manage"
           >
-            Manage subscription
+            {managePending ? 'Opening…' : 'Manage subscription'}
           </Button>
         }
       />
@@ -103,9 +107,10 @@ export function SubscriptionBanner({
             type="button"
             variant="primary"
             onClick={onManage}
+            disabled={managePending}
             data-testid="subscription-manage"
           >
-            Manage subscription
+            {managePending ? 'Opening…' : 'Manage subscription'}
           </Button>
         }
       />

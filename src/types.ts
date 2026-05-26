@@ -195,6 +195,22 @@ export interface BackupSubscribeData {
   transactionId: string;
 }
 
+/**
+ * Response shape for `endstate backup browser-session --json`.
+ *
+ * Returned by the engine after POSTing to substrate's `/api/auth/browser-session`
+ * with the user's session. The GUI composes `${accountUrl}?session=${sessionToken}`
+ * and opens it in the system browser; substrate's `/account/start` route swaps
+ * the 60s JWT for an HttpOnly cookie and redirects to the cookie-only `/account`
+ * page (hosted-backup contract §5).
+ */
+export interface BackupBrowserSessionData {
+  /** 60s EdDSA JWT, aud=endstate-account. Single-use. */
+  sessionToken: string;
+  /** Substrate-advertised portal landing, e.g. `https://…/account/start`. */
+  accountUrl: string;
+}
+
 export interface VerifyItem {
   id: string;
   driver: string;

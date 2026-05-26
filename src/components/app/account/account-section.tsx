@@ -1,8 +1,10 @@
 /**
  * Account section in Settings (only when signed in).
  *
- * Shows the user's email, current subscription status pill (with the same
- * hardcoded URLs as the subscription banner), Sign out, and Delete account.
+ * Shows the user's email, current subscription status pill, Manage subscription
+ * (routes through the engine's `backup browser-session` command to mint a short
+ * -lived handoff into substrate's `/account` portal), Sign out, and Delete
+ * account.
  */
 
 import { useCallback, useState } from 'react';
@@ -13,19 +15,24 @@ import { useToast } from '@/components/ui/toast';
 import {
   backupLogout,
   accountDelete,
+  backupBrowserSession,
   BackupCommandError,
 } from '@/lib/backup-bridge';
+import { friendlyBackupError } from '@/lib/backup-errors';
 import { AccountDeleteModal } from './account-delete-modal';
 import type { BackupStatusData, SubscriptionStatus } from '@/types';
 import type { AppSettings } from '@/settings';
-
-const MANAGE_URL = 'https://substratesystems.io/account';
 
 export interface AccountSectionProps {
   settings: AppSettings;
   status: BackupStatusData;
   onSignedOut: () => void;
   onDeleted: () => void;
+  /** Called when the engine reports AUTH_REQUIRED — session expired mid-click.
+   *  Parent should clear hosted-backup state and route back to the sign-in
+   *  flow with a calm toast. Optional: when absent, AUTH_REQUIRED is shown
+   *  as a friendly toast (graceful degradation). */
+  onAuthLost?: () => void;
 }
 
 const SUBSCRIPTION_LABEL: Record<SubscriptionStatus, string> = {
@@ -47,23 +54,46 @@ export function AccountSection({
   status,
   onSignedOut,
   onDeleted,
+  onAuthLost,
 }: AccountSectionProps) {
   const { showToast } = useToast();
   const [signingOut, setSigningOut] = useState(false);
+  const [managePending, setManagePending] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const subscription: SubscriptionStatus = status.subscriptionStatus ?? 'none';
 
+  // Manage subscription: same handoff flow as backup-pane.tsx's `handleManage`.
+  // Mint a 60s JWT via the engine, then open `${accountUrl}?session=<jwt>`
+  // externally. Substrate's `/account/start` swaps the JWT for an HttpOnly
+  // cookie and 302s to the cookie-only `/account` page. See hosted-backup
+  // contract §5 and the Endstate Account Portal Architecture decision.
   const handleManageSubscription = useCallback(async () => {
+    if (managePending) return;
+    setManagePending(true);
     try {
-      await openExternal(MANAGE_URL);
+      const { sessionToken, accountUrl } = await backupBrowserSession(settings);
+      const url = new URL(accountUrl);
+      url.searchParams.set('session', sessionToken);
+      await openExternal(url.toString());
     } catch (err) {
-      showToast(
-        err instanceof Error ? `Could not open URL: ${err.message}` : 'Could not open URL',
-        'warning',
-      );
+      if (err instanceof BackupCommandError && err.code === 'AUTH_REQUIRED') {
+        onAuthLost?.();
+        return;
+      }
+      if (err instanceof BackupCommandError) {
+        const f = friendlyBackupError(err);
+        showToast(f.headline, f.tone);
+      } else {
+        showToast(
+          err instanceof Error ? err.message : String(err),
+          'error',
+        );
+      }
+    } finally {
+      setManagePending(false);
     }
-  }, [showToast]);
+  }, [settings, managePending, onAuthLost, showToast]);
 
   const handleSignOut = useCallback(async () => {
     setSigningOut(true);
@@ -123,9 +153,10 @@ export function AccountSection({
               variant="ghost"
               size="sm"
               onClick={handleManageSubscription}
+              disabled={managePending}
               data-testid="account-manage-subscription"
             >
-              Manage subscription
+              {managePending ? 'Opening…' : 'Manage subscription'}
             </Button>
           </div>
         </div>

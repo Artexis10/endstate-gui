@@ -32,6 +32,7 @@ import {
   BackupDeleteVersionData,
   BackupRecoverData,
   BackupSubscribeData,
+  BackupBrowserSessionData,
   AccountDeleteData,
 } from '../types';
 
@@ -212,6 +213,19 @@ export async function backupSubscribe(
   settings: AppSettings,
 ): Promise<BackupSubscribeData> {
   return runBackupOnce<BackupSubscribeData>(settings, 'backup', ['subscribe']);
+}
+
+/**
+ * Mint a short-lived Account Portal handoff token.
+ *
+ * Returns `{ sessionToken, accountUrl }`; the GUI composes
+ * `${accountUrl}?session=${sessionToken}` and opens it in the system browser.
+ * Signed out → `AUTH_REQUIRED`. See hosted-backup contract §5.
+ */
+export async function backupBrowserSession(
+  settings: AppSettings,
+): Promise<BackupBrowserSessionData> {
+  return runBackupOnce<BackupBrowserSessionData>(settings, 'backup', ['browser-session']);
 }
 
 export interface RecoverArgs {
