@@ -18,7 +18,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Mint a GitHub App installation token (endstate-release-bot). Using
+      # this for both the checkout and the create-pull-request step ensures
+      # the bot PR's HEAD commit is authored by the App, which (unlike
+      # GITHUB_TOKEN) does fire status-check workflows on the PR. Without
+      # this, the bump PR opens with zero CI checks and stays stuck behind
+      # the `verify-engine-pin` required check forever. Same pattern
+      # release-please.yml uses.
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
       # -----------------------------------------------------------------------
       # 1. Read current pin + latest release, run semver comparison, guards
@@ -26,7 +42,7 @@ jobs:
       - name: Detect drift
         id: detect
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         shell: bash
         run: |
           CURRENT=$(cat ENGINE_VERSION | tr -d '[:space:]')
@@ -88,7 +104,7 @@ jobs:
         id: body
         if: steps.detect.outputs.should_bump == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           CURRENT: ${{ steps.detect.outputs.current }}
           LATEST: ${{ steps.detect.outputs.latest }}
         shell: bash
@@ -134,6 +150,7 @@ jobs:
         if: steps.detect.outputs.should_bump == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
+          token: ${{ steps.app-token.outputs.token }}
           branch: bot/bump-engine-v${{ steps.detect.outputs.latest }}
           title: "feat: bump engine to v${{ steps.detect.outputs.latest }}"
           body: ${{ steps.body.outputs.content }}
