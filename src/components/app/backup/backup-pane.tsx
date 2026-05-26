@@ -304,15 +304,6 @@ export function BackupPane({
     }
   }, [deleteTarget, settings, showToast, state]);
 
-  if (state.loading) {
-    return (
-      <div className="flex items-center justify-center p-12 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" />
-        Loading backup status…
-      </div>
-    );
-  }
-
   // Map the engine-side error to a friendly headline/body/CTA before render.
   // The mapper strips CLI-jargon remediation and routes the CTA to one of
   // retry / reauth / manage-billing / dismiss. The icon flips to WifiOff only
@@ -320,6 +311,10 @@ export function BackupPane({
   // (a follow-up list/versions failure after a successful status fetch is
   // most likely transient — claiming "can't reach servers" would contradict
   // the signed-in chip).
+  //
+  // Hook order: this useCallback must stay above any early return so React's
+  // hook order is stable across renders (loading → loaded flip would otherwise
+  // change the hook count and crash the component).
   const runCta = useCallback(
     (action: FriendlyBackupErrorCtaAction) => {
       switch (action) {
@@ -338,6 +333,15 @@ export function BackupPane({
     },
     [onAuthLost, handleManage, state],
   );
+
+  if (state.loading) {
+    return (
+      <div className="flex items-center justify-center p-12 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        Loading backup status…
+      </div>
+    );
+  }
 
   const errorView = state.error ? (
     (() => {
