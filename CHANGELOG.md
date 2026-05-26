@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.8.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.7.0...gui-v2.8.0) (2026-05-26)
+
+
+### Features
+
+* bump engine to v2.4.0 ([#55](https://github.com/Artexis10/endstate-gui/issues/55)) ([300b3ad](https://github.com/Artexis10/endstate-gui/commit/300b3ad4806e57e356ad64292036314eeaba2d82))
+
+
+### Bug Fixes
+
+* **ci:** mint App token in engine-drift-check so bump PRs fire CI ([#58](https://github.com/Artexis10/endstate-gui/issues/58)) ([24ba8df](https://github.com/Artexis10/endstate-gui/commit/24ba8dfd523c996e7a57d103b9bdca62c657194a))
+* **ci:** roll Tauri file sync into release-please via extra-files ([#56](https://github.com/Artexis10/endstate-gui/issues/56)) ([ed5d586](https://github.com/Artexis10/endstate-gui/commit/ed5d586a2f722e1fdbb1e2992b2270cfc3faad12))
+
 ## [2.7.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.6.0...gui-v2.7.0) (2026-05-26)
 
 
