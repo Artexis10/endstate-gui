@@ -38,6 +38,7 @@ import {
   backupPush,
   backupPull,
   backupSubscribe,
+  backupBrowserSession,
   BackupCommandError,
 } from '@/lib/backup-bridge';
 import {
@@ -106,6 +107,10 @@ export function BackupPane({
   const { showToast } = useToast();
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [checkoutPending, setCheckoutPending] = useState(false);
+  const [managePending, setManagePending] = useState(false);
+  // Ref-mirror so the click handler can guard re-entry synchronously (state
+  // updates are batched and would let a fast double-click slip through).
+  const managePendingRef = useRef(false);
 
   // Track mount so the AUTH_REQUIRED path (which triggers parent unmount via
   // `onAuthLost`) doesn't schedule setCheckoutPending(false) on an unmounted
@@ -173,12 +178,46 @@ export function BackupPane({
     }
   }, [settings, onAuthLost, showToast]);
 
-  // Manage subscription (active / grace): opens the substrate billing portal.
-  // Interim URL points at /endstate until the dedicated /account route ships
-  // — tracked on the `add-hosted-backup-gui` change.
+  // Manage subscription (active / grace / cancelled): mint a short-lived
+  // Account Portal handoff token via the engine, then open the substrate
+  // `/account/start?session=<jwt>` URL externally. Substrate swaps the JWT
+  // for an HttpOnly cookie and 302s to the cookie-only `/account` page.
+  // See hosted-backup contract §5 and the Endstate Account Portal
+  // Architecture decision (2026-05-26).
+  //
+  // Failure modes mirror handleCheckout above:
+  //   - AUTH_REQUIRED → onAuthLost (session expired between status + click)
+  //   - other engine error → friendlyBackupError + toast (BACKEND_UNREACHABLE,
+  //     SUBSCRIPTION_REQUIRED edge cases, etc.)
+  //
+  // Double-click is guarded by `managePending` (set during the engine call;
+  // openExternal returns immediately so the guard mostly covers the engine
+  // round-trip, which is the slow part).
   const handleManage = useCallback(async () => {
-    await openExternal('https://substratesystems.io/endstate');
-  }, []);
+    if (managePendingRef.current) return;
+    managePendingRef.current = true;
+    setManagePending(true);
+    try {
+      const { sessionToken, accountUrl } = await backupBrowserSession(settings);
+      const url = new URL(accountUrl);
+      url.searchParams.set('session', sessionToken);
+      await openExternal(url.toString());
+    } catch (err) {
+      if (err instanceof BackupCommandError && err.code === 'AUTH_REQUIRED') {
+        onAuthLost?.();
+        return;
+      }
+      if (err instanceof BackupCommandError) {
+        const f = friendlyBackupError(err);
+        showToast(f.headline, f.tone);
+      } else {
+        showToast(err instanceof Error ? err.message : String(err), 'error');
+      }
+    } finally {
+      if (mountedRef.current) setManagePending(false);
+      managePendingRef.current = false;
+    }
+  }, [settings, onAuthLost, showToast]);
 
   const handlePush = useCallback(
     async (backupId?: string) => {
@@ -402,6 +441,7 @@ export function BackupPane({
         onCheckout={handleCheckout}
         checkoutPending={checkoutPending}
         onManage={handleManage}
+        managePending={managePending}
       />
 
       <QuotaMeter

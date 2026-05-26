@@ -3363,6 +3363,11 @@ function AppContent() {
                   }
                   handleNavigate('auth');
                 }}
+                onAuthLost={() => {
+                  if (reauthOpenRef.current) return;
+                  setReauthExpectedEmail(backupStatusData?.email);
+                  setReauthDialogOpen(true);
+                }}
               />
             )}
 
