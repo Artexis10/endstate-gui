@@ -2362,6 +2362,14 @@ function AppContent() {
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
               hostedBackupSubscriptionStatus={backupStatusData?.subscriptionStatus}
               onOpenHostedBackup={() => handleNavigate('backup')}
+              onRestoreFromCloud={() => {
+                // Route to the Backup page where RestoreWizard is mounted,
+                // then open it. After the wizard completes the user lands on
+                // the Backup pane viewing the freshly-restored backup, which
+                // is the natural follow-up surface.
+                handleNavigate('backup');
+                setRestoreWizardOpen(true);
+              }}
               onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, setup: false })); setSetupFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={setupFlowResetKey}
               onFlowReset={() => setFlowHasWork(prev => ({ ...prev, setup: false }))}

@@ -6,7 +6,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info } from 'lucide-react';
+import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info, Cloud } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -100,6 +100,12 @@ export interface SetupFlowProps {
   hostedBackupSubscriptionStatus?: SubscriptionStatus;
   /** Routes to the Backup pane (sidebar). The chip click handler uses this. */
   onOpenHostedBackup?: () => void;
+  /** Opens the cold-start restore wizard (cloud → local profile). Visible as
+   *  a prominent CTA above the drop zone whenever the user is signed in to
+   *  Hosted Backup and has at least one cloud backup. Closes the new-machine
+   *  discoverability gap — without it, a fresh install with no local profiles
+   *  but a paid subscription has no obvious path to pull from the cloud. */
+  onRestoreFromCloud?: () => void;
 }
 
 export function SetupFlow({
@@ -128,6 +134,7 @@ export function SetupFlow({
   hostedBackupSignedIn = false,
   hostedBackupSubscriptionStatus,
   onOpenHostedBackup,
+  onRestoreFromCloud,
 }: SetupFlowProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<SetupPhase>('browse');
@@ -387,6 +394,48 @@ export function SetupFlow({
             exit={{ opacity: 0 }}
             transition={transition}
           >
+            {/* Hosted Backup restore CTA — only when the user is signed in and
+                has at least one cloud backup. Sits above the drop zone so the
+                new-machine path ("I paid for cloud backup, now where is it?")
+                is the first thing the user sees rather than a discoverability
+                puzzle through the chip. */}
+            {hostedBackupSignedIn &&
+              onRestoreFromCloud &&
+              cloudBackupIndex &&
+              cloudBackupIndex.size > 0 && (
+                <Card
+                  className="mb-4 cursor-pointer border-primary/30 bg-primary/5 hover:border-primary/60 hover:shadow-md transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  onClick={() => !isRunning && onRestoreFromCloud()}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && !isRunning) {
+                      e.preventDefault();
+                      onRestoreFromCloud();
+                    }
+                  }}
+                  tabIndex={isRunning ? -1 : 0}
+                  role="button"
+                  aria-label="Restore from your Hosted Backup"
+                  data-testid="setup-restore-from-cloud-cta"
+                >
+                  <CardContent className="py-4 px-5 flex items-center gap-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 shrink-0">
+                      <Cloud className="h-5 w-5 text-primary" aria-hidden="true" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">
+                        Restore from your Hosted Backup
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {cloudBackupIndex.size === 1
+                          ? '1 backup available in the cloud — pull it to this machine.'
+                          : `${cloudBackupIndex.size} backups available in the cloud — pick one to pull.`}
+                      </p>
+                    </div>
+                    <Download className="h-4 w-4 text-primary" aria-hidden="true" />
+                  </CardContent>
+                </Card>
+              )}
+
             {/* Drop zone for import */}
             <div className="mb-8">
               <DropZone onFileDrop={onFileDrop} onBrowse={onBrowse} disabled={isRunning} />
