@@ -26,6 +26,7 @@ import {
   backupPull,
   BackupCommandError,
 } from '@/lib/backup-bridge';
+import { friendlyBackupError } from '@/lib/backup-errors';
 import { isPhaseEvent, isBackupChunkEvent } from '@/lib/streaming-events';
 import type { StreamingEvent } from '@/lib/streaming-events';
 import { PullProgressDialog } from './pull-progress-dialog';
@@ -98,7 +99,12 @@ export function RestoreWizard({
         setSelectedVersionId(versions.versions[0]?.versionId ?? null);
       } catch (err) {
         if (cancelled) return;
-        showToast(err instanceof Error ? err.message : String(err), 'error');
+        if (err instanceof BackupCommandError) {
+          const f = friendlyBackupError(err);
+          showToast(f.headline, f.tone);
+        } else {
+          showToast(err instanceof Error ? err.message : String(err), 'error');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -121,7 +127,12 @@ export function RestoreWizard({
         setVersionsByBackup((prev) => ({ ...prev, [backupId]: data.versions }));
         setSelectedVersionId(data.versions[0]?.versionId ?? null);
       } catch (err) {
-        showToast(err instanceof Error ? err.message : String(err), 'error');
+        if (err instanceof BackupCommandError) {
+          const f = friendlyBackupError(err);
+          showToast(f.headline, f.tone);
+        } else {
+          showToast(err instanceof Error ? err.message : String(err), 'error');
+        }
       }
     } else {
       setSelectedVersionId(versionsByBackup[backupId][0]?.versionId ?? null);
@@ -201,7 +212,8 @@ export function RestoreWizard({
       setStep('done');
     } catch (err) {
       if (err instanceof BackupCommandError) {
-        showToast(err.message, 'error');
+        const f = friendlyBackupError(err);
+        showToast(f.headline, f.tone);
       } else {
         showToast(err instanceof Error ? err.message : String(err), 'error');
       }

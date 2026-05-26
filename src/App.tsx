@@ -52,6 +52,7 @@ import { AuthPane } from './components/app/auth/auth-pane';
 import { BackupPane } from './components/app/backup/backup-pane';
 import { ProfileMissingModal } from './components/app/profile-missing-modal';
 import { RestoreWizard } from './components/app/backup/restore-wizard';
+import { ReauthDialog } from './components/app/backup/reauth-dialog';
 import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
@@ -181,6 +182,17 @@ function AppContent() {
   // silently in the background).
   const [backupListData, setBackupListData] = useState<BackupListItem[] | null>(null);
   const [restoreWizardOpen, setRestoreWizardOpen] = useState(false);
+  // Re-auth dialog (Wave 6): opens inline when a backup command returns
+  // AUTH_REQUIRED. Preserves the backup pane state behind the dialog so the
+  // user re-authenticates without losing context. `reauthOpenRef` tracks the
+  // dialog state synchronously so a concurrent AUTH_REQUIRED (e.g. a focus-
+  // triggered status refresh) doesn't open a second dialog.
+  const [reauthDialogOpen, setReauthDialogOpen] = useState(false);
+  const [reauthExpectedEmail, setReauthExpectedEmail] = useState<string | undefined>(undefined);
+  const reauthOpenRef = useRef(false);
+  useEffect(() => {
+    reauthOpenRef.current = reauthDialogOpen;
+  }, [reauthDialogOpen]);
   // Which tab the auth pane opens in when reached from the Backup pane CTAs.
   // Reset to 'sign-in' on most nav transitions; "Create account" sets it to
   // 'sign-up' just before routing.
@@ -2654,9 +2666,12 @@ function AppContent() {
               initialStatus={backupStatusData}
               initialBackups={backupListData}
               onAuthLost={() => {
-                setBackupStatusData(null);
-                setBackupListData(null);
-                showToast('Session expired. Please sign in again.', 'info');
+                // Recursion guard: a focus-triggered status refresh can fire
+                // AUTH_REQUIRED while the dialog is already open. Don't queue
+                // a second dialog instance.
+                if (reauthOpenRef.current) return;
+                setReauthExpectedEmail(backupStatusData?.email);
+                setReauthDialogOpen(true);
               }}
               onRequestCapture={() => {
                 setActiveFlowPage('setup');
@@ -2673,6 +2688,29 @@ function AppContent() {
                 // Refresh local profiles list after a wizard restore so the
                 // newly-restored profile appears in the Home overview.
                 void refreshProfiles();
+              }}
+            />
+            <ReauthDialog
+              open={reauthDialogOpen}
+              settings={settings}
+              expectedEmail={reauthExpectedEmail}
+              onDismiss={() => setReauthDialogOpen(false)}
+              onReauthenticated={async () => {
+                setReauthDialogOpen(false);
+                // Engine has a fresh session — refresh status (and list).
+                // If anything errors here, the pane keeps its prior state
+                // and the user can retry manually from the pane's CTA.
+                try {
+                  const next = await backupStatus(settings);
+                  setBackupStatusData(next);
+                  if (next.signedIn && next.subscriptionStatus !== 'none') {
+                    const list = await backupList(settings);
+                    setBackupListData(list.backups);
+                  }
+                } catch {
+                  // Leave pane state intact; the pane will surface the
+                  // next failure via its own error card.
+                }
               }}
             />
           </>

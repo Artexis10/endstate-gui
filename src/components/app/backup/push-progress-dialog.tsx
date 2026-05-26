@@ -19,6 +19,14 @@ import { Loader2 } from 'lucide-react';
 import { invoke } from '@/lib/tauri-bridge';
 import { useToast } from '@/components/ui/toast';
 
+export interface PushRetryState {
+  chunkIndex: number;
+  /** 1-based attempt number; may be undefined when the engine emits a
+   *  retry event without the optional attempt metadata. */
+  attempt?: number;
+  maxAttempts?: number;
+}
+
 export interface PushProgressDialogProps {
   open: boolean;
   /** Total chunks (0 until first event arrives). */
@@ -27,6 +35,9 @@ export interface PushProgressDialogProps {
   uploadedChunks: number;
   /** Latest in-progress chunk index, if any. */
   currentChunkIndex: number | null;
+  /** When non-null, the named chunk is mid-retry. Renders an amber tag
+   *  without decrementing the progress count. */
+  retryState?: PushRetryState | null;
 }
 
 export function PushProgressDialog({
@@ -34,11 +45,19 @@ export function PushProgressDialog({
   totalChunks,
   uploadedChunks,
   currentChunkIndex,
+  retryState,
 }: PushProgressDialogProps) {
   const { showToast } = useToast();
 
   const percent =
     totalChunks > 0 ? Math.min(100, Math.round((uploadedChunks / totalChunks) * 100)) : 0;
+  const retryLabel = retryState
+    ? retryState.attempt != null && retryState.maxAttempts != null
+      ? `Retrying chunk ${retryState.chunkIndex + 1}${
+          totalChunks > 0 ? ` of ${totalChunks}` : ''
+        } (attempt ${retryState.attempt} of ${retryState.maxAttempts})`
+      : 'Retrying…'
+    : null;
 
   const handleCancel = async () => {
     try {
@@ -78,6 +97,16 @@ export function PushProgressDialog({
             )}
           </div>
         </div>
+        {retryLabel && (
+          <div
+            className="rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+            data-testid="push-retry-tag"
+            role="status"
+            aria-live="polite"
+          >
+            {retryLabel}
+          </div>
+        )}
         <div
           className="h-2 w-full overflow-hidden rounded-full bg-muted"
           role="progressbar"

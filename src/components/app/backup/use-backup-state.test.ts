@@ -67,6 +67,24 @@ function chunk(
   };
 }
 
+function retryChunk(
+  chunkIndex: number,
+  attempt?: number,
+  maxAttempts?: number,
+  totalChunks = 4,
+): StreamingEvent {
+  return {
+    ...baseFields,
+    event: 'backup-chunk',
+    chunkIndex,
+    totalChunks,
+    encryptedSize: 1024,
+    status: 'retrying',
+    attempt,
+    maxAttempts,
+  };
+}
+
 describe('useBackupState progress reducers', () => {
   it('accumulates push uploaded chunks and tracks current in-flight index', () => {
     const { result } = renderHook(() => useBackupState(SETTINGS));
@@ -174,6 +192,51 @@ describe('useBackupState progress reducers', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).toBeNull();
     expect(result.current.backups).toEqual([]);
+  });
+
+  it('records push retry state without decrementing uploadedChunks', () => {
+    const { result } = renderHook(() => useBackupState(SETTINGS));
+
+    act(() => {
+      result.current.pushOnEvent(chunk('uploading', 0));
+      result.current.pushOnEvent(chunk('uploaded', 0));
+      result.current.pushOnEvent(chunk('uploading', 1));
+    });
+    expect(result.current.pushProgress.uploadedChunks).toBe(1);
+
+    act(() => result.current.pushOnEvent(retryChunk(1, 2, 3)));
+    expect(result.current.pushProgress.retryState).toEqual({
+      chunkIndex: 1,
+      attempt: 2,
+      maxAttempts: 3,
+    });
+    // Retry must NOT decrement the count of completed chunks.
+    expect(result.current.pushProgress.uploadedChunks).toBe(1);
+  });
+
+  it('clears push retry state when the retried chunk finally uploads', () => {
+    const { result } = renderHook(() => useBackupState(SETTINGS));
+
+    act(() => {
+      result.current.pushOnEvent(chunk('uploading', 1));
+      result.current.pushOnEvent(retryChunk(1, 2, 3));
+    });
+    expect(result.current.pushProgress.retryState).not.toBeNull();
+
+    act(() => result.current.pushOnEvent(chunk('uploaded', 1)));
+    expect(result.current.pushProgress.retryState).toBeNull();
+    expect(result.current.pushProgress.uploadedChunks).toBe(1);
+  });
+
+  it('handles retrying without attempt/maxAttempts (older engine fallback)', () => {
+    const { result } = renderHook(() => useBackupState(SETTINGS));
+
+    act(() => result.current.pushOnEvent(retryChunk(2)));
+    expect(result.current.pushProgress.retryState).toEqual({
+      chunkIndex: 2,
+      attempt: undefined,
+      maxAttempts: undefined,
+    });
   });
 
   it('phase event for backup-push resets push counters', () => {

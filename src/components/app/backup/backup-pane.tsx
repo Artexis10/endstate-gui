@@ -40,6 +40,11 @@ import {
   backupSubscribe,
   BackupCommandError,
 } from '@/lib/backup-bridge';
+import {
+  friendlyBackupError,
+  isNetworkErrorCode,
+  type FriendlyBackupErrorCtaAction,
+} from '@/lib/backup-errors';
 import type { AppSettings } from '@/settings';
 import type { BackupListItem, BackupStatusData } from '@/types';
 import { useToast } from '@/components/ui/toast';
@@ -158,7 +163,8 @@ export function BackupPane({
         return;
       }
       if (err instanceof BackupCommandError) {
-        showToast(err.message, 'error');
+        const f = friendlyBackupError(err);
+        showToast(f.headline, f.tone);
       } else {
         showToast(err instanceof Error ? err.message : String(err), 'error');
       }
@@ -207,7 +213,8 @@ export function BackupPane({
       } catch (err) {
         state.setPushOpen(false);
         if (err instanceof BackupCommandError) {
-          showToast(err.message, 'error');
+          const f = friendlyBackupError(err);
+          showToast(f.headline, f.tone);
         } else {
           showToast(err instanceof Error ? err.message : String(err), 'error');
         }
@@ -239,7 +246,8 @@ export function BackupPane({
       } catch (err) {
         state.setPullOpen(false);
         if (err instanceof BackupCommandError) {
-          showToast(err.message, 'error');
+          const f = friendlyBackupError(err);
+          showToast(f.headline, f.tone);
         } else {
           showToast(err instanceof Error ? err.message : String(err), 'error');
         }
@@ -286,7 +294,8 @@ export function BackupPane({
       }
     } catch (err) {
       if (err instanceof BackupCommandError) {
-        showToast(err.message, 'error');
+        const f = friendlyBackupError(err);
+        showToast(f.headline, f.tone);
       } else {
         showToast(err instanceof Error ? err.message : String(err), 'error');
       }
@@ -304,26 +313,39 @@ export function BackupPane({
     );
   }
 
-  // Friendlier headlines for the common error codes — falls back to a calm
-  // generic title. The engine's `message` and `remediation` still appear
-  // underneath so the user can act on the specifics.
-  //
-  // We only call out a real network outage when status itself failed; if the
-  // status fetch succeeded then we just talked to the server, so a follow-up
-  // list/versions failure is most likely a transient blip — claiming the
-  // servers are unreachable would contradict the signed-in chip.
+  // Map the engine-side error to a friendly headline/body/CTA before render.
+  // The mapper strips CLI-jargon remediation and routes the CTA to one of
+  // retry / reauth / manage-billing / dismiss. The icon flips to WifiOff only
+  // when the code is genuinely network-class AND we have no signed-in status
+  // (a follow-up list/versions failure after a successful status fetch is
+  // most likely transient — claiming "can't reach servers" would contradict
+  // the signed-in chip).
+  const runCta = useCallback(
+    (action: FriendlyBackupErrorCtaAction) => {
+      switch (action) {
+        case 'reauth':
+          onAuthLost?.();
+          return;
+        case 'manage-billing':
+          void handleManage();
+          return;
+        case 'retry':
+        case 'dismiss':
+        default:
+          void state.refresh();
+          return;
+      }
+    },
+    [onAuthLost, handleManage, state],
+  );
+
   const errorView = state.error ? (
     (() => {
-      const statusKnown = !!state.status;
-      const isNetwork =
-        !statusKnown &&
-        (state.error?.code === 'NETWORK_ERROR' ||
-          state.error?.code === 'TIMEOUT' ||
-          /network|timeout|reach/i.test(state.error?.message ?? ''));
-      const headline = isNetwork
-        ? "Can't reach Endstate's servers"
-        : "Couldn't load your backups";
-      const Icon = isNetwork ? WifiOff : CloudOff;
+      const f = friendlyBackupError(state.error);
+      const showNetworkIcon =
+        !state.status && isNetworkErrorCode(state.error.code);
+      const Icon = showNetworkIcon ? WifiOff : CloudOff;
+      const cta = f.cta ?? { label: 'Try again', action: 'retry' as const };
       return (
         <div
           role="alert"
@@ -333,19 +355,18 @@ export function BackupPane({
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
             <Icon className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
           </div>
-          <h3 className="mt-4 text-base font-semibold">{headline}</h3>
-          <p className="mt-2 text-sm text-muted-foreground">{state.error?.message}</p>
-          {state.error?.remediation && (
-            <p className="mt-2 text-xs text-muted-foreground">{state.error.remediation}</p>
+          <h3 className="mt-4 text-base font-semibold">{f.headline}</h3>
+          {f.body && (
+            <p className="mt-2 text-sm text-muted-foreground">{f.body}</p>
           )}
           <div className="mt-5 flex justify-center gap-2">
             <Button
               type="button"
               variant="primary"
-              onClick={() => state.refresh()}
+              onClick={() => runCta(cta.action)}
               data-testid="backup-pane-retry"
             >
-              Try again
+              {cta.label}
             </Button>
           </div>
         </div>
@@ -443,6 +464,7 @@ export function BackupPane({
         totalChunks={state.pushProgress.totalChunks}
         uploadedChunks={state.pushProgress.uploadedChunks}
         currentChunkIndex={state.pushProgress.currentChunkIndex}
+        retryState={state.pushProgress.retryState}
       />
 
       <PullProgressDialog
@@ -453,6 +475,7 @@ export function BackupPane({
         decryptedChunks={state.pullProgress.decryptedChunks}
         subPhase={state.pullProgress.subPhase}
         currentChunkIndex={state.pullProgress.currentChunkIndex}
+        retryState={state.pullProgress.retryState}
       />
 
       <DeleteConfirmationModal

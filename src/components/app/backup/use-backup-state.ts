@@ -29,10 +29,21 @@ import type {
   StreamingEvent,
 } from '@/lib/streaming-events';
 
+/** Active retry state for a single chunk transfer. Cleared when the same
+ *  chunk emits a non-retry status, or when the operation ends. */
+export interface ChunkRetryState {
+  chunkIndex: number;
+  /** 1-based attempt number, or undefined if the engine didn't supply one
+   *  (older engine emitting status="retrying" without retry metadata). */
+  attempt?: number;
+  maxAttempts?: number;
+}
+
 export interface PushProgress {
   totalChunks: number;
   uploadedChunks: number;
   currentChunkIndex: number | null;
+  retryState: ChunkRetryState | null;
 }
 
 export interface PullProgress {
@@ -43,12 +54,14 @@ export interface PullProgress {
   /** The most recent sub-phase emitted by the engine. */
   subPhase: 'downloading' | 'verifying' | 'decrypting' | 'idle';
   currentChunkIndex: number | null;
+  retryState: ChunkRetryState | null;
 }
 
 const EMPTY_PUSH: PushProgress = {
   totalChunks: 0,
   uploadedChunks: 0,
   currentChunkIndex: null,
+  retryState: null,
 };
 
 const EMPTY_PULL: PullProgress = {
@@ -58,6 +71,7 @@ const EMPTY_PULL: PullProgress = {
   decryptedChunks: 0,
   subPhase: 'idle',
   currentChunkIndex: null,
+  retryState: null,
 };
 
 /**
@@ -100,11 +114,13 @@ export interface UseBackupStateResult {
 
 export interface UseBackupStateOptions {
   /**
-   * Called when a status fetch returns AUTH_REQUIRED, i.e. the engine's
-   * session is gone (token revoked, refresh expired, keychain wiped).
-   * The hook stops surfacing this as a hard error so the parent can route
-   * the user back to the sign-in flow with a calm toast. If omitted, the
-   * AUTH_REQUIRED is exposed via `error` like any other failure.
+   * Called when a fetch returns AUTH_REQUIRED, i.e. the engine's session is
+   * gone (token revoked, refresh expired, keychain wiped). The hook stops
+   * surfacing this as a hard error so the parent can open the re-auth
+   * dialog. The hook NO LONGER clears `status`/`backups` on auth loss —
+   * pane state is preserved behind the dialog so the user sees what they
+   * were doing while re-authenticating. If omitted, AUTH_REQUIRED is
+   * exposed via `error` like any other failure.
    */
   onAuthLost?: () => void;
   /**
@@ -157,8 +173,10 @@ export function useBackupState(
   const handleFetchError = useCallback(
     (err: unknown) => {
       if (err instanceof BackupCommandError && err.code === 'AUTH_REQUIRED') {
-        setStatus(null);
-        setBackups([]);
+        // Preserve `status`/`backups` so the pane stays rendered behind
+        // the re-auth dialog. The parent's onAuthLost handler opens the
+        // dialog; on success it refreshes status (and clears the list if
+        // the re-authenticated identity differs from expectedEmail).
         options.onAuthLost?.();
       } else if (err instanceof BackupCommandError) {
         setError({
@@ -381,11 +399,30 @@ export function useBackupState(
 
 function applyPushChunk(prev: PushProgress, event: BackupChunkEvent): PushProgress {
   const totalChunks = event.totalChunks > 0 ? event.totalChunks : prev.totalChunks;
+  // Retry events always clear when a different chunk's status arrives, and
+  // when the same chunk reaches a non-retry status. The matchesRetry check
+  // is conservative — keep retry visible only if the new event is for the
+  // same chunk and still retrying.
+  if (event.status === 'retrying') {
+    return {
+      ...prev,
+      totalChunks,
+      retryState: {
+        chunkIndex: event.chunkIndex,
+        attempt: event.attempt,
+        maxAttempts: event.maxAttempts,
+      },
+    };
+  }
   if (event.status === 'uploading') {
     return {
       ...prev,
       totalChunks,
       currentChunkIndex: event.chunkIndex,
+      retryState:
+        prev.retryState && prev.retryState.chunkIndex === event.chunkIndex
+          ? prev.retryState
+          : null,
     };
   }
   if (event.status === 'uploaded') {
@@ -394,14 +431,42 @@ function applyPushChunk(prev: PushProgress, event: BackupChunkEvent): PushProgre
       totalChunks,
       uploadedChunks: prev.uploadedChunks + 1,
       currentChunkIndex: null,
+      retryState:
+        prev.retryState && prev.retryState.chunkIndex === event.chunkIndex
+          ? null
+          : prev.retryState,
     };
   }
-  // failed / unrelated — leave counters alone
-  return { ...prev, totalChunks };
+  // failed / unrelated — clear retry if it was for this chunk; counters alone
+  return {
+    ...prev,
+    totalChunks,
+    retryState:
+      prev.retryState && prev.retryState.chunkIndex === event.chunkIndex
+        ? null
+        : prev.retryState,
+  };
 }
 
 function applyPullChunk(prev: PullProgress, event: BackupChunkEvent): PullProgress {
   const totalChunks = event.totalChunks > 0 ? event.totalChunks : prev.totalChunks;
+  // Pull path doesn't retry today; the case is here for forward-compat in
+  // case the engine adds chunk-level retry on the pull side later.
+  if (event.status === 'retrying') {
+    return {
+      ...prev,
+      totalChunks,
+      retryState: {
+        chunkIndex: event.chunkIndex,
+        attempt: event.attempt,
+        maxAttempts: event.maxAttempts,
+      },
+    };
+  }
+  const clearedRetry =
+    prev.retryState && prev.retryState.chunkIndex === event.chunkIndex
+      ? null
+      : prev.retryState;
   switch (event.status) {
     case 'downloading':
       return {
@@ -409,6 +474,7 @@ function applyPullChunk(prev: PullProgress, event: BackupChunkEvent): PullProgre
         totalChunks,
         subPhase: 'downloading',
         currentChunkIndex: event.chunkIndex,
+        retryState: clearedRetry,
       };
     case 'verified':
       return {
@@ -418,6 +484,7 @@ function applyPullChunk(prev: PullProgress, event: BackupChunkEvent): PullProgre
         verifiedChunks: prev.verifiedChunks + 1,
         subPhase: 'verifying',
         currentChunkIndex: event.chunkIndex,
+        retryState: clearedRetry,
       };
     case 'decrypted':
       return {
@@ -426,8 +493,9 @@ function applyPullChunk(prev: PullProgress, event: BackupChunkEvent): PullProgre
         decryptedChunks: prev.decryptedChunks + 1,
         subPhase: 'decrypting',
         currentChunkIndex: null,
+        retryState: clearedRetry,
       };
     default:
-      return { ...prev, totalChunks };
+      return { ...prev, totalChunks, retryState: clearedRetry };
   }
 }
