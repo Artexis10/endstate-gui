@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.7.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.6.0...gui-v2.7.0) (2026-05-26)
+
+
+### Features
+
+* **backup:** rewire Manage subscription to /account portal handoff (Wave 1) ([#53](https://github.com/Artexis10/endstate-gui/issues/53)) ([3ed4eaf](https://github.com/Artexis10/endstate-gui/commit/3ed4eaf0bbe1bd5c74fd16a2a1e541cf098bc36a))
+
+
+### Bug Fixes
+
+* **ci:** auth release-please via GitHub App, drop dispatch shims ([#51](https://github.com/Artexis10/endstate-gui/issues/51)) ([0408f80](https://github.com/Artexis10/endstate-gui/commit/0408f80ad82cd1c4ac94b4ed4ef753c7b85b9421))
+
 ## [2.6.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.5.0...gui-v2.6.0) (2026-05-26)
 
 
