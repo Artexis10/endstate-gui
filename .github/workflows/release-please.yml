@@ -16,11 +16,16 @@ on:
         description: 'Existing release tag to build and attach assets to (e.g. gui-v1.5.1)'
         required: true
 
+# Release-please runs under the endstate-release-bot GitHub App identity
+# (App ID + private key live as RELEASE_PLEASE_APP_* secrets). The minted
+# installation token is a non-GITHUB_TOKEN credential, so the PRs and
+# releases it creates fire `pull_request` and `release: published` events
+# normally — bypassing the recursion-protection rule that previously
+# silently swallowed every cascade from this workflow. The earlier
+# `dispatch-ci` shim job is no longer needed.
+
 permissions:
-  contents: write
-  pull-requests: write
-  # Needed by the dispatch-ci job below to call `gh workflow run`.
-  actions: write
+  contents: read
 
 jobs:
   release-please:
@@ -28,20 +33,30 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
-      prs_created: ${{ steps.release.outputs.prs_created }}
     steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
+          token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
       # If a release was created, also update tauri.conf.json and Cargo.toml
-      # (release-please only handles package.json for node type)
+      # (release-please only handles package.json for node type). Use the App
+      # token for the checkout + push so the sync commit fires CI normally
+      # (a GITHUB_TOKEN push would NOT trigger workflows on main).
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created }}
         with:
           ref: main
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Sync version to Tauri files
         if: ${{ steps.release.outputs.release_created }}
@@ -56,50 +71,12 @@ jobs:
 
           # Commit if changes were made
           if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git config user.name "endstate-release-bot[bot]"
+            git config user.email "endstate-release-bot[bot]@users.noreply.github.com"
             git add src-tauri/tauri.conf.json src-tauri/Cargo.toml
             git commit -m "chore: sync version $VERSION to Tauri files"
             git push
           fi
-
-  # release-please-action opens its release PRs using GITHUB_TOKEN. Per
-  # GitHub's recursion-protection rule, GITHUB_TOKEN-triggered events do NOT
-  # fire other workflows (with `workflow_dispatch` and `repository_dispatch`
-  # as the documented exceptions). That means the `pull_request` triggers on
-  # ci.yml / verify-engine-pin.yml silently never fire on release-please PRs
-  # — branch protection then blocks the merge waiting for checks that will
-  # never arrive. This job closes the gap by explicitly dispatching ci.yml
-  # against every open release-please PR's branch.
-  dispatch-ci:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.prs_created == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      pull-requests: read
-    steps:
-      - name: Dispatch CI against each open release-please PR branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          BRANCHES=$(gh pr list \
-            --repo "${{ github.repository }}" \
-            --search "head:release-please" \
-            --state open \
-            --json headRefName \
-            --jq '.[].headRefName')
-          if [ -z "$BRANCHES" ]; then
-            echo "No open release-please PRs — nothing to dispatch."
-            exit 0
-          fi
-          while IFS= read -r BRANCH; do
-            [ -z "$BRANCH" ] && continue
-            echo "Dispatching ci.yml against $BRANCH"
-            gh workflow run ci.yml \
-              --repo "${{ github.repository }}" \
-              --ref "$BRANCH"
-          done <<< "$BRANCHES"
 
   build:
     needs: release-please
