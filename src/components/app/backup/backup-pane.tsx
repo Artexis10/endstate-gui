@@ -25,6 +25,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, CloudOff, WifiOff } from 'lucide-react';
 import { SubscriptionBanner } from './subscription-banner';
 import { BackupList } from './backup-list';
+import { BackupListEmpty } from './backup-list-empty';
+import { QuotaMeter } from './quota-meter';
 import { VersionList } from './version-list';
 import { PushProgressDialog } from './push-progress-dialog';
 import { PullProgressDialog } from './pull-progress-dialog';
@@ -38,12 +40,24 @@ import {
   backupSubscribe,
   BackupCommandError,
 } from '@/lib/backup-bridge';
+import {
+  friendlyBackupError,
+  isNetworkErrorCode,
+  type FriendlyBackupErrorCtaAction,
+} from '@/lib/backup-errors';
 import type { AppSettings } from '@/settings';
 import type { BackupListItem, BackupStatusData } from '@/types';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { hasSeenFirstPushFor, markFirstPushFor } from '@/lib/first-push-flag';
+import {
+  hasSeenQuotaWarningFor,
+  markQuotaWarningFor,
+  clearQuotaWarningFor,
+} from '@/lib/quota-warning-flag';
+import { formatBytes } from '@/lib/format-bytes';
 
 export interface BackupPaneProps {
   settings: AppSettings;
@@ -61,6 +75,11 @@ export interface BackupPaneProps {
    *  the pane renders the cached list immediately and revalidates in the
    *  background (stale-while-revalidate). */
   initialBackups?: BackupListItem[] | null;
+  /** Route to the Setup flow ("capture this computer"). The pane uses this
+   *  to power the post-claim empty state's primary CTA. The pane does not
+   *  navigate on its own — App.tsx wires this to its existing setup-flow
+   *  entry point. */
+  onRequestCapture?: () => void;
 }
 
 interface DeleteTarget {
@@ -77,6 +96,7 @@ export function BackupPane({
   onAuthLost,
   initialStatus,
   initialBackups,
+  onRequestCapture,
 }: BackupPaneProps) {
   const state = useBackupState(settings, {
     onAuthLost,
@@ -102,6 +122,32 @@ export function BackupPane({
   const canRestore = subscriptionStatus !== 'none';
   const canDelete = subscriptionStatus !== 'none';
 
+  // Quota approaching-cap warning — fires once per account at the 90% mark.
+  // Clears the flag when the user drops back under the threshold so the
+  // warning re-arms after a delete + grow cycle. Skipped entirely when the
+  // engine hasn't sent quota fields yet (older engine versions).
+  const quotaUsed = state.status?.quotaUsedBytes;
+  const quotaTotal = state.status?.quotaTotalBytes;
+  const statusEmail = state.status?.email;
+  useEffect(() => {
+    if (!statusEmail) return;
+    if (quotaTotal === undefined || quotaTotal <= 0) return;
+    if (quotaUsed === undefined) return;
+    const ratio = quotaUsed / quotaTotal;
+    if (ratio < 0.9) {
+      // Below threshold — re-arm the warning so a future climb will toast.
+      clearQuotaWarningFor(statusEmail);
+      return;
+    }
+    if (hasSeenQuotaWarningFor(statusEmail)) return;
+    const pct = Math.min(100, Math.round(ratio * 100));
+    showToast(
+      `Backup storage at ${pct}% — using ${formatBytes(quotaUsed)} of ${formatBytes(quotaTotal)}. Delete older versions to free space.`,
+      'warning',
+    );
+    markQuotaWarningFor(statusEmail);
+  }, [quotaUsed, quotaTotal, statusEmail, showToast]);
+
   // Subscribe / Renew: the engine returns a checkout-transaction URL and we
   // open it in the system browser. The payment overlay renders on substrate's
   // /endstate landing — never in-app (hosted-backup contract §7). Guarded
@@ -117,7 +163,8 @@ export function BackupPane({
         return;
       }
       if (err instanceof BackupCommandError) {
-        showToast(err.message, 'error');
+        const f = friendlyBackupError(err);
+        showToast(f.headline, f.tone);
       } else {
         showToast(err instanceof Error ? err.message : String(err), 'error');
       }
@@ -134,7 +181,7 @@ export function BackupPane({
   }, []);
 
   const handlePush = useCallback(
-    async (backupId: string) => {
+    async (backupId?: string) => {
       if (!selectedProfilePath) {
         showToast('Select a profile first to push.', 'warning');
         return;
@@ -145,9 +192,19 @@ export function BackupPane({
         await backupPush(settings, {
           profile: selectedProfilePath,
           backupId,
+          name: backupId ? undefined : selectedProfileName ?? undefined,
           onEvent: state.pushOnEvent,
         });
-        showToast('Backup uploaded.', 'success');
+        const email = state.status?.email;
+        if (!hasSeenFirstPushFor(email)) {
+          showToast(
+            'First backup saved to the cloud. Your settings are now safe across machines.',
+            'success',
+          );
+          markFirstPushFor(email);
+        } else {
+          showToast('Backup uploaded.', 'success');
+        }
         state.setPushOpen(false);
         await state.refresh();
         if (state.selectedBackupId) {
@@ -156,13 +213,14 @@ export function BackupPane({
       } catch (err) {
         state.setPushOpen(false);
         if (err instanceof BackupCommandError) {
-          showToast(err.message, 'error');
+          const f = friendlyBackupError(err);
+          showToast(f.headline, f.tone);
         } else {
           showToast(err instanceof Error ? err.message : String(err), 'error');
         }
       }
     },
-    [selectedProfilePath, settings, state, showToast],
+    [selectedProfilePath, selectedProfileName, settings, state, showToast],
   );
 
   const handleRestore = useCallback(
@@ -188,7 +246,8 @@ export function BackupPane({
       } catch (err) {
         state.setPullOpen(false);
         if (err instanceof BackupCommandError) {
-          showToast(err.message, 'error');
+          const f = friendlyBackupError(err);
+          showToast(f.headline, f.tone);
         } else {
           showToast(err instanceof Error ? err.message : String(err), 'error');
         }
@@ -235,7 +294,8 @@ export function BackupPane({
       }
     } catch (err) {
       if (err instanceof BackupCommandError) {
-        showToast(err.message, 'error');
+        const f = friendlyBackupError(err);
+        showToast(f.headline, f.tone);
       } else {
         showToast(err instanceof Error ? err.message : String(err), 'error');
       }
@@ -243,6 +303,36 @@ export function BackupPane({
       setDeleteTarget(null);
     }
   }, [deleteTarget, settings, showToast, state]);
+
+  // Map the engine-side error to a friendly headline/body/CTA before render.
+  // The mapper strips CLI-jargon remediation and routes the CTA to one of
+  // retry / reauth / manage-billing / dismiss. The icon flips to WifiOff only
+  // when the code is genuinely network-class AND we have no signed-in status
+  // (a follow-up list/versions failure after a successful status fetch is
+  // most likely transient — claiming "can't reach servers" would contradict
+  // the signed-in chip).
+  //
+  // Hook order: this useCallback must stay above any early return so React's
+  // hook order is stable across renders (loading → loaded flip would otherwise
+  // change the hook count and crash the component).
+  const runCta = useCallback(
+    (action: FriendlyBackupErrorCtaAction) => {
+      switch (action) {
+        case 'reauth':
+          onAuthLost?.();
+          return;
+        case 'manage-billing':
+          void handleManage();
+          return;
+        case 'retry':
+        case 'dismiss':
+        default:
+          void state.refresh();
+          return;
+      }
+    },
+    [onAuthLost, handleManage, state],
+  );
 
   if (state.loading) {
     return (
@@ -253,26 +343,13 @@ export function BackupPane({
     );
   }
 
-  // Friendlier headlines for the common error codes — falls back to a calm
-  // generic title. The engine's `message` and `remediation` still appear
-  // underneath so the user can act on the specifics.
-  //
-  // We only call out a real network outage when status itself failed; if the
-  // status fetch succeeded then we just talked to the server, so a follow-up
-  // list/versions failure is most likely a transient blip — claiming the
-  // servers are unreachable would contradict the signed-in chip.
   const errorView = state.error ? (
     (() => {
-      const statusKnown = !!state.status;
-      const isNetwork =
-        !statusKnown &&
-        (state.error?.code === 'NETWORK_ERROR' ||
-          state.error?.code === 'TIMEOUT' ||
-          /network|timeout|reach/i.test(state.error?.message ?? ''));
-      const headline = isNetwork
-        ? "Can't reach Endstate's servers"
-        : "Couldn't load your backups";
-      const Icon = isNetwork ? WifiOff : CloudOff;
+      const f = friendlyBackupError(state.error);
+      const showNetworkIcon =
+        !state.status && isNetworkErrorCode(state.error.code);
+      const Icon = showNetworkIcon ? WifiOff : CloudOff;
+      const cta = f.cta ?? { label: 'Try again', action: 'retry' as const };
       return (
         <div
           role="alert"
@@ -282,19 +359,18 @@ export function BackupPane({
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
             <Icon className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
           </div>
-          <h3 className="mt-4 text-base font-semibold">{headline}</h3>
-          <p className="mt-2 text-sm text-muted-foreground">{state.error?.message}</p>
-          {state.error?.remediation && (
-            <p className="mt-2 text-xs text-muted-foreground">{state.error.remediation}</p>
+          <h3 className="mt-4 text-base font-semibold">{f.headline}</h3>
+          {f.body && (
+            <p className="mt-2 text-sm text-muted-foreground">{f.body}</p>
           )}
           <div className="mt-5 flex justify-center gap-2">
             <Button
               type="button"
               variant="primary"
-              onClick={() => state.refresh()}
+              onClick={() => runCta(cta.action)}
               data-testid="backup-pane-retry"
             >
-              Try again
+              {cta.label}
             </Button>
           </div>
         </div>
@@ -322,9 +398,16 @@ export function BackupPane({
     <div className="flex flex-col gap-4 p-4" data-testid="backup-pane">
       <SubscriptionBanner
         status={subscriptionStatus}
+        graceEndsAt={state.status.graceEndsAt}
         onCheckout={handleCheckout}
         checkoutPending={checkoutPending}
         onManage={handleManage}
+      />
+
+      <QuotaMeter
+        quotaUsedBytes={state.status.quotaUsedBytes}
+        quotaTotalBytes={state.status.quotaTotalBytes}
+        versionCount={state.status.versionCount}
       />
 
       {state.status.keychainError && (
@@ -337,17 +420,30 @@ export function BackupPane({
       )}
 
       {errorView ?? (
-        <BackupList
-          backups={state.backups}
-          canWrite={canWrite && !!selectedProfilePath}
-          canRestore={canRestore}
-          canDelete={canDelete}
-          onPush={handlePush}
-          onRestore={(id) => handleRestore(id)}
-          onDelete={handleDelete}
-          onSelect={(id) => state.setSelectedBackupId(id)}
-          selectedBackupId={state.selectedBackupId}
-        />
+        state.backups.length === 0 ? (
+          <BackupListEmpty
+            subscriptionStatus={subscriptionStatus}
+            onCapture={onRequestCapture}
+            onPushExisting={
+              canWrite && selectedProfilePath
+                ? () => handlePush(undefined)
+                : undefined
+            }
+            selectedProfileName={selectedProfileName}
+          />
+        ) : (
+          <BackupList
+            backups={state.backups}
+            canWrite={canWrite && !!selectedProfilePath}
+            canRestore={canRestore}
+            canDelete={canDelete}
+            onPush={handlePush}
+            onRestore={(id) => handleRestore(id)}
+            onDelete={handleDelete}
+            onSelect={(id) => state.setSelectedBackupId(id)}
+            selectedBackupId={state.selectedBackupId}
+          />
+        )
       )}
 
       {!errorView && selectedBackup && (
@@ -372,6 +468,7 @@ export function BackupPane({
         totalChunks={state.pushProgress.totalChunks}
         uploadedChunks={state.pushProgress.uploadedChunks}
         currentChunkIndex={state.pushProgress.currentChunkIndex}
+        retryState={state.pushProgress.retryState}
       />
 
       <PullProgressDialog
@@ -382,6 +479,7 @@ export function BackupPane({
         decryptedChunks={state.pullProgress.decryptedChunks}
         subPhase={state.pullProgress.subPhase}
         currentChunkIndex={state.pullProgress.currentChunkIndex}
+        retryState={state.pullProgress.retryState}
       />
 
       <DeleteConfirmationModal

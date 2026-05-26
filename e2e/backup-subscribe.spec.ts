@@ -330,7 +330,7 @@ test.describe('Hosted Backup — Subscribe / Renew checkout wiring', () => {
     expect(opened[0]).toContain('_ptxn=txn_e2e_abc');
   });
 
-  test('AUTH_REQUIRED routes through onAuthLost; no checkoutUrl opens', async ({ page }) => {
+  test('AUTH_REQUIRED routes through onAuthLost; opens re-auth dialog, no checkoutUrl', async ({ page }) => {
     await installBackupMock(page, {
       capabilities: CAPABILITIES_HOSTED_BACKUP,
       status: STATUS_NONE,
@@ -344,19 +344,23 @@ test.describe('Hosted Backup — Subscribe / Renew checkout wiring', () => {
 
     await page.getByTestId('subscription-subscribe').click();
 
-    // onAuthLost clears backupStatusData → pane re-renders the signed-out
-    // fallback ("Sign in to view your hosted backups.").
-    await expect(page.getByTestId('backup-pane-signed-out')).toBeVisible({ timeout: 5000 });
+    // Wave 6 (D3): onAuthLost no longer clears backupStatusData. Instead it
+    // opens the inline re-auth dialog and the pane stays rendered behind so
+    // the user doesn't lose context. Spec: backup-pane "Session re-auth
+    // preserves pane state".
+    await expect(page.getByTestId('reauth-dialog')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('backup-pane')).toBeVisible();
+    await expect(page.getByTestId('backup-pane-signed-out')).toHaveCount(0);
 
     const opened = await page.evaluate(() => (window as any).__test_shellOpenCalls);
     expect(opened).toHaveLength(0);
     await expect(page.getByTestId('backup-pane-error')).toHaveCount(0);
 
     // Spec requirement: no error toast on AUTH_REQUIRED — handleCheckout's
-    // catch branch returns early and lets onAuthLost route to the calm
-    // signed-out fallback instead of surfacing a toast.
+    // catch branch returns early and lets onAuthLost route to the dialog
+    // instead of surfacing a toast.
     await expect(
-      page.getByRole('alert').filter({ hasText: /authentication required|sign in/i }),
+      page.getByRole('alert').filter({ hasText: /authentication required|sign in to begin/i }),
     ).toHaveCount(0);
   });
 

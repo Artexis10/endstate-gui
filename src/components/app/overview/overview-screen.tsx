@@ -56,6 +56,7 @@ export function OverviewScreen({
   pendingCaptureDraft,
   sidebarVisible,
   engineConnected = true,
+  cloudBackupIndex,
 }: OverviewScreenProps) {
   const hasProfile = !!selectedProfile && profiles.length > 0;
 
@@ -225,6 +226,7 @@ export function OverviewScreen({
           onBack={handleFlowBack}
           captureActionSlot={captureActionSlot}
           setupActionSlot={setupActionSlot}
+          cloudBackupIndex={cloudBackupIndex}
         />
       </AnimatePresence>
 

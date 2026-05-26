@@ -20,10 +20,17 @@ export interface SignInFormProps {
   settings: AppSettings;
   onSignedIn: (data: BackupLoginData) => void;
   onSwitchTab: (tab: 'sign-up' | 'recover') => void;
+  /**
+   * When set, the email field is pre-filled with this value and rendered
+   * read-only, and the switch-tab footer (create account / forgot password)
+   * is hidden. Used by the re-auth dialog to lock identity to the previously
+   * signed-in user.
+   */
+  lockedEmail?: string;
 }
 
-export function SignInForm({ settings, onSignedIn, onSwitchTab }: SignInFormProps) {
-  const [email, setEmail] = useState('');
+export function SignInForm({ settings, onSignedIn, onSwitchTab, lockedEmail }: SignInFormProps) {
+  const [email, setEmail] = useState(lockedEmail ?? '');
   const [passphrase, setPassphrase] = useState('');
   const [busy, setBusy] = useState(false);
   const [authError, setAuthError] = useState<FriendlyAuthError | null>(null);
@@ -62,6 +69,8 @@ export function SignInForm({ settings, onSignedIn, onSwitchTab }: SignInFormProp
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           required
+          readOnly={lockedEmail != null}
+          disabled={lockedEmail != null}
         />
       </label>
       <label className="flex flex-col gap-1.5">
@@ -105,25 +114,27 @@ export function SignInForm({ settings, onSignedIn, onSwitchTab }: SignInFormProp
           'Sign in'
         )}
       </Button>
-      <div className="space-y-2 pt-1 text-center text-sm">
-        <div className="text-muted-foreground">
-          New to Endstate?{' '}
+      {lockedEmail == null && (
+        <div className="space-y-2 pt-1 text-center text-sm">
+          <div className="text-muted-foreground">
+            New to Endstate?{' '}
+            <button
+              type="button"
+              onClick={() => onSwitchTab('sign-up')}
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              Create an account
+            </button>
+          </div>
           <button
             type="button"
-            onClick={() => onSwitchTab('sign-up')}
-            className="text-primary underline-offset-2 hover:underline"
+            onClick={() => onSwitchTab('recover')}
+            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           >
-            Create an account
+            I forgot my password
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => onSwitchTab('recover')}
-          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-        >
-          I forgot my password
-        </button>
-      </div>
+      )}
     </form>
   );
 }

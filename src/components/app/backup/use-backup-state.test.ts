@@ -67,6 +67,24 @@ function chunk(
   };
 }
 
+function retryChunk(
+  chunkIndex: number,
+  attempt?: number,
+  maxAttempts?: number,
+  totalChunks = 4,
+): StreamingEvent {
+  return {
+    ...baseFields,
+    event: 'backup-chunk',
+    chunkIndex,
+    totalChunks,
+    encryptedSize: 1024,
+    status: 'retrying',
+    attempt,
+    maxAttempts,
+  };
+}
+
 describe('useBackupState progress reducers', () => {
   it('accumulates push uploaded chunks and tracks current in-flight index', () => {
     const { result } = renderHook(() => useBackupState(SETTINGS));
@@ -176,6 +194,51 @@ describe('useBackupState progress reducers', () => {
     expect(result.current.backups).toEqual([]);
   });
 
+  it('records push retry state without decrementing uploadedChunks', () => {
+    const { result } = renderHook(() => useBackupState(SETTINGS));
+
+    act(() => {
+      result.current.pushOnEvent(chunk('uploading', 0));
+      result.current.pushOnEvent(chunk('uploaded', 0));
+      result.current.pushOnEvent(chunk('uploading', 1));
+    });
+    expect(result.current.pushProgress.uploadedChunks).toBe(1);
+
+    act(() => result.current.pushOnEvent(retryChunk(1, 2, 3)));
+    expect(result.current.pushProgress.retryState).toEqual({
+      chunkIndex: 1,
+      attempt: 2,
+      maxAttempts: 3,
+    });
+    // Retry must NOT decrement the count of completed chunks.
+    expect(result.current.pushProgress.uploadedChunks).toBe(1);
+  });
+
+  it('clears push retry state when the retried chunk finally uploads', () => {
+    const { result } = renderHook(() => useBackupState(SETTINGS));
+
+    act(() => {
+      result.current.pushOnEvent(chunk('uploading', 1));
+      result.current.pushOnEvent(retryChunk(1, 2, 3));
+    });
+    expect(result.current.pushProgress.retryState).not.toBeNull();
+
+    act(() => result.current.pushOnEvent(chunk('uploaded', 1)));
+    expect(result.current.pushProgress.retryState).toBeNull();
+    expect(result.current.pushProgress.uploadedChunks).toBe(1);
+  });
+
+  it('handles retrying without attempt/maxAttempts (older engine fallback)', () => {
+    const { result } = renderHook(() => useBackupState(SETTINGS));
+
+    act(() => result.current.pushOnEvent(retryChunk(2)));
+    expect(result.current.pushProgress.retryState).toEqual({
+      chunkIndex: 2,
+      attempt: undefined,
+      maxAttempts: undefined,
+    });
+  });
+
   it('phase event for backup-push resets push counters', () => {
     const { result } = renderHook(() => useBackupState(SETTINGS));
     act(() => {
@@ -193,5 +256,88 @@ describe('useBackupState progress reducers', () => {
     );
     expect(result.current.pushProgress.uploadedChunks).toBe(0);
     expect(result.current.pushProgress.totalChunks).toBe(0);
+  });
+});
+
+describe('useBackupState focus refresh', () => {
+  it('refreshes when the window regains focus', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus } = await import('@/lib/backup-bridge');
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupStatus.mockResolvedValue({
+        signedIn: false,
+        issuerUrl: 'https://substratesystems.io',
+      });
+
+      renderHook(() => useBackupState(SETTINGS));
+      // Flush mount fetch
+      await vi.advanceTimersByTimeAsync(0);
+      const initialCalls = mockBackupStatus.mock.calls.length;
+
+      window.dispatchEvent(new Event('focus'));
+      // Debounced 1s
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(mockBackupStatus.mock.calls.length).toBe(initialCalls + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('coalesces a focus burst within the debounce window into one refresh', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus } = await import('@/lib/backup-bridge');
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupStatus.mockResolvedValue({
+        signedIn: false,
+        issuerUrl: 'https://substratesystems.io',
+      });
+
+      renderHook(() => useBackupState(SETTINGS));
+      await vi.advanceTimersByTimeAsync(0);
+      const initialCalls = mockBackupStatus.mock.calls.length;
+
+      // Three focus events within the 1s debounce window must collapse into
+      // a single refresh.
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(100);
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(100);
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(mockBackupStatus.mock.calls.length).toBe(initialCalls + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('skips focus refresh while a push is in flight', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus } = await import('@/lib/backup-bridge');
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupStatus.mockResolvedValue({
+        signedIn: false,
+        issuerUrl: 'https://substratesystems.io',
+      });
+
+      const { result } = renderHook(() => useBackupState(SETTINGS));
+      await vi.advanceTimersByTimeAsync(0);
+      const initialCalls = mockBackupStatus.mock.calls.length;
+
+      act(() => result.current.setPushOpen(true));
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(mockBackupStatus.mock.calls.length).toBe(initialCalls);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

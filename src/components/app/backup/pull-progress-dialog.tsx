@@ -23,6 +23,14 @@ import { useToast } from '@/components/ui/toast';
 
 export type PullSubPhase = 'downloading' | 'verifying' | 'decrypting' | 'idle';
 
+export interface PullRetryState {
+  chunkIndex: number;
+  /** 1-based attempt number; may be undefined when the engine emits a
+   *  retry event without the optional attempt metadata. */
+  attempt?: number;
+  maxAttempts?: number;
+}
+
 export interface PullProgressDialogProps {
   open: boolean;
   totalChunks: number;
@@ -31,6 +39,9 @@ export interface PullProgressDialogProps {
   downloadedChunks: number;
   subPhase: PullSubPhase;
   currentChunkIndex: number | null;
+  /** Pull doesn't retry today, but the dialog accepts the prop so a future
+   *  engine retry on the download path renders without further GUI work. */
+  retryState?: PullRetryState | null;
 }
 
 const SUB_PHASE_LABEL: Record<PullSubPhase, string> = {
@@ -48,11 +59,19 @@ export function PullProgressDialog({
   downloadedChunks,
   subPhase,
   currentChunkIndex,
+  retryState,
 }: PullProgressDialogProps) {
   const { showToast } = useToast();
 
   const percent =
     totalChunks > 0 ? Math.min(100, Math.round((decryptedChunks / totalChunks) * 100)) : 0;
+  const retryLabel = retryState
+    ? retryState.attempt != null && retryState.maxAttempts != null
+      ? `Retrying chunk ${retryState.chunkIndex + 1}${
+          totalChunks > 0 ? ` of ${totalChunks}` : ''
+        } (attempt ${retryState.attempt} of ${retryState.maxAttempts})`
+      : 'Retrying…'
+    : null;
 
   const handleCancel = async () => {
     try {
@@ -102,6 +121,16 @@ export function PullProgressDialog({
         >
           <div className="h-full bg-primary transition-all" style={{ width: `${percent}%` }} />
         </div>
+        {retryLabel && (
+          <div
+            className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
+            data-testid="pull-retry-tag"
+            role="status"
+            aria-live="polite"
+          >
+            {retryLabel}
+          </div>
+        )}
         <dl
           className="grid grid-cols-3 gap-2 text-xs text-muted-foreground"
           data-testid="pull-progress-stats"

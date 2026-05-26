@@ -27,8 +27,8 @@ import {
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { ConfigModuleInfo, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
-import { formatRelativeTime } from '@/lib/lifecycle-state';
-import { formatCount } from '@/lib/pluralize';
+import { ProfileCloudBadge } from '@/components/app/backup/profile-cloud-badge';
+import { ProfileStorageChip } from '@/components/app/backup/profile-storage-chip';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
@@ -101,6 +101,18 @@ export interface SetupFlowProps {
   hostedBackupSubscriptionStatus?: SubscriptionStatus;
   /** Routes to the Backup pane (sidebar). The chip click handler uses this. */
   onOpenHostedBackup?: () => void;
+  /** Opens the cold-start restore wizard (cloud → local profile). Visible as
+   *  a prominent CTA above the drop zone whenever the user is signed in to
+   *  Hosted Backup and has at least one cloud backup. Closes the new-machine
+   *  discoverability gap — without it, a fresh install with no local profiles
+   *  but a paid subscription has no obvious path to pull from the cloud. */
+  onRestoreFromCloud?: () => void;
+  /** Push a local-only profile up to the cloud as a new backup. The card
+   *  surfaces a "Back up to cloud" link on local-only rows so the user can
+   *  cloud-protect any locally-captured profile without leaving the Setup
+   *  screen. Only rendered when the user is signed in + subscription is
+   *  active + the profile is not already in `cloudBackupIndex`. */
+  onPushProfileToCloud?: (profilePath: string, profileName: string) => void;
 }
 
 export function SetupFlow({
@@ -129,6 +141,8 @@ export function SetupFlow({
   hostedBackupSignedIn = false,
   hostedBackupSubscriptionStatus,
   onOpenHostedBackup,
+  onRestoreFromCloud,
+  onPushProfileToCloud,
 }: SetupFlowProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<SetupPhase>('browse');
@@ -388,6 +402,48 @@ export function SetupFlow({
             exit={{ opacity: 0 }}
             transition={transition}
           >
+            {/* Hosted Backup restore CTA — only when the user is signed in and
+                has at least one cloud backup. Sits above the drop zone so the
+                new-machine path ("I paid for cloud backup, now where is it?")
+                is the first thing the user sees rather than a discoverability
+                puzzle through the chip. */}
+            {hostedBackupSignedIn &&
+              onRestoreFromCloud &&
+              cloudBackupIndex &&
+              cloudBackupIndex.size > 0 && (
+                <Card
+                  className="mb-4 cursor-pointer border-primary/30 bg-primary/5 hover:border-primary/60 hover:shadow-md transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  onClick={() => !isRunning && onRestoreFromCloud()}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && !isRunning) {
+                      e.preventDefault();
+                      onRestoreFromCloud();
+                    }
+                  }}
+                  tabIndex={isRunning ? -1 : 0}
+                  role="button"
+                  aria-label="Restore from your Hosted Backup"
+                  data-testid="setup-restore-from-cloud-cta"
+                >
+                  <CardContent className="py-4 px-5 flex items-center gap-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 shrink-0">
+                      <Cloud className="h-5 w-5 text-primary" aria-hidden="true" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">
+                        Restore from your Hosted Backup
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {cloudBackupIndex.size === 1
+                          ? '1 backup available in the cloud — pull it to this machine.'
+                          : `${cloudBackupIndex.size} backups available in the cloud — pick one to pull.`}
+                      </p>
+                    </div>
+                    <Download className="h-4 w-4 text-primary" aria-hidden="true" />
+                  </CardContent>
+                </Card>
+              )}
+
             {/* Drop zone for import */}
             <div className="mb-8">
               <DropZone onFileDrop={onFileDrop} onBrowse={onBrowse} disabled={isRunning} />
@@ -441,27 +497,48 @@ export function SetupFlow({
                       data-testid={`profile-card-${profile.name}`}
                     >
                       <CardContent className="py-4 px-5">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium">
-                              {profile.displayName || profile.name}
-                            </p>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline gap-2">
+                              <p className="text-sm font-medium truncate leading-5">
+                                {profile.displayName || profile.name}
+                              </p>
+                              <ProfileStorageChip
+                                cloudEntry={cloudEntry}
+                                testId={`profile-card-${profile.name}-storage-chip`}
+                              />
+                            </div>
                             {showSecondaryName && (
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {profile.name}
                               </p>
                             )}
                             {cloudEntry && (
-                              <p
-                                className="mt-1 inline-flex items-center gap-1 text-xs text-primary"
-                                data-testid={`profile-card-${profile.name}-cloud-badge`}
-                              >
-                                <Cloud className="h-3 w-3" aria-hidden="true" />
-                                <span>
-                                  Backed up · {formatCount(cloudEntry.versionCount, 'version')} · {formatRelativeTime(cloudEntry.updatedAt)}
-                                </span>
+                              <p className="mt-1">
+                                <ProfileCloudBadge
+                                  cloudEntry={cloudEntry}
+                                  variant="detailed"
+                                  testId={`profile-card-${profile.name}-cloud-badge`}
+                                />
                               </p>
                             )}
+                            {!cloudEntry &&
+                              hostedBackupSignedIn &&
+                              hostedBackupSubscriptionStatus === 'active' &&
+                              onPushProfileToCloud && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onPushProfileToCloud(profile.path, profile.name);
+                                  }}
+                                  className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline focus-visible:underline outline-none"
+                                  data-testid={`profile-card-${profile.name}-push-to-cloud`}
+                                >
+                                  <Cloud className="h-3 w-3" aria-hidden="true" />
+                                  Back up to cloud
+                                </button>
+                              )}
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Button

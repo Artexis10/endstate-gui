@@ -50,12 +50,15 @@ import { copyText } from './lib/clipboard';
 import { UpdatePrompt, runUpdateCheck } from './components/UpdatePrompt';
 import { AuthPane } from './components/app/auth/auth-pane';
 import { BackupPane } from './components/app/backup/backup-pane';
+import { ProfileMissingModal } from './components/app/profile-missing-modal';
 import { RestoreWizard } from './components/app/backup/restore-wizard';
+import { ReauthDialog } from './components/app/backup/reauth-dialog';
 import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
 import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
 import { isBackupChunkEvent } from './lib/streaming-events';
+import { hasSeenFirstPushFor, markFirstPushFor } from './lib/first-push-flag';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import type { BackupListItem, BackupStatusData } from './types';
 
@@ -179,6 +182,17 @@ function AppContent() {
   // silently in the background).
   const [backupListData, setBackupListData] = useState<BackupListItem[] | null>(null);
   const [restoreWizardOpen, setRestoreWizardOpen] = useState(false);
+  // Re-auth dialog (Wave 6): opens inline when a backup command returns
+  // AUTH_REQUIRED. Preserves the backup pane state behind the dialog so the
+  // user re-authenticates without losing context. `reauthOpenRef` tracks the
+  // dialog state synchronously so a concurrent AUTH_REQUIRED (e.g. a focus-
+  // triggered status refresh) doesn't open a second dialog.
+  const [reauthDialogOpen, setReauthDialogOpen] = useState(false);
+  const [reauthExpectedEmail, setReauthExpectedEmail] = useState<string | undefined>(undefined);
+  const reauthOpenRef = useRef(false);
+  useEffect(() => {
+    reauthOpenRef.current = reauthDialogOpen;
+  }, [reauthDialogOpen]);
   // Which tab the auth pane opens in when reached from the Backup pane CTAs.
   // Reset to 'sign-in' on most nav transitions; "Create account" sets it to
   // 'sign-up' just before routing.
@@ -202,6 +216,19 @@ function AppContent() {
     settings,
     hostedBackupSupported && !!backupStatusData?.signedIn,
   );
+
+  // ProfileMissingModal state — replaces the older info toast that fired after
+  // a delete OR at app-start when the saved profile name couldn't be resolved.
+  // The modal explains *why* the switch happened and gives the user actionable
+  // options (restore from cloud, switch, pick another, continue without).
+  interface ProfileMissingState {
+    previousName: string;
+    reason: 'deleted' | 'not-found';
+    firstAvailableLabel: string | null;
+    onAccept: () => void;
+  }
+  const [profileMissingState, setProfileMissingState] =
+    useState<ProfileMissingState | null>(null);
   
   // Overview action state - tracks which action is running and its status
   type OverviewActionType = 'capture' | 'setup' | 'check' | null;
@@ -872,19 +899,28 @@ function AppContent() {
         setProfiles(discovered);
         
         // Selection fallback: if selected profile was deleted (shouldn't happen due to check above)
-        // or if it disappeared for another reason, select first available or null
+        // or if it disappeared for another reason, surface the modal so the
+        // user understands what happened and can pick what comes next.
         const selectedStillExists = discovered.some(p => p.path === selectedProfilePath);
         if (!selectedStillExists) {
+          const previousLabel = selectedProfile;
           if (discovered.length > 0) {
-            // Auto-select first profile
             const firstProfile = discovered[0];
-            setSelectedProfile(firstProfile.name);
-            setSelectedProfilePath(firstProfile.path);
-            updateSettings({ selectedProfileName: firstProfile.name });
-            // Show toast notification for fallback selection
-            showToast(`Selected profile no longer exists—switched to "${firstProfile.displayName || firstProfile.name}".`, 'info');
+            const accept = () => {
+              setSelectedProfile(firstProfile.name);
+              setSelectedProfilePath(firstProfile.path);
+              updateSettings({ selectedProfileName: firstProfile.name });
+            };
+            setProfileMissingState({
+              previousName: previousLabel,
+              reason: 'deleted',
+              firstAvailableLabel: firstProfile.displayName || firstProfile.name,
+              onAccept: accept,
+            });
           } else {
-            // No profiles remain
+            // No profiles remain — clear selection immediately (there's no
+            // fallback to switch to) and surface a calmer info toast since
+            // the user has no actionable choice beyond capturing.
             setSelectedProfile('');
             setSelectedProfilePath('');
             updateSettings({ selectedProfileName: null });
@@ -984,12 +1020,40 @@ function AppContent() {
             setSelectedProfile(migratedSettings.selectedProfileName);
             setSelectedProfilePath(resolvedPath);
           } else {
-            // Profile name exists in settings but file not found - clear selection
+            // Profile name exists in settings but file not found — surface the
+            // actionable ProfileMissingModal once discovery completes. We can't
+            // know firstAvailable yet; defer that decision until discovered
+            // profiles arrive (see init-time follow-up below).
             console.warn('[init] Selected profile not found, clearing selection:', migratedSettings.selectedProfileName);
+            const previousLabel = migratedSettings.selectedProfileName;
             clearSelectedProfile();
             setSelectedProfile('');
             setSelectedProfilePath('');
-            showToast('Previously selected profile not found. Please select a profile.', 'info');
+            // Best-effort: enumerate profiles right now so we can populate
+            // firstAvailableLabel for the modal. discoverProfiles is async but
+            // cheap and we already need it for the profile list.
+            try {
+              const discovered = await discoverProfiles(dir);
+              const firstProfile = discovered[0];
+              setProfileMissingState({
+                previousName: previousLabel,
+                reason: 'not-found',
+                firstAvailableLabel: firstProfile
+                  ? firstProfile.displayName || firstProfile.name
+                  : null,
+                onAccept: firstProfile
+                  ? () => {
+                      setSelectedProfile(firstProfile.name);
+                      setSelectedProfilePath(firstProfile.path);
+                      updateSettings({ selectedProfileName: firstProfile.name });
+                    }
+                  : () => {},
+              });
+            } catch {
+              // If discovery fails, fall back to the calm toast — the modal
+              // can't help if we can't even list profiles.
+              showToast('Previously selected profile not found. Please select a profile.', 'info');
+            }
           }
         } else {
           // No profile selected
@@ -2199,7 +2263,16 @@ function AppContent() {
                             }
                           },
                         });
-                        showToast('Pushed to hosted backup.', 'success');
+                        const pushEmail = backupStatusData?.email;
+                        if (!hasSeenFirstPushFor(pushEmail)) {
+                          showToast(
+                            'First backup saved to the cloud. Your settings are now safe across machines.',
+                            'success',
+                          );
+                          markFirstPushFor(pushEmail);
+                        } else {
+                          showToast('Pushed to hosted backup.', 'success');
+                        }
                         // Refresh the cloud index so the new backup gets a
                         // cloud badge in Setup immediately.
                         void cloudBackupIndex.refresh();
@@ -2301,6 +2374,62 @@ function AppContent() {
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
               hostedBackupSubscriptionStatus={backupStatusData?.subscriptionStatus}
               onOpenHostedBackup={() => handleNavigate('backup')}
+              onRestoreFromCloud={() => {
+                // Route to the Backup page where RestoreWizard is mounted,
+                // then open it. After the wizard completes the user lands on
+                // the Backup pane viewing the freshly-restored backup, which
+                // is the natural follow-up surface.
+                handleNavigate('backup');
+                setRestoreWizardOpen(true);
+              }}
+              onPushProfileToCloud={
+                hostedBackupSupported &&
+                backupStatusData?.signedIn &&
+                backupStatusData.subscriptionStatus === 'active'
+                  ? async (profilePath: string, profileName: string) => {
+                      setPushTotalChunks(0);
+                      setPushUploadedChunks(0);
+                      setPushCurrentChunkIndex(null);
+                      setPushDialogOpen(true);
+                      try {
+                        await backupPush(settings, {
+                          profile: profilePath,
+                          name: profileName,
+                          onEvent: (event) => {
+                            if (!isBackupChunkEvent(event)) return;
+                            setPushTotalChunks(event.totalChunks);
+                            if (event.status === 'uploading') {
+                              setPushCurrentChunkIndex(event.chunkIndex);
+                            } else if (event.status === 'uploaded') {
+                              setPushUploadedChunks((prev) => prev + 1);
+                            }
+                          },
+                        });
+                        const pushEmail = backupStatusData?.email;
+                        if (!hasSeenFirstPushFor(pushEmail)) {
+                          showToast(
+                            'First backup saved to the cloud. Your settings are now safe across machines.',
+                            'success',
+                          );
+                          markFirstPushFor(pushEmail);
+                        } else {
+                          showToast(`"${profileName}" backed up to cloud.`, 'success');
+                        }
+                        void cloudBackupIndex.refresh();
+                      } catch (err) {
+                        const msg =
+                          err instanceof BackupCommandError
+                            ? `${err.code}: ${err.message}`
+                            : err instanceof Error
+                              ? err.message
+                              : String(err);
+                        showToast(`Push failed — ${msg}`, 'error');
+                      } finally {
+                        setPushDialogOpen(false);
+                      }
+                    }
+                  : undefined
+              }
               onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, setup: false })); setSetupFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={setupFlowResetKey}
               onFlowReset={() => setFlowHasWork(prev => ({ ...prev, setup: false }))}
@@ -2537,9 +2666,16 @@ function AppContent() {
               initialStatus={backupStatusData}
               initialBackups={backupListData}
               onAuthLost={() => {
-                setBackupStatusData(null);
-                setBackupListData(null);
-                showToast('Session expired. Please sign in again.', 'info');
+                // Recursion guard: a focus-triggered status refresh can fire
+                // AUTH_REQUIRED while the dialog is already open. Don't queue
+                // a second dialog instance.
+                if (reauthOpenRef.current) return;
+                setReauthExpectedEmail(backupStatusData?.email);
+                setReauthDialogOpen(true);
+              }}
+              onRequestCapture={() => {
+                setActiveFlowPage('setup');
+                setCurrentPage('setup');
               }}
             />
             <RestoreWizard
@@ -2552,6 +2688,29 @@ function AppContent() {
                 // Refresh local profiles list after a wizard restore so the
                 // newly-restored profile appears in the Home overview.
                 void refreshProfiles();
+              }}
+            />
+            <ReauthDialog
+              open={reauthDialogOpen}
+              settings={settings}
+              expectedEmail={reauthExpectedEmail}
+              onDismiss={() => setReauthDialogOpen(false)}
+              onReauthenticated={async () => {
+                setReauthDialogOpen(false);
+                // Engine has a fresh session — refresh status (and list).
+                // If anything errors here, the pane keeps its prior state
+                // and the user can retry manually from the pane's CTA.
+                try {
+                  const next = await backupStatus(settings);
+                  setBackupStatusData(next);
+                  if (next.signedIn && next.subscriptionStatus !== 'none') {
+                    const list = await backupList(settings);
+                    setBackupListData(list.backups);
+                  }
+                } catch {
+                  // Leave pane state intact; the pane will surface the
+                  // next failure via its own error card.
+                }
               }}
             />
           </>
@@ -3510,6 +3669,43 @@ function AppContent() {
         title={logViewerTitle}
         isLoading={logViewerLoading}
         error={logViewerError}
+      />
+
+      {/* Profile Missing Modal — replaces the older info toast when the
+          previously-selected profile no longer exists (delete or not-found
+          on resolve). Lives at the App root so both emission sites surface
+          it the same way. */}
+      <ProfileMissingModal
+        open={!!profileMissingState}
+        onOpenChange={(open) => {
+          if (!open) setProfileMissingState(null);
+        }}
+        previousName={profileMissingState?.previousName ?? ''}
+        reason={profileMissingState?.reason ?? 'deleted'}
+        firstAvailableLabel={profileMissingState?.firstAvailableLabel ?? null}
+        hasCloudBackup={
+          !!profileMissingState &&
+          cloudBackupIndex.index.has(profileMissingState.previousName)
+        }
+        onSwitchToFirstAvailable={() => {
+          profileMissingState?.onAccept();
+          setProfileMissingState(null);
+        }}
+        onRestoreFromCloud={() => {
+          setProfileMissingState(null);
+          // Route the user to the backup pane; they'll see the cloud-backed
+          // profile in the list and can pick a version to restore.
+          setCurrentPage('backup');
+        }}
+        onPickAnother={() => {
+          setProfileMissingState(null);
+          // Open the setup flow so the user can pick a different profile.
+          setActiveFlowPage('setup');
+          setCurrentPage('setup');
+        }}
+        onContinueWithoutProfile={() => {
+          setProfileMissingState(null);
+        }}
       />
 
     </>

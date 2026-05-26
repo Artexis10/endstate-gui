@@ -20,6 +20,13 @@ import { CheckCircle2, AlertTriangle, OctagonX, Sparkles } from 'lucide-react';
 export interface SubscriptionBannerProps {
   status?: SubscriptionStatus;
   /**
+   * ISO 8601 timestamp marking the end of the 30-day grace window. When set
+   * and the status is `grace`, the description renders the literal date so
+   * the user has a precise deadline rather than the calmer "within 30 days"
+   * fallback. Absent for non-grace states.
+   */
+  graceEndsAt?: string;
+  /**
    * Begin a checkout. Wired by the pane to call `backup subscribe` and open
    * the returned `checkoutUrl`. Used by the Subscribe (`none`) and Renew
    * (`cancelled`) actions. The pane's handler is `async` so the contract
@@ -38,8 +45,20 @@ export interface SubscriptionBannerProps {
   onManage?: () => void | Promise<void>;
 }
 
+function formatGraceDeadline(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export function SubscriptionBanner({
   status,
+  graceEndsAt,
   onCheckout,
   checkoutPending = false,
   onManage,
@@ -68,12 +87,17 @@ export function SubscriptionBanner({
   }
 
   if (effective === 'grace') {
+    const deadline = formatGraceDeadline(graceEndsAt);
     return (
       <BannerShell
         tone="warn"
         icon={<AlertTriangle className="h-5 w-5" />}
         title="Payment failed"
-        description="Fix billing within 30 days to keep backups."
+        description={
+          deadline
+            ? `Backups stay safe through ${deadline}. Fix billing to keep them.`
+            : 'Fix billing within 30 days to keep backups.'
+        }
         action={
           <Button
             type="button"

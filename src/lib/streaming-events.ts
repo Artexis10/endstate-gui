@@ -118,9 +118,12 @@ export interface ArtifactEvent extends BaseStreamingEvent {
 /**
  * Hosted-backup chunk status values from the engine.
  *
- * Push (`backup-push` phase): `uploading` -> `uploaded`, with `failed` on error.
- * Pull (`backup-pull` phase): `downloading` -> `verified` (sha256 match) -> `decrypted`,
- * with `failed` on error.
+ * Push (`backup-push` phase): `uploading` -> `uploaded`, with `retrying`
+ * between attempts (engine emits before the backoff sleep) and `failed`
+ * on terminal error.
+ * Pull (`backup-pull` phase): `downloading` -> `verified` (sha256 match) ->
+ * `decrypted`, with `failed` on error. The pull path does not currently
+ * retry at the chunk level so `retrying` is push-only today.
  */
 export type BackupChunkStatus =
   | 'uploading'
@@ -128,6 +131,7 @@ export type BackupChunkStatus =
   | 'downloading'
   | 'verified'
   | 'decrypted'
+  | 'retrying'
   | 'failed';
 
 /**
@@ -146,6 +150,17 @@ export interface BackupChunkEvent extends BaseStreamingEvent {
   encryptedSize: number;
   status: BackupChunkStatus;
   message?: string;
+  /** 1-based current attempt number. Present only when status === 'retrying'.
+   *  Old engines that don't emit retry events leave this undefined; the GUI
+   *  treats the absence as "generic retry indicator". */
+  attempt?: number;
+  /** Inclusive upper bound on attempts. Present only when status === 'retrying'. */
+  maxAttempts?: number;
+  /** 1-based chunk-of-total position. Mirrors chunkIndex+1 for data chunks;
+   *  omitted for the manifest chunk (chunkIndex === -1). */
+  current?: number;
+  /** Mirrors totalChunks for forward-compat. */
+  total?: number;
 }
 
 /**
