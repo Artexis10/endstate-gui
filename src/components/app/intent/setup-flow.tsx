@@ -28,6 +28,7 @@ import { formatAppIdentity } from '@/lib/app-identity';
 import type { ConfigModuleInfo, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 import { ProfileCloudBadge } from '@/components/app/backup/profile-cloud-badge';
+import { ProfileStorageChip } from '@/components/app/backup/profile-storage-chip';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
@@ -489,11 +490,17 @@ export function SetupFlow({
                       data-testid={`profile-card-${profile.name}`}
                     >
                       <CardContent className="py-4 px-5">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium">
-                              {profile.displayName || profile.name}
-                            </p>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline gap-2">
+                              <p className="text-sm font-medium truncate leading-5">
+                                {profile.displayName || profile.name}
+                              </p>
+                              <ProfileStorageChip
+                                cloudEntry={cloudEntry}
+                                testId={`profile-card-${profile.name}-storage-chip`}
+                              />
+                            </div>
                             {showSecondaryName && (
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {profile.name}

@@ -8,7 +8,7 @@ import type { BackupListItem } from '@/types';
 import { ViewAppsModal } from './view-apps-modal';
 import { useMicroFeedback } from '@/lib/micro-feedback';
 import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
-import { ProfileCloudBadge } from '@/components/app/backup/profile-cloud-badge';
+import { ProfileStorageChip } from '@/components/app/backup/profile-storage-chip';
 
 interface ManageProfilesModalProps {
   open: boolean;
@@ -151,10 +151,9 @@ export function ManageProfilesModal({
                               Active
                             </span>
                           )}
-                          <ProfileCloudBadge
+                          <ProfileStorageChip
                             cloudEntry={cloudBackupIndex?.get(profile.name)}
-                            variant="compact"
-                            testId={`manage-profiles-${profile.name}-cloud-badge`}
+                            testId={`manage-profiles-${profile.name}-storage-chip`}
                           />
                         </div>
                       </td>
