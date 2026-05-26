@@ -195,3 +195,86 @@ describe('useBackupState progress reducers', () => {
     expect(result.current.pushProgress.totalChunks).toBe(0);
   });
 });
+
+describe('useBackupState focus refresh', () => {
+  it('refreshes when the window regains focus', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus } = await import('@/lib/backup-bridge');
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupStatus.mockResolvedValue({
+        signedIn: false,
+        issuerUrl: 'https://substratesystems.io',
+      });
+
+      renderHook(() => useBackupState(SETTINGS));
+      // Flush mount fetch
+      await vi.advanceTimersByTimeAsync(0);
+      const initialCalls = mockBackupStatus.mock.calls.length;
+
+      window.dispatchEvent(new Event('focus'));
+      // Debounced 1s
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(mockBackupStatus.mock.calls.length).toBe(initialCalls + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('coalesces a focus burst within the debounce window into one refresh', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus } = await import('@/lib/backup-bridge');
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupStatus.mockResolvedValue({
+        signedIn: false,
+        issuerUrl: 'https://substratesystems.io',
+      });
+
+      renderHook(() => useBackupState(SETTINGS));
+      await vi.advanceTimersByTimeAsync(0);
+      const initialCalls = mockBackupStatus.mock.calls.length;
+
+      // Three focus events within the 1s debounce window must collapse into
+      // a single refresh.
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(100);
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(100);
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(mockBackupStatus.mock.calls.length).toBe(initialCalls + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('skips focus refresh while a push is in flight', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus } = await import('@/lib/backup-bridge');
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupStatus.mockResolvedValue({
+        signedIn: false,
+        issuerUrl: 'https://substratesystems.io',
+      });
+
+      const { result } = renderHook(() => useBackupState(SETTINGS));
+      await vi.advanceTimersByTimeAsync(0);
+      const initialCalls = mockBackupStatus.mock.calls.length;
+
+      act(() => result.current.setPushOpen(true));
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(1100);
+
+      expect(mockBackupStatus.mock.calls.length).toBe(initialCalls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

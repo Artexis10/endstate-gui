@@ -122,4 +122,7 @@ export interface OverviewScreenProps {
     draftText: string;
     apps: string[];
   } | null;
+  /** Cloud-backup index keyed by profile name. Pass-through to FlowSelector
+   *  and ManageProfilesModal so cloud-backed profiles render a badge. */
+  cloudBackupIndex?: Map<string, import('@/types').BackupListItem>;
 }

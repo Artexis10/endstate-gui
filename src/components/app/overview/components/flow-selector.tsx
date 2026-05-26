@@ -29,6 +29,7 @@ import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import { SelectedProfileCard } from './selected-profile-card';
 import type { DiscoveredProfile } from '@/file-discovery';
 import type { ActiveFlow } from '../types';
+import type { BackupListItem } from '@/types';
 
 interface FlowSelectorProps {
   activeFlow: ActiveFlow;
@@ -45,6 +46,7 @@ interface FlowSelectorProps {
   onBack: () => void;
   captureActionSlot?: ReactNode;
   setupActionSlot?: ReactNode;
+  cloudBackupIndex?: Map<string, BackupListItem>;
 }
 
 export function FlowSelector({
@@ -62,6 +64,7 @@ export function FlowSelector({
   onBack,
   captureActionSlot,
   setupActionSlot,
+  cloudBackupIndex,
 }: FlowSelectorProps) {
   const [refreshing, setRefreshing] = useState(false);
   const reduced = prefersReducedMotion();
@@ -349,6 +352,7 @@ export function FlowSelector({
                 isRunning={isRunning}
                 onProfileChange={onProfileChange}
                 onManageProfiles={onManageProfiles}
+                cloudBackupIndex={cloudBackupIndex}
               />
             </div>
             {setupActionSlot}

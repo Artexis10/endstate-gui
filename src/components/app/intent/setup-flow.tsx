@@ -6,7 +6,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info, Cloud } from 'lucide-react';
+import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,8 +27,7 @@ import {
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { ConfigModuleInfo, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
-import { formatRelativeTime } from '@/lib/lifecycle-state';
-import { formatCount } from '@/lib/pluralize';
+import { ProfileCloudBadge } from '@/components/app/backup/profile-cloud-badge';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
@@ -452,14 +451,12 @@ export function SetupFlow({
                               </p>
                             )}
                             {cloudEntry && (
-                              <p
-                                className="mt-1 inline-flex items-center gap-1 text-xs text-primary"
-                                data-testid={`profile-card-${profile.name}-cloud-badge`}
-                              >
-                                <Cloud className="h-3 w-3" aria-hidden="true" />
-                                <span>
-                                  Backed up · {formatCount(cloudEntry.versionCount, 'version')} · {formatRelativeTime(cloudEntry.updatedAt)}
-                                </span>
+                              <p className="mt-1">
+                                <ProfileCloudBadge
+                                  cloudEntry={cloudEntry}
+                                  variant="detailed"
+                                  testId={`profile-card-${profile.name}-cloud-badge`}
+                                />
                               </p>
                             )}
                           </div>

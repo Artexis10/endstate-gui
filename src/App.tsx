@@ -50,12 +50,14 @@ import { copyText } from './lib/clipboard';
 import { UpdatePrompt, runUpdateCheck } from './components/UpdatePrompt';
 import { AuthPane } from './components/app/auth/auth-pane';
 import { BackupPane } from './components/app/backup/backup-pane';
+import { ProfileMissingModal } from './components/app/profile-missing-modal';
 import { RestoreWizard } from './components/app/backup/restore-wizard';
 import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
 import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
 import { isBackupChunkEvent } from './lib/streaming-events';
+import { hasSeenFirstPushFor, markFirstPushFor } from './lib/first-push-flag';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import type { BackupListItem, BackupStatusData } from './types';
 
@@ -202,6 +204,19 @@ function AppContent() {
     settings,
     hostedBackupSupported && !!backupStatusData?.signedIn,
   );
+
+  // ProfileMissingModal state — replaces the older info toast that fired after
+  // a delete OR at app-start when the saved profile name couldn't be resolved.
+  // The modal explains *why* the switch happened and gives the user actionable
+  // options (restore from cloud, switch, pick another, continue without).
+  interface ProfileMissingState {
+    previousName: string;
+    reason: 'deleted' | 'not-found';
+    firstAvailableLabel: string | null;
+    onAccept: () => void;
+  }
+  const [profileMissingState, setProfileMissingState] =
+    useState<ProfileMissingState | null>(null);
   
   // Overview action state - tracks which action is running and its status
   type OverviewActionType = 'capture' | 'setup' | 'check' | null;
@@ -872,19 +887,28 @@ function AppContent() {
         setProfiles(discovered);
         
         // Selection fallback: if selected profile was deleted (shouldn't happen due to check above)
-        // or if it disappeared for another reason, select first available or null
+        // or if it disappeared for another reason, surface the modal so the
+        // user understands what happened and can pick what comes next.
         const selectedStillExists = discovered.some(p => p.path === selectedProfilePath);
         if (!selectedStillExists) {
+          const previousLabel = selectedProfile;
           if (discovered.length > 0) {
-            // Auto-select first profile
             const firstProfile = discovered[0];
-            setSelectedProfile(firstProfile.name);
-            setSelectedProfilePath(firstProfile.path);
-            updateSettings({ selectedProfileName: firstProfile.name });
-            // Show toast notification for fallback selection
-            showToast(`Selected profile no longer exists—switched to "${firstProfile.displayName || firstProfile.name}".`, 'info');
+            const accept = () => {
+              setSelectedProfile(firstProfile.name);
+              setSelectedProfilePath(firstProfile.path);
+              updateSettings({ selectedProfileName: firstProfile.name });
+            };
+            setProfileMissingState({
+              previousName: previousLabel,
+              reason: 'deleted',
+              firstAvailableLabel: firstProfile.displayName || firstProfile.name,
+              onAccept: accept,
+            });
           } else {
-            // No profiles remain
+            // No profiles remain — clear selection immediately (there's no
+            // fallback to switch to) and surface a calmer info toast since
+            // the user has no actionable choice beyond capturing.
             setSelectedProfile('');
             setSelectedProfilePath('');
             updateSettings({ selectedProfileName: null });
@@ -984,12 +1008,40 @@ function AppContent() {
             setSelectedProfile(migratedSettings.selectedProfileName);
             setSelectedProfilePath(resolvedPath);
           } else {
-            // Profile name exists in settings but file not found - clear selection
+            // Profile name exists in settings but file not found — surface the
+            // actionable ProfileMissingModal once discovery completes. We can't
+            // know firstAvailable yet; defer that decision until discovered
+            // profiles arrive (see init-time follow-up below).
             console.warn('[init] Selected profile not found, clearing selection:', migratedSettings.selectedProfileName);
+            const previousLabel = migratedSettings.selectedProfileName;
             clearSelectedProfile();
             setSelectedProfile('');
             setSelectedProfilePath('');
-            showToast('Previously selected profile not found. Please select a profile.', 'info');
+            // Best-effort: enumerate profiles right now so we can populate
+            // firstAvailableLabel for the modal. discoverProfiles is async but
+            // cheap and we already need it for the profile list.
+            try {
+              const discovered = await discoverProfiles(dir);
+              const firstProfile = discovered[0];
+              setProfileMissingState({
+                previousName: previousLabel,
+                reason: 'not-found',
+                firstAvailableLabel: firstProfile
+                  ? firstProfile.displayName || firstProfile.name
+                  : null,
+                onAccept: firstProfile
+                  ? () => {
+                      setSelectedProfile(firstProfile.name);
+                      setSelectedProfilePath(firstProfile.path);
+                      updateSettings({ selectedProfileName: firstProfile.name });
+                    }
+                  : () => {},
+              });
+            } catch {
+              // If discovery fails, fall back to the calm toast — the modal
+              // can't help if we can't even list profiles.
+              showToast('Previously selected profile not found. Please select a profile.', 'info');
+            }
           }
         } else {
           // No profile selected
@@ -2199,7 +2251,16 @@ function AppContent() {
                             }
                           },
                         });
-                        showToast('Pushed to hosted backup.', 'success');
+                        const pushEmail = backupStatusData?.email;
+                        if (!hasSeenFirstPushFor(pushEmail)) {
+                          showToast(
+                            'First backup saved to the cloud. Your settings are now safe across machines.',
+                            'success',
+                          );
+                          markFirstPushFor(pushEmail);
+                        } else {
+                          showToast('Pushed to hosted backup.', 'success');
+                        }
                         // Refresh the cloud index so the new backup gets a
                         // cloud badge in Setup immediately.
                         void cloudBackupIndex.refresh();
@@ -2540,6 +2601,10 @@ function AppContent() {
                 setBackupStatusData(null);
                 setBackupListData(null);
                 showToast('Session expired. Please sign in again.', 'info');
+              }}
+              onRequestCapture={() => {
+                setActiveFlowPage('setup');
+                setCurrentPage('setup');
               }}
             />
             <RestoreWizard
@@ -3510,6 +3575,43 @@ function AppContent() {
         title={logViewerTitle}
         isLoading={logViewerLoading}
         error={logViewerError}
+      />
+
+      {/* Profile Missing Modal — replaces the older info toast when the
+          previously-selected profile no longer exists (delete or not-found
+          on resolve). Lives at the App root so both emission sites surface
+          it the same way. */}
+      <ProfileMissingModal
+        open={!!profileMissingState}
+        onOpenChange={(open) => {
+          if (!open) setProfileMissingState(null);
+        }}
+        previousName={profileMissingState?.previousName ?? ''}
+        reason={profileMissingState?.reason ?? 'deleted'}
+        firstAvailableLabel={profileMissingState?.firstAvailableLabel ?? null}
+        hasCloudBackup={
+          !!profileMissingState &&
+          cloudBackupIndex.index.has(profileMissingState.previousName)
+        }
+        onSwitchToFirstAvailable={() => {
+          profileMissingState?.onAccept();
+          setProfileMissingState(null);
+        }}
+        onRestoreFromCloud={() => {
+          setProfileMissingState(null);
+          // Route the user to the backup pane; they'll see the cloud-backed
+          // profile in the list and can pick a version to restore.
+          setCurrentPage('backup');
+        }}
+        onPickAnother={() => {
+          setProfileMissingState(null);
+          // Open the setup flow so the user can pick a different profile.
+          setActiveFlowPage('setup');
+          setCurrentPage('setup');
+        }}
+        onContinueWithoutProfile={() => {
+          setProfileMissingState(null);
+        }}
       />
 
     </>

@@ -4,9 +4,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from '@/components/ui/button';
 import { Pencil, Trash2, FolderOpen, RefreshCw, Eye, Play } from 'lucide-react';
 import type { DiscoveredProfile } from '@/file-discovery';
+import type { BackupListItem } from '@/types';
 import { ViewAppsModal } from './view-apps-modal';
 import { useMicroFeedback } from '@/lib/micro-feedback';
 import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
+import { ProfileCloudBadge } from '@/components/app/backup/profile-cloud-badge';
 
 interface ManageProfilesModalProps {
   open: boolean;
@@ -20,6 +22,8 @@ interface ManageProfilesModalProps {
   onSetActive: (profile: DiscoveredProfile) => void;
   onOpenFolder: () => void;
   onRefresh: () => Promise<void>;
+  /** Cloud-backup index keyed by profile name. */
+  cloudBackupIndex?: Map<string, BackupListItem>;
 }
 
 export function ManageProfilesModal({
@@ -34,6 +38,7 @@ export function ManageProfilesModal({
   onSetActive,
   onOpenFolder,
   onRefresh,
+  cloudBackupIndex,
 }: ManageProfilesModalProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewAppsProfile, setViewAppsProfile] = useState<DiscoveredProfile | null>(null);
@@ -146,6 +151,11 @@ export function ManageProfilesModal({
                               Active
                             </span>
                           )}
+                          <ProfileCloudBadge
+                            cloudEntry={cloudBackupIndex?.get(profile.name)}
+                            variant="compact"
+                            testId={`manage-profiles-${profile.name}-cloud-badge`}
+                          />
                         </div>
                       </td>
                       {showDetails && (

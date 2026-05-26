@@ -9,7 +9,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { BackupListItem } from '@/types';
-import { HardDrive, Trash2, Upload, Download } from 'lucide-react';
+import { Trash2, Upload, Download } from 'lucide-react';
 
 export interface BackupListProps {
   backups: BackupListItem[];
@@ -52,18 +52,6 @@ export function BackupList({
   onSelect,
   selectedBackupId,
 }: BackupListProps) {
-  if (backups.length === 0) {
-    return (
-      <Card data-testid="backup-list-empty">
-        <CardContent className="flex flex-col items-center gap-2 py-8 text-center">
-          <HardDrive className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            No backups yet. Push a profile to create the first version.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
   return (
     <div className="flex flex-col gap-3" data-testid="backup-list">
       {backups.map((b) => {

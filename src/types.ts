@@ -89,6 +89,22 @@ export interface BackupStatusData {
   lastBackupAt?: string;
   /** Set when the OS keychain failed; auth still works but session won't persist. */
   keychainError?: string;
+  /**
+   * Storage usage across all backups for the signed-in user, in bytes.
+   * Coordinated separately with the engine — the GUI treats this as optional
+   * so the field can ship in any order. Substrate computes the underlying
+   * value via `sumActiveStorageForUser`.
+   */
+  quotaUsedBytes?: number;
+  /** Total storage allotment for the user's plan, in bytes. */
+  quotaTotalBytes?: number;
+  /** Number of versions across all backups for the user. */
+  versionCount?: number;
+  /**
+   * ISO 8601 timestamp marking the end of the 30-day grace window. Set when
+   * `subscriptionStatus === 'grace'`; absent otherwise.
+   */
+  graceEndsAt?: string;
 }
 
 /** A single backup row from `endstate backup list --json`. */

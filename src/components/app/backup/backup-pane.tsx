@@ -25,6 +25,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, CloudOff, WifiOff } from 'lucide-react';
 import { SubscriptionBanner } from './subscription-banner';
 import { BackupList } from './backup-list';
+import { BackupListEmpty } from './backup-list-empty';
+import { QuotaMeter } from './quota-meter';
 import { VersionList } from './version-list';
 import { PushProgressDialog } from './push-progress-dialog';
 import { PullProgressDialog } from './pull-progress-dialog';
@@ -44,6 +46,7 @@ import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { hasSeenFirstPushFor, markFirstPushFor } from '@/lib/first-push-flag';
 
 export interface BackupPaneProps {
   settings: AppSettings;
@@ -61,6 +64,11 @@ export interface BackupPaneProps {
    *  the pane renders the cached list immediately and revalidates in the
    *  background (stale-while-revalidate). */
   initialBackups?: BackupListItem[] | null;
+  /** Route to the Setup flow ("capture this computer"). The pane uses this
+   *  to power the post-claim empty state's primary CTA. The pane does not
+   *  navigate on its own — App.tsx wires this to its existing setup-flow
+   *  entry point. */
+  onRequestCapture?: () => void;
 }
 
 interface DeleteTarget {
@@ -77,6 +85,7 @@ export function BackupPane({
   onAuthLost,
   initialStatus,
   initialBackups,
+  onRequestCapture,
 }: BackupPaneProps) {
   const state = useBackupState(settings, {
     onAuthLost,
@@ -134,7 +143,7 @@ export function BackupPane({
   }, []);
 
   const handlePush = useCallback(
-    async (backupId: string) => {
+    async (backupId?: string) => {
       if (!selectedProfilePath) {
         showToast('Select a profile first to push.', 'warning');
         return;
@@ -145,9 +154,19 @@ export function BackupPane({
         await backupPush(settings, {
           profile: selectedProfilePath,
           backupId,
+          name: backupId ? undefined : selectedProfileName ?? undefined,
           onEvent: state.pushOnEvent,
         });
-        showToast('Backup uploaded.', 'success');
+        const email = state.status?.email;
+        if (!hasSeenFirstPushFor(email)) {
+          showToast(
+            'First backup saved to the cloud. Your settings are now safe across machines.',
+            'success',
+          );
+          markFirstPushFor(email);
+        } else {
+          showToast('Backup uploaded.', 'success');
+        }
         state.setPushOpen(false);
         await state.refresh();
         if (state.selectedBackupId) {
@@ -162,7 +181,7 @@ export function BackupPane({
         }
       }
     },
-    [selectedProfilePath, settings, state, showToast],
+    [selectedProfilePath, selectedProfileName, settings, state, showToast],
   );
 
   const handleRestore = useCallback(
@@ -322,9 +341,16 @@ export function BackupPane({
     <div className="flex flex-col gap-4 p-4" data-testid="backup-pane">
       <SubscriptionBanner
         status={subscriptionStatus}
+        graceEndsAt={state.status.graceEndsAt}
         onCheckout={handleCheckout}
         checkoutPending={checkoutPending}
         onManage={handleManage}
+      />
+
+      <QuotaMeter
+        quotaUsedBytes={state.status.quotaUsedBytes}
+        quotaTotalBytes={state.status.quotaTotalBytes}
+        versionCount={state.status.versionCount}
       />
 
       {state.status.keychainError && (
@@ -337,17 +363,30 @@ export function BackupPane({
       )}
 
       {errorView ?? (
-        <BackupList
-          backups={state.backups}
-          canWrite={canWrite && !!selectedProfilePath}
-          canRestore={canRestore}
-          canDelete={canDelete}
-          onPush={handlePush}
-          onRestore={(id) => handleRestore(id)}
-          onDelete={handleDelete}
-          onSelect={(id) => state.setSelectedBackupId(id)}
-          selectedBackupId={state.selectedBackupId}
-        />
+        state.backups.length === 0 ? (
+          <BackupListEmpty
+            subscriptionStatus={subscriptionStatus}
+            onCapture={onRequestCapture}
+            onPushExisting={
+              canWrite && selectedProfilePath
+                ? () => handlePush(undefined)
+                : undefined
+            }
+            selectedProfileName={selectedProfileName}
+          />
+        ) : (
+          <BackupList
+            backups={state.backups}
+            canWrite={canWrite && !!selectedProfilePath}
+            canRestore={canRestore}
+            canDelete={canDelete}
+            onPush={handlePush}
+            onRestore={(id) => handleRestore(id)}
+            onDelete={handleDelete}
+            onSelect={(id) => state.setSelectedBackupId(id)}
+            selectedBackupId={state.selectedBackupId}
+          />
+        )
       )}
 
       {!errorView && selectedBackup && (

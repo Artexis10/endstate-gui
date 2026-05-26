@@ -284,6 +284,43 @@ export function useBackupState(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-refresh on window focus or visibility change. Closes the "stale
+  // session" loop — yesterday's signed-in user persists, but a focus-triggered
+  // backup-status call returns AUTH_REQUIRED and routes through `onAuthLost`
+  // to the sign-in surface. Coalesces focus + visibilitychange (Tauri fires
+  // both) and skips while a push/pull is in flight so we don't disturb live
+  // progress state.
+  const inFlightRef = useRef({ pushOpen: false, pullOpen: false });
+  useEffect(() => {
+    inFlightRef.current.pushOpen = pushOpen;
+  }, [pushOpen]);
+  useEffect(() => {
+    inFlightRef.current.pullOpen = pullOpen;
+  }, [pullOpen]);
+
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      if (timeoutId !== null) return; // coalesce rapid focus+visibility pairs
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        if (inFlightRef.current.pushOpen || inFlightRef.current.pullOpen) return;
+        void refresh();
+      }, 1000);
+    };
+    const onFocus = () => trigger();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') trigger();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
+  }, [refresh]);
+
   const resetPushProgress = useCallback(() => setPushProgress(EMPTY_PUSH), []);
   const resetPullProgress = useCallback(() => setPullProgress(EMPTY_PULL), []);
 
