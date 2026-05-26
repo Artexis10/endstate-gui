@@ -1,7 +1,17 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "extra-files": [
-    "ENGINE_VERSION"
+    "ENGINE_VERSION",
+    {
+      "type": "json",
+      "path": "src-tauri/tauri.conf.json",
+      "jsonpath": "$.version"
+    },
+    {
+      "type": "toml",
+      "path": "src-tauri/Cargo.toml",
+      "jsonpath": "$.package.version"
+    }
   ],
   "packages": {
     ".": {
