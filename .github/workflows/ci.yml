@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual / programmatic trigger. Used by the dispatch-ci job in
+  # release-please.yml because GitHub blocks the GITHUB_TOKEN-opened
+  # release-please PR from firing `pull_request` workflows (recursion
+  # protection). workflow_dispatch is one of the two documented exceptions
+  # to that rule (along with repository_dispatch).
+  workflow_dispatch:
 
 jobs:
   test:
