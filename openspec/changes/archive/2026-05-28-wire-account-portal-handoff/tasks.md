@@ -25,7 +25,7 @@
        AUTH_REQUIRED → re-auth dialog, double-click guard
 
 ## 5. Engine pin
-- [ ] 5.1 Bump `ENGINE_VERSION` (and `engine.pinned` in
+- [x] 5.1 Bump `ENGINE_VERSION` (and `engine.pinned` in
        `endstate-gui/package.json` if applicable) to the engine release
-       that ships `backup browser-session`. **Pending engine release-please
-       cut from PR #42.**
+       that ships `backup browser-session`. **Done via engine-drift-check
+       auto-PR #55 (engine 2.4.0); shipped in gui 2.8.0 (#57).**
