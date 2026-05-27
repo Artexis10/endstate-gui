@@ -76,3 +76,14 @@ go-sidecar-integration-prompt.md
 # Screenshot reference copies and extras (local only)
 screenshots/reference/
 screenshots/extras/
+
+# Ad-hoc screenshots in repo root from chrome-devtools/playwright sessions
+/*.png
+
+# Local scratch
+tmp.json
+.claude/scratch/
+.playwright-mcp/
+
+# Nested engine repo clone (sibling work, not part of GUI tree)
+/endstate/
