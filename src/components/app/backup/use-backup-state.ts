@@ -95,7 +95,7 @@ export interface UseBackupStateResult {
   versions: BackupVersionItem[];
   selectedBackupId: string | null;
   setSelectedBackupId: (id: string | null) => void;
-  refresh: () => Promise<void>;
+  refresh: (opts?: { silent?: boolean }) => Promise<void>;
   refreshVersions: (backupId: string) => Promise<void>;
   // push state
   pushOpen: boolean;
@@ -139,6 +139,15 @@ export interface UseBackupStateOptions {
    * makes pane re-entry feel instant after the first session warm-up.
    */
   initialBackups?: BackupListItem[] | null;
+  /**
+   * Optional thunk reading whether the re-auth dialog is currently open.
+   * When set and a silent focus refresh sees AUTH_REQUIRED, the hook drops
+   * the event instead of re-firing `onAuthLost` — prevents recursive dialog
+   * stacking when the user lingers on the re-auth surface while the window
+   * regains focus. The thunk pattern (vs a boolean prop) keeps the predicate
+   * stable across re-renders so we don't churn the focus effect.
+   */
+  isReauthOpen?: () => boolean;
 }
 
 export function useBackupState(
@@ -168,16 +177,36 @@ export function useBackupState(
   const [pullOpen, setPullOpen] = useState(false);
   const [pullProgress, setPullProgress] = useState<PullProgress>(EMPTY_PULL);
 
+  // Monotonic run id — incremented at the top of every refresh() call (silent
+  // and loud). Every state setter inside a refresh is gated by matching its
+  // captured thisRunId against runIdRef.current; an in-flight slow refresh
+  // can no longer clobber a faster subsequent one.
+  const runIdRef = useRef(0);
+
   // Pure error handling shared between full refresh() and the
-  // backup-list-only path taken when initialStatus was provided.
+  // backup-list-only path taken when initialStatus was provided. When
+  // `silent` is true (focus-triggered SWR path), non-AUTH errors are dropped
+  // entirely and AUTH_REQUIRED is gated on the re-auth dialog not already
+  // being open.
   const handleFetchError = useCallback(
-    (err: unknown) => {
+    (err: unknown, silent = false) => {
       if (err instanceof BackupCommandError && err.code === 'AUTH_REQUIRED') {
         // Preserve `status`/`backups` so the pane stays rendered behind
         // the re-auth dialog. The parent's onAuthLost handler opens the
         // dialog; on success it refreshes status (and clears the list if
         // the re-authenticated identity differs from expectedEmail).
+        if (silent && options.isReauthOpen?.()) {
+          // Dialog already open — drop the event so we don't recursively
+          // re-fire onAuthLost on every focus event while the user lingers
+          // on the re-auth surface.
+          return;
+        }
         options.onAuthLost?.();
+      } else if (silent) {
+        // Silent path drops non-AUTH errors. Cached data stays visible;
+        // surfacing a transient BACKEND_UNREACHABLE on Alt-Tab would be
+        // hostile to a user who is just switching windows.
+        return;
       } else if (err instanceof BackupCommandError) {
         setError({
           message: err.message,
@@ -194,9 +223,17 @@ export function useBackupState(
   );
 
   const fetchBackupListFor = useCallback(
-    async (currentStatus: BackupStatusData | null) => {
+    async (
+      currentStatus: BackupStatusData | null,
+      thisRunId?: number,
+      silent = false,
+    ) => {
+      // Helper: skip a setBackups commit if a newer refresh has started.
+      const stillCurrent = () =>
+        thisRunId === undefined || runIdRef.current === thisRunId;
+
       if (!currentStatus?.signedIn) {
-        setBackups([]);
+        if (stillCurrent()) setBackups([]);
         return;
       }
       // With no subscription on file the engine returns SUBSCRIPTION_REQUIRED
@@ -204,11 +241,12 @@ export function useBackupState(
       // Skip the call — the subscription banner already prompts the user to
       // subscribe and there is no list to show anyway.
       if (currentStatus.subscriptionStatus === 'none') {
-        setBackups([]);
+        if (stillCurrent()) setBackups([]);
         return;
       }
       try {
         const list = await backupList(settings);
+        if (!stillCurrent()) return;
         setBackups(list.backups);
         if (list.backups.length > 0 && !selectedBackupId) {
           setSelectedBackupId(list.backups[0].id);
@@ -217,28 +255,43 @@ export function useBackupState(
         // SUBSCRIPTION_REQUIRED is a soft state — surfacing it as a hard error
         // hides the subscription banner. Treat as empty list, no error.
         if (err instanceof BackupCommandError && err.code === 'SUBSCRIPTION_REQUIRED') {
-          setBackups([]);
+          if (stillCurrent()) setBackups([]);
           return;
         }
-        handleFetchError(err);
+        if (!stillCurrent()) return;
+        handleFetchError(err, silent);
       }
     },
     [settings, selectedBackupId, handleFetchError],
   );
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const s = await backupStatus(settings);
-      setStatus(s);
-      await fetchBackupListFor(s);
-    } catch (err) {
-      handleFetchError(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [settings, fetchBackupListFor, handleFetchError]);
+  const refresh = useCallback(
+    async (opts: { silent?: boolean } = {}) => {
+      const silent = opts.silent === true;
+      // Bump and capture the run id. Every state setter below gates on
+      // matching its captured thisRunId against runIdRef.current so a slow
+      // in-flight refresh can't clobber a faster subsequent one.
+      runIdRef.current += 1;
+      const thisRunId = runIdRef.current;
+      const stillCurrent = () => runIdRef.current === thisRunId;
+
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const s = await backupStatus(settings);
+        if (stillCurrent()) setStatus(s);
+        await fetchBackupListFor(s, thisRunId, silent);
+      } catch (err) {
+        if (!stillCurrent()) return;
+        handleFetchError(err, silent);
+      } finally {
+        if (!silent && stillCurrent()) setLoading(false);
+      }
+    },
+    [settings, fetchBackupListFor, handleFetchError],
+  );
 
   const refreshVersions = useCallback(
     async (backupId: string) => {
@@ -323,7 +376,10 @@ export function useBackupState(
       timeoutId = setTimeout(() => {
         timeoutId = null;
         if (inFlightRef.current.pushOpen || inFlightRef.current.pullOpen) return;
-        void refresh();
+        // SWR: don't flip `loading`, don't clear `error`, drop non-AUTH
+        // failures, and gate AUTH_REQUIRED on the re-auth dialog not being
+        // open. Cached data stays visible across the round-trip.
+        void refresh({ silent: true });
       }, 1000);
     };
     const onFocus = () => trigger();
