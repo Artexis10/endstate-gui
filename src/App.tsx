@@ -2665,6 +2665,7 @@ function AppContent() {
               selectedProfileName={selectedProfile || null}
               initialStatus={backupStatusData}
               initialBackups={backupListData}
+              isReauthOpen={() => reauthOpenRef.current}
               onAuthLost={() => {
                 // Recursion guard: a focus-triggered status refresh can fire
                 // AUTH_REQUIRED while the dialog is already open. Don't queue

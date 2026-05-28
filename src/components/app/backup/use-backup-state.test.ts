@@ -341,3 +341,218 @@ describe('useBackupState focus refresh', () => {
     }
   });
 });
+
+describe('useBackupState silent focus refresh', () => {
+  const seededStatus: BackupStatusData = {
+    signedIn: true,
+    email: 'user@example.com',
+    userId: 'u-1',
+    subscriptionStatus: 'active',
+    issuerUrl: 'https://substratesystems.io',
+  };
+  const seededBackups = [
+    {
+      id: 'b-1',
+      name: 'work',
+      latestVersionId: 'v-1',
+      versionCount: 3,
+      totalSize: 1234,
+      updatedAt: '2026-05-11T00:00:00Z',
+    },
+  ];
+
+  it('does not flip loading=true during a silent focus refresh', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus } = await import('@/lib/backup-bridge');
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupStatus.mockResolvedValue(seededStatus);
+      mockBackupList.mockClear();
+      mockBackupList.mockResolvedValue({ backups: seededBackups });
+
+      // renderLog captures `loading` on every commit so we can prove no
+      // intermediate commit ever flipped it true (single post-await read
+      // would miss a transient flip).
+      const renderLog: boolean[] = [];
+      renderHook(() => {
+        const s = useBackupState(SETTINGS, {
+          initialStatus: seededStatus,
+          initialBackups: seededBackups,
+        });
+        renderLog.push(s.loading);
+        return s;
+      });
+      // Flush the mount-time SWR list-only revalidation.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      const baselineCalls = mockBackupStatus.mock.calls.length;
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        // Drain the 1s debounce + the awaited backupStatus +
+        // fetchBackupListFor microtasks. act() ensures React commits land.
+        await vi.advanceTimersByTimeAsync(1100);
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mockBackupStatus.mock.calls.length).toBe(baselineCalls + 1);
+
+      expect(renderLog.every((l) => l === false)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops non-AUTH errors from a silent focus refresh', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus, BackupCommandError } = await import(
+        '@/lib/backup-bridge'
+      );
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      // Seed the mount-time SWR list call: status not called (initialStatus
+      // is set), but a focus refresh will go through.
+      mockBackupList.mockClear();
+      mockBackupList.mockResolvedValue({ backups: seededBackups });
+
+      const onAuthLost = vi.fn();
+      const { result } = renderHook(() =>
+        useBackupState(SETTINGS, {
+          initialStatus: seededStatus,
+          initialBackups: seededBackups,
+          onAuthLost,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Make the focus-triggered status call fail with a non-AUTH error.
+      mockBackupStatus.mockRejectedValueOnce(
+        new BackupCommandError({
+          code: 'BACKEND_UNREACHABLE',
+          message: 'down',
+        }),
+      );
+
+      const baseline = mockBackupStatus.mock.calls.length;
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        // Drain the 1s debounce + the awaited backupStatus +
+        // fetchBackupListFor microtasks. act() ensures React commits land
+        // before assertions.
+        await vi.advanceTimersByTimeAsync(1100);
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mockBackupStatus.mock.calls.length).toBe(baseline + 1);
+
+      expect(result.current.error).toBeNull();
+      expect(onAuthLost).not.toHaveBeenCalled();
+      // Cached data still visible.
+      expect(result.current.status).toEqual(seededStatus);
+      expect(result.current.backups).toEqual(seededBackups);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('routes AUTH_REQUIRED to onAuthLost when re-auth dialog is closed', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus, BackupCommandError } = await import(
+        '@/lib/backup-bridge'
+      );
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupList.mockClear();
+      mockBackupList.mockResolvedValue({ backups: seededBackups });
+
+      const onAuthLost = vi.fn();
+      const isReauthOpen = vi.fn(() => false);
+      renderHook(() =>
+        useBackupState(SETTINGS, {
+          initialStatus: seededStatus,
+          initialBackups: seededBackups,
+          onAuthLost,
+          isReauthOpen,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      mockBackupStatus.mockRejectedValueOnce(
+        new BackupCommandError({
+          code: 'AUTH_REQUIRED',
+          message: 'session expired',
+        }),
+      );
+
+      const baseline = mockBackupStatus.mock.calls.length;
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        // Drain the 1s debounce + the awaited backupStatus +
+        // fetchBackupListFor microtasks. act() ensures React commits land
+        // before assertions.
+        await vi.advanceTimersByTimeAsync(1100);
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mockBackupStatus.mock.calls.length).toBe(baseline + 1);
+
+      expect(onAuthLost).toHaveBeenCalledTimes(1);
+      expect(isReauthOpen).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops AUTH_REQUIRED from silent refresh when re-auth dialog is already open', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus, BackupCommandError } = await import(
+        '@/lib/backup-bridge'
+      );
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupList.mockClear();
+      mockBackupList.mockResolvedValue({ backups: seededBackups });
+
+      const onAuthLost = vi.fn();
+      const isReauthOpen = vi.fn(() => true);
+      renderHook(() =>
+        useBackupState(SETTINGS, {
+          initialStatus: seededStatus,
+          initialBackups: seededBackups,
+          onAuthLost,
+          isReauthOpen,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      mockBackupStatus.mockRejectedValueOnce(
+        new BackupCommandError({
+          code: 'AUTH_REQUIRED',
+          message: 'session expired',
+        }),
+      );
+
+      const baseline = mockBackupStatus.mock.calls.length;
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        // Drain the 1s debounce + the awaited backupStatus +
+        // fetchBackupListFor microtasks. act() ensures React commits land
+        // before assertions.
+        await vi.advanceTimersByTimeAsync(1100);
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mockBackupStatus.mock.calls.length).toBe(baseline + 1);
+
+      expect(onAuthLost).not.toHaveBeenCalled();
+      expect(isReauthOpen).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
