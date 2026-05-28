@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.9.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.8.0...gui-v2.9.0) (2026-05-28)
+
+
+### Features
+
+* **backup:** polish backup pane status visibility (Wave 2) ([#60](https://github.com/Artexis10/endstate-gui/issues/60)) ([6da1cc9](https://github.com/Artexis10/endstate-gui/commit/6da1cc9e8e21996b3c09276fed3d0470ee006468))
+
 ## [2.8.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.7.0...gui-v2.8.0) (2026-05-26)
 
 
