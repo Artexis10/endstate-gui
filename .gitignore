@@ -83,6 +83,7 @@ screenshots/extras/
 # Local scratch
 tmp.json
 .claude/scratch/
+.claude/worktrees/
 .playwright-mcp/
 
 # Nested engine repo clone (sibling work, not part of GUI tree)
