@@ -40,7 +40,24 @@ if (prePlaced) {
 } else {
   // Read version files for ldflags embedding
   const engineRoot = path.resolve(ENGINE_DIR, '..');
-  const ver = fs.readFileSync(path.join(engineRoot, 'VERSION'), 'utf8').trim();
+  // Version comes from the release-please manifest — the single source of
+  // truth the engine itself uses at runtime (go-engine internal/config/
+  // version.go ReadVersion). The legacy VERSION file is NOT bumped by
+  // release-please (frozen at an old value), and released binaries derive
+  // their version from the git tag (engine release.yml). Reading VERSION here
+  // embeds a stale version into local source builds only. See Artexis10/endstate#54.
+  let ver = '0.0.0-dev';
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(engineRoot, '.release-please-manifest.json'), 'utf8'),
+    );
+    if (typeof manifest['.'] === 'string' && manifest['.'].trim()) {
+      ver = manifest['.'].trim();
+    }
+  } catch {
+    // Manifest missing/malformed (e.g. a fork without release-please) — keep
+    // the 0.0.0-dev fallback, matching version.go's fallbackVersion.
+  }
   const schemaVer = fs.readFileSync(path.join(engineRoot, 'SCHEMA_VERSION'), 'utf8').trim();
   const ldflags = `-X github.com/Artexis10/endstate/go-engine/internal/config.version=${ver} -X github.com/Artexis10/endstate/go-engine/internal/config.schemaVersion=${schemaVer}`;
 
