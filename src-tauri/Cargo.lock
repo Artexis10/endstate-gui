@@ -807,11 +807,12 @@ dependencies = [
 
 [[package]]
 name = "endstate-gui"
-version = "2.2.1"
+version = "2.9.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
  "dirs 5.0.1",
+ "parking_lot",
  "serde",
  "serde_json",
  "tauri",

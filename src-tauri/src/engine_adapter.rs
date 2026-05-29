@@ -15,7 +15,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
@@ -333,10 +334,7 @@ pub fn run_engine(
 
     // Acquire lock and check if another run is active
     {
-        let mut state = run_state.lock().map_err(|_| EngineError {
-            code: "LOCK_ERROR".to_string(),
-            message: "Failed to acquire run state lock".to_string(),
-        })?;
+        let mut state = run_state.lock();
 
         if state.run_id.is_some() {
             return Err(EngineError {
@@ -358,7 +356,8 @@ pub fn run_engine(
             Ok(c) => c,
             Err(e) => {
                 // Clear run state before returning error
-                if let Ok(mut state) = run_state.lock() {
+                {
+                    let mut state = run_state.lock();
                     state.run_id = None;
                     state.command = None;
                     state.child = None;
@@ -381,7 +380,8 @@ pub fn run_engine(
         Ok(child) => child,
         Err(e) => {
             // Clear run state on spawn failure
-            if let Ok(mut state) = run_state.lock() {
+            {
+                let mut state = run_state.lock();
                 state.run_id = None;
                 state.command = None;
                 state.child = None;
@@ -405,10 +405,7 @@ pub fn run_engine(
 
     // Store child in shared state for cancellation
     {
-        let mut state = run_state.lock().map_err(|_| EngineError {
-            code: "LOCK_ERROR".to_string(),
-            message: "Failed to acquire run state lock".to_string(),
-        })?;
+        let mut state = run_state.lock();
         state.child = Some(child);
     }
 
@@ -474,10 +471,7 @@ pub fn run_engine(
 
     // Get exit code and check cancellation status
     let (exit_code, was_cancelled) = {
-        let mut state = run_state.lock().map_err(|_| EngineError {
-            code: "LOCK_ERROR".to_string(),
-            message: "Failed to acquire run state lock".to_string(),
-        })?;
+        let mut state = run_state.lock();
 
         let was_cancelled = state.cancel_requested.load(Ordering::SeqCst);
         let exit_code = if let Some(ref mut child) = state.child {
@@ -519,10 +513,7 @@ pub fn run_engine(
 /// * `Ok(())` - Cancellation was initiated
 /// * `Err(EngineError)` - No run is active or failed to cancel
 pub fn cancel_engine(app: &AppHandle, run_state: &SharedRunState, broadcaster: &EventBroadcaster) -> Result<(), EngineError> {
-    let mut state = run_state.lock().map_err(|_| EngineError {
-        code: "LOCK_ERROR".to_string(),
-        message: "Failed to acquire run state lock".to_string(),
-    })?;
+    let mut state = run_state.lock();
 
     if state.run_id.is_none() {
         return Err(EngineError {
@@ -557,18 +548,12 @@ pub fn cancel_engine(app: &AppHandle, run_state: &SharedRunState, broadcaster: &
 
 /// Check if a run is currently active.
 pub fn is_run_active(run_state: &SharedRunState) -> bool {
-    run_state
-        .lock()
-        .map(|state| state.run_id.is_some())
-        .unwrap_or(false)
+    run_state.lock().run_id.is_some()
 }
 
 /// Get the current run ID if a run is active.
 pub fn get_current_run_id(run_state: &SharedRunState) -> Option<String> {
-    run_state
-        .lock()
-        .ok()
-        .and_then(|state| state.run_id.clone())
+    run_state.lock().run_id.clone()
 }
 
 #[cfg(test)]
@@ -802,5 +787,22 @@ mod tests {
         assert_eq!(extract_command_name(&["verify".to_string(), "manifest.json".to_string()]), "verify");
         assert_eq!(extract_command_name(&["-Json".to_string()]), "unknown");
         assert_eq!(extract_command_name(&[]), "unknown");
+    }
+
+    #[test]
+    fn concurrent_run_state_lock_does_not_panic() {
+        let run_state = create_run_state();
+        let cloned = run_state.clone();
+        let handle = std::thread::spawn(move || {
+            for _ in 0..50 {
+                let _ = is_run_active(&cloned);
+                let _ = get_current_run_id(&cloned);
+            }
+        });
+        for _ in 0..50 {
+            let _ = is_run_active(&run_state);
+            let _ = get_current_run_id(&run_state);
+        }
+        handle.join().unwrap();
     }
 }
