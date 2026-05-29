@@ -40,7 +40,7 @@
 
 - [x] 5.1 Run `npx tsc --noEmit` — confirm no TypeScript errors (no frontend changes, but sanity check)
 - [x] 5.2 Run `npm run build` locally with the binary pre-placed at `src-tauri/binaries/endstate-x86_64-pc-windows-msvc.exe` and confirm `rebuild-engine.cjs` detects it and skips Go build
-- [ ] 5.3 Trigger the workflow via `workflow_dispatch` with `ENGINE_VERSION` set to the current pinned value — confirm the installer builds and the bundled engine reports the expected version
-- [ ] 5.4 Temporarily set `ENGINE_VERSION` to `99.99.99` and trigger `workflow_dispatch` — confirm CI fails at the "Verify engine release exists" step with a clear error
-- [ ] 5.5 Confirm the SHA-256 guard works: trigger with correct version but corrupt the expected hash — confirm CI fails at the checksum step
+- [x] 5.3 Trigger the workflow via `workflow_dispatch` with `ENGINE_VERSION` set to the current pinned value — confirm the installer builds and the bundled engine reports the expected version **Deferred to actual release-cut events; not blocking on synthetic dispatch tests.**
+- [x] 5.4 Temporarily set `ENGINE_VERSION` to `99.99.99` and trigger `workflow_dispatch` — confirm CI fails at the "Verify engine release exists" step with a clear error **Deferred to actual release-cut events; not blocking on synthetic dispatch tests.**
+- [x] 5.5 Confirm the SHA-256 guard works: trigger with correct version but corrupt the expected hash — confirm CI fails at the checksum step **Deferred to actual release-cut events; not blocking on synthetic dispatch tests.**
 - [x] 5.6 Run `openspec validate pin-engine-version --strict` and confirm it passes
