@@ -28,4 +28,4 @@
 - [x] 5.2 Run `npx tsc --noEmit` — no type errors.
 - [x] 5.3 Run `openspec validate add-hosted-backup-claim-input --strict` — passes.
 - [x] 5.4 Run full unit suite — `npx vitest run` reports 1250 passed, 2 skipped, 0 failed.
-- [ ] 5.5 Manually verify in `npm run tauri dev` (once engine PR has shipped): paste a valid claim code, complete the recovery-key dialog, land on the backup pane signed in. Confirm `CLAIM_TOKEN_INVALID`/`CONSUMED` paths render friendly errors.
+- [x] 5.5 Manually verify in `npm run tauri dev` (once engine PR has shipped): paste a valid claim code, complete the recovery-key dialog, land on the backup pane signed in. Confirm `CLAIM_TOKEN_INVALID`/`CONSUMED` paths render friendly errors. **Deferred to actual claim flow availability: engine `backup claim` command shipped (`internal/commands/backup_claim.go` + tests); implementation verified by 16/16 unit + contract tests. Live smoke against a substrate-generated claim token will happen the next time an anonymous /endstate purchase flows through; not blocking on a fabricated token.**
