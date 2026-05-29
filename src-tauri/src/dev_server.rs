@@ -83,9 +83,7 @@ fn run_engine_http(
 
     // Acquire lock and check if another run is active
     {
-        let mut state = run_state
-            .lock()
-            .map_err(|_| "Failed to acquire run state lock".to_string())?;
+        let mut state = run_state.lock();
 
         if state.run_id.is_some() {
             return Err(
@@ -103,7 +101,8 @@ fn run_engine_http(
         match crate::engine_adapter::build_bundled_command(app, args) {
             Ok(c) => c,
             Err(e) => {
-                if let Ok(mut state) = run_state.lock() {
+                {
+                    let mut state = run_state.lock();
                     state.run_id = None;
                     state.command = None;
                     state.child = None;
@@ -119,7 +118,8 @@ fn run_engine_http(
     let mut child = match cmd.spawn() {
         Ok(child) => child,
         Err(e) => {
-            if let Ok(mut state) = run_state.lock() {
+            {
+                let mut state = run_state.lock();
                 state.run_id = None;
                 state.command = None;
                 state.child = None;
@@ -133,9 +133,7 @@ fn run_engine_http(
 
     // Store child for cancellation
     {
-        let mut state = run_state
-            .lock()
-            .map_err(|_| "Failed to acquire run state lock".to_string())?;
+        let mut state = run_state.lock();
         state.child = Some(child);
     }
 
@@ -194,9 +192,7 @@ fn run_engine_http(
 
     // Get exit code and check cancellation
     let (exit_code, was_cancelled) = {
-        let mut state = run_state
-            .lock()
-            .map_err(|_| "Failed to acquire run state lock".to_string())?;
+        let mut state = run_state.lock();
 
         let was_cancelled = state.cancel_requested.load(Ordering::SeqCst);
         let exit_code = if let Some(ref mut child) = state.child {
@@ -232,9 +228,7 @@ fn cancel_engine_http(
     run_state: &SharedRunState,
     broadcaster: &EventBroadcaster,
 ) -> Result<(), String> {
-    let mut state = run_state
-        .lock()
-        .map_err(|_| "Failed to acquire run state lock".to_string())?;
+    let mut state = run_state.lock();
 
     if state.run_id.is_none() {
         return Err("No run is currently active to cancel.".to_string());
@@ -344,12 +338,26 @@ async fn handle_invoke(
 ) -> Json<InvokeResponse> {
     match req.cmd.as_str() {
         "engine_is_running" => {
-            let result = crate::engine_adapter::is_run_active(&state.run_state);
-            ok_response(serde_json::json!(result))
+            let run_state = state.run_state.clone();
+            match tokio::task::spawn_blocking(move || {
+                crate::engine_adapter::is_run_active(&run_state)
+            })
+            .await
+            {
+                Ok(result) => ok_response(serde_json::json!(result)),
+                Err(e) => err_response(format!("Task error: {}", e)),
+            }
         }
         "engine_get_run_id" => {
-            let result = crate::engine_adapter::get_current_run_id(&state.run_state);
-            ok_response(serde_json::json!(result))
+            let run_state = state.run_state.clone();
+            match tokio::task::spawn_blocking(move || {
+                crate::engine_adapter::get_current_run_id(&run_state)
+            })
+            .await
+            {
+                Ok(result) => ok_response(serde_json::json!(result)),
+                Err(e) => err_response(format!("Task error: {}", e)),
+            }
         }
         "engine_run" => {
             let exe = req
@@ -384,9 +392,16 @@ async fn handle_invoke(
             }
         }
         "engine_cancel" => {
-            match cancel_engine_http(&state.run_state, &state.broadcaster) {
-                Ok(()) => ok_response(serde_json::json!(null)),
-                Err(e) => err_response(e),
+            let run_state = state.run_state.clone();
+            let broadcaster = state.broadcaster.clone();
+            match tokio::task::spawn_blocking(move || {
+                cancel_engine_http(&run_state, &broadcaster)
+            })
+            .await
+            {
+                Ok(Ok(())) => ok_response(serde_json::json!(null)),
+                Ok(Err(e)) => err_response(e),
+                Err(e) => err_response(format!("Task error: {}", e)),
             }
         }
         "run_endstate_streaming" => {
