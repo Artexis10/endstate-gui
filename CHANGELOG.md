@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.9.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.9.0...gui-v2.9.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* **dev-server:** eliminate tauri:dev:browser heap corruption ([#63](https://github.com/Artexis10/endstate-gui/issues/63)) ([a852fa3](https://github.com/Artexis10/endstate-gui/commit/a852fa322c64abb72f889c55d72fa20f705efce2))
+
 ## [2.9.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.8.0...gui-v2.9.0) (2026-05-28)
 
 
