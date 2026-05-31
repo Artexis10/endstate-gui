@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 * bump engine to v2.7.0 ([#71](https://github.com/Artexis10/endstate-gui/issues/71)) ([92bf4c0](https://github.com/Artexis10/endstate-gui/commit/92bf4c0dea8359085440e4abdce4e84528fa31d7))
+* bump engine to v2.8.0 ([#76](https://github.com/Artexis10/endstate-gui/issues/76)) ([b7dc4fd](https://github.com/Artexis10/endstate-gui/commit/b7dc4fdb0d06011c6a4bb0afa7f19b6754c510e1))
 
 
 ### Bug Fixes
