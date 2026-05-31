@@ -80,6 +80,26 @@ export function RestoreWizard({
   });
   const [completionPath, setCompletionPath] = useState<string | null>(null);
 
+  // Reset wizard state on every closed→open transition so a reopen always starts
+  // from a clean loading state and re-fetches. The component stays mounted across
+  // opens (its `open` prop is toggled from App.tsx), so without this it would
+  // render its previous `backups`/`loading` for a frame — surfacing a stale
+  // "We found N backups" count after the underlying list changed (e.g. a delete
+  // emptied the account). This is React's "adjust state during render" pattern,
+  // so the stale frame is never painted; the effect below then refetches.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setStep('choose');
+      setLoading(true);
+      setBackups([]);
+      setVersionsByBackup({});
+      setSelectedBackupId(null);
+      setSelectedVersionId(null);
+    }
+  }
+
   // Load backup + version list on open.
   useEffect(() => {
     if (!open) return;
