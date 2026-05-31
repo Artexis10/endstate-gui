@@ -1,0 +1,46 @@
+## 0. Prerequisites (cross-repo — BLOCKING; tracked outside this repo)
+- [ ] 0.1 Engine: add `backup push --if-changed` — no-op when candidate manifest == latest version's `manifestSha256`; return a `skipped: true` / `unchanged` envelope (no new versionId). Tracked: `Artexis10/endstate#62`.
+- [ ] 0.2 Engine + substrate (#59): populate `lastBackupAt` and add quota fields (`quotaUsedBytes`/`quotaTotalBytes`/`versionCount`) to `backup status`; substrate `/api/account/me` returns quota. (Already filed: Artexis10/endstate#59.)
+- [ ] 0.3 Engine: advertise `--if-changed` support in the capabilities envelope so the GUI can capability-gate.
+
+## 1. Settings
+- [ ] 1.1 Extend `AppSettings` (`src/settings.ts`): `autoBackupEnabled: boolean`, `autoBackupPromptSeen: boolean`, `profileBackupIds: Record<string, string>`; default missing fields on load.
+- [ ] 1.2 Unit test: settings load/save round-trip with the new fields + back-compat for settings stored without them.
+
+## 2. One-time consent prompt
+- [ ] 2.1 Add a non-blocking consent-prompt component under `src/components/app/backup/` (shadcn primitives; toggle pre-set ON), co-located test.
+- [ ] 2.2 Show it on the first eligible capture when `!autoBackupPromptSeen`; persist `autoBackupEnabled` + set `autoBackupPromptSeen` on dismiss/confirm.
+- [ ] 2.3 Unit test: prompt shown once only; decline sets `autoBackupEnabled=false`.
+
+## 3. Background push orchestrator
+- [ ] 3.1 Add `--if-changed` to `PushArgs`/`backupPush` in `src/lib/backup-bridge.ts`; handle the `skipped/unchanged` envelope shape.
+- [ ] 3.2 Add a small hook/util that runs the auto-push silently (no `PushProgressDialog`) and maps four outcomes: uploaded / skipped-unchanged / auth-required / other-error.
+- [ ] 3.3 Update the `profileBackupIds` map (first push omits `--backup-id` + passes `--name`, then stores the returned backupId; later pushes pass it).
+- [ ] 3.4 Unit tests for the four-outcome mapping + mapping persistence.
+
+## 4. Trigger wiring + visibility
+- [ ] 4.1 Wire the trigger in `src/App.tsx` at the capture-completion hook (after `recordLifecycleEvent('capture', …)`), eligibility-gated.
+- [ ] 4.2 Add the subtle "Backing up… / Backed up ✓" chip to the capture-complete summary (not the full modal).
+- [ ] 4.3 Capability gate: only enable auto-backup when the engine advertises `--if-changed`.
+
+## 5. Status surface (auth-paused)
+- [ ] 5.1 Thread an auth-paused flag through `use-backup-state.ts`.
+- [ ] 5.2 Extend `last-sync-indicator.tsx` with the persistent "Sign in to resume backups" affordance (warning tint, opens inline re-auth dialog).
+- [ ] 5.3 One-time toast on the first auth failure per session (no repeats).
+- [ ] 5.4 Unit tests: paused-state transitions + one-time-toast behavior.
+
+## 6. Settings UI
+- [ ] 6.1 Add the `autoBackupEnabled` toggle to the Settings surface (reversible; off → no auto-push), co-located test.
+
+## 7. Error handling
+- [ ] 7.1 `STORAGE_QUOTA_EXCEEDED` from a background push surfaces a persistent friendly quota notice (reuse `quota-notice` vocabulary); transient/unreachable errors are silently skipped + retried.
+- [ ] 7.2 All copy routes through `friendlyBackupError()` — no raw codes / CLI jargon.
+
+## 8. E2E
+- [ ] 8.1 `e2e/auto-backup.spec.ts`: capture → auto-push fires (mocked engine) → status flips; first capture shows the prompt once; opt-out disables; auth-fail → paused + single toast.
+
+## 9. Validation
+- [ ] 9.1 `npm run openspec:validate --all --strict --no-interactive` passes.
+- [ ] 9.2 `npx vitest run` + coverage thresholds hold.
+- [ ] 9.3 `npm run test:all` passes.
+- [ ] 9.4 Live (livewire) smoke once the engine co-requisites land: real capture → observe silent background push + status flip.
