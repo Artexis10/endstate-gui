@@ -14,7 +14,13 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { invoke } from '@/lib/tauri-bridge';
@@ -223,17 +229,33 @@ export function RestoreWizard({
 
   if (!open) return null;
 
+  // While the pull runs, show only PullProgressDialog (its own modal) so we
+  // never stack two overlays. Choose/done render inside the wizard dialog.
+  if (step === 'progress') {
+    return (
+      <PullProgressDialog
+        open
+        totalChunks={pullProgress.totalChunks}
+        downloadedChunks={pullProgress.downloadedChunks}
+        verifiedChunks={pullProgress.verifiedChunks}
+        decryptedChunks={pullProgress.decryptedChunks}
+        subPhase={pullProgress.subPhase}
+        currentChunkIndex={pullProgress.currentChunkIndex}
+      />
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
-      <Card className="w-full max-w-xl">
-        <CardHeader>
-          <CardTitle>Restore on this machine</CardTitle>
-          <p className="text-sm text-muted-foreground">
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onDismiss(); }}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Restore on this machine</DialogTitle>
+          <DialogDescription>
             We found {backups.length} backup{backups.length === 1 ? '' : 's'} under your
             account. Pick one to restore here.
-          </p>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -306,16 +328,6 @@ export function RestoreWizard({
                 </Button>
               </div>
             </>
-          ) : step === 'progress' ? (
-            <PullProgressDialog
-              open
-              totalChunks={pullProgress.totalChunks}
-              downloadedChunks={pullProgress.downloadedChunks}
-              verifiedChunks={pullProgress.verifiedChunks}
-              decryptedChunks={pullProgress.decryptedChunks}
-              subPhase={pullProgress.subPhase}
-              currentChunkIndex={pullProgress.currentChunkIndex}
-            />
           ) : (
             <>
               <div className="rounded-md border border-success/30 bg-success/10 p-3 text-sm">
@@ -361,8 +373,8 @@ export function RestoreWizard({
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
