@@ -1325,20 +1325,49 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(create_run_state())
         .manage(EventBroadcaster::new())
-        .setup(|_app| {
+        .setup(|app| {
+            // Headless dev bridge: debug build + ENDSTATE_BROWSER_BRIDGE=1. In this
+            // mode the GUI is driven from an EXTERNAL browser over the HTTP bridge
+            // (port 9876), so the Tauri host window's WebView2 is pure overhead — and
+            // it is the only native surface in this process that can crash it (an
+            // intermittent upstream wry/WebView2 bug, see
+            // memory/project_tauri_dev_server_crash). `bridge_mode` is a compile-time
+            // `false` in release (cfg!(debug_assertions)), so production + normal dev
+            // always create the window below.
+            let bridge_mode = cfg!(debug_assertions)
+                && std::env::var("ENDSTATE_BROWSER_BRIDGE").unwrap_or_default() == "1";
+
             #[cfg(all(debug_assertions, feature = "dev-server"))]
             {
                 use tauri::Manager;
-                if std::env::var("ENDSTATE_BROWSER_BRIDGE").unwrap_or_default() == "1" {
-                    let broadcaster = _app.state::<EventBroadcaster>().inner().clone();
-                    let run_state = _app.state::<SharedRunState>().inner().clone();
-                    let app_handle = _app.handle().clone();
+                if bridge_mode {
+                    let broadcaster = app.state::<EventBroadcaster>().inner().clone();
+                    let run_state = app.state::<SharedRunState>().inner().clone();
+                    let app_handle = app.handle().clone();
                     tauri::async_runtime::spawn(async move {
                         if let Err(e) = dev_server::start(app_handle, run_state, broadcaster).await {
                             eprintln!("Dev server failed: {}", e);
                         }
                     });
                 }
+            }
+
+            // Create the host window UNLESS we're a headless dev bridge. Not creating
+            // the window means no WebView2 in-process → the WebView2 crash surface is
+            // gone entirely (unlike navigating it to about:blank, which keeps the
+            // WebView2 alive). The window is defined here (not in tauri.conf.json's
+            // `app.windows`, which is now empty) so we can skip it conditionally.
+            if !bridge_mode {
+                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+                    .title("Endstate")
+                    .inner_size(800.0, 600.0)
+                    .resizable(true)
+                    .fullscreen(false)
+                    .build()?;
+            } else {
+                eprintln!(
+                    "[bridge] headless mode — no host window. Drive the app from http://127.0.0.1:1420"
+                );
             }
             Ok(())
         })
@@ -1371,6 +1400,19 @@ pub fn run() {
             cleanup_capture_cache,
             validate_profile
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app_handle, event| {
+            // In headless bridge mode there are no windows; don't let Tauri auto-exit
+            // when the (non-existent) window count is zero — keep the process alive so
+            // the HTTP bridge keeps serving the external browser. No-op in release
+            // (bridge_mode is compile-time false there).
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let bridge_mode = cfg!(debug_assertions)
+                    && std::env::var("ENDSTATE_BROWSER_BRIDGE").unwrap_or_default() == "1";
+                if bridge_mode {
+                    api.prevent_exit();
+                }
+            }
+        });
 }
