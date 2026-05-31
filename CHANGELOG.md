@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.11.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.10.1...gui-v2.11.0) (2026-05-31)
+
+
+### Features
+
+* bump engine to v2.7.0 ([#71](https://github.com/Artexis10/endstate-gui/issues/71)) ([92bf4c0](https://github.com/Artexis10/endstate-gui/commit/92bf4c0dea8359085440e4abdce4e84528fa31d7))
+
+
+### Bug Fixes
+
+* **backup:** restore wizard uses shadcn Dialog instead of hand-rolled overlay ([#75](https://github.com/Artexis10/endstate-gui/issues/75)) ([1704b23](https://github.com/Artexis10/endstate-gui/commit/1704b23e8d229ea9aab78dd39e16f92b218d4a39))
+
 ## [2.10.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.10.0...gui-v2.10.1) (2026-05-29)
 
 
