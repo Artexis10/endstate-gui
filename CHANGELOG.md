@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.12.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.12.0...gui-v2.12.1) (2026-05-31)
+
+
+### Bug Fixes
+
+* **dev-server:** run the dev bridge headless (no host window) to remove the WebView2 crash surface ([#81](https://github.com/Artexis10/endstate-gui/issues/81)) ([8517942](https://github.com/Artexis10/endstate-gui/commit/8517942ba82e33330e71d8f47f32d3f958a594ea))
+
 ## [2.12.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.11.0...gui-v2.12.0) (2026-05-31)
 
 
