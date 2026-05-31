@@ -53,6 +53,10 @@ import { BackupPane } from './components/app/backup/backup-pane';
 import { ProfileMissingModal } from './components/app/profile-missing-modal';
 import { RestoreWizard } from './components/app/backup/restore-wizard';
 import { ReauthDialog } from './components/app/backup/reauth-dialog';
+import { AutoBackupConsent } from './components/app/backup/auto-backup-consent';
+import { AutoBackupSetting } from './components/app/settings/auto-backup-setting';
+import { runAutoBackup } from './lib/auto-backup';
+import { engineSupportsIfChanged, autoBackupAvailable } from './lib/backup-capabilities';
 import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
@@ -197,6 +201,16 @@ function AppContent() {
   // Reset to 'sign-in' on most nav transitions; "Create account" sets it to
   // 'sign-up' just before routing.
   const [authInitialTab, setAuthInitialTab] = useState<'sign-in' | 'sign-up' | 'recover'>('sign-in');
+
+  // Automatic hosted backup (capability-gated; stays dark until the engine
+  // advertises `backup push --if-changed`). Trigger is capture-only.
+  const [ifChangedSupported, setIfChangedSupported] = useState(false);
+  const [autoBackupChip, setAutoBackupChip] =
+    useState<'idle' | 'backing-up' | 'backed-up' | 'paused'>('idle');
+  const [autoBackupAuthPaused, setAutoBackupAuthPaused] = useState(false);
+  const [autoBackupConsentOpen, setAutoBackupConsentOpen] = useState(false);
+  // One auth-failure toast per session (no repeats); a ref so it never re-renders.
+  const autoBackupAuthToastShownRef = useRef(false);
 
   // Post-save "Push to hosted backup" — fires the existing backupPush wrapper
   // from outside the Backup pane and renders the same PushProgressDialog as
@@ -1103,6 +1117,61 @@ function AppContent() {
     saveSettings(updated);
   };
 
+  // One-time auto-backup consent decision: persist the choice + mark the prompt seen.
+  const handleAutoBackupConsent = (enabled: boolean) => {
+    updateSettings({ autoBackupEnabled: enabled, autoBackupPromptSeen: true });
+    setAutoBackupConsentOpen(false);
+  };
+
+  // Run a silent background auto-push for a freshly-captured profile and map the
+  // outcome to the inline chip / paused indicator / one-time toast / settings.
+  // No-op surfaces nothing; transient errors are swallowed and retried next capture.
+  const runCaptureAutoBackup = async (
+    profilePath: string,
+    profileKey: string,
+    name: string,
+  ) => {
+    setAutoBackupChip('backing-up');
+    const outcome = await runAutoBackup({ settings, profilePath, profileKey, name });
+    switch (outcome.kind) {
+      case 'uploaded':
+        setAutoBackupAuthPaused(false);
+        setAutoBackupChip('backed-up');
+        updateSettings({
+          profileBackupIds: { ...settings.profileBackupIds, [profileKey]: outcome.backupId },
+        });
+        backupStatus(settings).then(setBackupStatusData).catch(() => {});
+        break;
+      case 'skipped':
+        setAutoBackupAuthPaused(false);
+        setAutoBackupChip('backed-up');
+        if (outcome.backupId && !settings.profileBackupIds[profileKey]) {
+          updateSettings({
+            profileBackupIds: { ...settings.profileBackupIds, [profileKey]: outcome.backupId },
+          });
+        }
+        break;
+      case 'auth-required':
+        setAutoBackupAuthPaused(true);
+        setAutoBackupChip('paused');
+        if (!autoBackupAuthToastShownRef.current) {
+          autoBackupAuthToastShownRef.current = true;
+          showToast('Auto-backup paused — sign in to resume backups.', 'warning');
+        }
+        break;
+      case 'quota-exceeded':
+        // Persistent surface is the quota notice in the Backup pane; refresh
+        // status so it reflects the full quota.
+        setAutoBackupChip('idle');
+        backupStatus(settings).then(setBackupStatusData).catch(() => {});
+        break;
+      case 'error':
+        // Transient / unreachable — silent; retried on the next capture.
+        setAutoBackupChip('idle');
+        break;
+    }
+  };
+
   const resetSettings = () => {
     localStorage.removeItem('endstate-gui-settings');
     const defaults = loadSettings();
@@ -1206,6 +1275,9 @@ function AppContent() {
       // here on initial boot; subsequent refreshes happen on auth events.
       const supported = capResult.envelope.data?.features?.hostedBackup?.supported === true;
       setHostedBackupSupported(supported);
+      // Auto-backup capability gate: stays dark until the engine advertises
+      // `backup push --if-changed`. Defaults false when unknown.
+      setIfChangedSupported(engineSupportsIfChanged(capResult.envelope.data));
       if (supported) {
         try {
           const status = await backupStatus(settings);
@@ -2238,6 +2310,7 @@ function AppContent() {
               hostedBackupSupported={hostedBackupSupported}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
               hostedBackupSubscriptionStatus={backupStatusData?.subscriptionStatus}
+              autoBackupState={autoBackupChip}
               onOpenHostedBackup={() => handleNavigate('backup')}
               onPushToHostedBackup={
                 hostedBackupSupported
@@ -2293,6 +2366,7 @@ function AppContent() {
               onStartCapture={async () => {
                 setIsRunning(true);
                 setLiveAppEvents([]);
+                setAutoBackupChip('idle');
                 setOverviewRunningAction('capture');
                 setOverviewActionStatus('capture', 'running');
                 setOverviewActionProgress('capture', { message: 'Scanning installed applications...' });
@@ -2300,6 +2374,28 @@ function AppContent() {
                   const result = await handleCaptureFromOverview();
                   setOverviewActionStatus('capture', 'success');
                   setFlowHasWork(prev => ({ ...prev, save: true }));
+
+                  // Automatic hosted backup (capture-only). Pushes the same
+                  // persisted engine output the manual push uses, silently and
+                  // with --if-changed. Capability-gated → dark until the engine
+                  // advertises --if-changed (ifChangedSupported defaults false).
+                  const autoBackupPath = result.envelopeData?.outputPath;
+                  if (
+                    autoBackupPath &&
+                    autoBackupAvailable({
+                      hostedBackupSupported,
+                      ifChangedSupported,
+                      status: backupStatusData,
+                    })
+                  ) {
+                    if (!settings.autoBackupPromptSeen) {
+                      // First eligible capture: ask once (no push this time).
+                      setAutoBackupConsentOpen(true);
+                    } else if (settings.autoBackupEnabled) {
+                      void runCaptureAutoBackup(autoBackupPath, 'auto:this-computer', 'This computer');
+                    }
+                  }
+
                   return {
                     count: result.count,
                     draftText: result.draftText,
@@ -2677,6 +2773,12 @@ function AppContent() {
               onRequestCapture={() => {
                 setActiveFlowPage('setup');
                 setCurrentPage('setup');
+              }}
+              autoBackupPaused={autoBackupAuthPaused}
+              onResumeAutoBackup={() => {
+                if (reauthOpenRef.current) return;
+                setReauthExpectedEmail(backupStatusData?.email);
+                setReauthDialogOpen(true);
               }}
             />
             <RestoreWizard
@@ -3372,6 +3474,23 @@ function AppContent() {
               />
             )}
 
+            {hostedBackupSupported && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Automatic backup</CardTitle>
+                  <CardDescription>
+                    Keep your saved setup backed up to your cloud automatically.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AutoBackupSetting
+                    enabled={settings.autoBackupEnabled}
+                    onChange={(v) => updateSettings({ autoBackupEnabled: v })}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Updates</CardTitle>
@@ -3458,6 +3577,13 @@ function AppContent() {
         totalChunks={pushTotalChunks}
         uploadedChunks={pushUploadedChunks}
         currentChunkIndex={pushCurrentChunkIndex}
+      />
+
+      {/* One-time auto-backup consent prompt. App-level so it can appear after a
+          capture from the Save flow (not just on the Backup pane). */}
+      <AutoBackupConsent
+        open={autoBackupConsentOpen}
+        onDecision={handleAutoBackupConsent}
       />
 
       {/* Folder Path Modal (web fallback) */}

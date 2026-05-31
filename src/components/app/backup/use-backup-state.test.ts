@@ -44,6 +44,9 @@ const SETTINGS: AppSettings = {
   selectedProfileName: null,
   dryRunEnabled: false,
   showDetails: false,
+  autoBackupEnabled: false,
+  autoBackupPromptSeen: false,
+  profileBackupIds: {},
 };
 
 const baseFields = {

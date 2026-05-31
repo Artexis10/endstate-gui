@@ -7,6 +7,12 @@ export interface AppSettings {
   selectedProfileName: string | null;
   dryRunEnabled: boolean;
   showDetails: boolean;
+  /** Opt-in for automatic hosted backup on capture. Reversible (Settings toggle). */
+  autoBackupEnabled: boolean;
+  /** Whether the one-time auto-backup consent prompt has been shown. */
+  autoBackupPromptSeen: boolean;
+  /** Persistent map: profile key → its hosted-backup id, so auto-push updates the same backup. */
+  profileBackupIds: Record<string, string>;
 }
 
 /** Legacy settings shape for one-time migration only */
@@ -23,6 +29,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   selectedProfileName: null,
   dryRunEnabled: true,
   showDetails: false,
+  autoBackupEnabled: false,
+  autoBackupPromptSeen: false,
+  profileBackupIds: {},
 };
 
 export function loadSettings(): AppSettings {
@@ -98,6 +107,9 @@ export async function loadSettingsWithProfileMigration(
         selectedProfileName: migratedName,
         dryRunEnabled: rawSettings.dryRunEnabled,
         showDetails: rawSettings.showDetails,
+        autoBackupEnabled: rawSettings.autoBackupEnabled,
+        autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
+        profileBackupIds: rawSettings.profileBackupIds,
       };
       saveSettings(updatedSettings);
       console.debug('[settings] Profile selection migrated to name:', migratedName);
@@ -110,6 +122,9 @@ export async function loadSettingsWithProfileMigration(
         selectedProfileName: null,
         dryRunEnabled: rawSettings.dryRunEnabled,
         showDetails: rawSettings.showDetails,
+        autoBackupEnabled: rawSettings.autoBackupEnabled,
+        autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
+        profileBackupIds: rawSettings.profileBackupIds,
       };
       saveSettings(updatedSettings);
       return updatedSettings;
@@ -125,6 +140,9 @@ export async function loadSettingsWithProfileMigration(
       selectedProfileName: rawSettings.lastSelectedProfile,
       dryRunEnabled: rawSettings.dryRunEnabled,
       showDetails: rawSettings.showDetails,
+      autoBackupEnabled: rawSettings.autoBackupEnabled,
+      autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
+      profileBackupIds: rawSettings.profileBackupIds,
     };
     saveSettings(updatedSettings);
     return updatedSettings;

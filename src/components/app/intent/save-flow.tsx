@@ -69,6 +69,12 @@ export interface SaveFlowProps {
   hostedBackupSubscriptionStatus?: SubscriptionStatus;
   /** Routes to the Backup pane (sidebar). The chip click handler uses this. */
   onOpenHostedBackup?: () => void;
+  /**
+   * Inline automatic-backup status shown in the capture-complete summary.
+   * 'idle' renders nothing. Capability-gated upstream — stays 'idle' until
+   * auto-backup is active.
+   */
+  autoBackupState?: 'idle' | 'backing-up' | 'backed-up' | 'paused';
 }
 
 export function SaveFlow({
@@ -86,6 +92,7 @@ export function SaveFlow({
   hostedBackupSignedIn = false,
   hostedBackupSubscriptionStatus,
   onOpenHostedBackup,
+  autoBackupState = 'idle',
 }: SaveFlowProps) {
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [result, setResult] = useState<CaptureResult | null>(null);
@@ -377,6 +384,28 @@ export function SaveFlow({
                       )}
                     </p>
                   </div>
+                  {autoBackupState !== 'idle' && (
+                    <span
+                      data-testid="auto-backup-chip"
+                      className="ml-auto flex items-center gap-1.5 text-xs font-medium"
+                    >
+                      {autoBackupState === 'backing-up' && (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                          <span className="text-muted-foreground">Backing up…</span>
+                        </>
+                      )}
+                      {autoBackupState === 'backed-up' && (
+                        <>
+                          <Cloud className="h-3 w-3 text-blue-500" />
+                          <span className="text-blue-600">Backed up</span>
+                        </>
+                      )}
+                      {autoBackupState === 'paused' && (
+                        <span className="text-warning/90">Backups paused</span>
+                      )}
+                    </span>
+                  )}
                 </div>
 
                 {/* Unified app + settings list */}

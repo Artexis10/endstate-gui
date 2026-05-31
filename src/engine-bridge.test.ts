@@ -36,6 +36,9 @@ const baseSettings: AppSettings = {
   selectedProfileName: null,
   dryRunEnabled: false,
   showDetails: false,
+  autoBackupEnabled: false,
+  autoBackupPromptSeen: false,
+  profileBackupIds: {},
 };
 
 describe('engine-bridge type guards', () => {

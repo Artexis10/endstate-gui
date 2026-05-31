@@ -44,6 +44,9 @@ describe('Persistence Boundaries', () => {
         selectedProfileName: 'my-profile',
         dryRunEnabled: false,
         showDetails: false,
+        autoBackupEnabled: false,
+        autoBackupPromptSeen: false,
+        profileBackupIds: {},
       };
 
       seedLocalStorage({
@@ -61,6 +64,9 @@ describe('Persistence Boundaries', () => {
         selectedProfileName: 'work-setup',
         dryRunEnabled: true,
         showDetails: false,
+        autoBackupEnabled: false,
+        autoBackupPromptSeen: false,
+        profileBackupIds: {},
       };
 
       saveSettings(settings);
@@ -88,6 +94,9 @@ describe('Persistence Boundaries', () => {
         selectedProfileName: null,
         dryRunEnabled: true,
         showDetails: false,
+        autoBackupEnabled: false,
+        autoBackupPromptSeen: false,
+        profileBackupIds: {},
       };
 
       saveSettings(initial);
@@ -430,6 +439,9 @@ describe('Persistence Boundaries', () => {
         selectedProfileName: 'test',
         dryRunEnabled: true,
         showDetails: false,
+        autoBackupEnabled: false,
+        autoBackupPromptSeen: false,
+        profileBackupIds: {},
       };
       saveSettings(settings);
 
