@@ -97,4 +97,52 @@ describe('RestoreWizard', () => {
     renderWizard({ open: false });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+
+  it('re-fetches the backup list on every reopen', async () => {
+    const props = {
+      settings: SETTINGS,
+      defaultDestination: 'C:\\Users\\test\\profiles',
+      onDismiss: vi.fn(),
+      onComplete: vi.fn(),
+    };
+    const { rerender } = renderWithProviders(
+      <RestoreWizard open={false} {...props} />,
+    );
+
+    rerender(<RestoreWizard open {...props} />);
+    expect(await screen.findByText('hugo-desktop')).toBeInTheDocument();
+    expect(backupListMock).toHaveBeenCalledTimes(1);
+
+    // Close, then reopen — the list must be fetched again, not reused.
+    rerender(<RestoreWizard open={false} {...props} />);
+    rerender(<RestoreWizard open {...props} />);
+    await waitFor(() => expect(backupListMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not show a stale count when the list emptied between opens', async () => {
+    const onDismiss = vi.fn();
+    const props = {
+      settings: SETTINGS,
+      defaultDestination: 'C:\\Users\\test\\profiles',
+      onDismiss,
+      onComplete: vi.fn(),
+    };
+    const { rerender } = renderWithProviders(
+      <RestoreWizard open={false} {...props} />,
+    );
+
+    // First open: one backup present.
+    rerender(<RestoreWizard open {...props} />);
+    expect(await screen.findByText('hugo-desktop')).toBeInTheDocument();
+
+    // The account is emptied (e.g. the only backup was deleted), then reopen.
+    rerender(<RestoreWizard open={false} {...props} />);
+    backupListMock.mockResolvedValue({ backups: [] });
+    rerender(<RestoreWizard open {...props} />);
+
+    // The refetch returns empty → polite dismiss, and the stale "1 backup"
+    // copy must never be shown over the now-empty account.
+    await waitFor(() => expect(onDismiss).toHaveBeenCalled());
+    expect(screen.queryByText(/We found 1 backup\b/)).not.toBeInTheDocument();
+  });
 });
