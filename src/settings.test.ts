@@ -1,9 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { loadSettings, saveSettings, AppSettings } from './settings';
+import {
+  loadSettings,
+  saveSettings,
+  loadSettingsWithProfileMigration,
+  AppSettings,
+} from './settings';
+import { setItem } from './lib/storage';
 
 // Unit tests run in happy-dom (not Tauri), so storage uses "web" namespace
 const NAMESPACED_KEY = 'web:endstate-gui-settings';
 const LEGACY_KEY = 'endstate-gui-settings';
+
+// New auto-backup fields, defaulted off. Reused so the existing round-trip
+// assertions keep matching what loadSettings() now returns.
+const AUTO_BACKUP_DEFAULTS = {
+  autoBackupEnabled: false,
+  autoBackupPromptSeen: false,
+  profileBackupIds: {} as Record<string, string>,
+};
 
 describe('settings', () => {
   beforeEach(() => {
@@ -28,6 +42,7 @@ describe('settings', () => {
         selectedProfileName: 'TestProfile',
         dryRunEnabled: false,
         showDetails: false,
+        ...AUTO_BACKUP_DEFAULTS,
       };
       localStorage.setItem(NAMESPACED_KEY, JSON.stringify(stored));
 
@@ -43,6 +58,7 @@ describe('settings', () => {
         selectedProfileName: null,
         dryRunEnabled: false,
         showDetails: false,
+        ...AUTO_BACKUP_DEFAULTS,
       };
       localStorage.setItem(LEGACY_KEY, JSON.stringify(stored));
 
@@ -104,6 +120,7 @@ describe('settings', () => {
         selectedProfileName: 'Profile1',
         dryRunEnabled: false,
         showDetails: false,
+        ...AUTO_BACKUP_DEFAULTS,
       };
 
       saveSettings(settings);
@@ -120,6 +137,7 @@ describe('settings', () => {
         selectedProfileName: 'Old',
         dryRunEnabled: true,
         showDetails: false,
+        ...AUTO_BACKUP_DEFAULTS,
       };
       saveSettings(initial);
 
@@ -129,11 +147,81 @@ describe('settings', () => {
         selectedProfileName: 'New',
         dryRunEnabled: false,
         showDetails: false,
+        ...AUTO_BACKUP_DEFAULTS,
       };
       saveSettings(updated);
 
       const stored = localStorage.getItem(NAMESPACED_KEY);
       expect(JSON.parse(stored!)).toEqual(updated);
+    });
+  });
+
+  describe('auto-backup fields', () => {
+    const FULL: AppSettings = {
+      engineMode: 'bundled',
+      customProfilesDirectory: '',
+      selectedProfileName: 'my-profile',
+      dryRunEnabled: true,
+      showDetails: false,
+      autoBackupEnabled: true,
+      autoBackupPromptSeen: true,
+      profileBackupIds: { 'my-profile': 'b-123' },
+    };
+
+    it('round-trips the new auto-backup fields through save/load', () => {
+      saveSettings(FULL);
+      const loaded = loadSettings();
+      expect(loaded.autoBackupEnabled).toBe(true);
+      expect(loaded.autoBackupPromptSeen).toBe(true);
+      expect(loaded.profileBackupIds).toEqual({ 'my-profile': 'b-123' });
+    });
+
+    it('defaults the new fields for settings stored before they existed', () => {
+      // A settings blob persisted by an older build — no auto-backup keys.
+      setItem(
+        'endstate-gui-settings',
+        JSON.stringify({
+          engineMode: 'bundled',
+          customProfilesDirectory: '',
+          selectedProfileName: 'legacy',
+          dryRunEnabled: true,
+          showDetails: false,
+        }),
+      );
+      const loaded = loadSettings();
+      expect(loaded.autoBackupEnabled).toBe(false);
+      expect(loaded.autoBackupPromptSeen).toBe(false);
+      expect(loaded.profileBackupIds).toEqual({});
+      expect(loaded.selectedProfileName).toBe('legacy');
+    });
+
+    it('preserves the new fields through loadSettingsWithProfileMigration', async () => {
+      saveSettings(FULL);
+      const migrated = await loadSettingsWithProfileMigration('C:\\profiles');
+      expect(migrated.autoBackupEnabled).toBe(true);
+      expect(migrated.autoBackupPromptSeen).toBe(true);
+      expect(migrated.profileBackupIds).toEqual({ 'my-profile': 'b-123' });
+    });
+
+    it('carries the new fields through the legacy name-based migration path', async () => {
+      // Legacy selection (no selectedProfileName, has lastSelectedProfile) + opted-in.
+      setItem(
+        'endstate-gui-settings',
+        JSON.stringify({
+          engineMode: 'bundled',
+          customProfilesDirectory: '',
+          dryRunEnabled: true,
+          showDetails: false,
+          autoBackupEnabled: true,
+          autoBackupPromptSeen: true,
+          profileBackupIds: { foo: 'b-9' },
+          lastSelectedProfile: 'foo',
+        }),
+      );
+      const migrated = await loadSettingsWithProfileMigration('C:\\profiles');
+      expect(migrated.selectedProfileName).toBe('foo');
+      expect(migrated.autoBackupEnabled).toBe(true);
+      expect(migrated.profileBackupIds).toEqual({ foo: 'b-9' });
     });
   });
 });

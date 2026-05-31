@@ -23,6 +23,13 @@ export interface EndstateHostedBackupCapability {
   minSchemaVersion?: string;
   issuerUrl?: string;
   audience?: string;
+  /**
+   * True when the engine supports `backup push --if-changed` (content-hash
+   * dedup). Tolerant fallback for the capability gate; the canonical signal is
+   * `--if-changed` appearing in the backup command's advertised flags. Absent
+   * until engine #62 / task 0.3 lands → auto-backup stays dark.
+   */
+  ifChanged?: boolean;
 }
 
 export interface EndstateCapabilitiesData {
@@ -143,7 +150,10 @@ export interface BackupVersionsData {
 /** Response shape for `endstate backup push --json`. */
 export interface BackupPushData {
   backupId: string;
-  versionId: string;
+  /** Absent when `--if-changed` skipped the upload (content unchanged). */
+  versionId?: string;
+  /** True when `--if-changed` found the content unchanged; no new version created. */
+  skipped?: boolean;
 }
 
 /** Response shape for `endstate backup pull --json`. */

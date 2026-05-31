@@ -82,6 +82,11 @@ export interface BackupPaneProps {
    *  AUTH_REQUIRED while the dialog is already open drops the event instead
    *  of re-firing `onAuthLost` and stacking dialogs. */
   isReauthOpen?: () => boolean;
+  /** Automatic backup is paused because a background push hit AUTH_REQUIRED.
+   *  Flips the last-sync indicator to an actionable "Sign in to resume" state. */
+  autoBackupPaused?: boolean;
+  /** Opens the inline re-auth dialog from the paused indicator. */
+  onResumeAutoBackup?: () => void;
 }
 
 interface DeleteTarget {
@@ -100,6 +105,8 @@ export function BackupPane({
   initialBackups,
   onRequestCapture,
   isReauthOpen,
+  autoBackupPaused,
+  onResumeAutoBackup,
 }: BackupPaneProps) {
   const state = useBackupState(settings, {
     onAuthLost,
@@ -432,7 +439,11 @@ export function BackupPane({
         versionCount={state.status.versionCount}
       />
 
-      <LastSyncIndicator lastBackupAt={state.status.lastBackupAt} />
+      <LastSyncIndicator
+        lastBackupAt={state.status.lastBackupAt}
+        authPaused={autoBackupPaused}
+        onResumeClick={onResumeAutoBackup}
+      />
 
       {state.status.keychainError && (
         <div

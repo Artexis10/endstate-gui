@@ -18,12 +18,21 @@
  */
 
 import { formatRelativeTime, type Freshness } from '@/lib/format-relative-time';
+import { Button } from '@/components/ui/button';
 
 export interface LastSyncIndicatorProps {
   /** ISO 8601 timestamp from `BackupStatusData.lastBackupAt`. */
   lastBackupAt?: string;
   /** Test seam — frozen "now" in ms. Defaults to `Date.now()` inside `formatRelativeTime`. */
   nowMs?: number;
+  /**
+   * Auto-backup is paused after a background push returned `AUTH_REQUIRED`.
+   * Replaces the freshness label with a persistent, actionable
+   * "Sign in to resume backups" affordance until the session is restored.
+   */
+  authPaused?: boolean;
+  /** Opens the inline re-auth dialog (per "Session re-auth preserves pane state"). */
+  onResumeClick?: () => void;
 }
 
 const TINT_BY_FRESHNESS: Record<Freshness, string> = {
@@ -36,7 +45,25 @@ const TINT_BY_FRESHNESS: Record<Freshness, string> = {
 export function LastSyncIndicator({
   lastBackupAt,
   nowMs,
+  authPaused,
+  onResumeClick,
 }: LastSyncIndicatorProps) {
+  // Paused takes precedence over freshness: a dead session is the urgent signal.
+  if (authPaused) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onResumeClick}
+        data-testid="last-sync-indicator"
+        data-paused="true"
+        className="h-auto justify-start p-0 text-xs font-normal text-warning/90 hover:bg-transparent hover:text-warning"
+      >
+        Sign in to resume backups
+      </Button>
+    );
+  }
+
   const { label, freshness } = formatRelativeTime(lastBackupAt, nowMs);
   const text = freshness === 'never' ? 'No backups yet' : `Last synced ${label}`;
 

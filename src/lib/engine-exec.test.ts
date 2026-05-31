@@ -19,6 +19,9 @@ describe('buildEngineCommand', () => {
     selectedProfileName: null,
     dryRunEnabled: false,
     showDetails: false,
+    autoBackupEnabled: false,
+    autoBackupPromptSeen: false,
+    profileBackupIds: {},
   };
 
   beforeEach(() => {
@@ -78,6 +81,9 @@ describe('runEndstateOnce', () => {
     selectedProfileName: null,
     dryRunEnabled: false,
     showDetails: false,
+    autoBackupEnabled: false,
+    autoBackupPromptSeen: false,
+    profileBackupIds: {},
   };
 
   const validEnvelope = {

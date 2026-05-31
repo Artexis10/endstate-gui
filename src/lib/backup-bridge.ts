@@ -334,6 +334,12 @@ export interface PushArgs {
   backupId?: string;
   /** Display name for an auto-created backup. Ignored when `backupId` is set. */
   name?: string;
+  /**
+   * Pass `--if-changed` so the engine no-ops when the candidate manifest equals
+   * the latest version's hash. A skipped result returns `{ skipped: true }` with
+   * no `versionId` and is treated as success. Used by automatic backup.
+   */
+  ifChanged?: boolean;
   /** Callback for chunk-progress events (`backup-chunk`). */
   onEvent?: NdjsonEventCallback;
 }
@@ -351,6 +357,7 @@ export async function backupPush(
   const cliArgs: string[] = ['push', '--profile', args.profile];
   if (args.backupId) cliArgs.push('--backup-id', args.backupId);
   if (args.name) cliArgs.push('--name', args.name);
+  if (args.ifChanged) cliArgs.push('--if-changed');
 
   const result = await runEndstateStreaming<BackupPushData>(
     settings,

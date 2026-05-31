@@ -16,6 +16,9 @@ describe('streaming-runner', () => {
     selectedProfileName: null,
     dryRunEnabled: true,
     showDetails: false,
+    autoBackupEnabled: false,
+    autoBackupPromptSeen: false,
+    profileBackupIds: {},
   };
 
   beforeEach(() => {

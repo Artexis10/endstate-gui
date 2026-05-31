@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
-import { renderWithProviders } from '@/test/test-utils';
+import { renderWithProviders, userEvent } from '@/test/test-utils';
 import { LastSyncIndicator } from './last-sync-indicator';
 
 // Frozen anchor mirrors format-relative-time.test.ts so deltas are deterministic
@@ -146,6 +146,36 @@ describe('LastSyncIndicator', () => {
       expect(el).toHaveTextContent('No backups yet');
       expect(el).toHaveAttribute('data-freshness', 'never');
       expect(el).toHaveClass('text-muted-foreground');
+    });
+  });
+
+  describe('auto-backup paused (AUTH_REQUIRED)', () => {
+    it('replaces the freshness label with an actionable "Sign in to resume backups"', () => {
+      renderWithProviders(
+        <LastSyncIndicator
+          lastBackupAt={isoAgo(ONE_HOUR_MS)}
+          nowMs={FROZEN_NOW_MS}
+          authPaused
+        />,
+      );
+      const el = screen.getByTestId('last-sync-indicator');
+      expect(el).toHaveTextContent('Sign in to resume backups');
+      // Paused overrides the freshness label even when a recent backup exists.
+      expect(el).not.toHaveTextContent('Last synced');
+      expect(el).toHaveAttribute('data-paused', 'true');
+      expect(el).toHaveClass('text-warning/90');
+      expect(screen.getByRole('button', { name: /sign in to resume backups/i })).toBeInTheDocument();
+    });
+
+    it('invokes onResumeClick when clicked', async () => {
+      const onResumeClick = vi.fn();
+      renderWithProviders(
+        <LastSyncIndicator authPaused onResumeClick={onResumeClick} nowMs={FROZEN_NOW_MS} />,
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: /sign in to resume backups/i }),
+      );
+      expect(onResumeClick).toHaveBeenCalledTimes(1);
     });
   });
 
