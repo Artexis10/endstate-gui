@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.12.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.11.0...gui-v2.12.0) (2026-05-31)
+
+
+### Features
+
+* **backup:** automatic hosted backup (ships dark, capability-gated) ([#80](https://github.com/Artexis10/endstate-gui/issues/80)) ([0d6c65a](https://github.com/Artexis10/endstate-gui/commit/0d6c65a5faa8631b5a301b0b3800743de04e532b))
+
+
+### Bug Fixes
+
+* **backup:** restore wizard re-fetches its list on every reopen ([#79](https://github.com/Artexis10/endstate-gui/issues/79)) ([e0f1205](https://github.com/Artexis10/endstate-gui/commit/e0f1205980ba6a2bd7c9452e4f6fa31798dffa28))
+
 ## [2.11.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.10.1...gui-v2.11.0) (2026-05-31)
 
 
