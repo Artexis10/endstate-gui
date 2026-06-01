@@ -38,6 +38,36 @@ jobs:
           flags: unittests
           fail_ci_if_error: false
 
+  # Regression guard for the standalone dev bridge (PR #87). The dev bridge was
+  # extracted out of the Tauri process specifically so it links NONE of the
+  # native GUI stack (tao / wry / webview2-com) — that layer was the source of
+  # the intermittent 0xc0000374 heap corruption (our Rust is zero-`unsafe`).
+  # The fix holds only as long as nothing re-links that surface into the bridge
+  # crate. This job fails the build the moment one of those crates reappears in
+  # endstate-dev-bridge's dependency tree. Pure metadata (`cargo tree`), no
+  # build, resolved against the Windows target from Linux — fast.
+  dev-bridge-no-gui-deps:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert dev-bridge links no GUI crates
+        working-directory: src-tauri
+        run: |
+          echo "Resolving endstate-dev-bridge dependency tree (x86_64-pc-windows-msvc)…"
+          offenders=$(cargo tree -p endstate-dev-bridge \
+              --target x86_64-pc-windows-msvc --prefix none --no-dedupe \
+            | sed -E 's/ \(.*\)//' | awk '{print $1}' | sort -u \
+            | grep -xE 'tao|wry|webview2-com|webview2-com-sys|tauri|tauri-runtime|tauri-runtime-wry' || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::endstate-dev-bridge now links native GUI crate(s) — reintroduces the 0xc0000374 crash surface:"
+            echo "$offenders" | sed 's/^/  - /'
+            echo "The dev bridge must stay free of tao/wry/webview2-com/tauri. See PR #87 and KB dev-bridge-crash-session-5-handoff."
+            exit 1
+          fi
+          echo "OK — no tao/wry/webview2-com/tauri in the dev bridge."
+
   e2e:
     runs-on: ubuntu-latest
 
