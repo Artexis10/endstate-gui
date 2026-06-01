@@ -1,3 +1,10 @@
+[workspace]
+# The dev bridge was extracted out of the Tauri process into a standalone
+# binary that links NONE of the native GUI stack (tao/wry/webview2-com) — the
+# layer responsible for the intermittent 0xc0000374 heap corruption. Shared
+# engine logic lives in engine-core; the standalone server is endstate-dev-bridge.
+members = ["engine-core", "dev-bridge"]
+
 [package]
 name = "endstate-gui"
 version = "2.12.1"
@@ -13,6 +20,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+endstate-engine-core = { path = "engine-core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
@@ -23,13 +31,9 @@ tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros", "net",
 parking_lot = "0.12"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 base64 = "0.22"
-axum = { version = "0.8", optional = true }
-tower-http = { version = "0.6", features = ["cors"], optional = true }
-tokio-stream = { version = "0.1", features = ["sync"], optional = true }
 tauri-plugin-dialog = "2.6.0"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 
 [features]
 default = []
-dev-server = ["axum", "tower-http", "tokio-stream"]

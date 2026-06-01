@@ -1,0 +1,14 @@
+[package]
+name = "endstate-dev-bridge"
+version = "0.1.0"
+description = "Standalone (non-Tauri) HTTP dev bridge for livewire: drives the Endstate engine from an external browser without linking the native GUI stack."
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "endstate-dev-bridge"
+path = "src/main.rs"
+
+[dependencies]
+endstate-engine-core = { path = "../engine-core", features = ["bridge"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

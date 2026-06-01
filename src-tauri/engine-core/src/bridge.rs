@@ -1,11 +1,13 @@
 //! Dev-only HTTP server for browser-based engine access.
 //!
-//! Mirrors Tauri IPC commands as REST endpoints so a browser tab pointed at
-//! the Vite dev server can call engine functions without Tauri IPC. The
-//! original consumer was the Tidewave inspector but the bridge itself is
-//! generic — any browser process can use it during development.
+//! Mirrors the app's IPC commands as REST endpoints so a browser tab pointed at
+//! the Vite dev server can call engine functions without Tauri IPC. Runs in the
+//! standalone `endstate-dev-bridge` binary — which links NONE of the native GUI
+//! stack (no tauri/tao/wry/webview2-com), so the intermittent WebView2-layer
+//! heap corruption that plagued the in-process bridge cannot occur here.
 //!
-//! Activated only when: debug build + ENDSTATE_BROWSER_BRIDGE=1
+//! Routes + port (127.0.0.1:9876) + response shapes are byte-compatible with the
+//! old in-process bridge, so the frontend (`src/lib/http-bridge.ts`) is unchanged.
 
 use axum::{
     extract::State,
@@ -22,18 +24,26 @@ use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use tower_http::cors::CorsLayer;
 
-use crate::engine_adapter::{
+use crate::broadcast::EventBroadcaster;
+use crate::engine::{
     create_cancelled_result, create_fallback_result, extract_command_name_pub, generate_run_id,
     inject_run_id, is_result_event, parse_line, parse_line_with_run_id, SharedRunState,
 };
-use crate::event_broadcast::EventBroadcaster;
 
-/// Shared state for the HTTP server
+/// Shared state for the HTTP server (Tauri-free; no AppHandle).
 #[derive(Clone)]
-struct AppState {
-    run_state: SharedRunState,
-    broadcaster: EventBroadcaster,
-    app: tauri::AppHandle,
+pub struct AppState {
+    pub run_state: SharedRunState,
+    pub broadcaster: EventBroadcaster,
+}
+
+impl AppState {
+    pub fn new(run_state: SharedRunState, broadcaster: EventBroadcaster) -> Self {
+        Self {
+            run_state,
+            broadcaster,
+        }
+    }
 }
 
 /// Generic invoke request (mirrors Tauri's invoke model)
@@ -72,7 +82,6 @@ fn err_response(msg: impl ToString) -> Json<InvokeResponse> {
 /// Run engine via HTTP bridge.
 /// Emits events only through the broadcaster (SSE).
 fn run_engine_http(
-    app: &tauri::AppHandle,
     exe: &str,
     args: &[String],
     run_state: &SharedRunState,
@@ -98,7 +107,7 @@ fn run_engine_http(
 
     // Spawn the process (resolve __bundled__ to the sidecar binary if needed)
     let mut cmd = if exe == "__bundled__" {
-        match crate::engine_adapter::build_bundled_command(app, args) {
+        match crate::engine::build_bundled_command(args) {
             Ok(c) => c,
             Err(e) => {
                 {
@@ -111,7 +120,7 @@ fn run_engine_http(
             }
         }
     } else {
-        crate::cmd_impl::build_engine_command(exe, args)
+        crate::cmd::build_engine_command(exe, args)
     };
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -259,17 +268,16 @@ fn cancel_engine_http(
 /// Run endstate streaming via HTTP bridge.
 /// Emits stdout/stderr/exit events through the broadcaster only.
 fn run_streaming_http(
-    app: &tauri::AppHandle,
     exe: &str,
     args: &[String],
     event_channel: &str,
     broadcaster: &EventBroadcaster,
 ) -> Result<(), String> {
     let mut cmd = if exe == "__bundled__" {
-        crate::engine_adapter::build_bundled_command(app, args)
+        crate::engine::build_bundled_command(args)
             .map_err(|e| format!("{}: {}", e.code, e.message))?
     } else {
-        crate::cmd_impl::build_engine_command(exe, args)
+        crate::cmd::build_engine_command(exe, args)
     };
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -340,7 +348,7 @@ async fn handle_invoke(
         "engine_is_running" => {
             let run_state = state.run_state.clone();
             match tokio::task::spawn_blocking(move || {
-                crate::engine_adapter::is_run_active(&run_state)
+                crate::engine::is_run_active(&run_state)
             })
             .await
             {
@@ -351,7 +359,7 @@ async fn handle_invoke(
         "engine_get_run_id" => {
             let run_state = state.run_state.clone();
             match tokio::task::spawn_blocking(move || {
-                crate::engine_adapter::get_current_run_id(&run_state)
+                crate::engine::get_current_run_id(&run_state)
             })
             .await
             {
@@ -379,10 +387,9 @@ async fn handle_invoke(
 
             let run_state = state.run_state.clone();
             let broadcaster = state.broadcaster.clone();
-            let app = state.app.clone();
 
             match tokio::task::spawn_blocking(move || {
-                run_engine_http(&app, &exe, &args, &run_state, &broadcaster)
+                run_engine_http(&exe, &args, &run_state, &broadcaster)
             })
             .await
             {
@@ -430,10 +437,9 @@ async fn handle_invoke(
                 .to_string();
 
             let broadcaster = state.broadcaster.clone();
-            let app = state.app.clone();
 
             match tokio::task::spawn_blocking(move || {
-                run_streaming_http(&app, &exe, &args, &event_channel, &broadcaster)
+                run_streaming_http(&exe, &args, &event_channel, &broadcaster)
             })
             .await
             {
@@ -467,23 +473,22 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .map(String::from);
 
-            let app = state.app.clone();
             match tokio::task::spawn_blocking(move || {
                 use std::io::Write as _;
                 use std::process::Stdio;
 
                 let mut cmd = if exe == "__bundled__" {
-                    match crate::engine_adapter::build_bundled_command(&app, &args) {
+                    match crate::engine::build_bundled_command(&args) {
                         Ok(c) => c,
                         Err(e) => {
-                            return Err(crate::cmd_impl::ExecError {
+                            return Err(crate::cmd::ExecError {
                                 code: e.code,
                                 message: e.message,
                             });
                         }
                     }
                 } else {
-                    crate::cmd_impl::build_engine_command(&exe, &args)
+                    crate::cmd::build_engine_command(&exe, &args)
                 };
                 let output = if let Some(input) = stdin_input {
                     cmd.stdin(Stdio::piped())
@@ -497,7 +502,7 @@ async fn handle_invoke(
                 } else {
                     cmd.output()?
                 };
-                Ok(crate::cmd_impl::ExecResult {
+                Ok(crate::cmd::ExecResult {
                     stdout: String::from_utf8_lossy(&output.stdout).to_string(),
                     stderr: String::from_utf8_lossy(&output.stderr).to_string(),
                     exit_code: output.status.code().unwrap_or(-1),
@@ -519,7 +524,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::validate_profile(&path) {
+            match crate::cmd::validate_profile(&path) {
                 Ok(result) => ok_response(serde_json::to_value(result).unwrap_or_default()),
                 Err(e) => err_response(e),
             }
@@ -531,16 +536,16 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::list_manifest_files(&directory) {
+            match crate::cmd::list_manifest_files(&directory) {
                 Ok(files) => ok_response(serde_json::json!(files)),
                 Err(e) => err_response(e),
             }
         }
-        "get_default_profiles_directory" => match crate::cmd_impl::get_default_profiles_directory() {
+        "get_default_profiles_directory" => match crate::cmd::get_default_profiles_directory() {
             Ok(dir) => ok_response(serde_json::json!(dir)),
             Err(e) => err_response(e),
         },
-        "get_capture_cache_directory" => match crate::cmd_impl::get_capture_cache_directory() {
+        "get_capture_cache_directory" => match crate::cmd::get_capture_cache_directory() {
             Ok(dir) => ok_response(serde_json::json!(dir)),
             Err(e) => err_response(e),
         },
@@ -551,7 +556,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::check_file_exists(&path) {
+            match crate::cmd::check_file_exists(&path) {
                 Ok(exists) => ok_response(serde_json::json!(exists)),
                 Err(e) => err_response(e),
             }
@@ -563,7 +568,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::read_text_file(&path) {
+            match crate::cmd::read_text_file(&path) {
                 Ok(content) => ok_response(serde_json::json!(content)),
                 Err(e) => err_response(e),
             }
@@ -581,7 +586,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::write_text_file(&path, &content) {
+            match crate::cmd::write_text_file(&path, &content) {
                 Ok(()) => ok_response(serde_json::json!(null)),
                 Err(e) => err_response(e),
             }
@@ -593,7 +598,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::delete_file(&path) {
+            match crate::cmd::delete_file(&path) {
                 Ok(()) => ok_response(serde_json::json!(null)),
                 Err(e) => err_response(e),
             }
@@ -605,7 +610,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::delete_file_silent(&path) {
+            match crate::cmd::delete_file_silent(&path) {
                 Ok(()) => ok_response(serde_json::json!(null)),
                 Err(e) => err_response(e),
             }
@@ -625,7 +630,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::rename_file(&old_path, &new_path) {
+            match crate::cmd::rename_file(&old_path, &new_path) {
                 Ok(()) => ok_response(serde_json::json!(null)),
                 Err(e) => err_response(e),
             }
@@ -645,7 +650,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::copy_file(&source_path, &dest_path) {
+            match crate::cmd::copy_file(&source_path, &dest_path) {
                 Ok(()) => ok_response(serde_json::json!(null)),
                 Err(e) => err_response(e),
             }
@@ -657,7 +662,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::ensure_dir(&path) {
+            match crate::cmd::ensure_dir(&path) {
                 Ok(()) => ok_response(serde_json::json!(null)),
                 Err(e) => err_response(e),
             }
@@ -677,12 +682,12 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::import_profile(&source_path, &profiles_dir) {
+            match crate::cmd::import_profile(&source_path, &profiles_dir) {
                 Ok(name) => ok_response(serde_json::json!(name)),
                 Err(e) => err_response(e),
             }
         }
-        "show_file_dialog" => match crate::cmd_impl::show_file_dialog() {
+        "show_file_dialog" => match crate::cmd::show_file_dialog() {
             Ok(path) => ok_response(serde_json::json!(path)),
             Err(e) => err_response(e),
         },
@@ -693,12 +698,12 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::open_folder(&path) {
+            match crate::cmd::open_folder(&path) {
                 Ok(()) => ok_response(serde_json::json!(null)),
                 Err(e) => err_response(e),
             }
         }
-        "cleanup_capture_cache" => match crate::cmd_impl::cleanup_capture_cache() {
+        "cleanup_capture_cache" => match crate::cmd::cleanup_capture_cache() {
             Ok(()) => ok_response(serde_json::json!(null)),
             Err(e) => err_response(e),
         },
@@ -781,7 +786,7 @@ async fn handle_invoke(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            match crate::cmd_impl::write_text_file_debug(&filename, &content) {
+            match crate::cmd::write_text_file_debug(&filename, &content) {
                 Ok(path) => ok_response(serde_json::json!(path)),
                 Err(e) => err_response(e),
             }
@@ -896,17 +901,9 @@ async fn handle_events(
     Sse::new(stream)
 }
 
-pub async fn start(
-    app: tauri::AppHandle,
-    run_state: SharedRunState,
-    broadcaster: EventBroadcaster,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let state = AppState {
-        run_state,
-        broadcaster,
-        app,
-    };
-
+/// Start the bridge HTTP server on 127.0.0.1:9876, serving until the process
+/// exits. Tauri-free — the caller (standalone binary) owns the runtime.
+pub async fn start(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
     let cors = CorsLayer::new()
         .allow_origin(tower_http::cors::Any)
         .allow_methods(tower_http::cors::Any)

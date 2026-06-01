@@ -1,6 +1,6 @@
 ---
 name: livewire
-description: Drive the real GUI against the real engine via the dev HTTP bridge (`npm run tauri:dev:browser`). Use whenever "does the wiring test actually hold up against real code?" matters — smoke verification, UI development with live engine state, real-engine bug repro, exploratory debugging with Chrome DevTools instruments.
+description: Drive the real GUI against the real engine via the standalone dev HTTP bridge (`npm run dev:bridge`). Use whenever "does the wiring test actually hold up against real code?" matters — smoke verification, UI development with live engine state, real-engine bug repro, exploratory debugging with Chrome DevTools instruments.
 ---
 
 Real Chromium ↔ real HTTP bridge ↔ real engine. No mocks, no fixtures. The
@@ -65,14 +65,17 @@ All three share the same launch + watcher + hazard handling.
    The `awk '{print $NF}'` is load-bearing — `$5` is `LISTENING`, not the
    PID. On Git Bash, `//F //PID` (double-slash) prevents Msys from
    mangling the args into paths.
-4. Run `SKIP_ENGINE_BUILD=1 npm run tauri:dev:browser` in the background.
-   This starts Vite (1420) + the Tauri binary, which boots an HTTP
-   server on 9876 (debug build + `--features dev-server` +
-   `ENDSTATE_BROWSER_BRIDGE=1`).
+4. Run `SKIP_ENGINE_BUILD=1 npm run dev:bridge` in the background.
+   This starts Vite (1420) + the **standalone `endstate-dev-bridge`
+   binary** (9876) — a non-Tauri process that links none of the native
+   GUI stack. (`npm run tauri:dev:browser` is now an alias for
+   `dev:bridge`.) First run compiles the bridge crate (fast; usually
+   already built). `ENDSTATE_ROOT` defaults to the sibling `../endstate`
+   repo; override via env if needed.
 5. **Arm a single-shot watcher** that emits when ANY of these signals
    land:
    ```bash
-   until grep -qE "Browser bridge listening|Browser bridge failed to bind|STATUS_|error\[|terminated with" /tmp/tauri-dev-browser.log; do
+   until grep -qE "Browser bridge listening|Browser bridge failed to bind|error\[|panicked|exited" /tmp/dev-bridge.log; do
      sleep 2
    done
    ```
@@ -80,25 +83,23 @@ All three share the same launch + watcher + hazard handling.
    bind-failure literal is `Browser bridge failed to bind port 9876` —
    match the prefix so it works across OS-error wording.
 
-**KNOWN HAZARD — Tauri dev-server is intermittently unstable on this
-Windows box.** See `memory/project_tauri_dev_server_crash.md`. The Tauri
-main process *sometimes* survives a full Playwright drive (150+ bridge
-invokes, observed 2026-05-23) and *sometimes* heap-corrupts or hits
-STATUS_ILLEGAL_INSTRUCTION within ~3s of `Browser bridge listening`.
+**STABILITY — the dev bridge no longer runs inside Tauri.** The
+intermittent ~12% `0xc0000374` heap corruption (see
+`memory/project_tauri_dev_server_crash.md`) lived in the native GUI
+layer (tao/wry/webview2-com) that the *in-process* bridge dragged in.
+The standalone `endstate-dev-bridge` binary links none of it
+(`cargo tree -p endstate-dev-bridge` shows no tao/wry/webview2-com), so
+that crash surface is structurally gone. If the bridge process dies now,
+it's a real bug in our (safe) Rust or the engine subprocess — investigate
+it, don't write it off as "the known Tauri flake."
 
 Response policy:
-- **Restart once.** A clean retry often boots into a stable session.
-  Don't retry more than that — the pattern is intermittent, not
-  transient.
 - **In smoke mode**, curl is enough for envelope-shape verification. Do
   the curl pass first so you have protocol proof regardless of whether
   the UI drive lands.
-- **In dev mode**, if the bridge dies mid-iteration, your changes are
-  fine — just relaunch (no state was lost). The keychain / engine
-  state persists.
-- **If the second restart also crashes**, fall back to the mocked e2e
-  pattern (`e2e/backup-subscribe.spec.ts`) for the UI assertion and
-  report the crash as the remaining gap.
+- **In dev mode**, if the bridge dies mid-iteration, relaunch — Vite HMR
+  and engine/keychain state persist. But also capture the stderr: a
+  standalone-bridge crash is now signal, not noise.
 
 ## Tool choice — chrome-devtools MCP is primary
 
@@ -217,9 +218,10 @@ When you're reproducing a real-engine bug:
 
 ## Teardown
 
-11. Stop the background `tauri:dev:browser` task with `TaskStop` (or its
-    natural crash will reap it). The kill-orphan command in step 3
-    works again if anything sticks.
+11. Stop the background `dev:bridge` task. Note `TaskStop` does NOT reap
+    the detached child processes — kill the orphan listeners on 1420 +
+    9876 with the step-3 command, and if a `cargo`/`endstate-dev-bridge`
+    process sticks, `taskkill //F //IM endstate-dev-bridge.exe`.
 12. If the sibling engine was checked out to a specific tag, switch it
     back: `git -C ../endstate switch <previous-branch>`.
 
