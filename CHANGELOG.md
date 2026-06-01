@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.13.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.12.1...gui-v2.13.0) (2026-06-01)
+
+
+### Features
+
+* bump engine to v2.10.0 ([#84](https://github.com/Artexis10/endstate-gui/issues/84)) ([922b3a4](https://github.com/Artexis10/endstate-gui/commit/922b3a4cea1b0747bc2e0d87e258768278416e24))
+* bump engine to v2.11.0 ([#86](https://github.com/Artexis10/endstate-gui/issues/86)) ([bd9efe2](https://github.com/Artexis10/endstate-gui/commit/bd9efe2660718d286f877ad4700f7e4b3ffd7fcb))
+
+
+### Bug Fixes
+
+* **dev-bridge:** extract dev bridge to a standalone non-Tauri binary ([#87](https://github.com/Artexis10/endstate-gui/issues/87)) ([24218eb](https://github.com/Artexis10/endstate-gui/commit/24218eb80c218bda82847e80227682e3f9e5e497))
+
 ## [2.12.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.12.0...gui-v2.12.1) (2026-05-31)
 
 
