@@ -10,6 +10,7 @@ import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCir
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { FilterChip } from '@/components/ui/filter-chip';
+import { NavButton } from '@/components/ui/nav-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 import { DropZone } from './drop-zone';
@@ -356,15 +357,15 @@ export function SetupFlow({
       data-testid="setup-flow"
     >
       {/* Back navigation */}
-      <button
+      <NavButton
         onClick={phase === 'browse' ? onBack : handleBackToProfiles}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+        className="mb-6"
         data-testid="setup-flow-back"
         disabled={phase === 'previewing' || phase === 'applying' || phase === 'undo-checking' || phase === 'undo-running'}
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         {phase === 'browse' ? 'Back' : 'Back to profiles'}
-      </button>
+      </NavButton>
 
       {/* Flow header */}
       <div className="flex items-center justify-between gap-3 mb-8">

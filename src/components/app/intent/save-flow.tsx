@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2, Cloud } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FilterChip } from '@/components/ui/filter-chip';
+import { NavButton } from '@/components/ui/nav-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import {
@@ -241,15 +242,15 @@ export function SaveFlow({
       data-testid="save-flow"
     >
       {/* Back navigation */}
-      <button
+      <NavButton
         onClick={onBack}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+        className="mb-6"
         data-testid="save-flow-back"
         disabled={phase === 'scanning'}
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back
-      </button>
+      </NavButton>
 
       {/* Flow header */}
       <div className="flex items-center justify-between gap-3 mb-8">
