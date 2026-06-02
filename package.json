@@ -33,7 +33,8 @@
     "version:bump": "node scripts/bump-version.mjs",
     "version:show": "node -e \"console.log(require('./package.json').version)\"",
     "version:check": "node scripts/check-version-sync.mjs",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "engine:refresh": "node scripts/refresh-engine.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",
