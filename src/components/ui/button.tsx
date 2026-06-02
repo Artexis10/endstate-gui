@@ -12,12 +12,18 @@ const buttonVariants = cva(
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'hover:bg-accent/10 hover:text-accent-foreground',
         danger: 'bg-danger text-danger-foreground hover:bg-danger/90',
+        // Inline text link. font-normal neutralizes the base font-medium so it
+        // reads as a link, not a button; callers that want a heavier link
+        // (e.g. an inline error CTA) re-add `font-medium` via className.
+        link: 'font-normal text-primary underline-offset-2 hover:underline',
       },
       size: {
         default: 'h-10 px-4 py-2',
         sm: 'h-9 rounded-md px-3',
         lg: 'h-11 rounded-md px-8',
         icon: 'h-10 w-10',
+        // Strips the button box so the control sits inline in flowing text.
+        inline: 'h-auto p-0',
       },
     },
     defaultVariants: {

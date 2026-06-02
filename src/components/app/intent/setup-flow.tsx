@@ -528,18 +528,20 @@ export function SetupFlow({
                               hostedBackupSignedIn &&
                               hostedBackupSubscriptionStatus === 'active' &&
                               onPushProfileToCloud && (
-                                <button
+                                <Button
                                   type="button"
+                                  variant="link"
+                                  size="inline"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onPushProfileToCloud(profile.path, profile.name);
                                   }}
-                                  className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline focus-visible:underline outline-none"
+                                  className="mt-1 gap-1 text-xs"
                                   data-testid={`profile-card-${profile.name}-push-to-cloud`}
                                 >
                                   <Cloud className="h-3 w-3" aria-hidden="true" />
                                   Back up to cloud
-                                </button>
+                                </Button>
                               )}
                           </div>
                           <div className="flex items-center gap-1.5">

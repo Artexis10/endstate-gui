@@ -94,13 +94,15 @@ export function SignInForm({ settings, onSignedIn, onSwitchTab, lockedEmail }: S
             <p className="mt-1 text-xs text-muted-foreground">{authError.remediation}</p>
           )}
           {authError.cta && authError.cta.tab !== 'sign-in' && (
-            <button
+            <Button
               type="button"
+              variant="link"
+              size="inline"
               onClick={() => onSwitchTab(authError.cta!.tab as 'sign-up' | 'recover')}
-              className="mt-2 text-xs font-medium text-primary underline-offset-2 hover:underline"
+              className="mt-2 text-xs font-medium"
             >
               {authError.cta.label} →
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -118,21 +120,24 @@ export function SignInForm({ settings, onSignedIn, onSwitchTab, lockedEmail }: S
         <div className="space-y-2 pt-1 text-center text-sm">
           <div className="text-muted-foreground">
             New to Endstate?{' '}
-            <button
+            <Button
               type="button"
+              variant="link"
+              size="inline"
               onClick={() => onSwitchTab('sign-up')}
-              className="text-primary underline-offset-2 hover:underline"
             >
               Create an account
-            </button>
+            </Button>
           </div>
-          <button
+          <Button
             type="button"
+            variant="link"
+            size="inline"
             onClick={() => onSwitchTab('recover')}
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
             I forgot my password
-          </button>
+          </Button>
         </div>
       )}
     </form>

@@ -161,13 +161,15 @@ export function RecoverForm({ settings, onRecovered, onSwitchTab }: RecoverFormP
         )}
       </Button>
       <div className="text-xs text-muted-foreground text-center">
-        <button
+        <Button
           type="button"
+          variant="link"
+          size="inline"
           onClick={() => onSwitchTab('sign-in')}
-          className="text-primary underline-offset-2 hover:underline"
+          className="text-xs"
         >
           Back to sign in
-        </button>
+        </Button>
       </div>
     </form>
   );
