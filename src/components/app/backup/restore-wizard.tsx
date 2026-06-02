@@ -22,6 +22,14 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/components/ui/toast';
 import { invoke } from '@/lib/tauri-bridge';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
@@ -285,32 +293,32 @@ export function RestoreWizard({
             <>
               <fieldset className="flex flex-col gap-2">
                 <legend className="text-sm font-medium mb-1">Backup</legend>
-                {backups.map((b) => (
-                  <label
-                    key={b.id}
-                    className={
-                      'flex items-center gap-3 rounded-md border p-2 cursor-pointer ' +
-                      (selectedBackupId === b.id
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border')
-                    }
-                  >
-                    <input
-                      type="radio"
-                      name="restore-backup"
-                      value={b.id}
-                      checked={selectedBackupId === b.id}
-                      onChange={() => handlePickBackup(b.id)}
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{b.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {b.versionCount} version{b.versionCount === 1 ? '' : 's'} ·
-                        updated {new Date(b.updatedAt).toLocaleString()}
-                      </span>
-                    </div>
-                  </label>
-                ))}
+                <RadioGroup
+                  value={selectedBackupId ?? undefined}
+                  onValueChange={handlePickBackup}
+                  aria-label="Backup"
+                >
+                  {backups.map((b) => (
+                    <label
+                      key={b.id}
+                      className={
+                        'flex items-center gap-3 rounded-md border p-2 cursor-pointer ' +
+                        (selectedBackupId === b.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border')
+                      }
+                    >
+                      <RadioGroupItem value={b.id} />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{b.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {b.versionCount} version{b.versionCount === 1 ? '' : 's'} ·
+                          updated {new Date(b.updatedAt).toLocaleString()}
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </RadioGroup>
               </fieldset>
               <fieldset className="flex flex-col gap-2">
                 <legend className="text-sm font-medium mb-1">Version</legend>
@@ -319,19 +327,22 @@ export function RestoreWizard({
                     No versions for this backup.
                   </p>
                 ) : (
-                  <select
-                    className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={selectedVersionId ?? ''}
-                    onChange={(e) => setSelectedVersionId(e.target.value || null)}
-                    aria-label="Backup version"
+                  <Select
+                    value={selectedVersionId ?? undefined}
+                    onValueChange={(v) => setSelectedVersionId(v || null)}
                   >
-                    {versions.map((v) => (
-                      <option key={v.versionId} value={v.versionId}>
-                        {new Date(v.createdAt).toLocaleString()} (
-                        {v.versionId.slice(0, 8)})
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger aria-label="Backup version">
+                      <SelectValue placeholder="Select a version" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {versions.map((v) => (
+                        <SelectItem key={v.versionId} value={v.versionId}>
+                          {new Date(v.createdAt).toLocaleString()} (
+                          {v.versionId.slice(0, 8)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </fieldset>
               <div className="flex justify-between">

@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint (enforce shadcn controls — no native interactive elements)
+        run: npm run lint
+
       - name: Run unit tests with coverage
         run: npm run test:coverage
 

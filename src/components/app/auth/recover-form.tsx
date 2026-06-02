@@ -18,6 +18,7 @@
 import { FormEvent, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { backupRecover, BackupCommandError } from '@/lib/backup-bridge';
 import type { BackupRecoverData } from '@/types';
 import type { AppSettings } from '@/settings';
@@ -105,12 +106,12 @@ export function RecoverForm({ settings, onRecovered, onSwitchTab }: RecoverFormP
       </label>
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium">Recovery key</span>
-        <textarea
+        <Textarea
           value={mnemonic}
           onChange={(e) => setMnemonic(e.target.value)}
           rows={3}
           required
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="font-mono"
           placeholder="Paste your 24-word recovery key, separated by spaces"
           aria-label="Recovery key (24 words)"
         />
