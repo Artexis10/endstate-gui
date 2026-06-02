@@ -9,6 +9,8 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2, Cloud } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { FilterChip } from '@/components/ui/filter-chip';
+import { NavButton } from '@/components/ui/nav-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import {
@@ -240,15 +242,15 @@ export function SaveFlow({
       data-testid="save-flow"
     >
       {/* Back navigation */}
-      <button
+      <NavButton
         onClick={onBack}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+        className="mb-6"
         data-testid="save-flow-back"
         disabled={phase === 'scanning'}
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back
-      </button>
+      </NavButton>
 
       {/* Flow header */}
       <div className="flex items-center justify-between gap-3 mb-8">
@@ -412,21 +414,23 @@ export function SaveFlow({
                 {result.apps.length > 0 && (
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
-                      <button
+                      <FilterChip
                         onClick={clearFilters}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('detected').bg} ${getColorClasses('detected').text} ${activeFilters.size > 0 ? 'opacity-50' : ''}`}
-                        aria-pressed={activeFilters.size === 0}
+                        pressed={activeFilters.size === 0}
+                        dimmed={activeFilters.size > 0}
+                        className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                       >
                         {result.apps.length} apps
-                      </button>
+                      </FilterChip>
                       {settingsCount > 0 && (
-                        <button
+                        <FilterChip
                           onClick={() => toggleFilter('settings')}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.has('settings')}
+                          pressed={activeFilters.has('settings')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
+                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                         >
                           {settingsCount} settings
-                        </button>
+                        </FilterChip>
                       )}
                     </div>
                     <div className="space-y-1 max-h-64 overflow-y-auto">

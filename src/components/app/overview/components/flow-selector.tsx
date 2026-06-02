@@ -18,6 +18,7 @@ import { motion } from 'framer-motion';
 import { ScanSearch, PlayCircle, ArrowLeft, FolderOpen, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { NavButton } from '@/components/ui/nav-button';
 import {
   Select,
   SelectContent,
@@ -200,14 +201,14 @@ export function FlowSelector({
         data-testid="flow-capture-expanded"
       >
         {!isRunning && (
-          <button
+          <NavButton
             onClick={onBack}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+            className="mb-4"
             data-testid="flow-back-button"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to flow selection
-          </button>
+          </NavButton>
         )}
 
         <Card className="border-l-2 border-l-blue-500 border-blue-500/50 shadow-md shadow-blue-500/5">
@@ -243,14 +244,14 @@ export function FlowSelector({
       data-testid="flow-setup-expanded"
     >
       {!isRunning && (
-        <button
+        <NavButton
           onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+          className="mb-4"
           data-testid="flow-back-button"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to flow selection
-        </button>
+        </NavButton>
       )}
 
       {needsProfilePicker ? (

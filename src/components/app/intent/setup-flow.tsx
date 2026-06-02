@@ -9,6 +9,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info, Cloud } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { FilterChip } from '@/components/ui/filter-chip';
+import { NavButton } from '@/components/ui/nav-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 import { DropZone } from './drop-zone';
@@ -355,15 +357,15 @@ export function SetupFlow({
       data-testid="setup-flow"
     >
       {/* Back navigation */}
-      <button
+      <NavButton
         onClick={phase === 'browse' ? onBack : handleBackToProfiles}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+        className="mb-6"
         data-testid="setup-flow-back"
         disabled={phase === 'previewing' || phase === 'applying' || phase === 'undo-checking' || phase === 'undo-running'}
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         {phase === 'browse' ? 'Back' : 'Back to profiles'}
-      </button>
+      </NavButton>
 
       {/* Flow header */}
       <div className="flex items-center justify-between gap-3 mb-8">
@@ -689,41 +691,45 @@ export function SetupFlow({
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
                       {totalApps > 0 && (
-                        <button
+                        <FilterChip
                           onClick={clearFilters}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('detected').bg} ${getColorClasses('detected').text} ${activeFilters.size > 0 ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.size === 0}
+                          pressed={activeFilters.size === 0}
+                          dimmed={activeFilters.size > 0}
+                          className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                         >
                           {totalApps} {totalApps === 1 ? 'app' : 'apps'}
-                        </button>
+                        </FilterChip>
                       )}
                       {adjustedInstalled > 0 && (
-                        <button
+                        <FilterChip
                           onClick={() => toggleFilter('to_install')}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('action').bg} ${getColorClasses('action').text} ${activeFilters.size > 0 && !activeFilters.has('to_install') ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.has('to_install')}
+                          pressed={activeFilters.has('to_install')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('to_install')}
+                          className={`${getColorClasses('action').bg} ${getColorClasses('action').text}`}
                         >
                           {adjustedInstalled} to install
-                        </button>
+                        </FilterChip>
                       )}
                       {adjustedPresent > 0 && (
-                        <button
+                        <FilterChip
                           onClick={() => toggleFilter('present')}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('present') ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.has('present')}
+                          pressed={activeFilters.has('present')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('present')}
+                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                         >
                           {adjustedPresent} present
-                        </button>
+                        </FilterChip>
                       )}
                       {settingsCount > 0 && (
                         hasConfigMap ? (
-                          <button
+                          <FilterChip
                             onClick={() => toggleFilter('settings')}
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
-                            aria-pressed={activeFilters.has('settings')}
+                            pressed={activeFilters.has('settings')}
+                            dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
+                            className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                           >
                             {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'}`}
-                          </button>
+                          </FilterChip>
                         ) : (
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
                             {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'}`}
@@ -971,56 +977,62 @@ export function SetupFlow({
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
                       {totalApplyApps > 0 && (
-                        <button
+                        <FilterChip
                           onClick={clearFilters}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('detected').bg} ${getColorClasses('detected').text} ${activeFilters.size > 0 ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.size === 0}
+                          pressed={activeFilters.size === 0}
+                          dimmed={activeFilters.size > 0}
+                          className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                         >
                           {totalApplyApps} {totalApplyApps === 1 ? 'app' : 'apps'}
-                        </button>
+                        </FilterChip>
                       )}
                       {applyResult.installed > 0 && (
-                        <button
+                        <FilterChip
                           onClick={() => toggleFilter('installed')}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('installed') ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.has('installed')}
+                          pressed={activeFilters.has('installed')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('installed')}
+                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                         >
                           {applyResult.installed} installed
-                        </button>
+                        </FilterChip>
                       )}
                       {applyResult.alreadyPresent > 0 && (
-                        <button
+                        <FilterChip
                           onClick={() => toggleFilter('present')}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('present') ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.has('present')}
+                          pressed={activeFilters.has('present')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('present')}
+                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                         >
                           {applyResult.alreadyPresent} present
-                        </button>
+                        </FilterChip>
                       )}
                       {applyResult.skipped > 0 && (
-                        <button
+                        <FilterChip
                           onClick={() => toggleFilter('skipped')}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('warn').bg} ${getColorClasses('warn').text} ${activeFilters.size > 0 && !activeFilters.has('skipped') ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.has('skipped')}
+                          pressed={activeFilters.has('skipped')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('skipped')}
+                          className={`${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
                         >
                           {applyResult.skipped} skipped
-                        </button>
+                        </FilterChip>
                       )}
                       {applyResult.failed > 0 && (
-                        <button
+                        <FilterChip
                           onClick={() => toggleFilter('failed')}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('error').bg} ${getColorClasses('error').text} ${activeFilters.size > 0 && !activeFilters.has('failed') ? 'opacity-50' : ''}`}
-                          aria-pressed={activeFilters.has('failed')}
+                          pressed={activeFilters.has('failed')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('failed')}
+                          className={`${getColorClasses('error').bg} ${getColorClasses('error').text}`}
                         >
                           {applyResult.failed} failed
-                        </button>
+                        </FilterChip>
                       )}
                       {applySettingsTotal > 0 && (
                         applySettingsProcessed > 0 ? (
-                          <button
+                          <FilterChip
                             onClick={() => toggleFilter('settings')}
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${applySettingsFailed > 0 ? `${getColorClasses('warn').bg} ${getColorClasses('warn').text}` : `${getColorClasses('success').bg} ${getColorClasses('success').text}`} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
-                            aria-pressed={activeFilters.has('settings')}
+                            pressed={activeFilters.has('settings')}
+                            dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
+                            className={applySettingsFailed > 0 ? `${getColorClasses('warn').bg} ${getColorClasses('warn').text}` : `${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                           >
                             {applySettingsRestored > 0 && applySettingsFailed === 0
                               ? `${applySettingsRestored} ${applySettingsRestored === 1 ? 'setting' : 'settings'} restored`
@@ -1028,15 +1040,16 @@ export function SetupFlow({
                               ? `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'} (${applySettingsFailed} failed)`
                               : `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'}`
                             }
-                          </button>
+                          </FilterChip>
                         ) : (
-                          <button
+                          <FilterChip
                             onClick={() => toggleFilter('settings')}
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-opacity ${getColorClasses('success').bg} ${getColorClasses('success').text} ${activeFilters.size > 0 && !activeFilters.has('settings') ? 'opacity-50' : ''}`}
-                            aria-pressed={activeFilters.has('settings')}
+                            pressed={activeFilters.has('settings')}
+                            dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
+                            className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                           >
                             {applySettingsTotal} {applySettingsTotal === 1 ? 'setting' : 'settings'}
-                          </button>
+                          </FilterChip>
                         )
                       )}
                     </div>
