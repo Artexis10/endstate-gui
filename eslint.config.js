@@ -49,18 +49,22 @@ export default [
     },
     plugins: {
       react,
-      // `react-hooks` and `@typescript-eslint` are registered (NOT enabled) so
-      // the existing `eslint-disable react-hooks/exhaustive-deps` and
+      // `react-hooks` is enabled for `rules-of-hooks` ONLY (see rules below) —
+      // it catches the recurring "hook called conditionally / after an early
+      // return" bug class. `exhaustive-deps` stays OFF (the codebase has
+      // intentional dependency-array suppressions). `@typescript-eslint` is
+      // registered with no rules enabled. Both plugins must be present so the
+      // codebase's existing `eslint-disable react-hooks/exhaustive-deps` /
       // `@typescript-eslint/no-unused-vars` directives resolve to real rule
-      // definitions instead of erroring as unknown rules. Turning those rule
-      // sets ON is a deliberate, separate step (the config is now poised for
-      // it — e.g. react-hooks/rules-of-hooks would catch the recurring
-      // "hooks above early returns" class of bug).
+      // definitions instead of erroring as unknown rules.
       'react-hooks': reactHooks,
       '@typescript-eslint': tseslint.plugin,
     },
     settings: { react: { version: 'detect' } },
     rules: {
+      // Structural hook safety — hooks must not be called conditionally or
+      // after an early return. Zero current violations; this keeps it that way.
+      'react-hooks/rules-of-hooks': 'error',
       'react/forbid-elements': [
         'error',
         {
