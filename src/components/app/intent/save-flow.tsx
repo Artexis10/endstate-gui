@@ -491,7 +491,15 @@ export function SaveFlow({
                       </>
                     )}
                   </Button>
-                  {onPushToHostedBackup && result.outputPath && (
+                  {/* Manual push is the fallback. Hide it once auto-backup has
+                      already handled this capture (the chip shows "Backing up…"
+                      / "Backed up") — showing both is contradictory. Stays
+                      visible on 'idle' (auto-backup off / not eligible / consent
+                      pending) and 'paused' (auth lost), where it's the recovery. */}
+                  {onPushToHostedBackup &&
+                    result.outputPath &&
+                    autoBackupState !== 'backing-up' &&
+                    autoBackupState !== 'backed-up' && (
                     <Button
                       variant="secondary"
                       onClick={() => onPushToHostedBackup(result.outputPath!)}
