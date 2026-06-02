@@ -85,4 +85,42 @@ describe('SaveFlow — Push to hosted backup CTA', () => {
     await reachDoneState();
     expect(screen.queryByTestId('save-flow-push-to-backup')).not.toBeInTheDocument();
   });
+
+  // Auto-backup already covers this capture → the manual push is redundant and
+  // must hide (the done-card shows the "Backing up…"/"Backed up" chip instead).
+  it.each(['backing-up', 'backed-up'] as const)(
+    'hides the push button when autoBackupState is "%s"',
+    async (autoBackupState) => {
+      renderWithProviders(
+        <SaveFlow
+          {...baseProps}
+          onStartCapture={vi.fn().mockResolvedValue(captureResult)}
+          onPushToHostedBackup={vi.fn()}
+          autoBackupState={autoBackupState}
+        />,
+      );
+
+      await reachDoneState();
+      expect(screen.queryByTestId('save-flow-push-to-backup')).not.toBeInTheDocument();
+    },
+  );
+
+  // Auto-backup did NOT handle this capture (off / not eligible / consent
+  // pending → 'idle', or auth lost → 'paused') → manual push stays as fallback.
+  it.each(['idle', 'paused'] as const)(
+    'keeps the push button when autoBackupState is "%s"',
+    async (autoBackupState) => {
+      renderWithProviders(
+        <SaveFlow
+          {...baseProps}
+          onStartCapture={vi.fn().mockResolvedValue(captureResult)}
+          onPushToHostedBackup={vi.fn()}
+          autoBackupState={autoBackupState}
+        />,
+      );
+
+      await reachDoneState();
+      expect(screen.getByTestId('save-flow-push-to-backup')).toBeInTheDocument();
+    },
+  );
 });
