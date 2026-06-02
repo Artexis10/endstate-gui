@@ -157,6 +157,7 @@ export function DropZone({ onFileDrop, onBrowse, disabled = false }: DropZonePro
         </p>
       </div>
 
+      {/* eslint-disable-next-line react/forbid-elements -- hidden file picker; there is no shadcn file-input primitive */}
       <input
         ref={fileInputRef}
         type="file"
