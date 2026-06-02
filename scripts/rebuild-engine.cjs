@@ -178,6 +178,32 @@ try {
 
 console.log(`\n  Bundling engine v${cliVersion} (schema ${schemaVersion})\n`);
 
+// ---------------------------------------------------------------------------
+// Drift heads-up (non-blocking): warn when the bundled binary doesn't match the
+// ENGINE_VERSION pin. The binary is gitignored and refreshed by CI from the
+// pinned engine release; locally it goes stale when ENGINE_VERSION is bumped
+// but a pre-placed binary persists (Step 1's pre-placed branch then skips the
+// rebuild). We WARN rather than fail: a hard gate would block intentional local
+// custom builds, and the released cliVersion is the reliable signal here
+// (released binaries derive it from the git tag, unlike local source builds —
+// Artexis10/endstate#54), so a mismatch is worth surfacing but not fatal.
+// ---------------------------------------------------------------------------
+try {
+  const pinned = fs
+    .readFileSync(path.resolve(__dirname, '../ENGINE_VERSION'), 'utf8')
+    .trim();
+  if (pinned && cliVersion !== 'unknown' && cliVersion !== pinned) {
+    console.warn(
+      'WARNING: bundled engine is out of sync with the pin (non-blocking).\n' +
+        `  ENGINE_VERSION pins: v${pinned}\n` +
+        `  bundled binary:      v${cliVersion}\n` +
+        '  Refresh it:          npm run engine:refresh\n',
+    );
+  }
+} catch {
+  // No ENGINE_VERSION file — nothing to compare against.
+}
+
 // Write build-time version record for GUI runtime display
 const outDir = path.resolve(__dirname, '../src/generated');
 if (!fs.existsSync(outDir)) {
