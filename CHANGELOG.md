@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.14.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.13.0...gui-v2.14.0) (2026-06-03)
+
+
+### Features
+
+* bump engine to v2.13.0 ([#95](https://github.com/Artexis10/endstate-gui/issues/95)) ([91d2819](https://github.com/Artexis10/endstate-gui/commit/91d28195805143e841724d86b5682647a295a40c))
+* bump engine to v2.14.0 ([#102](https://github.com/Artexis10/endstate-gui/issues/102)) ([7771189](https://github.com/Artexis10/endstate-gui/commit/77711896f9e2167799f85058244155e0a4ee16f9))
+
+
+### Bug Fixes
+
+* hide manual push button once auto-backup has handled the capture ([#90](https://github.com/Artexis10/endstate-gui/issues/90)) ([fb84fd4](https://github.com/Artexis10/endstate-gui/commit/fb84fd41734282dba90801fc7b266d3d5694201c))
+
 ## [2.13.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.12.1...gui-v2.13.0) (2026-06-01)
 
 
