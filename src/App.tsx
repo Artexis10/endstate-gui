@@ -39,6 +39,8 @@ import { LogViewerModal } from './components/app/log-viewer-modal';
 import { ToastProvider, useToast } from './components/ui/toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
+import { Switch } from './components/ui/switch';
+import { NavButton } from './components/ui/nav-button';
 import { Input } from './components/ui/input';
 import { RadioGroup, RadioGroupItem } from './components/ui/radio-group';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
@@ -2714,15 +2716,16 @@ function AppContent() {
                   <span className="text-muted-foreground"> — billed monthly, cancel anytime.</span>
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  <button
+                  <Button
                     type="button"
+                    variant="link"
+                    size="inline"
                     onClick={() => {
                       void openExternal('https://substratesystems.io/endstate');
                     }}
-                    className="text-primary underline-offset-2 hover:underline"
                   >
                     Learn more → substratesystems.io/endstate
-                  </button>
+                  </Button>
                 </p>
                 <div className="mt-6 flex gap-3">
                   <Button
@@ -3394,18 +3397,11 @@ function AppContent() {
                       Show IDs, paths, and diagnostic information
                     </p>
                   </div>
-                  <button
-                    onClick={() => updateSettings({ showDetails: !settings.showDetails })}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      settings.showDetails ? 'bg-primary' : 'bg-muted'
-                    }`}
-                    role="switch"
-                    aria-checked={settings.showDetails}
-                  >
-                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                      settings.showDetails ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
-                  </button>
+                  <Switch
+                    checked={settings.showDetails}
+                    onCheckedChange={(checked) => updateSettings({ showDetails: checked })}
+                    aria-label="Show details"
+                  />
                 </div>
                 
                 <div className="flex items-center justify-between pt-3 border-t border-border/50">
@@ -3710,13 +3706,14 @@ function AppContent() {
             />
             {profileNameModalMode === 'rename' && settings.showDetails && (
               <div>
-                <button
+                <NavButton
                   onClick={() => setProfileNameModalMoreOptions(!profileNameModalMoreOptions)}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  aria-expanded={profileNameModalMoreOptions}
+                  className="gap-1 text-xs"
                 >
                   {profileNameModalMoreOptions ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   {profileNameModalMoreOptions ? 'Hide' : 'Details'}
-                </button>
+                </NavButton>
                 {profileNameModalMoreOptions && (() => {
                   const parts = profileNameModalPath.split(/[\\/]/);
                   const filename = parts[parts.length - 1] || '';

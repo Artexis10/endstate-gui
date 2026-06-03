@@ -94,6 +94,7 @@ export function AppShell({
                 const indicator = navIndicators?.[item.id as keyof typeof navIndicators];
                 
                 return (
+                  // eslint-disable-next-line react/forbid-elements -- bespoke sidebar nav item with animated active indicator (framer-motion layoutId); no nav-item primitive
                   <button
                     key={item.id}
                     data-testid={`nav-${item.id}`}

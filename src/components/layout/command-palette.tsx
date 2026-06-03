@@ -197,6 +197,7 @@ export function CommandPalette({
               {filteredCommands.map((cmd, index) => {
                 const Icon = cmd.icon;
                 return (
+                  // eslint-disable-next-line react/forbid-elements -- bespoke command-menu row (cmdk-style, selected/hover state); no menu-item primitive
                   <button
                     key={cmd.id}
                     onClick={cmd.action}

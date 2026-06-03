@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { FilterChip } from '@/components/ui/filter-chip';
 import {
   Dialog,
   DialogContent,
@@ -124,90 +125,90 @@ export function ActionDetailsModal({
             
             {/* Filter pills - clickable to filter the list */}
             {actionResult.counts && (
-              <div className="flex flex-wrap gap-2 text-xs" role="tablist" aria-label="Filter by status">
+              <div className="flex flex-wrap gap-2 text-xs" role="group" aria-label="Filter by status">
                 {actionResult.counts.installed !== undefined && actionResult.counts.installed > 0 && (
-                  <button
-                    role="tab"
-                    aria-selected={detailsFilter === 'installed'}
+                  <FilterChip
+                    pressed={detailsFilter === 'installed'}
+                    dimmed={!!detailsFilter && detailsFilter !== 'installed'}
                     onClick={() => setDetailsFilter(detailsFilter === 'installed' ? null : 'installed')}
-                    className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                    className={`px-2 py-1 text-xs font-normal ${
                       detailsFilter === 'installed' ? 'ring-2 ring-success' : ''
-                    } ${detailsFilter && detailsFilter !== 'installed' ? 'opacity-50' : ''} ${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                    } ${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                   >
                     Installed: {actionResult.counts.installed}
-                  </button>
+                  </FilterChip>
                 )}
                 {actionResult.counts.toInstall !== undefined && actionResult.counts.toInstall > 0 && (
-                  <button
-                    role="tab"
-                    aria-selected={detailsFilter === 'to_install'}
+                  <FilterChip
+                    pressed={detailsFilter === 'to_install'}
+                    dimmed={!!detailsFilter && detailsFilter !== 'to_install'}
                     onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
-                    className={`px-2 py-1 rounded cursor-pointer transition-opacity whitespace-nowrap flex-shrink-0 ${
+                    className={`px-2 py-1 text-xs font-normal whitespace-nowrap flex-shrink-0 ${
                       detailsFilter === 'to_install' ? `ring-2 ${getColorClasses('action').border}` : ''
-                    } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('action').bg} ${getColorClasses('action').text}`}
+                    } ${getColorClasses('action').bg} ${getColorClasses('action').text}`}
                   >
                     To install: {actionResult.counts.toInstall}
-                  </button>
+                  </FilterChip>
                 )}
                 {actionResult.counts.alreadyPresent !== undefined && actionResult.counts.alreadyPresent > 0 && (
-                  <button
-                    role="tab"
-                    aria-selected={detailsFilter === 'present'}
+                  <FilterChip
+                    pressed={detailsFilter === 'present'}
+                    dimmed={!!detailsFilter && detailsFilter !== 'present'}
                     onClick={() => setDetailsFilter(detailsFilter === 'present' ? null : 'present')}
-                    className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                    className={`px-2 py-1 text-xs font-normal ${
                       detailsFilter === 'present' ? 'ring-2 ring-success' : ''
-                    } ${detailsFilter && detailsFilter !== 'present' ? 'opacity-50' : ''} ${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                    } ${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                   >
                     Already present: {actionResult.counts.alreadyPresent}
-                  </button>
+                  </FilterChip>
                 )}
                 {actionResult.counts.skipped !== undefined && actionResult.counts.skipped > 0 && (
-                  <button
-                    role="tab"
-                    aria-selected={detailsFilter === 'skipped'}
+                  <FilterChip
+                    pressed={detailsFilter === 'skipped'}
+                    dimmed={!!detailsFilter && detailsFilter !== 'skipped'}
                     onClick={() => setDetailsFilter(detailsFilter === 'skipped' ? null : 'skipped')}
-                    className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                    className={`px-2 py-1 text-xs font-normal ${
                       detailsFilter === 'skipped' ? 'ring-2 ring-warning' : ''
-                    } ${detailsFilter && detailsFilter !== 'skipped' ? 'opacity-50' : ''} ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
+                    } ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
                   >
                     Skipped: {actionResult.counts.skipped}
-                  </button>
+                  </FilterChip>
                 )}
                 {actionResult.counts.failed !== undefined && actionResult.counts.failed > 0 && (
-                  <button
-                    role="tab"
-                    aria-selected={detailsFilter === 'failed'}
+                  <FilterChip
+                    pressed={detailsFilter === 'failed'}
+                    dimmed={!!detailsFilter && detailsFilter !== 'failed'}
                     onClick={() => setDetailsFilter(detailsFilter === 'failed' ? null : 'failed')}
-                    className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                    className={`px-2 py-1 text-xs font-normal ${
                       detailsFilter === 'failed' ? 'ring-2 ring-danger' : ''
-                    } ${detailsFilter && detailsFilter !== 'failed' ? 'opacity-50' : ''} ${getColorClasses('error').bg} ${getColorClasses('error').text}`}
+                    } ${getColorClasses('error').bg} ${getColorClasses('error').text}`}
                   >
                     Failed: {actionResult.counts.failed}
-                  </button>
+                  </FilterChip>
                 )}
                 {actionResult.counts.missing !== undefined && actionResult.counts.missing > 0 && (
-                  <button
-                    role="tab"
-                    aria-selected={detailsFilter === 'to_install'}
+                  <FilterChip
+                    pressed={detailsFilter === 'to_install'}
+                    dimmed={!!detailsFilter && detailsFilter !== 'to_install'}
                     onClick={() => setDetailsFilter(detailsFilter === 'to_install' ? null : 'to_install')}
-                    className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                    className={`px-2 py-1 text-xs font-normal ${
                       detailsFilter === 'to_install' ? `ring-2 ${getColorClasses('warn').border}` : ''
-                    } ${detailsFilter && detailsFilter !== 'to_install' ? 'opacity-50' : ''} ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
+                    } ${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
                   >
                     Missing: {actionResult.counts.missing}
-                  </button>
+                  </FilterChip>
                 )}
                 {actionResult.counts.configsCaptured !== undefined && actionResult.counts.configsCaptured > 0 && (
-                  <button
-                    role="tab"
-                    aria-selected={detailsFilter === 'config'}
+                  <FilterChip
+                    pressed={detailsFilter === 'config'}
+                    dimmed={!!detailsFilter && detailsFilter !== 'config'}
                     onClick={() => setDetailsFilter(detailsFilter === 'config' ? null : 'config')}
-                    className={`px-2 py-1 rounded cursor-pointer transition-opacity ${
+                    className={`px-2 py-1 text-xs font-normal ${
                       detailsFilter === 'config' ? 'ring-2 ring-violet-500/40' : ''
-                    } ${detailsFilter && detailsFilter !== 'config' ? 'opacity-50' : ''} bg-violet-500/10 text-violet-600 dark:text-violet-400`}
+                    } bg-violet-500/10 text-violet-600 dark:text-violet-400`}
                   >
                     Settings: {actionResult.counts.configsCaptured}
-                  </button>
+                  </FilterChip>
                 )}
               </div>
             )}

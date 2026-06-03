@@ -338,6 +338,7 @@ export function ActionExpandedContent({
       {/* Preview/Apply toggle for Setup card */}
       {action === 'setup' && !isThisRunning && !isThisComplete && (
         <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-md w-fit">
+          {/* eslint-disable react/forbid-elements -- bespoke segmented Preview/Apply mode control (mutually-exclusive, raised-active); no segmented-control primitive exists */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -366,6 +367,7 @@ export function ActionExpandedContent({
             <Zap className="h-3 w-3" />
             Apply
           </button>
+          {/* eslint-enable react/forbid-elements */}
         </div>
       )}
 
