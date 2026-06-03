@@ -13,6 +13,7 @@ import {
   getPhaseColor,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
+import { DisclosureButton } from '@/components/ui/disclosure-button';
 import type { LiveCounters, ActionProgress } from '../types';
 
 interface LiveActivityPanelProps {
@@ -58,12 +59,13 @@ export function LiveActivityPanel({
         exit="exit"
         className={`rounded-md border ${isVerifyPhase ? `${colorClasses.border} ${colorClasses.bg}` : 'border-border/50'}`}
       >
-        <button
+        <DisclosureButton
+          className="text-xs"
+          aria-expanded={activityExpanded}
           onClick={(e) => {
             e.stopPropagation();
             setActivityExpanded(!activityExpanded);
           }}
-          className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
         >
           <span className="font-medium flex items-center gap-2">
             Live activity
@@ -86,7 +88,7 @@ export function LiveActivityPanel({
             )}
             {activityExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </div>
-        </button>
+        </DisclosureButton>
         {activityExpanded && (
           <div className="relative border-t border-border/50">
             <div 
