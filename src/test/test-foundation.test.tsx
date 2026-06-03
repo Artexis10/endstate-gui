@@ -185,6 +185,7 @@ describe('Test Foundation', () => {
         const handleClick = () => {
           localStorage.setItem('clicked', 'true');
         };
+        // eslint-disable-next-line react/forbid-elements -- test-harness fixture (verifies renderWithProviders + click + localStorage), not production UI
         return <button onClick={handleClick}>Click</button>;
       };
 

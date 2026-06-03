@@ -8,14 +8,18 @@
 //
 // We deliberately do NOT enable the broader recommended rule sets: this
 // config exists to guard one invariant, not to retrofit a full lint pass
-// onto the codebase. (That's also why native <button> — used in ~18 places
-// — is not forbidden yet; tightening that is a separate, larger cleanup.)
+// onto the codebase.
 //
-// The shadcn primitives themselves wrap native elements by design, so
-// `src/components/ui/**` is exempted. Genuine one-off exceptions (e.g. a
-// hidden <input type="file"> — there is no shadcn file-picker primitive)
-// use an inline `// eslint-disable-next-line react/forbid-elements` with a
-// justification at the call site.
+// Forbidden native elements: select, input, textarea, and button — each has
+// a shadcn primitive or a dedicated one in `src/components/ui/` (Button,
+// NavButton, FilterChip, Pill, DisclosureButton). The primitives themselves
+// wrap native elements by design, so `src/components/ui/**` is exempted, as
+// is `src/screenshots-harness.tsx` (a temporary marketing-screenshot file).
+// Genuine one-off exceptions (e.g. a hidden <input type="file"> — no shadcn
+// file-picker primitive; or a few bespoke single-use interactive widgets like
+// the cmdk command rows / animated sidebar nav) use an inline
+// `// eslint-disable-next-line react/forbid-elements` with a justification at
+// the call site.
 
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
@@ -27,7 +31,13 @@ const NATIVE_CONTROL_HINT =
 
 export default [
   {
-    ignores: ['dist/**', 'src-tauri/**', 'src/components/ui/**'],
+    ignores: [
+      'dist/**',
+      'src-tauri/**',
+      'src/components/ui/**',
+      // Temporary marketing-screenshot harness (native buttons, not shipped UI).
+      'src/screenshots-harness.tsx',
+    ],
   },
   {
     files: ['src/**/*.{ts,tsx}'],
@@ -80,6 +90,13 @@ export default [
             {
               element: 'textarea',
               message: `Use the shadcn <Textarea> (@/components/ui/textarea). ${NATIVE_CONTROL_HINT}`,
+            },
+            {
+              element: 'button',
+              message:
+                'Use the shadcn <Button> or a dedicated primitive ' +
+                '(<NavButton>/<FilterChip>/<Pill>/<DisclosureButton>) from ' +
+                `@/components/ui/*. ${NATIVE_CONTROL_HINT}`,
             },
           ],
         },
