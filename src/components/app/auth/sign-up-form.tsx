@@ -189,13 +189,15 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
             <p className="mt-1 text-xs text-muted-foreground">{authError.remediation}</p>
           )}
           {authError?.cta && (
-            <button
+            <Button
               type="button"
+              variant="link"
+              size="inline"
               onClick={() => onSwitchTab(authError.cta!.tab)}
-              className="mt-2 text-xs font-medium text-primary underline-offset-2 hover:underline"
+              className="mt-2 text-xs font-medium"
             >
               {authError.cta.label} →
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -212,22 +214,26 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
         )}
       </Button>
       <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
-        <button
+        <Button
           type="button"
+          variant="link"
+          size="inline"
           onClick={() => toggleClaimMode(!claimMode)}
-          className="text-primary underline-offset-2 hover:underline"
+          className="text-xs"
         >
           {claimMode
             ? 'Use a regular sign-up instead'
             : 'Have a Hosted Backup claim code?'}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="link"
+          size="inline"
           onClick={() => onSwitchTab('sign-in')}
-          className="text-primary underline-offset-2 hover:underline"
+          className="text-xs"
         >
           Already have an account? Sign in
-        </button>
+        </Button>
       </div>
     </form>
   );

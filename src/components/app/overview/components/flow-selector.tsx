@@ -326,12 +326,14 @@ export function FlowSelector({
                   </Button>
                 </div>
 
-                <button
+                <Button
+                  variant="link"
+                  size="inline"
                   onClick={handleCaptureInstead}
-                  className="text-sm text-blue-500 hover:text-blue-400 transition-colors"
+                  className="text-blue-500 hover:text-blue-400 hover:no-underline"
                 >
                   &larr; Save this computer instead
-                </button>
+                </Button>
               </CardContent>
             </Card>
           )}
