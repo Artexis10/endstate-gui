@@ -14,6 +14,7 @@ import {
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
 import { DisclosureButton } from '@/components/ui/disclosure-button';
+import { Pill } from '@/components/ui/pill';
 import type { LiveCounters, ActionProgress } from '../types';
 
 interface LiveActivityPanelProps {
@@ -162,7 +163,7 @@ export function LiveActivityPanel({
               const pillClasses = getColorClasses(pillColor);
               
               return (
-                <button
+                <Pill
                   onClick={(e) => {
                     e.stopPropagation();
                     if (activityScrollRef.current) {
@@ -186,13 +187,13 @@ export function LiveActivityPanel({
                     }
                     setIsAtBottom(true);
                   }}
-                  className={`absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs rounded-full shadow-lg transition-colors border ${pillClasses.bg} ${pillClasses.border} ${pillClasses.text}`}
+                  className={`absolute bottom-2 right-2 gap-1 px-2 shadow-lg ${pillClasses.bg} ${pillClasses.border} ${pillClasses.text}`}
                   aria-label="Jump to latest and re-enable auto-follow"
                   data-testid="latest-pill"
                 >
                   <ArrowDown className="h-3 w-3" />
                   Latest
-                </button>
+                </Pill>
               );
             })()}
           </div>

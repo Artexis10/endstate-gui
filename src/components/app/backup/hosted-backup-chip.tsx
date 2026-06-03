@@ -19,6 +19,7 @@
  */
 
 import { Cloud } from 'lucide-react';
+import { Pill } from '@/components/ui/pill';
 import type { SubscriptionStatus } from '@/types';
 
 export interface HostedBackupChipProps {
@@ -41,40 +42,37 @@ export function HostedBackupChip({
 
   if (!signedIn) {
     return (
-      <button
-        type="button"
+      <Pill
         onClick={onOpen}
         data-testid="hosted-backup-chip"
         data-state="signed-out"
-        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/50 px-2.5 py-1 text-xs text-muted-foreground hover:bg-card hover:text-foreground transition-colors"
+        className="border-border bg-card/50 text-muted-foreground hover:bg-card hover:text-foreground"
       >
         <Cloud className="h-3.5 w-3.5" />
         <span>Sign in to Hosted Backup</span>
-      </button>
+      </Pill>
     );
   }
 
   if (effective === 'active') {
     return (
-      <button
-        type="button"
+      <Pill
         onClick={onOpen}
         data-testid="hosted-backup-chip"
         data-state="active"
         title="Backups are up to date. Click to manage."
-        className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/20 transition-colors"
+        className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
       >
         <Cloud className="h-3.5 w-3.5" />
         <span>Hosted Backup · Active</span>
-      </button>
+      </Pill>
     );
   }
 
   if (effective === 'grace' || effective === 'cancelled') {
     const label = effective === 'cancelled' ? 'Renew' : 'Fix billing';
     return (
-      <button
-        type="button"
+      <Pill
         onClick={onOpen}
         data-testid="hosted-backup-chip"
         data-state={effective}
@@ -83,25 +81,24 @@ export function HostedBackupChip({
             ? 'Subscription cancelled. Backups read-only until renewed.'
             : 'Payment failed. Fix billing to keep backups.'
         }
-        className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-xs text-warning-foreground hover:bg-warning/20 transition-colors"
+        className="border-warning/30 bg-warning/10 text-warning-foreground hover:bg-warning/20"
       >
         <Cloud className="h-3.5 w-3.5" />
         <span>Hosted Backup · {label}</span>
-      </button>
+      </Pill>
     );
   }
 
   // signedIn but subscriptionStatus === 'none' — finished signup, never paid.
   return (
-    <button
-      type="button"
+    <Pill
       onClick={onOpen}
       data-testid="hosted-backup-chip"
       data-state="none"
-      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/50 px-2.5 py-1 text-xs text-muted-foreground hover:bg-card hover:text-foreground transition-colors"
+      className="border-border bg-card/50 text-muted-foreground hover:bg-card hover:text-foreground"
     >
       <Cloud className="h-3.5 w-3.5" />
       <span>Subscribe to Hosted Backup</span>
-    </button>
+    </Pill>
   );
 }
