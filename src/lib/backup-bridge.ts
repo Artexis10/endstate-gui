@@ -27,6 +27,7 @@ import {
   BackupListData,
   BackupVersionsData,
   BackupPushData,
+  BackupEstimateData,
   BackupPullData,
   BackupDeleteData,
   BackupDeleteVersionData,
@@ -199,6 +200,22 @@ export async function backupLogout(settings: AppSettings): Promise<BackupLogoutD
 /** Report the current hosted-backup session state. */
 export async function backupStatus(settings: AppSettings): Promise<BackupStatusData> {
   return runBackupOnce<BackupStatusData>(settings, 'backup', ['status']);
+}
+
+/**
+ * Estimate the upload size of a profile WITHOUT uploading (read-only).
+ *
+ * Returns the exact bytes a `backup push` of `profile` would upload, so callers
+ * can warn before a push that would approach/exceed the storage quota. Single
+ * envelope (no streaming). Requires a signed-in session.
+ */
+export async function backupEstimate(
+  settings: AppSettings,
+  args: { profile: string; backupId?: string },
+): Promise<BackupEstimateData> {
+  const cliArgs: string[] = ['estimate', '--profile', args.profile];
+  if (args.backupId) cliArgs.push('--backup-id', args.backupId);
+  return runBackupOnce<BackupEstimateData>(settings, 'backup', cliArgs);
 }
 
 /**

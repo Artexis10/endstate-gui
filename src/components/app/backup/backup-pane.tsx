@@ -33,6 +33,7 @@ import { VersionList } from './version-list';
 import { PushProgressDialog } from './push-progress-dialog';
 import { PullProgressDialog } from './pull-progress-dialog';
 import { DeleteConfirmationModal } from './delete-confirmation-modal';
+import { usePrePushGuard } from './use-pre-push-guard';
 import { useBackupState } from './use-backup-state';
 import {
   backupDelete,
@@ -203,17 +204,15 @@ export function BackupPane({
     }
   }, [settings, onAuthLost, showToast]);
 
-  const handlePush = useCallback(
-    async (backupId?: string) => {
-      if (!selectedProfilePath) {
-        showToast('Select a profile first to push.', 'warning');
-        return;
-      }
+  const { guardPush, dialog: prePushDialog } = usePrePushGuard(settings, state.status);
+
+  const runPush = useCallback(
+    async (profile: string, backupId?: string) => {
       state.resetPushProgress();
       state.setPushOpen(true);
       try {
         await backupPush(settings, {
-          profile: selectedProfilePath,
+          profile,
           backupId,
           name: backupId ? undefined : selectedProfileName ?? undefined,
           onEvent: state.pushOnEvent,
@@ -243,7 +242,21 @@ export function BackupPane({
         }
       }
     },
-    [selectedProfilePath, selectedProfileName, settings, state, showToast],
+    [selectedProfileName, settings, state, showToast],
+  );
+
+  // Manual push → soft-warn first if it would approach/exceed quota, then push.
+  const handlePush = useCallback(
+    async (backupId?: string) => {
+      if (!selectedProfilePath) {
+        showToast('Select a profile first to push.', 'warning');
+        return;
+      }
+      await guardPush({ profile: selectedProfilePath, backupId }, () =>
+        runPush(selectedProfilePath, backupId),
+      );
+    },
+    [selectedProfilePath, guardPush, runPush, showToast],
   );
 
   const handleRestore = useCallback(
@@ -535,6 +548,8 @@ export function BackupPane({
         }
         onConfirm={confirmDelete}
       />
+
+      {prePushDialog}
     </div>
   );
 }
