@@ -156,6 +156,19 @@ export interface BackupPushData {
   skipped?: boolean;
 }
 
+/**
+ * Response shape for `endstate backup estimate --json` — the exact bytes a push
+ * of the same profile would upload, computed client-side with no network call.
+ * Used to warn before a push that would approach/exceed the quota.
+ */
+export interface BackupEstimateData {
+  /** Encrypted chunks + encrypted manifest — the bytes counted against quota. */
+  estimatedUploadBytes: number;
+  /** Tarred profile size before encryption. */
+  plaintextBytes: number;
+  chunkCount: number;
+}
+
 /** Response shape for `endstate backup pull --json`. */
 export interface BackupPullData {
   backupId: string;
