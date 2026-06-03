@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.15.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.14.0...gui-v2.15.0) (2026-06-03)
+
+
+### Features
+
+* **backup:** soft pre-push quota warning in the Backup pane ([#103](https://github.com/Artexis10/endstate-gui/issues/103)) ([1453ba3](https://github.com/Artexis10/endstate-gui/commit/1453ba30058bd223124406d16380d41f06f111a0))
+
 ## [2.14.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.13.0...gui-v2.14.0) (2026-06-03)
 
 
