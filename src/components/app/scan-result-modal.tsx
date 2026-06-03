@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { DisclosureButton } from '@/components/ui/disclosure-button';
+import { NavButton } from '@/components/ui/nav-button';
 import { CheckCircle2, AlertCircle, Copy, Package, ChevronDown, ChevronRight } from 'lucide-react';
 import type { VerifyItem } from '../../types';
 import { useMicroFeedback } from '@/lib/micro-feedback';
@@ -121,9 +123,10 @@ export function ScanResultModal({
 
     return (
       <div className={`rounded-lg border ${bgClass}`}>
-        <button
+        <DisclosureButton
           onClick={() => toggleSection(sectionKey)}
-          className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/50 rounded-lg transition-colors"
+          aria-expanded={isExpanded}
+          className="p-3 rounded-lg text-foreground"
         >
           <div className="flex items-center gap-2">
             {isExpanded ? (
@@ -134,7 +137,7 @@ export function ScanResultModal({
             <span className="text-sm font-medium">{icon} {title}</span>
             <span className="text-xs text-muted-foreground">({itemCount})</span>
           </div>
-        </button>
+        </DisclosureButton>
         {isExpanded && (
           <div className="px-3 pb-3 space-y-2">
             {Object.entries(groupedItems).map(([driver, driverItems]) => (
@@ -206,12 +209,13 @@ export function ScanResultModal({
         {items.length > 0 && (
           <div className="border-t border-border pt-4">
             <div className="flex items-center justify-between mb-3">
-              <button
+              <NavButton
                 onClick={() => setShowDetails(!showDetails)}
-                className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                aria-expanded={showDetails}
+                className="font-medium"
               >
                 {showDetails ? 'Hide' : 'View'} details ({items.length} apps)
-              </button>
+              </NavButton>
               {showDetails && (
                 <Button
                   ref={copyFeedback.buttonRef}

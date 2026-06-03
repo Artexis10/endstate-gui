@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
+import { FilterChip } from '../ui/filter-chip';
 import { CheckCircle2, AlertTriangle, Copy, Package, Loader2, Settings, FolderArchive } from 'lucide-react';
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { DetailsDisclosure } from '../ui/details-disclosure';
@@ -286,77 +287,72 @@ export function ApplyResultModal({
             <>
               {/* To install (preview only - from dry-run, NOT during applying) */}
               {isDryRun && willBeInstalled > 0 && (
-                <button
+                <FilterChip
+                  pressed={activeFilters.has('To install')}
+                  dimmed={activeFilters.size > 0 && !activeFilters.has('To install')}
                   onClick={() => toggleFilter('To install')}
-                  className={`flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20 w-full text-left transition-opacity ${
-                    activeFilters.size > 0 && !activeFilters.has('To install') ? 'opacity-50' : ''
-                  }`}
                   data-testid="filter-to-install"
-                  aria-pressed={activeFilters.has('To install')}
+                  className="flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20 w-full text-left"
                 >
                   <span className="text-sm font-medium">To install</span>
                   <span className="text-2xl font-semibold text-warning">{willBeInstalled}</span>
-                </button>
+                </FilterChip>
               )}
               
               {/* Installed this run (apply result only - never shown in preview) */}
               {!isDryRun && installedThisRun > 0 && (
-                <button
+                <FilterChip
+                  pressed={activeFilters.has('Installed this run')}
+                  dimmed={activeFilters.size > 0 && !activeFilters.has('Installed this run')}
                   onClick={() => toggleFilter('Installed this run')}
-                  className={`flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20 w-full text-left transition-opacity ${
-                    activeFilters.size > 0 && !activeFilters.has('Installed this run') ? 'opacity-50' : ''
-                  }`}
                   data-testid="filter-installed-this-run"
-                  aria-pressed={activeFilters.has('Installed this run')}
+                  className="flex items-center justify-between p-4 rounded-lg bg-success/10 border border-success/20 w-full text-left"
                 >
                   <span className="text-sm font-medium">Installed this run</span>
                   <span className="text-2xl font-semibold text-success">{installedThisRun}</span>
-                </button>
+                </FilterChip>
               )}
               
               {/* Already present */}
               {alreadyPresent > 0 && (
-                <button
+                <FilterChip
+                  pressed={activeFilters.has('Already present')}
+                  dimmed={activeFilters.size > 0 && !activeFilters.has('Already present')}
                   onClick={() => toggleFilter('Already present')}
-                  className={`flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20 w-full text-left transition-opacity ${
-                    activeFilters.size > 0 && !activeFilters.has('Already present') ? 'opacity-50' : ''
-                  }`}
                   data-testid="filter-already-present"
-                  aria-pressed={activeFilters.has('Already present')}
+                  className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20 w-full text-left"
                 >
                   <span className="text-sm font-medium">Already present</span>
                   <span className="text-2xl font-semibold text-muted-foreground">{alreadyPresent}</span>
-                </button>
+                </FilterChip>
               )}
               
               {/* Needs attention (failures) */}
               {needsAttention > 0 && (
-                <button
+                <FilterChip
+                  pressed={activeFilters.has('Needs attention')}
+                  dimmed={activeFilters.size > 0 && !activeFilters.has('Needs attention')}
                   onClick={() => toggleFilter('Needs attention')}
-                  className={`flex items-center justify-between p-4 rounded-lg bg-danger/10 border border-danger/20 w-full text-left transition-opacity ${
-                    activeFilters.size > 0 && !activeFilters.has('Needs attention') ? 'opacity-50' : ''
-                  }`}
                   data-testid="filter-needs-attention"
-                  aria-pressed={activeFilters.has('Needs attention')}
+                  className="flex items-center justify-between p-4 rounded-lg bg-danger/10 border border-danger/20 w-full text-left"
                 >
                   <span className="text-sm font-medium">Needs attention</span>
                   <span className="text-2xl font-semibold text-danger">{needsAttention}</span>
-                </button>
+                </FilterChip>
               )}
               
               {/* Skipped (advanced - only show if > 0) */}
               {skippedCount > 0 && (
-                <button
+                <FilterChip
+                  pressed={activeFilters.has('Skipped')}
+                  dimmed={activeFilters.size > 0 && !activeFilters.has('Skipped')}
                   onClick={() => toggleFilter('Skipped')}
-                  className={`flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20 w-full text-left transition-opacity ${
-                    activeFilters.size > 0 && !activeFilters.has('Skipped') ? 'opacity-50' : ''
-                  }`}
                   data-testid="filter-skipped"
-                  aria-pressed={activeFilters.has('Skipped')}
+                  className="flex items-center justify-between p-4 rounded-lg bg-muted/10 border border-muted/20 w-full text-left"
                 >
                   <span className="text-sm font-medium">Skipped</span>
                   <span className="text-2xl font-semibold text-muted-foreground">{skippedCount}</span>
-                </button>
+                </FilterChip>
               )}
             </>
           )}
