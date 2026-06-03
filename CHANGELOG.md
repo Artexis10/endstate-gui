@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.16.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.15.0...gui-v2.16.0) (2026-06-03)
+
+
+### Features
+
+* **backup:** gate the Save/Setup "push to cloud" actions with the pre-push guard ([#107](https://github.com/Artexis10/endstate-gui/issues/107)) ([1663e0b](https://github.com/Artexis10/endstate-gui/commit/1663e0bba28d244438f3ac900d909ebaed0d86f8))
+* bump engine to v2.16.0 ([#105](https://github.com/Artexis10/endstate-gui/issues/105)) ([e953c66](https://github.com/Artexis10/endstate-gui/commit/e953c662b0de25f3458922dd7bd5b80de6ef553a))
+
 ## [2.15.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.14.0...gui-v2.15.0) (2026-06-03)
 
 
