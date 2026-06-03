@@ -4,6 +4,7 @@ import { Input } from '../ui/input';
 import { AlertCircle, Copy, Package, ChevronDown, ChevronRight, FileText, Search } from 'lucide-react';
 import { useState } from 'react';
 import { DetailsDisclosure } from '../ui/details-disclosure';
+import { DisclosureButton } from '../ui/disclosure-button';
 import { useShowDetails } from '@/lib/use-show-details';
 import type { CapturedApp, CaptureCounts } from '../../types';
 import { useMicroFeedback } from '@/lib/micro-feedback';
@@ -150,16 +151,17 @@ export function CaptureResultModal({
                 {/* Apps grouped by source */}
                 {Object.entries(appsBySource).map(([source, apps]) => (
                   <div key={source} className="border border-border rounded-lg">
-                    <button
+                    <DisclosureButton
                       onClick={() => toggleSource(source)}
-                      className="flex items-center justify-between w-full p-3 text-left hover:bg-muted/50"
+                      aria-expanded={expandedSources.has(source)}
+                      className="p-3 text-foreground"
                     >
                       <div className="flex items-center gap-2">
                         {expandedSources.has(source) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                         <span className="text-sm font-medium capitalize">{source}</span>
                       </div>
                       <span className="text-xs text-muted-foreground">{apps.length} apps</span>
-                    </button>
+                    </DisclosureButton>
                     
                     {expandedSources.has(source) && (
                       <div className="border-t border-border max-h-48 overflow-y-auto">

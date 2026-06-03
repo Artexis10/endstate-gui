@@ -4,6 +4,7 @@ import { LogViewer } from './log-viewer';
 import { ChevronDown, ChevronRight, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DetailsDisclosure } from '@/components/ui/details-disclosure';
+import { NavButton } from '@/components/ui/nav-button';
 
 interface ActivityItem {
   id: string;
@@ -66,9 +67,10 @@ export function ActivityLog({
         {/* Collapsed summary when complete */}
         {isComplete && hasActivity ? (
           <div>
-            <button
+            <NavButton
               onClick={() => setShowActivity(!showActivity)}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full"
+              aria-expanded={showActivity}
+              className="flex w-full gap-2"
             >
               {showActivity ? (
                 <ChevronDown className="h-4 w-4" />
@@ -78,7 +80,7 @@ export function ActivityLog({
               <span>
                 Scan completed • {totalAppsChecked} apps checked
               </span>
-            </button>
+            </NavButton>
             
             <AnimatePresence>
               {showActivity && (
