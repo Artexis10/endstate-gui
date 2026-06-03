@@ -52,6 +52,7 @@ import { copyText } from './lib/clipboard';
 import { UpdatePrompt, runUpdateCheck } from './components/UpdatePrompt';
 import { AuthPane } from './components/app/auth/auth-pane';
 import { BackupPane } from './components/app/backup/backup-pane';
+import { usePrePushGuard } from './components/app/backup/use-pre-push-guard';
 import { ProfileMissingModal } from './components/app/profile-missing-modal';
 import { RestoreWizard } from './components/app/backup/restore-wizard';
 import { ReauthDialog } from './components/app/backup/reauth-dialog';
@@ -182,6 +183,12 @@ function AppContent() {
   //   local profiles directory is empty (Phase 6 wizard).
   const [hostedBackupSupported, setHostedBackupSupported] = useState<boolean>(false);
   const [backupStatusData, setBackupStatusData] = useState<BackupStatusData | null>(null);
+  // Soft pre-push quota guard for the MANUAL push surfaces below (the silent
+  // auto-backup via runAutoBackup is intentionally not gated).
+  const { guardPush: guardManualPush, dialog: prePushGuardDialog } = usePrePushGuard(
+    settings,
+    backupStatusData,
+  );
   // Boot-time prefetch of `backup list`. Engine subprocess spawns cost
   // ~300ms–2s on Windows, so by the time the user opens the Backup pane the
   // list is warm and the pane renders instantly (SWR — pane revalidates
@@ -2319,49 +2326,51 @@ function AppContent() {
                 && backupStatusData?.signedIn
                 && backupStatusData.subscriptionStatus === 'active'
                   ? async (capturedPath: string) => {
-                      // Reset counters and open the dialog before kicking off
-                      // the push so the first chunk event lands into clean state.
-                      setPushTotalChunks(0);
-                      setPushUploadedChunks(0);
-                      setPushCurrentChunkIndex(null);
-                      setPushDialogOpen(true);
-                      try {
-                        await backupPush(settings, {
-                          profile: capturedPath,
-                          onEvent: (event) => {
-                            if (!isBackupChunkEvent(event)) return;
-                            setPushTotalChunks(event.totalChunks);
-                            if (event.status === 'uploading') {
-                              setPushCurrentChunkIndex(event.chunkIndex);
-                            } else if (event.status === 'uploaded') {
-                              setPushUploadedChunks((prev) => prev + 1);
-                            }
-                          },
-                        });
-                        const pushEmail = backupStatusData?.email;
-                        if (!hasSeenFirstPushFor(pushEmail)) {
-                          showToast(
-                            'First backup saved to the cloud. Your settings are now safe across machines.',
-                            'success',
-                          );
-                          markFirstPushFor(pushEmail);
-                        } else {
-                          showToast('Pushed to hosted backup.', 'success');
+                      await guardManualPush({ profile: capturedPath }, async () => {
+                        // Reset counters and open the dialog before kicking off
+                        // the push so the first chunk event lands into clean state.
+                        setPushTotalChunks(0);
+                        setPushUploadedChunks(0);
+                        setPushCurrentChunkIndex(null);
+                        setPushDialogOpen(true);
+                        try {
+                          await backupPush(settings, {
+                            profile: capturedPath,
+                            onEvent: (event) => {
+                              if (!isBackupChunkEvent(event)) return;
+                              setPushTotalChunks(event.totalChunks);
+                              if (event.status === 'uploading') {
+                                setPushCurrentChunkIndex(event.chunkIndex);
+                              } else if (event.status === 'uploaded') {
+                                setPushUploadedChunks((prev) => prev + 1);
+                              }
+                            },
+                          });
+                          const pushEmail = backupStatusData?.email;
+                          if (!hasSeenFirstPushFor(pushEmail)) {
+                            showToast(
+                              'First backup saved to the cloud. Your settings are now safe across machines.',
+                              'success',
+                            );
+                            markFirstPushFor(pushEmail);
+                          } else {
+                            showToast('Pushed to hosted backup.', 'success');
+                          }
+                          // Refresh the cloud index so the new backup gets a
+                          // cloud badge in Setup immediately.
+                          void cloudBackupIndex.refresh();
+                        } catch (err) {
+                          const msg =
+                            err instanceof BackupCommandError
+                              ? `${err.code}: ${err.message}`
+                              : err instanceof Error
+                                ? err.message
+                                : String(err);
+                          showToast(`Push failed — ${msg}`, 'error');
+                        } finally {
+                          setPushDialogOpen(false);
                         }
-                        // Refresh the cloud index so the new backup gets a
-                        // cloud badge in Setup immediately.
-                        void cloudBackupIndex.refresh();
-                      } catch (err) {
-                        const msg =
-                          err instanceof BackupCommandError
-                            ? `${err.code}: ${err.message}`
-                            : err instanceof Error
-                              ? err.message
-                              : String(err);
-                        showToast(`Push failed — ${msg}`, 'error');
-                      } finally {
-                        setPushDialogOpen(false);
-                      }
+                      });
                     }
                   : undefined
               }
@@ -2485,46 +2494,48 @@ function AppContent() {
                 backupStatusData?.signedIn &&
                 backupStatusData.subscriptionStatus === 'active'
                   ? async (profilePath: string, profileName: string) => {
-                      setPushTotalChunks(0);
-                      setPushUploadedChunks(0);
-                      setPushCurrentChunkIndex(null);
-                      setPushDialogOpen(true);
-                      try {
-                        await backupPush(settings, {
-                          profile: profilePath,
-                          name: profileName,
-                          onEvent: (event) => {
-                            if (!isBackupChunkEvent(event)) return;
-                            setPushTotalChunks(event.totalChunks);
-                            if (event.status === 'uploading') {
-                              setPushCurrentChunkIndex(event.chunkIndex);
-                            } else if (event.status === 'uploaded') {
-                              setPushUploadedChunks((prev) => prev + 1);
-                            }
-                          },
-                        });
-                        const pushEmail = backupStatusData?.email;
-                        if (!hasSeenFirstPushFor(pushEmail)) {
-                          showToast(
-                            'First backup saved to the cloud. Your settings are now safe across machines.',
-                            'success',
-                          );
-                          markFirstPushFor(pushEmail);
-                        } else {
-                          showToast(`"${profileName}" backed up to cloud.`, 'success');
+                      await guardManualPush({ profile: profilePath }, async () => {
+                        setPushTotalChunks(0);
+                        setPushUploadedChunks(0);
+                        setPushCurrentChunkIndex(null);
+                        setPushDialogOpen(true);
+                        try {
+                          await backupPush(settings, {
+                            profile: profilePath,
+                            name: profileName,
+                            onEvent: (event) => {
+                              if (!isBackupChunkEvent(event)) return;
+                              setPushTotalChunks(event.totalChunks);
+                              if (event.status === 'uploading') {
+                                setPushCurrentChunkIndex(event.chunkIndex);
+                              } else if (event.status === 'uploaded') {
+                                setPushUploadedChunks((prev) => prev + 1);
+                              }
+                            },
+                          });
+                          const pushEmail = backupStatusData?.email;
+                          if (!hasSeenFirstPushFor(pushEmail)) {
+                            showToast(
+                              'First backup saved to the cloud. Your settings are now safe across machines.',
+                              'success',
+                            );
+                            markFirstPushFor(pushEmail);
+                          } else {
+                            showToast(`"${profileName}" backed up to cloud.`, 'success');
+                          }
+                          void cloudBackupIndex.refresh();
+                        } catch (err) {
+                          const msg =
+                            err instanceof BackupCommandError
+                              ? `${err.code}: ${err.message}`
+                              : err instanceof Error
+                                ? err.message
+                                : String(err);
+                          showToast(`Push failed — ${msg}`, 'error');
+                        } finally {
+                          setPushDialogOpen(false);
                         }
-                        void cloudBackupIndex.refresh();
-                      } catch (err) {
-                        const msg =
-                          err instanceof BackupCommandError
-                            ? `${err.code}: ${err.message}`
-                            : err instanceof Error
-                              ? err.message
-                              : String(err);
-                        showToast(`Push failed — ${msg}`, 'error');
-                      } finally {
-                        setPushDialogOpen(false);
-                      }
+                      });
                     }
                   : undefined
               }
@@ -3574,6 +3585,9 @@ function AppContent() {
         uploadedChunks={pushUploadedChunks}
         currentChunkIndex={pushCurrentChunkIndex}
       />
+
+      {/* Soft pre-push quota warning for the Save/Setup "push to cloud" actions. */}
+      {prePushGuardDialog}
 
       {/* One-time auto-backup consent prompt. App-level so it can appear after a
           capture from the Save flow (not just on the Backup pane). */}
