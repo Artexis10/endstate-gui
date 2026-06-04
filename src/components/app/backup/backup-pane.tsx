@@ -261,11 +261,20 @@ export function BackupPane({
 
   const handleRestore = useCallback(
     async (backupId: string, versionId?: string) => {
-      const target = await saveDialog({
-        title: 'Choose where to restore',
-        defaultPath: selectedProfileName ?? 'restored-profile.json',
-        filters: [{ name: 'Endstate profile', extensions: ['json', 'jsonc'] }],
-      });
+      let target: string | null;
+      try {
+        target = await saveDialog({
+          title: 'Choose where to restore',
+          defaultPath: selectedProfileName ?? 'restored-profile.json',
+          filters: [{ name: 'Endstate profile', extensions: ['json', 'jsonc'] }],
+        });
+      } catch {
+        // The native save dialog can fail to present (e.g. outside the Tauri
+        // shell). Surface a friendly toast rather than leaking an unhandled
+        // promise rejection. Mirrors the same guard in restore-wizard.tsx.
+        showToast('Could not open the save dialog. Please try again.', 'error');
+        return;
+      }
       if (!target) return; // user cancelled
       state.resetPullProgress();
       state.setPullOpen(true);
