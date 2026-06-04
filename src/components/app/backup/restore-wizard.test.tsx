@@ -11,10 +11,24 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders, screen, waitFor } from '@/test/test-utils';
+import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { RestoreWizard } from './restore-wizard';
 import type { AppSettings } from '@/settings';
 import type { BackupListItem, BackupVersionItem } from '@/types';
+
+const saveDialogMock = vi.mocked(saveDialog);
+
+// Toasts render through sonner's portal, which isn't mounted in jsdom — assert
+// on the showToast call instead of DOM text.
+const { showToastSpy } = vi.hoisted(() => ({ showToastSpy: vi.fn() }));
+vi.mock('@/components/ui/toast', async () => {
+  const actual = await vi.importActual<typeof import('@/components/ui/toast')>(
+    '@/components/ui/toast',
+  );
+  return { ...actual, useToast: () => ({ showToast: showToastSpy }) };
+});
 
 const backupListMock = vi.fn();
 const backupVersionsMock = vi.fn();
@@ -68,6 +82,8 @@ function renderWizard(
 beforeEach(() => {
   backupListMock.mockReset();
   backupVersionsMock.mockReset();
+  saveDialogMock.mockReset();
+  showToastSpy.mockReset();
   backupListMock.mockResolvedValue({ backups: [BACKUP] });
   backupVersionsMock.mockResolvedValue({ versions: [VERSION] });
 });
@@ -117,6 +133,27 @@ describe('RestoreWizard', () => {
     rerender(<RestoreWizard open={false} {...props} />);
     rerender(<RestoreWizard open {...props} />);
     await waitFor(() => expect(backupListMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('surfaces a friendly toast (not an unhandled rejection) when the save dialog fails to open', async () => {
+    // The native save dialog can reject when it cannot be presented (e.g.
+    // outside the Tauri shell). The handler must catch it and toast rather
+    // than leaking an unhandled promise rejection.
+    saveDialogMock.mockRejectedValueOnce(new Error('no dialog available'));
+    renderWizard();
+
+    const restore = await screen.findByRole('button', { name: /^restore$/i });
+    await waitFor(() => expect(restore).toBeEnabled());
+    await userEvent.click(restore);
+
+    await waitFor(() =>
+      expect(showToastSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/could not open the save dialog/i),
+        'error',
+      ),
+    );
+    // The pull must never start when no destination was chosen.
+    expect(saveDialogMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not show a stale count when the list emptied between opens', async () => {
