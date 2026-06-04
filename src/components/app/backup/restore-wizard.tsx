@@ -175,11 +175,20 @@ export function RestoreWizard({
 
   const handleStartRestore = async () => {
     if (!selectedBackupId || !selectedVersionId) return;
-    const target = await saveDialog({
-      title: 'Choose where to restore',
-      defaultPath: `${defaultDestination}\\restored.profile.json`,
-      filters: [{ name: 'Endstate profile', extensions: ['json', 'jsonc'] }],
-    });
+    let target: string | null;
+    try {
+      target = await saveDialog({
+        title: 'Choose where to restore',
+        defaultPath: `${defaultDestination}\\restored.profile.json`,
+        filters: [{ name: 'Endstate profile', extensions: ['json', 'jsonc'] }],
+      });
+    } catch {
+      // The native save dialog can fail to present (e.g. outside the Tauri
+      // shell). Surface a friendly toast rather than leaking an unhandled
+      // promise rejection.
+      showToast('Could not open the save dialog. Please try again.', 'error');
+      return;
+    }
     if (!target) return;
     setStep('progress');
     setPullProgress({

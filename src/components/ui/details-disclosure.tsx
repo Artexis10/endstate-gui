@@ -37,8 +37,9 @@ export function DetailsDisclosure({
   return (
     <div className={className}>
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full"
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-expanded={expanded}
       >
         {expanded ? (
