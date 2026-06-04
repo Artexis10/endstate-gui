@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.16.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.16.0...gui-v2.16.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* **backup:** guard in-pane restore save-dialog against unhandled rejection ([#109](https://github.com/Artexis10/endstate-gui/issues/109)) ([26745c7](https://github.com/Artexis10/endstate-gui/commit/26745c7436f1a8140db407237e7343dcbd8a28e0))
+
 ## [2.16.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.15.0...gui-v2.16.0) (2026-06-03)
 
 
