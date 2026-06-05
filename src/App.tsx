@@ -65,7 +65,6 @@ import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
 import { profileKeyFor } from './lib/profile-key';
 import { resolveCloudEntriesByKey, buildProfilePushArgs } from './lib/cloud-hosting';
-import { getMachineName } from './lib/machine-name';
 import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
 import { isBackupChunkEvent } from './lib/streaming-events';
 import { hasSeenFirstPushFor, markFirstPushFor } from './lib/first-push-flag';
@@ -2416,14 +2415,13 @@ function AppContent() {
                       // First eligible capture: ask once (no push this time).
                       setAutoBackupConsentOpen(true);
                     } else if (settings.autoBackupEnabled) {
-                      // Label the machine's auto-backup with its hostname so
-                      // multiple machines are distinguishable in the backup
-                      // list. The local mapping key stays the stable
-                      // `auto:this-computer` (non-regressive — repeated captures
-                      // keep versioning the same backup); only the cloud label
-                      // changes. The name is consumed only on a first push.
-                      const machineName = await getMachineName();
-                      void runCaptureAutoBackup(autoBackupPath, 'auto:this-computer', machineName);
+                      // Auto-backup is a single stable per-machine backup
+                      // (key `auto:this-computer`). The human label is owned by
+                      // the engine (it defaults the backup name to a device
+                      // label) — the GUI does not fabricate it. Until that
+                      // engine default ships, the name passed here is a
+                      // placeholder the engine only uses on a first push.
+                      void runCaptureAutoBackup(autoBackupPath, 'auto:this-computer', 'This computer');
                     }
                   }
 

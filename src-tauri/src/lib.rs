@@ -257,24 +257,6 @@ fn get_capture_cache_directory() -> Result<String, String> {
         .map(|s| s.to_string())
 }
 
-/// Return this machine's host name, used as the human label for the computer's
-/// automatic hosted backup.
-///
-/// Reads `COMPUTERNAME` (Windows) then `HOSTNAME` (POSIX). The GUI only uses
-/// this as a display label — backups are identified by their backend id — so a
-/// missing value is non-fatal; the frontend falls back to "This computer".
-///
-/// # Returns
-/// * `Ok(String)` - The host name (already trimmed of surrounding whitespace)
-/// * `Err(String)` - Neither environment variable was set
-#[tauri::command]
-fn get_hostname() -> Result<String, String> {
-    std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .map(|s| s.trim().to_string())
-        .map_err(|_| "Host name is not available".to_string())
-}
-
 /// Copy a file from source to destination.
 ///
 /// # Arguments
@@ -1369,7 +1351,6 @@ pub fn run() {
             check_file_exists,
             get_default_profiles_directory,
             get_capture_cache_directory,
-            get_hostname,
             ensure_dir,
             import_profile,
             extract_zip_profile,

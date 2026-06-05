@@ -19,13 +19,13 @@
 - [x] 3.3 Refresh the cloud index after a successful host (`cloudBackupIndex.refresh()`) + the recorded id both feed the memo so the badge flips without reload
 - [x] 3.4 A mapped-but-deleted backup (id absent from list) falls back to "Local only" (covered by `cloud-hosting.test.ts`)
 
-## 4. GUI — auto-backup label = hostname (unification deferred)
+## 4. GUI — auto-backup unchanged; device label + unification deferred to the engine
 
-> Reframed during implementation. Captures write a timestamped temp zip and `EndstateCaptureData` carries no machine/profile name, so there is no stable per-capture identity to unify on (auto-backup fires before the profile is named/saved). Re-keying would create a new backup per capture (regression) and cannot satisfy "later captures version the same backup". Per the design's deferred capture-naming Open Question, full unification is **deferred** to when the engine emits a stable capture/machine identity.
+> Auto-backup keeps its single stable per-machine backup (`auto:this-computer`); this change does not touch it. A GUI-side hostname label was prototyped then **reverted** — fabricating a device name in the GUI violates the thin-presentation-layer contract (and the repo's "display names come from the engine" rule). The better label is moved to a separate **engine** change (engine defaults the backup name to a device label when `--name` is omitted; GUI displays it). Full per-profile *unification* stays deferred for the same root cause: no stable per-capture/machine identity exists yet (engine concern).
 
-- [x] 4.1 `runCaptureAutoBackup` call site keeps the stable `auto:this-computer` **key** (non-regressive) but labels the backup with the machine **hostname** via `getMachineName()` (`src/lib/machine-name.ts` → new `get_hostname` Tauri command), replacing the generic `"This computer"`
-- [x] 4.2 Auto-backup first-capture still creates/records the backup id and later captures version the same backup (mechanism unchanged; `auto-backup.test.ts` covers first-push `--name`)
-- [~] 4.3 Per-profile *unification* (silent + explicit host converge on one object) — **deferred** (see note above); the hostname label is the user-chosen scope for this change
+- [x] 4.1 `runCaptureAutoBackup` call site unchanged — stable `auto:this-computer` key, label placeholder `"This computer"` (the engine owns the real default label)
+- [x] 4.2 Auto-backup first-capture still creates/records the backup id and later captures version the same backup (`auto-backup.test.ts` covers first-push `--name`)
+- [~] 4.3 Device label (engine-side default) **and** per-profile unification — **deferred to the engine change** (`../endstate`); GUI is pass-through
 
 ## 5. Migration & compatibility
 
@@ -36,8 +36,8 @@
 ## 6. Tests & verification
 
 - [x] 6.1 Unit tests: manual host first-time (create + record id), re-host (version via id), name-collision isolation, stale-id → Local only (`cloud-hosting.test.ts`, `profile-key.test.ts`)
-- [x] 6.2 Unit tests: hostname label fallback (`machine-name.test.ts`); auto-backup `--name`/`--backup-id` behavior (`auto-backup.test.ts`, unchanged)
+- [x] 6.2 Unit tests: auto-backup `--name`/`--backup-id` behavior (`auto-backup.test.ts`, unchanged)
 - [x] 6.3 Updated `setup-flow` + badge tests for id/path-based resolution; added a regression guard that a name-only match no longer flips the badge
-- [x] 6.4 `npx tsc --noEmit`, `npm run lint`, `npx vitest run` (1488 passed / 2 pre-existing skips), `cargo build` green
+- [x] 6.4 `npx tsc --noEmit`, `npm run lint`, `npx vitest run` green
 - [x] 6.5 Live verification (livewire, real engine 2.18.0): hosted a local-only profile (`hugo-desktop`) → row flipped to "Backed up" with no reload; the engine created a **distinct** backup (`This computer` untouched at 5 versions — the exact bug, fixed); CLI confirmed `--name` creates a distinct backup and `--backup-id` versions it; deleting the backup in the cloud reverted the row to "Local only" (stale-id fallback). Console clean throughout.
 - [x] 6.6 `openspec validate unified-per-profile-backups --strict`

@@ -39,23 +39,21 @@ The Setup-flow per-profile "Backed up / Local only" indicator SHALL be derived f
 - **WHEN** two distinct profiles share the same label but map to different backup ids
 - **THEN** each row's badge reflects only its own mapped id's presence in `backup list`
 
-### Requirement: Automatic backup labels this machine's backup with its hostname
+### Requirement: Automatic backup remains a single stable per-machine backup
 
-After a capture, automatic backup SHALL push to a single stable per-machine backup (local key `auto:this-computer`) and SHALL label that backup with the machine's **hostname** rather than a generic `"This computer"` string, so a user with multiple machines can distinguish their auto-backups in the backup list. The label is best-effort and SHALL fall back to `"This computer"` when the hostname cannot be determined. The local key is unchanged so existing auto-backups continue to version the same backup (non-destructive).
+After a capture, automatic backup SHALL continue to push to a single stable per-machine backup, keyed locally by `auto:this-computer`, so repeated captures version the same backup (non-destructive). This change SHALL NOT alter that behaviour.
 
-> Full per-profile *unification* (a silent auto-backup and an explicit host of the **same** profile converging on one backup) is DEFERRED. Captures have no stable per-profile identity yet — the capture artifact is a timestamped temp file and the capture envelope carries no machine/profile name, and auto-backup runs before the profile is named/saved. Re-keying would create a new backup per capture. Tracked for a follow-up once the engine emits a stable capture/profile identity (the deferred capture-naming Open Question in `design.md`).
+The human **label** for this machine backup is OWNED BY THE ENGINE, not the GUI: the GUI SHALL NOT fabricate a device name (e.g. by reading the OS hostname) per the thin-presentation-layer contract. Improving the default label from the generic `"This computer"` to a real device label is tracked as a separate **engine** change (the engine defaults a backup's name to a device label when `--name` is omitted), after which the GUI displays whatever name the engine returns.
 
-#### Scenario: First auto-backup labels the backup with the hostname
-- **WHEN** auto-backup runs on a machine with no `auto:this-computer` entry in `profileBackupIds`
-- **THEN** it pushes with `--name <hostname>` (no `--backup-id`) and records the returned id under `auto:this-computer`
+> Full per-profile *unification* (a silent auto-backup and an explicit host of the **same** profile converging on one backup) is DEFERRED for the same reason the engine must own the device label: captures have no stable per-profile/machine identity yet — the capture artifact is a timestamped temp file and the capture envelope carries no machine/profile name, and auto-backup runs before the profile is named/saved. Both the device label and the stable identity belong in the engine; tracked as a follow-up (the deferred capture-naming Open Question in `design.md`).
 
-#### Scenario: Later captures version the same machine backup
-- **WHEN** a machine already has an `auto:this-computer` entry
-- **THEN** auto-backup pushes with `--backup-id <mappedId>`, adding a version to the same backup
+#### Scenario: Auto-backup keeps versioning one machine backup
+- **WHEN** auto-backup runs after a later capture on a machine that already has an `auto:this-computer` entry
+- **THEN** it pushes with `--backup-id <mappedId>`, adding a version to the same backup (not a new one)
 
-#### Scenario: Hostname unavailable falls back gracefully
-- **WHEN** the hostname cannot be determined (e.g. a non-Tauri runtime or the command errors)
-- **THEN** the label falls back to `"This computer"` and the push still succeeds
+#### Scenario: GUI does not fabricate the device label
+- **WHEN** automatic backup creates this machine's backup
+- **THEN** the GUI does not derive the label from OS data; the label default is the engine's responsibility
 
 ### Requirement: Engine push contract — create when named without an id
 
