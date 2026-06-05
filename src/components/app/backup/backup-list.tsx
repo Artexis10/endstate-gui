@@ -9,7 +9,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { BackupListItem } from '@/types';
-import { Trash2, Upload, Download } from 'lucide-react';
+import { Trash2, Upload, Download, Pencil } from 'lucide-react';
 
 export interface BackupListProps {
   backups: BackupListItem[];
@@ -22,6 +22,9 @@ export interface BackupListProps {
   onPush: (backupId: string) => void;
   onRestore: (backupId: string) => void;
   onDelete: (backupId: string) => void;
+  /** Rename a backup's label. Omit to hide the affordance (e.g. when the engine
+   *  doesn't advertise `features.hostedBackup.rename`). */
+  onRename?: (backupId: string, currentName: string) => void;
   onSelect: (backupId: string) => void;
   selectedBackupId: string | null;
 }
@@ -49,6 +52,7 @@ export function BackupList({
   onPush,
   onRestore,
   onDelete,
+  onRename,
   onSelect,
   selectedBackupId,
 }: BackupListProps) {
@@ -110,6 +114,21 @@ export function BackupList({
                   <Download className="h-4 w-4" />
                   Restore
                 </Button>
+                {onRename && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRename(b.id, b.name);
+                    }}
+                    data-testid={`backup-rename-${b.id}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Rename
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="ghost"

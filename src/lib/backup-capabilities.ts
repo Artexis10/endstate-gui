@@ -41,6 +41,20 @@ export function engineSupportsIfChanged(
   return false;
 }
 
+/**
+ * Whether the engine supports `backup rename` (mutable backup labels).
+ *
+ * Rename reuses `--backup-id`/`--name`, so there is no flag to probe — the only
+ * signal is the explicit `features.hostedBackup.rename` boolean. Defaults to
+ * FALSE when unknown, so the GUI's rename affordance stays hidden against an
+ * older engine.
+ */
+export function engineSupportsRename(
+  caps: EndstateCapabilitiesData | null | undefined,
+): boolean {
+  return caps?.features?.hostedBackup?.rename === true;
+}
+
 export interface AutoBackupConditions {
   hostedBackupSupported: boolean;
   ifChangedSupported: boolean;
