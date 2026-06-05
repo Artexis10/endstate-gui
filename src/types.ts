@@ -30,6 +30,13 @@ export interface EndstateHostedBackupCapability {
    * until engine #62 / task 0.3 lands → auto-backup stays dark.
    */
   ifChanged?: boolean;
+  /**
+   * True when the engine supports `backup rename` (mutable backup labels via
+   * PATCH). Rename reuses `--backup-id`/`--name`, so it cannot be probed via the
+   * flag list — this explicit boolean is the only signal. Absent until the
+   * engine ships it → the GUI's rename affordance stays hidden.
+   */
+  rename?: boolean;
 }
 
 export interface EndstateCapabilitiesData {
@@ -181,6 +188,14 @@ export interface BackupPullData {
 export interface BackupDeleteData {
   backupId: string;
   deleted: boolean;
+}
+
+/** Response shape for `endstate backup rename --json`. The id is unchanged
+ *  identity; `name` is the new label echoed by the backend. */
+export interface BackupRenameData {
+  backupId: string;
+  name: string;
+  updatedAt?: string;
 }
 
 /** Response shape for `endstate backup delete-version --json`. */

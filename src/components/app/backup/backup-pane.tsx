@@ -33,6 +33,7 @@ import { VersionList } from './version-list';
 import { PushProgressDialog } from './push-progress-dialog';
 import { PullProgressDialog } from './pull-progress-dialog';
 import { DeleteConfirmationModal } from './delete-confirmation-modal';
+import { RenameBackupDialog } from './rename-backup-dialog';
 import { usePrePushGuard } from './use-pre-push-guard';
 import { useBackupState } from './use-backup-state';
 import {
@@ -40,6 +41,7 @@ import {
   backupDeleteVersion,
   backupPush,
   backupPull,
+  backupRename,
   backupSubscribe,
   backupBrowserSession,
   BackupCommandError,
@@ -88,6 +90,9 @@ export interface BackupPaneProps {
   autoBackupPaused?: boolean;
   /** Opens the inline re-auth dialog from the paused indicator. */
   onResumeAutoBackup?: () => void;
+  /** Whether the engine advertises `backup rename`. Gates the per-backup
+   *  rename affordance — hidden against an engine that can't rename. */
+  renameSupported?: boolean;
 }
 
 interface DeleteTarget {
@@ -108,6 +113,7 @@ export function BackupPane({
   isReauthOpen,
   autoBackupPaused,
   onResumeAutoBackup,
+  renameSupported,
 }: BackupPaneProps) {
   const state = useBackupState(settings, {
     onAuthLost,
@@ -117,6 +123,8 @@ export function BackupPane({
   });
   const { showToast } = useToast();
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ backupId: string; currentName: string } | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const [checkoutPending, setCheckoutPending] = useState(false);
   const [managePending, setManagePending] = useState(false);
   // Ref-mirror so the click handler can guard re-entry synchronously (state
@@ -322,6 +330,33 @@ export function BackupPane({
     });
   }, []);
 
+  const handleRename = useCallback((backupId: string, currentName: string) => {
+    setRenameTarget({ backupId, currentName });
+  }, []);
+
+  const confirmRename = useCallback(
+    async (newName: string) => {
+      if (!renameTarget) return;
+      setRenaming(true);
+      try {
+        await backupRename(settings, { backupId: renameTarget.backupId, name: newName });
+        showToast(`Renamed to “${newName}”.`, 'success');
+        await state.refresh();
+        setRenameTarget(null);
+      } catch (err) {
+        if (err instanceof BackupCommandError) {
+          const f = friendlyBackupError(err);
+          showToast(f.headline, f.tone);
+        } else {
+          showToast(err instanceof Error ? err.message : String(err), 'error');
+        }
+      } finally {
+        setRenaming(false);
+      }
+    },
+    [renameTarget, settings, showToast, state],
+  );
+
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     try {
@@ -497,6 +532,7 @@ export function BackupPane({
             onPush={handlePush}
             onRestore={(id) => handleRestore(id)}
             onDelete={handleDelete}
+            onRename={renameSupported ? handleRename : undefined}
             onSelect={(id) => state.setSelectedBackupId(id)}
             selectedBackupId={state.selectedBackupId}
           />
@@ -556,6 +592,14 @@ export function BackupPane({
           deleteTarget?.kind === 'backup' ? 'Delete backup' : 'Delete version'
         }
         onConfirm={confirmDelete}
+      />
+
+      <RenameBackupDialog
+        open={!!renameTarget}
+        currentName={renameTarget?.currentName ?? ''}
+        busy={renaming}
+        onOpenChange={(open) => !open && !renaming && setRenameTarget(null)}
+        onConfirm={confirmRename}
       />
 
       {prePushDialog}

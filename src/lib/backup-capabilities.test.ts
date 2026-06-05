@@ -1,10 +1,40 @@
 import { describe, it, expect } from 'vitest';
 import {
   engineSupportsIfChanged,
+  engineSupportsRename,
   autoBackupAvailable,
   isAutoBackupActive,
 } from './backup-capabilities';
 import type { EndstateCapabilitiesData, BackupStatusData } from '../types';
+
+describe('engineSupportsRename', () => {
+  it('is false for null/empty capabilities (dark by default)', () => {
+    expect(engineSupportsRename(null)).toBe(false);
+    expect(engineSupportsRename(undefined)).toBe(false);
+    expect(engineSupportsRename({} as EndstateCapabilitiesData)).toBe(false);
+  });
+
+  it('is false when hostedBackup.rename is absent or false', () => {
+    expect(
+      engineSupportsRename({
+        features: { hostedBackup: { supported: true } },
+      } as EndstateCapabilitiesData),
+    ).toBe(false);
+    expect(
+      engineSupportsRename({
+        features: { hostedBackup: { supported: true, rename: false } },
+      } as EndstateCapabilitiesData),
+    ).toBe(false);
+  });
+
+  it('is true only when hostedBackup.rename === true', () => {
+    expect(
+      engineSupportsRename({
+        features: { hostedBackup: { supported: true, rename: true } },
+      } as EndstateCapabilitiesData),
+    ).toBe(true);
+  });
+});
 
 describe('engineSupportsIfChanged', () => {
   it('is false for null/empty capabilities (dark by default)', () => {

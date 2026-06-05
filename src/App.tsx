@@ -59,7 +59,7 @@ import { ReauthDialog } from './components/app/backup/reauth-dialog';
 import { AutoBackupConsent } from './components/app/backup/auto-backup-consent';
 import { AutoBackupSetting } from './components/app/settings/auto-backup-setting';
 import { runAutoBackup } from './lib/auto-backup';
-import { engineSupportsIfChanged, autoBackupAvailable } from './lib/backup-capabilities';
+import { engineSupportsIfChanged, engineSupportsRename, autoBackupAvailable } from './lib/backup-capabilities';
 import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
@@ -216,6 +216,9 @@ function AppContent() {
   // Automatic hosted backup (capability-gated; stays dark until the engine
   // advertises `backup push --if-changed`). Trigger is capture-only.
   const [ifChangedSupported, setIfChangedSupported] = useState(false);
+  // Gates the per-backup rename affordance; stays dark until the engine
+  // advertises `features.hostedBackup.rename`. Defaults false when unknown.
+  const [renameSupported, setRenameSupported] = useState(false);
   const [autoBackupChip, setAutoBackupChip] =
     useState<'idle' | 'backing-up' | 'backed-up' | 'paused'>('idle');
   const [autoBackupAuthPaused, setAutoBackupAuthPaused] = useState(false);
@@ -1299,6 +1302,7 @@ function AppContent() {
       // Auto-backup capability gate: stays dark until the engine advertises
       // `backup push --if-changed`. Defaults false when unknown.
       setIfChangedSupported(engineSupportsIfChanged(capResult.envelope.data));
+      setRenameSupported(engineSupportsRename(capResult.envelope.data));
       if (supported) {
         try {
           const status = await backupStatus(settings);
@@ -2807,6 +2811,7 @@ function AppContent() {
               selectedProfileName={selectedProfile || null}
               initialStatus={backupStatusData}
               initialBackups={backupListData}
+              renameSupported={renameSupported}
               isReauthOpen={() => reauthOpenRef.current}
               onAuthLost={() => {
                 // Recursion guard: a focus-triggered status refresh can fire

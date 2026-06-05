@@ -30,6 +30,7 @@ import {
   BackupEstimateData,
   BackupPullData,
   BackupDeleteData,
+  BackupRenameData,
   BackupDeleteVersionData,
   BackupRecoverData,
   BackupSubscribeData,
@@ -312,6 +313,28 @@ export async function backupDelete(
     settings,
     'backup',
     ['delete', '--backup-id', args.backupId, '--confirm'],
+  );
+}
+
+export interface RenameBackupArgs {
+  backupId: string;
+  /** New display label. Identity (the backend id) is unchanged. */
+  name: string;
+}
+
+/**
+ * Rename a backup (change its mutable label by id). Requires an engine that
+ * advertises `features.hostedBackup.rename` — callers gate the affordance on
+ * that capability. The backend echoes the persisted row.
+ */
+export async function backupRename(
+  settings: AppSettings,
+  args: RenameBackupArgs,
+): Promise<BackupRenameData> {
+  return runBackupOnce<BackupRenameData>(
+    settings,
+    'backup',
+    ['rename', '--backup-id', args.backupId, '--name', args.name],
   );
 }
 
