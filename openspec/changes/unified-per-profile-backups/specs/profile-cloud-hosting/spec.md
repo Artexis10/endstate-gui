@@ -39,17 +39,23 @@ The Setup-flow per-profile "Backed up / Local only" indicator SHALL be derived f
 - **WHEN** two distinct profiles share the same label but map to different backup ids
 - **THEN** each row's badge reflects only its own mapped id's presence in `backup list`
 
-### Requirement: Automatic backup unifies onto the captured profile
+### Requirement: Automatic backup labels this machine's backup with its hostname
 
-After a capture, automatic backup SHALL push the captured profile under that profile's own name/key (recording its backup id in `profileBackupIds`), rather than under a fixed `"This computer"` backup. A silent automatic backup and an explicit host of the same profile SHALL target the same backup/version stream.
+After a capture, automatic backup SHALL push to a single stable per-machine backup (local key `auto:this-computer`) and SHALL label that backup with the machine's **hostname** rather than a generic `"This computer"` string, so a user with multiple machines can distinguish their auto-backups in the backup list. The label is best-effort and SHALL fall back to `"This computer"` when the hostname cannot be determined. The local key is unchanged so existing auto-backups continue to version the same backup (non-destructive).
 
-#### Scenario: Auto-backup creates the profile's backup on first capture
-- **WHEN** auto-backup runs for a captured profile with no `profileBackupIds` entry
-- **THEN** it pushes with `--name <profileName>` (no `--backup-id`) and records the returned id under the profile's key
+> Full per-profile *unification* (a silent auto-backup and an explicit host of the **same** profile converging on one backup) is DEFERRED. Captures have no stable per-profile identity yet — the capture artifact is a timestamped temp file and the capture envelope carries no machine/profile name, and auto-backup runs before the profile is named/saved. Re-keying would create a new backup per capture. Tracked for a follow-up once the engine emits a stable capture/profile identity (the deferred capture-naming Open Question in `design.md`).
 
-#### Scenario: Auto-backup versions the same backup as an explicit host
-- **WHEN** a profile already hosted (mapped id present) is auto-backed-up after a later capture
-- **THEN** auto-backup pushes with `--backup-id <mappedId>`, adding a version to the same backup the user sees as hosted
+#### Scenario: First auto-backup labels the backup with the hostname
+- **WHEN** auto-backup runs on a machine with no `auto:this-computer` entry in `profileBackupIds`
+- **THEN** it pushes with `--name <hostname>` (no `--backup-id`) and records the returned id under `auto:this-computer`
+
+#### Scenario: Later captures version the same machine backup
+- **WHEN** a machine already has an `auto:this-computer` entry
+- **THEN** auto-backup pushes with `--backup-id <mappedId>`, adding a version to the same backup
+
+#### Scenario: Hostname unavailable falls back gracefully
+- **WHEN** the hostname cannot be determined (e.g. a non-Tauri runtime or the command errors)
+- **THEN** the label falls back to `"This computer"` and the push still succeeds
 
 ### Requirement: Engine push contract — create when named without an id
 

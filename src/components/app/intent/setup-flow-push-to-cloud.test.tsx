@@ -24,8 +24,10 @@ const baseProps = {
   onApply: vi.fn(),
 };
 
+// Keyed by profileKey (path) — the cloud badge now derives from the id-mapping,
+// so a hosted profile is identified by its path key, not its name.
 const cloudIndex: Map<string, BackupListItem> = new Map([
-  ['cloud-pc', {
+  ['C:\\profiles\\cloud-pc.jsonc', {
     id: 'b-cloud-pc',
     name: 'cloud-pc',
     versionCount: 2,
