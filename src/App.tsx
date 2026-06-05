@@ -2832,8 +2832,24 @@ function AppContent() {
               settings={settings}
               defaultDestination={profilesDirectory}
               onDismiss={() => setRestoreWizardOpen(false)}
-              onComplete={() => {
+              onComplete={(writtenTo, backupId) => {
                 setRestoreWizardOpen(false);
+                // Link the restored profile to the backup it came from, so it
+                // reads as "Backed up" (not "Local only") and future hosts /
+                // auto-backups version the SAME backup — the core old-machine
+                // → new-machine continuity. Keyed by the restored path (the
+                // default destination is the profiles dir, so it matches a
+                // discovered profile); harmless if the user saved elsewhere.
+                // The robust cross-machine identity (move/share-proof) is the
+                // deferred manifest-embedded profile id.
+                if (writtenTo && backupId) {
+                  updateSettings({
+                    profileBackupIds: {
+                      ...settings.profileBackupIds,
+                      [profileKeyFor({ path: writtenTo })]: backupId,
+                    },
+                  });
+                }
                 // Refresh local profiles list after a wizard restore so the
                 // newly-restored profile appears in the Home overview.
                 void refreshProfiles();
