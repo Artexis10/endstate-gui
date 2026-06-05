@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   EndstateEnvelope,
@@ -63,6 +63,8 @@ import { engineSupportsIfChanged, engineSupportsRename, autoBackupAvailable } fr
 import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
+import { profileKeyFor } from './lib/profile-key';
+import { resolveCloudEntriesByKey, buildProfilePushArgs } from './lib/cloud-hosting';
 import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
 import { isBackupChunkEvent } from './lib/streaming-events';
 import { hasSeenFirstPushFor, markFirstPushFor } from './lib/first-push-flag';
@@ -241,6 +243,16 @@ function AppContent() {
   const cloudBackupIndex = useBackupNameIndex(
     settings,
     hostedBackupSupported && !!backupStatusData?.signedIn,
+  );
+  // Per-profile cloud state, keyed by profileKey (path). Derived from the
+  // local id-mapping (`profileBackupIds`) verified against the live backup list
+  // BY ID — so the badge is truthful on name collisions and reverts to "Local
+  // only" when a mapped backup was deleted in the cloud. Refreshing the list
+  // (after a host) or recording a new id both update this map → the badge flips
+  // without a reload.
+  const cloudEntryByKey = useMemo(
+    () => resolveCloudEntriesByKey(settings.profileBackupIds, cloudBackupIndex.byId),
+    [settings.profileBackupIds, cloudBackupIndex.byId],
   );
 
   // ProfileMissingModal state — replaces the older info toast that fired after
@@ -2407,6 +2419,12 @@ function AppContent() {
                       // First eligible capture: ask once (no push this time).
                       setAutoBackupConsentOpen(true);
                     } else if (settings.autoBackupEnabled) {
+                      // Auto-backup is a single stable per-machine backup
+                      // (key `auto:this-computer`). The human label is owned by
+                      // the engine (it defaults the backup name to a device
+                      // label) — the GUI does not fabricate it. Until that
+                      // engine default ships, the name passed here is a
+                      // placeholder the engine only uses on a first push.
                       void runCaptureAutoBackup(autoBackupPath, 'auto:this-computer', 'This computer');
                     }
                   }
@@ -2480,7 +2498,7 @@ function AppContent() {
             {errorBanner}
             <SetupFlow
               profiles={profiles}
-              cloudBackupIndex={cloudBackupIndex.index}
+              cloudBackupIndex={cloudEntryByKey}
               hostedBackupSupported={hostedBackupSupported}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
               hostedBackupSubscriptionStatus={backupStatusData?.subscriptionStatus}
@@ -2504,9 +2522,14 @@ function AppContent() {
                         setPushCurrentChunkIndex(null);
                         setPushDialogOpen(true);
                         try {
-                          await backupPush(settings, {
-                            profile: profilePath,
-                            name: profileName,
+                          // Address the backup by stable id: re-host versions
+                          // the profile's existing backup (--backup-id); a first
+                          // host creates one (--name) and we record the returned
+                          // id under the profile key so the badge flips + future
+                          // hosts version the same backup.
+                          const pushArgs = buildProfilePushArgs(settings, profilePath, profileName);
+                          const result = await backupPush(settings, {
+                            ...pushArgs,
                             onEvent: (event) => {
                               if (!isBackupChunkEvent(event)) return;
                               setPushTotalChunks(event.totalChunks);
@@ -2517,6 +2540,15 @@ function AppContent() {
                               }
                             },
                           });
+                          // First host (no id passed) → persist the new backup id.
+                          if (!pushArgs.backupId && result.backupId) {
+                            updateSettings({
+                              profileBackupIds: {
+                                ...settings.profileBackupIds,
+                                [profileKeyFor({ path: profilePath })]: result.backupId,
+                              },
+                            });
+                          }
                           const pushEmail = backupStatusData?.email;
                           if (!hasSeenFirstPushFor(pushEmail)) {
                             showToast(
@@ -2805,8 +2837,24 @@ function AppContent() {
               settings={settings}
               defaultDestination={profilesDirectory}
               onDismiss={() => setRestoreWizardOpen(false)}
-              onComplete={() => {
+              onComplete={(writtenTo, backupId) => {
                 setRestoreWizardOpen(false);
+                // Link the restored profile to the backup it came from, so it
+                // reads as "Backed up" (not "Local only") and future hosts /
+                // auto-backups version the SAME backup — the core old-machine
+                // → new-machine continuity. Keyed by the restored path (the
+                // default destination is the profiles dir, so it matches a
+                // discovered profile); harmless if the user saved elsewhere.
+                // The robust cross-machine identity (move/share-proof) is the
+                // deferred manifest-embedded profile id.
+                if (writtenTo && backupId) {
+                  updateSettings({
+                    profileBackupIds: {
+                      ...settings.profileBackupIds,
+                      [profileKeyFor({ path: writtenTo })]: backupId,
+                    },
+                  });
+                }
                 // Refresh local profiles list after a wizard restore so the
                 // newly-restored profile appears in the Home overview.
                 void refreshProfiles();
@@ -3832,6 +3880,12 @@ function AppContent() {
         reason={profileMissingState?.reason ?? 'deleted'}
         firstAvailableLabel={profileMissingState?.firstAvailableLabel ?? null}
         hasCloudBackup={
+          // Best-effort "this just-deleted profile may have a cloud backup"
+          // hint. The deleted profile is gone, so we only have its former name
+          // (not a path key to resolve by id) — a name match against the list
+          // is the right heuristic here. This is a discoverability nudge to the
+          // Backup pane, not the authoritative per-profile badge (which is
+          // id-based via `cloudEntryByKey`).
           !!profileMissingState &&
           cloudBackupIndex.index.has(profileMissingState.previousName)
         }

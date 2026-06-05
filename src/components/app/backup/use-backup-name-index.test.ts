@@ -65,6 +65,43 @@ describe('useBackupNameIndex', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('also indexes returned backups by id', async () => {
+    vi.mocked(backupList).mockResolvedValueOnce({
+      backups: [
+        {
+          id: 'b1',
+          name: 'work-laptop',
+          versionCount: 3,
+          totalSize: 1024,
+          updatedAt: '2026-05-10T20:00:00Z',
+          latestVersionId: 'v3',
+        },
+        {
+          id: 'b2',
+          name: 'gaming-pc',
+          versionCount: 1,
+          totalSize: 512,
+          updatedAt: '2026-05-09T20:00:00Z',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useBackupNameIndex(SETTINGS, true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.byId.size).toBe(2);
+    expect(result.current.byId.get('b1')?.name).toBe('work-laptop');
+    expect(result.current.byId.get('b2')?.versionCount).toBe(1);
+    // A backup id that is absent → undefined (drives the "Local only" fallback).
+    expect(result.current.byId.get('does-not-exist')).toBeUndefined();
+  });
+
+  it('clears the byId map when disabled', async () => {
+    const { result } = renderHook(() => useBackupNameIndex(SETTINGS, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.byId.size).toBe(0);
+  });
+
   it('returns an empty index and surfaces the error when the call fails', async () => {
     vi.mocked(backupList).mockRejectedValueOnce(new Error('AUTH_REQUIRED: not signed in'));
 

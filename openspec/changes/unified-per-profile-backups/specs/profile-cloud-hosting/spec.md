@@ -39,17 +39,21 @@ The Setup-flow per-profile "Backed up / Local only" indicator SHALL be derived f
 - **WHEN** two distinct profiles share the same label but map to different backup ids
 - **THEN** each row's badge reflects only its own mapped id's presence in `backup list`
 
-### Requirement: Automatic backup unifies onto the captured profile
+### Requirement: Automatic backup remains a single stable per-machine backup
 
-After a capture, automatic backup SHALL push the captured profile under that profile's own name/key (recording its backup id in `profileBackupIds`), rather than under a fixed `"This computer"` backup. A silent automatic backup and an explicit host of the same profile SHALL target the same backup/version stream.
+After a capture, automatic backup SHALL continue to push to a single stable per-machine backup, keyed locally by `auto:this-computer`, so repeated captures version the same backup (non-destructive). This change SHALL NOT alter that behaviour.
 
-#### Scenario: Auto-backup creates the profile's backup on first capture
-- **WHEN** auto-backup runs for a captured profile with no `profileBackupIds` entry
-- **THEN** it pushes with `--name <profileName>` (no `--backup-id`) and records the returned id under the profile's key
+The human **label** for this machine backup is OWNED BY THE ENGINE, not the GUI: the GUI SHALL NOT fabricate a device name (e.g. by reading the OS hostname) per the thin-presentation-layer contract. Improving the default label from the generic `"This computer"` to a real device label is tracked as a separate **engine** change (the engine defaults a backup's name to a device label when `--name` is omitted), after which the GUI displays whatever name the engine returns.
 
-#### Scenario: Auto-backup versions the same backup as an explicit host
-- **WHEN** a profile already hosted (mapped id present) is auto-backed-up after a later capture
-- **THEN** auto-backup pushes with `--backup-id <mappedId>`, adding a version to the same backup the user sees as hosted
+> Full per-profile *unification* (a silent auto-backup and an explicit host of the **same** profile converging on one backup) is DEFERRED for the same reason the engine must own the device label: captures have no stable per-profile/machine identity yet — the capture artifact is a timestamped temp file and the capture envelope carries no machine/profile name, and auto-backup runs before the profile is named/saved. Both the device label and the stable identity belong in the engine; tracked as a follow-up (the deferred capture-naming Open Question in `design.md`).
+
+#### Scenario: Auto-backup keeps versioning one machine backup
+- **WHEN** auto-backup runs after a later capture on a machine that already has an `auto:this-computer` entry
+- **THEN** it pushes with `--backup-id <mappedId>`, adding a version to the same backup (not a new one)
+
+#### Scenario: GUI does not fabricate the device label
+- **WHEN** automatic backup creates this machine's backup
+- **THEN** the GUI does not derive the label from OS data; the label default is the engine's responsibility
 
 ### Requirement: Engine push contract — create when named without an id
 

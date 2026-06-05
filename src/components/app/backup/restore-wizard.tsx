@@ -57,7 +57,10 @@ export interface RestoreWizardProps {
   /** Suggested default destination (typically the user's profiles directory). */
   defaultDestination: string;
   onDismiss: () => void;
-  onComplete: (writtenTo: string) => void;
+  /** Called when the user finishes the wizard. `backupId` is the backup the
+   *  profile was restored from, so the caller can record the local→cloud link
+   *  (so the restored profile reads as "Backed up", not "Local only"). */
+  onComplete: (writtenTo: string, backupId: string) => void;
 }
 
 type Step = 'choose' | 'progress' | 'done';
@@ -404,7 +407,9 @@ export function RestoreWizard({
                   type="button"
                   variant="primary"
                   onClick={() => {
-                    if (completionPath) onComplete(completionPath);
+                    if (completionPath && selectedBackupId) {
+                      onComplete(completionPath, selectedBackupId);
+                    }
                     onDismiss();
                   }}
                 >

@@ -19,7 +19,13 @@ import type { BackupListItem } from '@/types';
 import type { AppSettings } from '@/settings';
 
 export interface UseBackupNameIndexResult {
+  /** Backups keyed by name. Used by the "missing profile may have a cloud
+   *  backup" restore hint, which only has the (deleted) profile's name. */
   index: Map<string, BackupListItem>;
+  /** Backups keyed by backend id. The per-profile cloud badge resolves
+   *  `profileBackupIds[key]` → id → entry against this map, so a deleted-in-
+   *  cloud backup (id absent) correctly falls back to "Local only". */
+  byId: Map<string, BackupListItem>;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -32,12 +38,14 @@ export function useBackupNameIndex(
   enabled: boolean,
 ): UseBackupNameIndexResult {
   const [index, setIndex] = useState<Map<string, BackupListItem>>(EMPTY);
+  const [byId, setById] = useState<Map<string, BackupListItem>>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!enabled) {
       setIndex(EMPTY);
+      setById(EMPTY);
       setError(null);
       return;
     }
@@ -45,13 +53,17 @@ export function useBackupNameIndex(
     setError(null);
     try {
       const data = await backupList(settings);
-      const next = new Map<string, BackupListItem>();
+      const nextByName = new Map<string, BackupListItem>();
+      const nextById = new Map<string, BackupListItem>();
       for (const item of data.backups) {
-        next.set(item.name, item);
+        nextByName.set(item.name, item);
+        nextById.set(item.id, item);
       }
-      setIndex(next);
+      setIndex(nextByName);
+      setById(nextById);
     } catch (err) {
       setIndex(EMPTY);
+      setById(EMPTY);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
@@ -62,5 +74,5 @@ export function useBackupNameIndex(
     void refresh();
   }, [refresh]);
 
-  return { index, loading, error, refresh };
+  return { index, byId, loading, error, refresh };
 }
