@@ -9,6 +9,7 @@ import { ViewAppsModal } from './view-apps-modal';
 import { useMicroFeedback } from '@/lib/micro-feedback';
 import { InlineFeedbackPopover } from '@/components/ui/inline-feedback-popover';
 import { ProfileStorageChip } from '@/components/app/backup/profile-storage-chip';
+import { profileKeyFor } from '@/lib/profile-key';
 
 interface ManageProfilesModalProps {
   open: boolean;
@@ -22,7 +23,7 @@ interface ManageProfilesModalProps {
   onSetActive: (profile: DiscoveredProfile) => void;
   onOpenFolder: () => void;
   onRefresh: () => Promise<void>;
-  /** Cloud-backup index keyed by profile name. */
+  /** Map keyed by profileKey (path) → hosted backup, resolved by id. */
   cloudBackupIndex?: Map<string, BackupListItem>;
 }
 
@@ -152,7 +153,7 @@ export function ManageProfilesModal({
                             </span>
                           )}
                           <ProfileStorageChip
-                            cloudEntry={cloudBackupIndex?.get(profile.name)}
+                            cloudEntry={cloudBackupIndex?.get(profileKeyFor(profile))}
                             testId={`manage-profiles-${profile.name}-storage-chip`}
                           />
                         </div>

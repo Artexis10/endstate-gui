@@ -25,7 +25,26 @@ const baseProps = {
   onApply: vi.fn(),
 };
 
+// The cloud index is now keyed by profileKey (the profile's path), not name —
+// badges derive from the id-mapping, never from a name match. The test
+// profiles live at `C:\profiles\<name>.jsonc`, so key on that path.
 function makeIndex(names: string[]): Map<string, BackupListItem> {
+  const m = new Map<string, BackupListItem>();
+  for (const name of names) {
+    m.set(`C:\\profiles\\${name}.jsonc`, {
+      id: `b-${name}`,
+      name,
+      versionCount: 2,
+      totalSize: 1024,
+      updatedAt: '2026-05-10T20:00:00Z',
+    });
+  }
+  return m;
+}
+
+// Old-style map keyed by NAME — used to prove the badge no longer flips on a
+// name match alone (the bug this change fixes).
+function makeIndexKeyedByName(names: string[]): Map<string, BackupListItem> {
   const m = new Map<string, BackupListItem>();
   for (const name of names) {
     m.set(name, {
@@ -74,6 +93,16 @@ describe('SetupFlow — cloud-backed badge', () => {
         screen.queryByTestId(`profile-card-${p.name}-cloud-badge`),
       ).not.toBeInTheDocument();
     }
+  });
+
+  it('does NOT render a badge when only the name (not the path key) is in the index', () => {
+    // Regression guard: a name match must no longer flip the badge.
+    renderWithProviders(
+      <SetupFlow {...baseProps} cloudBackupIndex={makeIndexKeyedByName(['work-laptop'])} />,
+    );
+    expect(
+      screen.queryByTestId('profile-card-work-laptop-cloud-badge'),
+    ).not.toBeInTheDocument();
   });
 
   it('shows backup version count and relative time inline in the badge text', () => {

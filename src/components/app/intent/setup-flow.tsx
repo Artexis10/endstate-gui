@@ -30,6 +30,7 @@ import { formatAppIdentity } from '@/lib/app-identity';
 import type { ConfigModuleInfo, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 import { ProfileCloudBadge } from '@/components/app/backup/profile-cloud-badge';
+import { profileKeyFor } from '@/lib/profile-key';
 import { ProfileStorageChip } from '@/components/app/backup/profile-storage-chip';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
@@ -90,9 +91,11 @@ export interface SetupFlowProps {
   /** Called when the flow returns to browse (start over, etc.) */
   onFlowReset?: () => void;
   /**
-   * Index of remote backups keyed by profile name. When provided, profile
-   * cards whose `name` matches a key get an inline "Backed up · N versions ·
-   * M ago" subtitle. Pass `undefined` (or an empty map) to hide entirely.
+   * Map of profileKey (the profile's path) → its hosted backup, derived from
+   * `profileBackupIds` verified against `backup list` BY ID (never by name).
+   * A profile card whose key is present gets the cloud badge + "Backed up · N
+   * versions · M ago" subtitle; absent (or a stale/deleted id) → "Local only".
+   * Pass `undefined` (or an empty map) to hide cloud state entirely.
    */
   cloudBackupIndex?: Map<string, BackupListItem>;
   /** Hosted-backup capability gate. False → hide the chip entirely. */
@@ -480,7 +483,7 @@ export function SetupFlow({
               {profiles.length > 0 ? (
                 <div className="grid gap-3">
                   {profiles.map((profile) => {
-                    const cloudEntry = cloudBackupIndex?.get(profile.name);
+                    const cloudEntry = cloudBackupIndex?.get(profileKeyFor(profile));
                     const showSecondaryName =
                       !!profile.displayName && profile.displayName !== profile.name;
                     return (

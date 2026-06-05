@@ -14,6 +14,7 @@ import {
 import type { DiscoveredProfile } from '@/file-discovery';
 import type { BackupListItem } from '@/types';
 import { ProfileCloudBadge } from '@/components/app/backup/profile-cloud-badge';
+import { profileKeyFor } from '@/lib/profile-key';
 
 interface SelectedProfileCardProps {
   selectedProfile: string;
@@ -21,7 +22,8 @@ interface SelectedProfileCardProps {
   isRunning: boolean;
   onProfileChange: (profile: string, path: string) => void;
   onManageProfiles: () => void;
-  /** Map keyed by profile name — present entries get a cloud badge. */
+  /** Map keyed by profileKey (path) → hosted backup, resolved by id. Present
+   *  entries get a cloud badge. */
   cloudBackupIndex?: Map<string, BackupListItem>;
 }
 
@@ -52,7 +54,7 @@ export function SelectedProfileCard({
         </SelectTrigger>
         <SelectContent>
           {profiles.map((p) => {
-            const cloudEntry = cloudBackupIndex?.get(p.name);
+            const cloudEntry = cloudBackupIndex?.get(profileKeyFor(p));
             return (
               <SelectItem key={p.name} value={p.name}>
                 <span className="inline-flex items-center gap-2">
