@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.17.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.16.1...gui-v2.17.0) (2026-06-05)
+
+
+### Features
+
+* **backup:** per-profile hosted backups addressed by id (badge-flip fix) ([#114](https://github.com/Artexis10/endstate-gui/issues/114)) ([e88761c](https://github.com/Artexis10/endstate-gui/commit/e88761cb46977ec97d8925ea0a1fbf46d69281c2))
+* **backup:** rename a hosted backup (mutable label UI, gated on engine) ([#115](https://github.com/Artexis10/endstate-gui/issues/115)) ([5c62225](https://github.com/Artexis10/endstate-gui/commit/5c6222543f0a052f00c7c3cdf4d04a7205473527))
+* bump engine to v2.18.0 ([#112](https://github.com/Artexis10/endstate-gui/issues/112)) ([88bde93](https://github.com/Artexis10/endstate-gui/commit/88bde9399aeccf4dbec6a96b115ac7afe7de54e7))
+* bump engine to v2.19.0 ([#116](https://github.com/Artexis10/endstate-gui/issues/116)) ([3cb83ed](https://github.com/Artexis10/endstate-gui/commit/3cb83ed8837a540dbdde445adc7d1198ce0792d6))
+
 ## [2.16.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.16.0...gui-v2.16.1) (2026-06-04)
 
 
