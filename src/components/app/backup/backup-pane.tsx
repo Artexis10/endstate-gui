@@ -93,6 +93,9 @@ export interface BackupPaneProps {
   /** Whether the engine advertises `backup rename`. Gates the per-backup
    *  rename affordance — hidden against an engine that can't rename. */
   renameSupported?: boolean;
+  /** Called after a backup is deleted so the parent can drop its local
+   *  profile→backupId mapping (else a later push targets a dead id). */
+  onBackupDeleted?: (backupId: string) => void;
 }
 
 interface DeleteTarget {
@@ -114,6 +117,7 @@ export function BackupPane({
   autoBackupPaused,
   onResumeAutoBackup,
   renameSupported,
+  onBackupDeleted,
 }: BackupPaneProps) {
   const state = useBackupState(settings, {
     onAuthLost,
@@ -362,6 +366,7 @@ export function BackupPane({
     try {
       if (deleteTarget.kind === 'backup') {
         await backupDelete(settings, { backupId: deleteTarget.backupId });
+        onBackupDeleted?.(deleteTarget.backupId);
         showToast(`Deleted backup “${deleteTarget.label}”.`, 'success');
         await state.refresh();
       } else if (deleteTarget.versionId) {
@@ -382,7 +387,7 @@ export function BackupPane({
     } finally {
       setDeleteTarget(null);
     }
-  }, [deleteTarget, settings, showToast, state]);
+  }, [deleteTarget, settings, showToast, state, onBackupDeleted]);
 
   // Map the engine-side error to a friendly headline/body/CTA before render.
   // The mapper strips CLI-jargon remediation and routes the CTA to one of
