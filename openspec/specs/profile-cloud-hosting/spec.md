@@ -1,5 +1,8 @@
-## ADDED Requirements
+# profile-cloud-hosting Specification
 
+## Purpose
+TBD - created by archiving change unified-per-profile-backups. Update Purpose after archive.
+## Requirements
 ### Requirement: Profiles are hosted as id-addressed cloud backups
 
 A local profile SHALL be hosted as its own cloud backup identified by the backend-assigned backup **id**. The GUI SHALL persist a profile-key → backupId mapping in settings (`profileBackupIds`). The profile **name** is a per-user-unique human label only; it SHALL NOT be used as the identity for resolving or matching a backup.
@@ -18,6 +21,20 @@ A local profile SHALL be hosted as its own cloud backup identified by the backen
 - **WHEN** a profile whose `profileBackupIds` entry is preserved is hosted again under a new label
 - **THEN** the GUI targets the same backup by its mapped id
 - **AND** the existing backup is versioned (its label may update), not duplicated
+
+#### Scenario: Re-host after the mapped backup was deleted creates a fresh backup
+- **WHEN** a profile has a `profileBackupIds` entry whose id is NOT present in the live `backup list` (deleted here or on another machine)
+- **THEN** the GUI pushes with `--name` and no `--backup-id`, creating a new backup
+- **AND** it SHALL NOT push `--backup-id <deletedId>` (which the engine would reject)
+
+### Requirement: Deleting a backup clears its local mapping
+
+When a backup is deleted, the GUI SHALL remove every `profileBackupIds` entry that points at the deleted backup id, so a later host of that profile creates a fresh backup rather than targeting a dead id.
+
+#### Scenario: Deleting a backup prunes the mapping
+- **WHEN** the user deletes a backup that a profile is mapped to
+- **THEN** the GUI removes that profile's `profileBackupIds` entry
+- **AND** the profile's row reverts to "Local only"
 
 ### Requirement: Per-profile cloud badge derives from the id-mapping
 
@@ -72,3 +89,4 @@ Introducing the unified model SHALL NOT delete, rename, or invalidate existing b
 - **WHEN** an account has a pre-existing `"This computer"` backup before the change ships
 - **THEN** after the change it still appears in `backup list` and can be restored
 - **AND** existing `profileBackupIds` entries continue to resolve to their backups
+

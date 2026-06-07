@@ -1,9 +1,11 @@
 ## 1. Engine contract (separate `endstate` repo change — prerequisite)
 
-- [ ] 1.1 Change `resolveBackupID` (`go-engine/internal/backup/upload/upload.go`): when `--backup-id` is absent and `--name` is provided, create a new backup labeled `--name` instead of returning `backups[0]`
-- [ ] 1.2 Preserve auto-backup/id path: an explicit `--backup-id` still versions that backup; verify the zero-backups create path is unchanged
-- [ ] 1.3 Add/adjust Go tests covering: named push with no id + existing backups → new backup; push with id → new version
-- [ ] 1.4 Release engine, then let `engine-drift-check` bump the GUI `ENGINE_VERSION` pin (do NOT hand-edit the pin)
+> SHIPPED in the `endstate` repo: endstate#118 (`backup push --name` create-not-collapse) → engine v2.18.0; GUI pin bumped to 2.18.0.
+
+- [x] 1.1 Change `resolveBackupID` (`go-engine/internal/backup/upload/upload.go`): when `--backup-id` is absent and `--name` is provided, create a new backup labeled `--name` instead of returning `backups[0]`
+- [x] 1.2 Preserve auto-backup/id path: an explicit `--backup-id` still versions that backup; verify the zero-backups create path is unchanged
+- [x] 1.3 Add/adjust Go tests covering: named push with no id + existing backups → new backup; push with id → new version
+- [x] 1.4 Release engine, then let `engine-drift-check` bump the GUI `ENGINE_VERSION` pin (do NOT hand-edit the pin)
 
 ## 2. GUI — id-addressed manual hosting
 

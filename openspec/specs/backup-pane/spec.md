@@ -327,7 +327,14 @@ The backup pane SHALL render a persistent warn-tone notice above the quota meter
 
 ### Requirement: Last sync indicator
 
-The backup pane SHALL render a relative-time indicator below the quota meter using `status.lastBackupAt`. The label and freshness band SHALL be produced by the `formatRelativeTime` utility. When `lastBackupAt` is absent or unparseable, the indicator SHALL render "No backups yet" in the calm muted-foreground tint. The indicator SHALL NOT be a live region.
+The backup pane SHALL render a relative-time indicator below the quota meter using
+`status.lastBackupAt`. The label and freshness band SHALL be produced by the
+`formatRelativeTime` utility. When `lastBackupAt` is absent or unparseable, the indicator
+SHALL render "No backups yet" in the calm muted-foreground tint. The indicator SHALL NOT be
+a live region. When automatic backup is paused because a background push returned
+`AUTH_REQUIRED`, the indicator SHALL render a persistent, actionable "Sign in to resume
+backups" affordance in the warning tint, replacing the freshness label until the session is
+restored.
 
 #### Scenario: Recently synced renders fresh tint
 - **GIVEN** `lastBackupAt` was within the last 24 hours
@@ -352,4 +359,11 @@ The backup pane SHALL render a relative-time indicator below the quota meter usi
 - **WHEN** the backup pane renders
 - **THEN** the indicator shows "No backups yet" in `text-muted-foreground`
 - **AND** `data-freshness="never"`
+
+#### Scenario: Auto-backup paused renders "Sign in to resume backups"
+- **GIVEN** automatic backup is enabled and a background auto-push returned `AUTH_REQUIRED`
+- **WHEN** the backup pane renders the last-sync indicator
+- **THEN** it shows an actionable "Sign in to resume backups" affordance in the warning tint
+- **AND** clicking it opens the inline re-auth dialog (per "Session re-auth preserves pane state")
+- **AND** the affordance persists across renders until the session is restored
 
