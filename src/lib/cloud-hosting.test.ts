@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { resolveCloudEntriesByKey, buildProfilePushArgs } from './cloud-hosting';
+import {
+  resolveCloudEntriesByKey,
+  buildProfilePushArgs,
+  pruneProfileBackupIds,
+} from './cloud-hosting';
 import type { BackupListItem } from '../types';
 import type { AppSettings } from '../settings';
 
@@ -61,18 +65,63 @@ describe('buildProfilePushArgs', () => {
       settingsWith({}),
       'C:\\p\\work.jsonc',
       'work',
+      byId(item('b1', 'other')),
     );
     expect(args).toEqual({ profile: 'C:\\p\\work.jsonc', name: 'work' });
     expect(args.backupId).toBeUndefined();
   });
 
-  it('re-host (mapping present) targets --backup-id and omits --name', () => {
+  it('re-host (mapping present AND backup still exists) targets --backup-id', () => {
     const args = buildProfilePushArgs(
       settingsWith({ 'C:\\p\\work.jsonc': 'b9' }),
       'C:\\p\\work.jsonc',
       'work',
+      byId(item('b9', 'work')),
     );
     expect(args).toEqual({ profile: 'C:\\p\\work.jsonc', backupId: 'b9' });
     expect(args.name).toBeUndefined();
+  });
+
+  it('stale mapping (backup deleted) falls back to create, not a dead --backup-id', () => {
+    // The backup was deleted (here or on another machine): the mapped id is no
+    // longer in the live list. Pushing --backup-id <dead> would fail; instead we
+    // create a fresh backup. Mirrors the badge's id-verification.
+    const args = buildProfilePushArgs(
+      settingsWith({ 'C:\\p\\work.jsonc': 'deleted-id' }),
+      'C:\\p\\work.jsonc',
+      'work',
+      byId(item('b1', 'something-else')),
+    );
+    expect(args).toEqual({ profile: 'C:\\p\\work.jsonc', name: 'work' });
+    expect(args.backupId).toBeUndefined();
+  });
+});
+
+describe('pruneProfileBackupIds', () => {
+  it('removes every key mapping to the deleted backup id', () => {
+    const result = pruneProfileBackupIds(
+      { 'C:\\a.jsonc': 'b1', 'C:\\b.jsonc': 'b2' },
+      'b1',
+    );
+    expect(result).toEqual({ 'C:\\b.jsonc': 'b2' });
+  });
+
+  it('removes all keys sharing the deleted id (auto + manual of the same profile)', () => {
+    const result = pruneProfileBackupIds(
+      { 'auto:x': 'b1', 'C:\\x.jsonc': 'b1', 'C:\\y.jsonc': 'b2' },
+      'b1',
+    );
+    expect(result).toEqual({ 'C:\\y.jsonc': 'b2' });
+  });
+
+  it('is a no-op when no key maps to the id', () => {
+    const map = { 'C:\\a.jsonc': 'b1' };
+    expect(pruneProfileBackupIds(map, 'nope')).toEqual(map);
+  });
+
+  it('tolerates an undefined mapping', () => {
+    expect(
+      pruneProfileBackupIds(undefined as unknown as Record<string, string>, 'b1'),
+    ).toEqual({});
   });
 });

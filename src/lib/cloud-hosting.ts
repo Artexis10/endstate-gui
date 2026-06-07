@@ -37,18 +37,40 @@ export function resolveCloudEntriesByKey(
 
 /**
  * Decide the `backupPush` arguments for hosting a profile from the Setup flow.
- * Re-host (a mapping already exists) → version the same backup by id. First
- * host → create a backup labeled with the profile name; the caller records the
- * returned id under the profile key on success.
+ * Re-host (a mapping exists AND the backup is still in the live list) → version
+ * the same backup by id. Otherwise → create a backup labeled with the profile
+ * name; the caller records the returned id under the profile key on success.
+ *
+ * The mapped id is verified against `byId` so a backup deleted here or on
+ * another machine falls back to creating a fresh one instead of pushing to a
+ * dead `--backup-id` (which the engine rejects). This mirrors the badge's
+ * id-verification — the live list is the single source of truth.
  */
 export function buildProfilePushArgs(
   settings: AppSettings,
   profilePath: string,
   profileName: string,
+  byId: Map<string, BackupListItem>,
 ): { profile: string; backupId?: string; name?: string } {
   const key = profileKeyFor({ path: profilePath });
   const mappedId = settings.profileBackupIds?.[key];
-  return mappedId
+  return mappedId && byId.has(mappedId)
     ? { profile: profilePath, backupId: mappedId }
     : { profile: profilePath, name: profileName };
+}
+
+/**
+ * Remove every profile-key mapping that points at `deletedBackupId`. Called
+ * when a backup is deleted so the local id-mapping doesn't retain a dead id
+ * (which would otherwise make the next push target a deleted backup).
+ */
+export function pruneProfileBackupIds(
+  profileBackupIds: Record<string, string>,
+  deletedBackupId: string,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, id] of Object.entries(profileBackupIds ?? {})) {
+    if (id !== deletedBackupId) out[key] = id;
+  }
+  return out;
 }

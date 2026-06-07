@@ -64,7 +64,7 @@ import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
 import { profileKeyFor } from './lib/profile-key';
-import { resolveCloudEntriesByKey, buildProfilePushArgs } from './lib/cloud-hosting';
+import { resolveCloudEntriesByKey, buildProfilePushArgs, pruneProfileBackupIds } from './lib/cloud-hosting';
 import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
 import { isBackupChunkEvent } from './lib/streaming-events';
 import { hasSeenFirstPushFor, markFirstPushFor } from './lib/first-push-flag';
@@ -2527,7 +2527,7 @@ function AppContent() {
                           // host creates one (--name) and we record the returned
                           // id under the profile key so the badge flips + future
                           // hosts version the same backup.
-                          const pushArgs = buildProfilePushArgs(settings, profilePath, profileName);
+                          const pushArgs = buildProfilePushArgs(settings, profilePath, profileName, cloudBackupIndex.byId);
                           const result = await backupPush(settings, {
                             ...pushArgs,
                             onEvent: (event) => {
@@ -2812,6 +2812,14 @@ function AppContent() {
               initialStatus={backupStatusData}
               initialBackups={backupListData}
               renameSupported={renameSupported}
+              onBackupDeleted={(backupId) => {
+                // Drop the local id-mapping for a deleted backup so a later
+                // "Back up to cloud" creates a fresh one instead of pushing to
+                // a dead --backup-id.
+                updateSettings({
+                  profileBackupIds: pruneProfileBackupIds(settings.profileBackupIds, backupId),
+                });
+              }}
               isReauthOpen={() => reauthOpenRef.current}
               onAuthLost={() => {
                 // Recursion guard: a focus-triggered status refresh can fire
