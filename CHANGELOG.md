@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.17.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.17.0...gui-v2.17.1) (2026-06-07)
+
+
+### Bug Fixes
+
+* **backup:** don't push to a deleted backup's stale id after delete ([#117](https://github.com/Artexis10/endstate-gui/issues/117)) ([bcbac46](https://github.com/Artexis10/endstate-gui/commit/bcbac46d678eea3989351450c2a0168a5ba10433))
+
 ## [2.17.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.16.1...gui-v2.17.0) (2026-06-05)
 
 

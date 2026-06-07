@@ -7,7 +7,7 @@ members = ["engine-core", "dev-bridge"]
 
 [package]
 name = "endstate-gui"
-version = "2.17.0"
+version = "2.17.1"
 description = "Endstate GUI - Desktop application for Endstate"
 authors = ["Substrate Systems"]
 edition = "2021"
