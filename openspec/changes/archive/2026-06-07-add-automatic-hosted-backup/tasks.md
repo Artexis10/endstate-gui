@@ -1,7 +1,7 @@
-## 0. Prerequisites (cross-repo — BLOCKING; tracked outside this repo)
-- [ ] 0.1 Engine: add `backup push --if-changed` — no-op when candidate manifest == latest version's `manifestSha256`; return a `skipped: true` / `unchanged` envelope (no new versionId). Tracked: `Artexis10/endstate#62`.
-- [ ] 0.2 Engine + substrate (#59): populate `lastBackupAt` and add quota fields (`quotaUsedBytes`/`quotaTotalBytes`/`versionCount`) to `backup status`; substrate `/api/account/me` returns quota. (Already filed: Artexis10/endstate#59.)
-- [ ] 0.3 Engine: advertise `--if-changed` support in the capabilities envelope so the GUI can capability-gate.
+## 0. Prerequisites (cross-repo — tracked outside this repo; SHIPPED)
+- [x] 0.1 Engine: add `backup push --if-changed` — no-op when candidate manifest == latest version's `manifestSha256`; return a `skipped: true` / `unchanged` envelope (no new versionId). Tracked: `Artexis10/endstate#62`. (Shipped.)
+- [x] 0.2 Engine + substrate (#59): populate `lastBackupAt` and add quota fields (`quotaUsedBytes`/`quotaTotalBytes`/`versionCount`) to `backup status`; substrate `/api/account/me` returns quota. (Shipped; #59 closed.)
+- [x] 0.3 Engine: advertise `--if-changed` support in the capabilities envelope so the GUI can capability-gate. (Shipped.)
 
 ## 1. Settings
 - [x] 1.1 Extend `AppSettings` (`src/settings.ts`): `autoBackupEnabled: boolean`, `autoBackupPromptSeen: boolean`, `profileBackupIds: Record<string, string>`; default missing fields on load.
@@ -43,4 +43,4 @@
 - [x] 9.1 `npm run openspec:validate --all --strict --no-interactive` passes.
 - [x] 9.2 `npx vitest run` + coverage thresholds hold.
 - [x] 9.3 `npm run test:all` passes.
-- [ ] 9.4 Live (livewire) smoke once the engine co-requisites land: real capture → observe silent background push + status flip.
+- [x] 9.4 Live (livewire) smoke once the engine co-requisites land: real capture → observe silent background push + status flip. (Verified end-to-end via livewire 2026-06-02.)
