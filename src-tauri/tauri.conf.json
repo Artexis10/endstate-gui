@@ -32,7 +32,6 @@
     "resources": {
       "../endstate/modules/": "engine/modules/",
       "../endstate/payload/": "engine/payload/",
-      "../endstate/VERSION": "engine/VERSION",
       "../endstate/SCHEMA_VERSION": "engine/SCHEMA_VERSION"
     },
     "windows": {

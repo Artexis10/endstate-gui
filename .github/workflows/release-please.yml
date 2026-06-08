@@ -61,6 +61,19 @@ jobs:
       contents: write
 
     steps:
+      # Hold the freshly-published release OUT of "Latest" until installers and
+      # latest.json are uploaded and verified below. release-please publishes the
+      # release the instant the PR merges; if this build then fails, an assetless
+      # release must never be what /download and the auto-updater resolve. Marking
+      # it prerelease makes /releases/latest skip it and keep serving the last good
+      # release. Promoted back to Latest only after the verify step passes.
+      - name: Hold release as prerelease until installers are verified
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
+        run: gh release edit "$TAG" --repo Artexis10/endstate-gui --prerelease=true --latest=false
+
       - uses: actions/checkout@v4
         with:
           ref: main
@@ -162,16 +175,45 @@ jobs:
         with:
           tagName: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
 
-      - name: Verify latest.json uploaded
+      - name: Verify installers + latest.json uploaded
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
         run: |
           ASSETS=$(gh release view "$TAG" --repo Artexis10/endstate-gui --json assets --jq '[.assets[].name] | join(" ")')
-          if ! echo "$ASSETS" | grep -qF "latest.json"; then
-            echo "::error::Release $TAG is missing latest.json — updater endpoint will be broken." \
+          echo "Assets on $TAG: $ASSETS"
+          missing=()
+          echo "$ASSETS" | grep -qE '\.exe( |$)' || missing+=("a .exe installer")
+          echo "$ASSETS" | grep -qE '\.msi( |$)' || missing+=("a .msi installer")
+          echo "$ASSETS" | grep -qF "latest.json"  || missing+=("latest.json")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error::Release $TAG is missing: ${missing[*]} — would break /download and the auto-updater." \
               | tee -a "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "latest.json confirmed in release $TAG." | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Verified installers + latest.json present in $TAG." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # All artifacts confirmed present — safe to make this the release users get.
+      - name: Promote release to Latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
+        run: |
+          gh release edit "$TAG" --repo Artexis10/endstate-gui --prerelease=false --latest
+          echo "Promoted $TAG to Latest." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Backstop: if the build or verify failed (or was cancelled), leave the
+      # release as a prerelease so /releases/latest keeps resolving the previous
+      # good release. An assetless release can never be served as "Latest".
+      - name: On failure, keep the release out of Latest
+        if: ${{ failure() || cancelled() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
+        run: |
+          gh release edit "$TAG" --repo Artexis10/endstate-gui --prerelease=true --latest=false || true
+          echo "::error::Release $TAG did not produce verified installers and was held as prerelease (NOT Latest). /download and the updater keep serving the previous good release. Investigate and re-run." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
