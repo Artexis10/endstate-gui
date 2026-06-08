@@ -1,0 +1,87 @@
+name: bundle-check
+
+# Catch installer-bundle regressions BEFORE they merge.
+#
+# The release pipeline (release-please.yml) publishes the GitHub Release the
+# instant a release PR merges, then builds installers in a separate job. So a
+# change that breaks Tauri bundling — e.g. a tauri.conf.json `resources` entry
+# pointing at an engine file that no longer exists — is not caught until release
+# time, where it ships an assetless "Latest" and breaks /download + the updater.
+#
+# This job runs the *real* Tauri bundler on every PR that touches files which can
+# affect the bundle, and fails the PR if bundling fails. It mirrors the release
+# job's engine setup but skips signing and publishing (NSIS only, updater
+# artifacts disabled) so no signing secret is needed and it stays comparatively
+# fast. The goal is only to exercise resource bundling, not to ship anything.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src-tauri/**'
+      - 'ENGINE_VERSION'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tauri-bundle:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read ENGINE_VERSION
+        id: read_engine_ver
+        shell: bash
+        run: echo "version=$(cat ENGINE_VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Download engine binary
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.read_engine_ver.outputs.version }}"
+          gh release download "v${VERSION}" --repo Artexis10/endstate --pattern "endstate.exe"
+
+      - name: Place engine binary at sidecar location
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries src-tauri/target/release
+          cp endstate.exe src-tauri/binaries/endstate-x86_64-pc-windows-msvc.exe
+          cp endstate.exe src-tauri/target/release/endstate.exe
+
+      # Shallow checkout of the engine repo at the pinned version to obtain the
+      # resource files (modules/, SCHEMA_VERSION, ...) bundled into the installer.
+      # These are exactly the paths tauri.conf.json `resources` references, so if
+      # one is missing/renamed the bundle step below fails — which is the point.
+      - uses: actions/checkout@v4
+        with:
+          repository: Artexis10/endstate
+          ref: v${{ steps.read_engine_ver.outputs.version }}
+          path: endstate
+          fetch-depth: 1
+          token: ${{ secrets.ENGINE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Create empty payload directory
+        shell: bash
+        run: mkdir -p endstate/payload/apps
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # The real bundler — NSIS only, updater artifacts off (no signing key
+      # required). Resource bundling is shared across targets, so this still fails
+      # on a missing/renamed `resources` path just like a full release build would.
+      - name: Tauri bundle check (no signing, no publish)
+        shell: bash
+        run: npm run tauri build -- --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
