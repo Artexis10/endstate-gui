@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.18.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.17.2...gui-v2.18.0) (2026-06-09)
+
+
+### Features
+
+* bump engine to v2.20.0 ([#121](https://github.com/Artexis10/endstate-gui/issues/121)) ([4ca5803](https://github.com/Artexis10/endstate-gui/commit/4ca5803effbca136b317b049a909808c254f8330))
+
 ## [2.17.2](https://github.com/Artexis10/endstate-gui/compare/gui-v2.17.1...gui-v2.17.2) (2026-06-08)
 
 
