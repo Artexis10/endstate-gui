@@ -537,7 +537,13 @@ export function SetupFlow({
                                   size="inline"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    onPushProfileToCloud(profile.path, profile.name);
+                                    // First host labels the cloud backup with what
+                                    // this row shows — the user-set displayName
+                                    // when present, the file name otherwise.
+                                    onPushProfileToCloud(
+                                      profile.path,
+                                      profile.displayName || profile.name,
+                                    );
                                   }}
                                   className="mt-1 gap-1 text-xs"
                                   data-testid={`profile-card-${profile.name}-push-to-cloud`}
