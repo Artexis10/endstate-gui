@@ -76,6 +76,11 @@ export function friendlyAuthError(
         message: "Your password isn't strong enough.",
         remediation: 'Use at least 12 characters.',
       };
+    case 'RATE_LIMITED':
+      return {
+        message: 'Too many attempts.',
+        remediation: 'Wait a few minutes, then try again.',
+      };
     default: {
       const cliJargon =
         err.remediation && CLI_JARGON_PATTERN.test(err.remediation);

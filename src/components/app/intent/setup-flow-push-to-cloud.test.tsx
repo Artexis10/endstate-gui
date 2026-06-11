@@ -7,6 +7,11 @@ import type { DiscoveredProfile } from '../../../file-discovery';
 const profiles: DiscoveredProfile[] = [
   { name: 'cloud-pc', path: 'C:\\profiles\\cloud-pc.jsonc' },
   { name: 'local-pc', path: 'C:\\profiles\\local-pc.jsonc' },
+  {
+    name: 'renamed-pc',
+    path: 'C:\\profiles\\renamed-pc.jsonc',
+    displayName: 'Gaming Rig',
+  },
 ];
 
 const baseProps = {
@@ -120,6 +125,24 @@ describe('SetupFlow — "Back up to cloud" action on local-only profile cards', 
     expect(onPushProfileToCloud).toHaveBeenCalledWith(
       'C:\\profiles\\local-pc.jsonc',
       'local-pc',
+    );
+  });
+
+  it('hosts under the user-set displayName when the profile has one', () => {
+    const onPushProfileToCloud = vi.fn();
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        hostedBackupSignedIn={true}
+        hostedBackupSubscriptionStatus="active"
+        cloudBackupIndex={cloudIndex}
+        onPushProfileToCloud={onPushProfileToCloud}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('profile-card-renamed-pc-push-to-cloud'));
+    expect(onPushProfileToCloud).toHaveBeenCalledWith(
+      'C:\\profiles\\renamed-pc.jsonc',
+      'Gaming Rig',
     );
   });
 

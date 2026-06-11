@@ -54,6 +54,18 @@ describe('friendlyAuthError', () => {
     expect(f.remediation).toBe('Please try again later.');
   });
 
+  it('maps RATE_LIMITED to wait-and-retry copy, no CTA', () => {
+    const f = friendlyAuthError(
+      new BackupCommandError({
+        code: 'RATE_LIMITED',
+        message: 'too many attempts; retry after 15 minutes',
+      }),
+    );
+    expect(f.message).toMatch(/too many attempts/i);
+    expect(f.remediation).toMatch(/wait/i);
+    expect(f.cta).toBeUndefined();
+  });
+
   it('maps CLAIM_TOKEN_INVALID to a friendly headline + helpful remediation, no CTA', () => {
     const f = friendlyAuthError(
       new BackupCommandError({
