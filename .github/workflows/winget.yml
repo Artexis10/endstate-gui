@@ -1,0 +1,26 @@
+name: Publish to WinGet
+
+# Auto-submits each new Endstate release to microsoft/winget-pkgs so
+# `winget install SubstrateSystems.Endstate` stays current. Fires only on
+# full (non-prerelease) releases.
+on:
+  release:
+    types: [released]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Derive version from tag
+        id: version
+        # Release tags look like "gui-v2.18.0" -> winget wants "2.18.0"
+        run: echo "value=${GITHUB_REF_NAME#gui-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to WinGet
+        uses: microsoft/winget-releaser@v2
+        with:
+          identifier: SubstrateSystems.Endstate
+          version: ${{ steps.version.outputs.value }}
+          # Submit the MSI installer (matches the existing manifest)
+          installers-regex: '\.msi$'
+          token: ${{ secrets.WINGET_TOKEN }}
