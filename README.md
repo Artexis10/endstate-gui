@@ -1,6 +1,8 @@
 # Endstate GUI
 
-Endstate GUI is the official desktop application for **Endstate**, providing a graphical interface for running provisioning, configuration restore, and verification workflows.
+Endstate GUI is the official desktop app for **Endstate** — set up a new Windows PC by reinstalling your apps and restoring your settings from one portable file. Free and open source. It gives you a graphical interface to scan your current machine, save your apps and settings, and restore them on a fresh Windows install in minutes.
+
+Website: <https://substratesystems.io/endstate> · Download: <https://substratesystems.io/download>
 
 The GUI is designed to consume Endstate strictly through its public CLI interface, ensuring a clear separation between the engine and the user interface.
 
