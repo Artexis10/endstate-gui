@@ -12,6 +12,8 @@ import {
   engineSupportsSchedule,
   engineSupportsScheduleAutoPush,
   driftStateFromStatus,
+  isZipPath,
+  resolveScheduleBaselinePath,
   ScheduleCommandError,
 } from './schedule-bridge';
 import type { AppSettings } from '../settings';
@@ -237,5 +239,66 @@ describe('driftStateFromStatus', () => {
         },
       }),
     ).toEqual({ kind: 'failing', checkedAt: '2026-07-10T09:00:00Z' });
+  });
+});
+
+describe('isZipPath', () => {
+  it('detects .zip extensions case-insensitively', () => {
+    expect(isZipPath('C:\snap.zip')).toBe(true);
+    expect(isZipPath('C:\SNAP.ZIP')).toBe(true);
+    expect(isZipPath('C:\snap.Zip ')).toBe(true);
+  });
+
+  it('rejects non-zip paths', () => {
+    expect(isZipPath('C:\snap.jsonc')).toBe(false);
+    expect(isZipPath('C:\snap.zip.manifest.jsonc')).toBe(false);
+    expect(isZipPath('C:\zip')).toBe(false);
+  });
+});
+
+describe('resolveScheduleBaselinePath', () => {
+  it('returns a manifest-only save unchanged without extracting', async () => {
+    const extract = vi.fn();
+    await expect(
+      resolveScheduleBaselinePath('C:\captures\snap.jsonc', extract),
+    ).resolves.toBe('C:\captures\snap.jsonc');
+    expect(extract).not.toHaveBeenCalled();
+  });
+
+  it('side-writes the embedded manifest next to a zip save and returns that path', async () => {
+    const extract = vi.fn().mockResolvedValue(undefined);
+    await expect(
+      resolveScheduleBaselinePath('C:\captures\snap.zip', extract),
+    ).resolves.toBe('C:\captures\snap.zip.manifest.jsonc');
+    expect(extract).toHaveBeenCalledWith(
+      'C:\captures\snap.zip',
+      'C:\captures\snap.zip.manifest.jsonc',
+    );
+  });
+
+  it('returns null when the side-write fails (baseline left unchanged)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const extract = vi.fn().mockRejectedValue(new Error('no manifest.jsonc'));
+    await expect(
+      resolveScheduleBaselinePath('C:\captures\snap.zip', extract),
+    ).resolves.toBeNull();
+    warn.mockRestore();
+  });
+
+  it('never resolves to a .zip path (schedule baseline invariant)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const inputs: Array<[string, (z: string, d: string) => Promise<void>]> = [
+      ['C:\captures\snap.jsonc', vi.fn().mockResolvedValue(undefined)],
+      ['C:\captures\snap.zip', vi.fn().mockResolvedValue(undefined)],
+      ['C:\captures\snap.zip', vi.fn().mockRejectedValue(new Error('boom'))],
+      ['C:\captures\SNAP.ZIP', vi.fn().mockResolvedValue(undefined)],
+    ];
+    for (const [savePath, extract] of inputs) {
+      const resolved = await resolveScheduleBaselinePath(savePath, extract);
+      // The engine's scheduled verify parses raw JSONC only — a .zip
+      // baseline would fail every scheduled run permanently.
+      expect(resolved === null || !isZipPath(resolved)).toBe(true);
+    }
+    warn.mockRestore();
   });
 });

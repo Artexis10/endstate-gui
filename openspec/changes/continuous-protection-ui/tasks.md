@@ -45,3 +45,10 @@
 - [x] `src/components/app/settings/continuous-protection-setting.test.tsx` — toggle consent, hint gating, sub-toggle availability, busy state
 - [x] `src/components/app/intent/intent-landing.drift-chip.test.tsx` — chip states + precedence
 - [x] `src/settings.test.ts` — schedule field defaults, round-trip, legacy-blob defaulting, migration preservation
+
+### Task 8: Contract-guard review fixes (zip baseline)
+- [x] `src-tauri/src/lib.rs` — `extract_zip_manifest(zip_path, dest_path)` Tauri command (single-entry side-write of the bundle's embedded `manifest.jsonc`)
+- [x] `src/lib/schedule-bridge.ts` — `isZipPath` + `resolveScheduleBaselinePath` (never resolve a `.zip` baseline; `null` on failed side-write) + transport-vs-engine error code comment
+- [x] `src/App.tsx` — save-to-file records the side-written manifest for zip saves; boot self-heal skips `.zip` baselines with a warning; web-download branch documents why the baseline is not updated
+- [x] `src/lib/schedule-bridge.test.ts` — zip-baseline invariant tests (scheduleManifestPath is never a `.zip` path)
+- [x] `docs/ux-language.md` — "Scheduled Drift Check Chip" section (states + precedence)

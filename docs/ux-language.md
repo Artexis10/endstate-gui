@@ -1,7 +1,7 @@
 # Endstate UX Language & Status Contract
 
 **Status:** Locked  
-**Last Updated:** 2025-01-05
+**Last Updated:** 2026-07-10
 
 This document is the **single source of truth** for status/phase semantics across Endstate GUI and engine. It defines:
 - How engine events map to UI labels and colors
@@ -249,6 +249,44 @@ Internal UI status keys (canonical filter/logic keys):
 - Color: Red (error)
 - Long label: "Failed"
 - User meaning: Real install failure
+
+---
+
+## Scheduled Drift Check Chip (Continuous Protection)
+
+The landing screen's "Save this computer" card renders **at most one** chip,
+derived purely from the engine's `schedule status` last-run document. The
+mapping is `driftStateFromStatus()` in `src/lib/schedule-bridge.ts` — no drift
+computation happens client-side (CLI is source of truth).
+
+### Chip States
+
+| Drift state | Condition (from `schedule status`) | Chip text | Color |
+|-------------|-----------------------------------|-----------|-------|
+| `drift` | last run verified with `fail > 0` | "N apps drifted since your snapshot" (pluralised) | warn (amber) |
+| `failing` | last run recorded a hard `error` | "Drift check failing" | muted (gray) |
+| `clean` | last run verified with zero failures | *(no chip)* | — |
+| `never-run` | schedule disabled, or no last-run document | *(no chip)* | — |
+
+### Precedence
+
+**MUST rule:** one chip slot, resolved in this order:
+
+1. **Drift** (amber) — engine-reported drift always wins
+2. **Drift check failing** (muted)
+3. **Scan complete** (transient blue session chip, unrelated to scheduling)
+
+Clean and never-run states render nothing — absence of a chip **is** the
+healthy state; there is no "all good" badge.
+
+### Rationale
+
+- Drift is actionable user data; a failing check is diagnostic; both outrank
+  the purely cosmetic session chip.
+- The failing chip is muted (not red) because a broken scheduled task is not a
+  data-loss event — the user's saved capture is intact.
+- A disabled schedule maps to `never-run` even when a stale last-run document
+  is retained: with no future runs, the retained signal is stale by definition.
 
 ---
 

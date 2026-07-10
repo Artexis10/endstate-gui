@@ -70,6 +70,14 @@ async function runScheduleOnce<T>(
         detail: envelope.error.detail,
       });
     }
+    // No parseable envelope: this is a GUI-transport failure, not an engine
+    // error. The code is the uppercased `EngineErrorKind` from engine-exec
+    // (COMMAND_NOT_FOUND, INVOKE_FAILED, ENGINE_UNAVAILABLE_WEB,
+    // COMMAND_FAILED) — a distinct namespace from the engine's stable
+    // envelope codes documented on ScheduleCommandError (NOT_SUPPORTED,
+    // TASK_REGISTRATION_FAILED, SCHEDULE_DISABLED, MANIFEST_NOT_FOUND).
+    // Callers matching on engine codes must not expect transport codes to
+    // be stable engine API.
     throw new ScheduleCommandError({
       code: result.error.kind.toUpperCase(),
       message: result.error.message,
@@ -131,6 +139,47 @@ export async function scheduleStatus(
   settings: AppSettings,
 ): Promise<ScheduleStatusData> {
   return runScheduleOnce<ScheduleStatusData>(settings, ['status']);
+}
+
+/** True when the path points at a zip bundle (case-insensitive). */
+export function isZipPath(path: string): boolean {
+  return /\.zip$/i.test(path.trim());
+}
+
+/**
+ * Resolve the drift-check baseline manifest for a freshly saved capture.
+ *
+ * The engine's scheduled run (`schedule run` → verify) parses raw JSONC
+ * only — a `.zip` bundle path baked into the task would fail every scheduled
+ * run permanently. Manifest-only saves are their own baseline; zip saves must
+ * side-write the bundle's embedded `manifest.jsonc` (always present at the
+ * archive root, per the engine's capture-bundle-zip spec) next to the zip and
+ * use that instead.
+ *
+ * Returns the path to record as `scheduleManifestPath`, or `null` when no
+ * scheduler-compatible baseline could be produced (extraction failed).
+ * Callers MUST leave the previous baseline untouched on `null` — a `.zip`
+ * path is never a valid baseline.
+ *
+ * @param savePath - Where the user saved the capture (.jsonc or .zip)
+ * @param extractManifest - Side-writes the zip's embedded manifest.jsonc to
+ *                          the given destination (Tauri `extract_zip_manifest`)
+ */
+export async function resolveScheduleBaselinePath(
+  savePath: string,
+  extractManifest: (zipPath: string, destPath: string) => Promise<void>,
+): Promise<string | null> {
+  if (!isZipPath(savePath)) return savePath;
+  const destPath = `${savePath}.manifest.jsonc`;
+  try {
+    await extractManifest(savePath, destPath);
+    return destPath;
+  } catch (err) {
+    // Best-effort: the save itself succeeded; only the baseline update is
+    // skipped. The previously recorded baseline (if any) remains in force.
+    console.warn('schedule baseline side-write failed:', err);
+    return null;
+  }
 }
 
 /**

@@ -45,13 +45,40 @@ The card SHALL offer "Back up automatically when changes are found" only when th
 - **THEN** the sub-toggle is not rendered
 
 ### Requirement: Launch wiring fetches status and self-heals
-After a successful capabilities handshake with `features.schedule.supported`, the GUI SHALL fetch `schedule status` and store it as the drift source. When the persisted preference `scheduleEnabled` is true and a manifest reference exists, the GUI SHALL re-assert `schedule enable` (idempotent on the engine side) to self-heal a lost task, then refresh status. Status or self-heal failures SHALL NOT block boot.
+After a successful capabilities handshake with `features.schedule.supported`, the GUI SHALL fetch `schedule status` and store it as the drift source. When the persisted preference `scheduleEnabled` is true and a manifest reference exists, the GUI SHALL re-assert `schedule enable` (idempotent on the engine side) to self-heal a lost task, then refresh status — unless the manifest path ends in `.zip`, in which case the re-assert SHALL be skipped with a logged warning (a zip baseline can never verify; re-registering would re-arm a permanently failing task). Status or self-heal failures SHALL NOT block boot.
 
 #### Scenario: Self-heal on boot
 - **GIVEN** `scheduleEnabled: true` persisted and a known manifest (engine config or saved capture)
 - **WHEN** the app boots against a schedule-capable engine
 - **THEN** `schedule enable` is re-asserted with the persisted time and auto-push preference
 - **AND** `schedule status` is re-fetched afterwards
+
+#### Scenario: Self-heal skipped for a zip baseline
+- **GIVEN** `scheduleEnabled: true` persisted and a manifest reference ending in `.zip` (persisted by a pre-fix build)
+- **WHEN** the app boots against a schedule-capable engine
+- **THEN** `schedule enable` is NOT invoked
+- **AND** a console warning explains the skip
+
+### Requirement: A zip bundle is never the drift baseline
+The GUI SHALL never record a `.zip` path as `scheduleManifestPath` or pass one to `schedule enable --manifest` (the engine's scheduled run parses raw JSONC only). When a capture is saved to file as a zip bundle, the GUI SHALL side-write the bundle's embedded `manifest.jsonc` next to the saved zip as `<savePath>.manifest.jsonc` (via the Tauri `extract_zip_manifest` command) and record that side-written path as the baseline. If the side-write fails, the GUI SHALL leave the previously recorded baseline unchanged. Web/browser-download saves SHALL NOT update the baseline (no stable on-disk path).
+
+#### Scenario: Manifest-only save is its own baseline
+- **GIVEN** a capture saved to file as `.jsonc`
+- **WHEN** the save completes
+- **THEN** `scheduleManifestPath` records the saved path unchanged
+
+#### Scenario: Zip save records the side-written manifest
+- **GIVEN** a capture saved to file as `C:\snap.zip`
+- **WHEN** the save completes
+- **THEN** the embedded `manifest.jsonc` is written to `C:\snap.zip.manifest.jsonc`
+- **AND** `scheduleManifestPath` records `C:\snap.zip.manifest.jsonc`, not the zip
+- **AND** an active schedule is re-pointed at the side-written manifest
+
+#### Scenario: Failed side-write leaves the baseline untouched
+- **GIVEN** a zip save whose manifest extraction fails
+- **WHEN** the save completes
+- **THEN** `scheduleManifestPath` keeps its previous value
+- **AND** no `schedule enable` is issued with a `.zip` manifest
 
 ### Requirement: Drift chip renders engine status only
 The landing screen's "Save this computer" card SHALL render at most one chip derived purely from `schedule status`: never-run and clean states render nothing; drift renders an amber "N apps drifted since your snapshot" chip (pluralised, count = `verify.summary.fail`); a hard last-run error renders a muted "Drift check failing" chip. Drift SHALL take precedence over the failing chip and over the session "Scan complete" chip. A disabled schedule SHALL render nothing even when a stale last-run is retained.

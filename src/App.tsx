@@ -68,6 +68,8 @@ import {
   engineSupportsSchedule,
   engineSupportsScheduleAutoPush,
   driftStateFromStatus,
+  isZipPath,
+  resolveScheduleBaselinePath,
   ScheduleCommandError,
 } from './lib/schedule-bridge';
 import { AccountSection } from './components/app/account/account-section';
@@ -1473,7 +1475,14 @@ function AppContent() {
           // what the task actually verifies against), then the last saved
           // capture. No manifest → nothing to self-heal.
           const manifest = schedStatus.manifest || settings.scheduleManifestPath || undefined;
-          if (settings.scheduleEnabled && manifest) {
+          if (settings.scheduleEnabled && manifest && isZipPath(manifest)) {
+            // A .zip baseline can never verify — the scheduled run parses raw
+            // JSONC only — so re-asserting would just re-register a task that
+            // fails every day. Leave it unregistered; the next manifest-only
+            // save (or zip save with a successful manifest side-write)
+            // re-points the schedule at a usable baseline.
+            console.warn('schedule self-heal skipped: baseline is a .zip bundle the scheduled verify cannot parse:', manifest);
+          } else if (settings.scheduleEnabled && manifest) {
             void scheduleEnable(settings, {
               manifest,
               time: settings.scheduleTime,
@@ -2621,21 +2630,37 @@ function AppContent() {
                   // Record the saved capture as the continuous-protection
                   // baseline. The transient capture cache is wiped at app
                   // start, so only this durable user-saved copy is a valid
-                  // manifest for the scheduled task. If protection is already
-                  // on, re-point the task at the fresh snapshot (idempotent).
-                  updateSettings({ scheduleManifestPath: savePath });
-                  if (scheduleSupported && settings.scheduleEnabled) {
-                    void scheduleEnable(settings, {
-                      manifest: savePath,
-                      time: settings.scheduleTime,
-                      autoPush: settings.scheduleAutoPush && scheduleAutoPushCapable,
-                    })
-                      .then(() => scheduleStatus(settings))
-                      .then(setScheduleStatusData)
-                      .catch((err) => console.warn('schedule re-point failed:', err));
+                  // manifest for the scheduled task. Zip saves cannot be the
+                  // baseline directly — the scheduled run's verify parses raw
+                  // JSONC only — so the bundle's embedded manifest.jsonc is
+                  // side-written next to the zip and recorded instead. On a
+                  // failed side-write the baseline is left unchanged (never
+                  // record a .zip path). If protection is already on,
+                  // re-point the task at the fresh snapshot (idempotent).
+                  const baselinePath = await resolveScheduleBaselinePath(
+                    savePath,
+                    (zipPath, destPath) => invoke('extract_zip_manifest', { zipPath, destPath }),
+                  );
+                  if (baselinePath) {
+                    updateSettings({ scheduleManifestPath: baselinePath });
+                    if (scheduleSupported && settings.scheduleEnabled) {
+                      void scheduleEnable(settings, {
+                        manifest: baselinePath,
+                        time: settings.scheduleTime,
+                        autoPush: settings.scheduleAutoPush && scheduleAutoPushCapable,
+                      })
+                        .then(() => scheduleStatus(settings))
+                        .then(setScheduleStatusData)
+                        .catch((err) => console.warn('schedule re-point failed:', err));
+                    }
                   }
                 } else {
-                  // Web / browser-bridge: browser download
+                  // Web / browser-bridge: browser download.
+                  // scheduleManifestPath is deliberately NOT updated on this
+                  // branch: the browser owns the download location (often an
+                  // auto-renamed file in Downloads the GUI never learns), so
+                  // there is no stable on-disk path to bake into the
+                  // scheduled task.
                   let blob: Blob;
                   let downloadName = defaultName;
                   if (isZip) {
