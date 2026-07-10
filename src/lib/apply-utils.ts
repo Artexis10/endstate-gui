@@ -740,6 +740,29 @@ export function isAllAlreadyPresent(
 }
 
 /**
+ * Build the value for `apply --only <ids>` from the selected manifest app ids.
+ *
+ * Pure presentation-to-CLI translation: blank entries are dropped and
+ * duplicates removed. The GUI must never emit an empty/blank `--only` (the
+ * engine rejects it with MANIFEST_VALIDATION_ERROR), so this returns null
+ * when the input yields no ids — callers must then OMIT the flag entirely,
+ * leaving behavior unchanged.
+ */
+export function buildOnlyFlagValue(ids: string[] | undefined | null): string | null {
+  if (!ids || ids.length === 0) return null;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of ids) {
+    const id = raw.trim();
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out.length > 0 ? out.join(',') : null;
+}
+
+/**
  * Result from parsing a streaming log line.
  */
 export interface ParsedProgressLine {
