@@ -20,7 +20,8 @@ import { discoverProfiles, DiscoveredProfile } from './file-discovery';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
-import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, type AppEvent, type UiPhase } from './lib/apply-utils';
+import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, buildOnlyFlagValue, type AppEvent, type UiPhase } from './lib/apply-utils';
+import { engineSupportsApplyOnly } from './lib/apply-capabilities';
 import { isItemEvent, isArtifactEvent, isPhaseEvent, isRestoreItemEvent, type EnginePhase } from './lib/streaming-events';
 import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
@@ -231,6 +232,9 @@ function AppContent() {
   // Gates the per-backup rename affordance; stays dark until the engine
   // advertises `features.hostedBackup.rename`. Defaults false when unknown.
   const [renameSupported, setRenameSupported] = useState(false);
+  // Gates the setup-flow per-app picker; stays dark until the engine
+  // advertises `apply --only` in commands.apply.flags. Defaults false.
+  const [applyOnlySupported, setApplyOnlySupported] = useState(false);
   const [autoBackupChip, setAutoBackupChip] =
     useState<'idle' | 'backing-up' | 'backed-up' | 'paused'>('idle');
   const [autoBackupAuthPaused, setAutoBackupAuthPaused] = useState(false);
@@ -1421,6 +1425,8 @@ function AppContent() {
       // `backup push --if-changed`. Defaults false when unknown.
       setIfChangedSupported(engineSupportsIfChanged(capResult.envelope.data));
       setRenameSupported(engineSupportsRename(capResult.envelope.data));
+      // Per-app setup picker gate: dark unless `apply --only` is advertised.
+      setApplyOnlySupported(engineSupportsApplyOnly(capResult.envelope.data));
       if (supported) {
         try {
           const status = await backupStatus(settings);
@@ -1938,13 +1944,17 @@ function AppContent() {
       alreadyPresent,
       profile: profileName,
       appEvents: collectedEvents,
+      // Envelope actions carry the manifest app `id` (what `apply --only`
+      // matches on) plus the winget `ref` streamed events are keyed by —
+      // the setup-flow per-app picker maps rows to ids through these.
+      actions: previewActions,
       restoreModulesAvailable,
       configModuleMap,
     };
   };
 
 
-  const handleApplyFromOverview = async (restoreOptions?: { restoreIntent?: import('./types').RestoreIntent; selectedModules?: string[] }) => {
+  const handleApplyFromOverview = async (restoreOptions?: { restoreIntent?: import('./types').RestoreIntent; selectedModules?: string[]; onlyAppIds?: string[] }) => {
     // Use refs for immediate access (state may not have settled in async callbacks)
     const profileName = selectedProfileRef.current || selectedProfile;
     const profilePath = selectedProfilePathRef.current || selectedProfilePath;
@@ -1992,6 +2002,14 @@ function AppContent() {
     if (restoreOptions?.restoreIntent === 'apps-and-settings' && restoreOptions.selectedModules && restoreOptions.selectedModules.length > 0) {
       applyArgs.push('--enable-restore');
       applyArgs.push('--restore-filter', restoreOptions.selectedModules.join(','));
+    }
+    // Per-app subset (setup-flow picker). The picker passes manifest app ids
+    // only when the user selected a strict subset; all-selected omits the
+    // field so this run is identical to today. buildOnlyFlagValue never
+    // yields an empty value (the engine rejects a blank --only).
+    const onlyValue = buildOnlyFlagValue(restoreOptions?.onlyAppIds);
+    if (onlyValue) {
+      applyArgs.push('--only', onlyValue);
     }
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
@@ -2790,6 +2808,7 @@ function AppContent() {
               isRunning={isRunning}
               setupProgress={actionProgressByAction['setup'] ?? null}
               liveAppEvents={liveAppEvents}
+              applyOnlySupported={applyOnlySupported}
               onPreview={async (profile) => {
                 setProfileSelection(profile.name, profile.path);
                 updateSettings({ selectedProfileName: profile.name });

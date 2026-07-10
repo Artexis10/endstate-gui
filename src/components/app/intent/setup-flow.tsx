@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info, Cloud } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { FilterChip } from '@/components/ui/filter-chip';
 import { NavButton } from '@/components/ui/nav-button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,7 +17,7 @@ import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 import { DropZone } from './drop-zone';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import type { DiscoveredProfile } from '@/file-discovery';
-import type { EndstateEnvelope, EndstateRevertData, RestoreIntent, RestoreModuleRef, BackupListItem } from '@/types';
+import type { EndstateApplyData, EndstateEnvelope, EndstateRevertData, RestoreIntent, RestoreModuleRef, BackupListItem } from '@/types';
 import type { EngineExecResult } from '@/lib/engine-exec';
 import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
 import { ConfigModuleSelector } from '@/components/app/overview/components/config-module-selector';
@@ -46,9 +47,46 @@ interface PreviewResult {
   installed: number;
   alreadyPresent: number;
   appEvents: AppEvent[];
+  /**
+   * Envelope actions from the dry-run preview. Each action carries the
+   * manifest app `id` (the value `apply --only` matches on) alongside the
+   * winget `ref` the streamed item events are keyed by. Optional so older
+   * callers/tests without envelope data keep working — the per-app picker
+   * simply stays dark without it.
+   */
+  actions?: EndstateApplyData['actions'];
   restoreModulesAvailable?: RestoreModuleRef[];
   /** Maps winget ID → config module name for apps with settings */
   configModuleMap?: Record<string, string>;
+}
+
+/**
+ * Derive the picker's selectable set from preview envelope actions: apps with
+ * a manifest `id` AND a winget `ref` (installable rows). Ref-less actions are
+ * manual/config-only apps — they are governed by the restore-intent controls,
+ * not the picker, and are always kept in a subset run (see buildOnlyAppIds).
+ */
+function selectablePickerIds(actions: EndstateApplyData['actions']): string[] {
+  return (actions ?? []).filter((a) => a.id && a.ref).map((a) => a.id!);
+}
+
+/**
+ * Build the `--only` id list for a subset apply, in envelope action order:
+ * the SELECTED winget app ids plus ALL manual/config-only app ids. Manual ids
+ * are always included so the "Settings only" section and restore-intent
+ * composition behave exactly as an unfiltered run.
+ */
+function buildOnlyAppIds(actions: EndstateApplyData['actions'], selected: Set<string>): string[] {
+  const out: string[] = [];
+  for (const a of actions ?? []) {
+    if (!a.id) continue;
+    if (a.ref) {
+      if (selected.has(a.id)) out.push(a.id);
+    } else {
+      out.push(a.id);
+    }
+  }
+  return out;
 }
 
 interface ApplyResult {
@@ -79,7 +117,19 @@ export interface SetupFlowProps {
   setupProgress: { message: string; detail?: string } | null;
   liveAppEvents: AppEvent[];
   onPreview: (profile: DiscoveredProfile) => Promise<PreviewResult>;
-  onApply: (profile: DiscoveredProfile, restoreOptions?: { restoreIntent: RestoreIntent; selectedModules?: string[] }) => Promise<ApplyResult>;
+  /**
+   * `onlyAppIds` is present ONLY when the per-app picker is active and the
+   * user selected a strict subset — the caller passes them as
+   * `apply --only <ids>`. All-selected (or picker dark) omits the field so
+   * the invocation is identical to today.
+   */
+  onApply: (profile: DiscoveredProfile, options?: { restoreIntent?: RestoreIntent; selectedModules?: string[]; onlyAppIds?: string[] }) => Promise<ApplyResult>;
+  /**
+   * Per-app picker capability gate: true only when the engine advertises
+   * `apply --only` (see engineSupportsApplyOnly). False → the preview renders
+   * exactly as before, with no checkboxes and no selection affordances.
+   */
+  applyOnlySupported?: boolean;
   // Undo settings flow
   onUndoDryRun?: () => Promise<EngineExecResult<EndstateEnvelope<EndstateRevertData>>>;
   onUndoExecute?: () => Promise<EngineExecResult<EndstateEnvelope<EndstateRevertData>>>;
@@ -134,6 +184,7 @@ export function SetupFlow({
   liveAppEvents,
   onPreview,
   onApply,
+  applyOnlySupported = false,
   onUndoDryRun,
   onUndoExecute,
   onUndoComplete,
@@ -158,6 +209,10 @@ export function SetupFlow({
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [restoreIntent, setRestoreIntent] = useState<RestoreIntent>('apps-only');
   const [selectedModules, setSelectedModules] = useState<string[]>([]);
+  // Per-app picker selection: manifest app ids currently INCLUDED in the run.
+  // Initialized to the full selectable set when a preview completes (default
+  // all checked). Presentation-only — planning stays in the engine.
+  const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
   // Undo flow state
   const [undoDryRunData, setUndoDryRunData] = useState<EndstateRevertData | null>(null);
   const [undoExecuteData, setUndoExecuteData] = useState<EndstateRevertData | null>(null);
@@ -174,6 +229,7 @@ export function SetupFlow({
       setActiveFilters(new Set());
       setRestoreIntent('apps-only');
       setSelectedModules([]);
+      setSelectedAppIds(new Set());
       setUndoDryRunData(null);
       setUndoExecuteData(null);
       setUndoError('');
@@ -238,6 +294,8 @@ export function SetupFlow({
     try {
       const result = await onPreview(profile);
       setPreviewResult(result);
+      // Picker default: everything checked (identical to an unfiltered apply).
+      setSelectedAppIds(new Set(selectablePickerIds(result.actions)));
       setPhase('preview-done');
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Preview failed');
@@ -248,12 +306,22 @@ export function SetupFlow({
   const handleApply = async () => {
     if (!selectedProfile) return;
     const settingsCount = previewResult?.restoreModulesAvailable?.length ?? Object.keys(previewResult?.configModuleMap ?? {}).length;
+    // Per-app subset: only when the engine advertises --only AND the user
+    // deselected at least one app. All-selected omits the field entirely so
+    // the apply invocation is byte-identical to a picker-less run.
+    const pickerIds = selectablePickerIds(previewResult?.actions);
+    const selectedCount = pickerIds.filter((id) => selectedAppIds.has(id)).length;
+    const subsetActive = applyOnlySupported && pickerIds.length > 0 && selectedCount < pickerIds.length;
+    const restoreOpts = settingsCount > 0 ? { restoreIntent, selectedModules } : undefined;
+    const options = subsetActive
+      ? { ...(restoreOpts ?? {}), onlyAppIds: buildOnlyAppIds(previewResult?.actions, selectedAppIds) }
+      : restoreOpts;
     setPhase('applying');
     setApplyResult(null);
     setErrorMessage('');
     setActiveFilters(new Set());
     try {
-      const result = await onApply(selectedProfile, settingsCount > 0 ? { restoreIntent, selectedModules } : undefined);
+      const result = await onApply(selectedProfile, options);
       setApplyResult(result);
       setPhase('apply-done');
     } catch (err) {
@@ -270,6 +338,7 @@ export function SetupFlow({
     setErrorMessage('');
     setRestoreIntent('apps-only');
     setSelectedModules([]);
+    setSelectedAppIds(new Set());
     setUndoDryRunData(null);
     setUndoExecuteData(null);
     setUndoError('');
@@ -667,6 +736,29 @@ export function SetupFlow({
           const adjustedInstalled = previewResult.installed - configOnlyToInstall;
           const adjustedPresent = previewResult.alreadyPresent - configOnlyPresent;
           const totalApps = adjustedInstalled + adjustedPresent;
+          // Per-app picker (capability-gated). Selection re-slices the
+          // engine-reported plan counts client-side — presentation only, no
+          // planning logic. Dark (pickerEnabled false) → display counts are
+          // exactly the adjusted envelope counts, byte-identical to before.
+          const pickerActions = previewResult.actions ?? [];
+          const pickerIds = selectablePickerIds(pickerActions);
+          const pickerEnabled = applyOnlySupported && pickerIds.length > 0;
+          const pickerSelectedCount = pickerIds.filter((id) => selectedAppIds.has(id)).length;
+          const manifestIdByEventKey = new Map<string, string>();
+          if (pickerEnabled) {
+            for (const a of pickerActions) {
+              if (!a.id) continue;
+              if (a.ref) manifestIdByEventKey.set(a.ref, a.id);
+              manifestIdByEventKey.set(a.id, a.id);
+            }
+          }
+          const selectedToInstall = pickerActions.filter((a) =>
+            a.id && a.ref && selectedAppIds.has(a.id) && (a.status === 'to_install' || a.status === 'installed')).length;
+          const selectedPresent = pickerActions.filter((a) =>
+            a.id && a.ref && selectedAppIds.has(a.id) && a.status === 'present').length;
+          const displayInstalled = pickerEnabled ? selectedToInstall : adjustedInstalled;
+          const displayPresent = pickerEnabled ? selectedPresent : adjustedPresent;
+          const displayTotal = pickerEnabled ? displayInstalled + displayPresent : totalApps;
           // Partition filtered events
           const allFilteredEvents = filterEvents(previewResult.appEvents, configMap);
           const wingetEvents = allFilteredEvents.filter(e => !isConfigOnlyApp(e));
@@ -688,9 +780,11 @@ export function SetupFlow({
                   <div>
                     <p className="text-sm font-medium">Preview complete</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {adjustedInstalled > 0
-                        ? `${adjustedInstalled} to install, ${adjustedPresent} already present`
-                        : `All ${totalApps} apps already present`}
+                      {displayInstalled > 0
+                        ? `${displayInstalled} to install, ${displayPresent} already present`
+                        : pickerEnabled && pickerSelectedCount === 0
+                        ? 'No apps selected'
+                        : `All ${displayTotal} apps already present`}
                       {activeSettingsCount > 0 && ` · ${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'} selected`}
                       {activeSettingsCount === 0 && settingsCount > 0 && ` · ${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'} available`}
                     </p>
@@ -701,34 +795,34 @@ export function SetupFlow({
                 {previewResult.appEvents.length > 0 && (
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
-                      {totalApps > 0 && (
+                      {displayTotal > 0 && (
                         <FilterChip
                           onClick={clearFilters}
                           pressed={activeFilters.size === 0}
                           dimmed={activeFilters.size > 0}
                           className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                         >
-                          {totalApps} {totalApps === 1 ? 'app' : 'apps'}
+                          {displayTotal} {displayTotal === 1 ? 'app' : 'apps'}
                         </FilterChip>
                       )}
-                      {adjustedInstalled > 0 && (
+                      {displayInstalled > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('to_install')}
                           pressed={activeFilters.has('to_install')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('to_install')}
                           className={`${getColorClasses('action').bg} ${getColorClasses('action').text}`}
                         >
-                          {adjustedInstalled} to install
+                          {displayInstalled} to install
                         </FilterChip>
                       )}
-                      {adjustedPresent > 0 && (
+                      {displayPresent > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('present')}
                           pressed={activeFilters.has('present')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('present')}
                           className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                         >
-                          {adjustedPresent} present
+                          {displayPresent} present
                         </FilterChip>
                       )}
                       {settingsCount > 0 && (
@@ -748,6 +842,35 @@ export function SetupFlow({
                         )
                       )}
                     </div>
+                    {pickerEnabled && (
+                      <div className="flex items-center justify-between mb-2" data-testid="app-picker-header">
+                        <p className="text-xs text-muted-foreground" data-testid="app-picker-count">
+                          {pickerSelectedCount} of {pickerIds.length} selected
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto py-0.5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                            onClick={() => setSelectedAppIds(new Set(pickerIds))}
+                            disabled={pickerSelectedCount === pickerIds.length}
+                            data-testid="app-picker-select-all"
+                          >
+                            Select all
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto py-0.5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                            onClick={() => setSelectedAppIds(new Set())}
+                            disabled={pickerSelectedCount === 0}
+                            data-testid="app-picker-select-none"
+                          >
+                            Select none
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     <div className="space-y-1 max-h-64 overflow-y-auto">
                       {wingetEvents.map((event, i) => {
                         const statusKey: StatusKey = event.statusKey || (
@@ -758,15 +881,38 @@ export function SetupFlow({
                         const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'preview', reason: event.reason });
                         const colors = getColorClasses(uiStatus.color);
                         const hasSettings = event.app in configMap;
+                        // Manifest app id for --only (streamed events are keyed
+                        // by winget ref; the envelope actions map ref → id).
+                        const appId = pickerEnabled ? manifestIdByEventKey.get(event.app) : undefined;
+                        const isSelected = appId ? selectedAppIds.has(appId) : true;
                         return (
                           <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
+                            {pickerEnabled && (
+                              <span className="w-4 flex-shrink-0 flex justify-center">
+                                {appId && (
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={() => {
+                                      setSelectedAppIds(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(appId)) next.delete(appId);
+                                        else next.add(appId);
+                                        return next;
+                                      });
+                                    }}
+                                    aria-label={`Include ${event.name || formatAppIdentity(event.app)}`}
+                                    data-testid={`app-picker-checkbox-${appId}`}
+                                  />
+                                )}
+                              </span>
+                            )}
                             <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
                             <span className="w-4 flex-shrink-0 flex justify-center">
                               {hasSettings && (
                                 <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
                               )}
                             </span>
-                            <span className="truncate">
+                            <span className={`truncate ${pickerEnabled && !isSelected ? 'text-muted-foreground' : ''}`}>
                               {event.name || formatAppIdentity(event.app)}
                             </span>
                           </div>
@@ -835,6 +981,7 @@ export function SetupFlow({
                     <Button
                       onClick={handleApply}
                       data-testid="setup-flow-apply"
+                      disabled={pickerEnabled && pickerSelectedCount === 0}
                       className="bg-green-600 hover:bg-green-700 text-white ring-green-600/30 hover:ring-green-600/50"
                     >
                       <Play className="h-4 w-4 mr-2" />

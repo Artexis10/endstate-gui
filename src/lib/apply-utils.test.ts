@@ -16,6 +16,7 @@ import {
   RESTORE_STATUS_MAP,
   getRestoreUiStatus,
   deriveCountersFromEvents,
+  buildOnlyFlagValue,
   UI_STATUS_MAP,
   type AppEvent,
   type RestoreStatusKey,
@@ -978,6 +979,30 @@ describe('apply-utils', () => {
         expect(counts.alreadyPresent).toBe(2); // PresentApp + PresentManual
         expect(counts.needsAttention).toBe(1); // ManualApp
       });
+    });
+  });
+
+  describe('buildOnlyFlagValue', () => {
+    it('joins manifest app ids with commas (the exact --only value)', () => {
+      expect(buildOnlyFlagValue(['git-git', '7zip-7zip'])).toBe('git-git,7zip-7zip');
+    });
+
+    it('preserves a single id without separators', () => {
+      expect(buildOnlyFlagValue(['git-git'])).toBe('git-git');
+    });
+
+    it('returns null for undefined/null/empty input so the flag is omitted', () => {
+      expect(buildOnlyFlagValue(undefined)).toBe(null);
+      expect(buildOnlyFlagValue(null)).toBe(null);
+      expect(buildOnlyFlagValue([])).toBe(null);
+    });
+
+    it('never emits a blank --only value (engine rejects it)', () => {
+      expect(buildOnlyFlagValue(['', '  '])).toBe(null);
+    });
+
+    it('drops blank entries and duplicates while preserving order', () => {
+      expect(buildOnlyFlagValue([' git-git ', '', 'firefox', 'git-git'])).toBe('git-git,firefox');
     });
   });
 });
