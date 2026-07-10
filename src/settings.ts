@@ -13,6 +13,18 @@ export interface AppSettings {
   autoBackupPromptSeen: boolean;
   /** Persistent map: profile key → its hosted-backup id, so auto-push updates the same backup. */
   profileBackupIds: Record<string, string>;
+  /** Opt-in for the scheduled daily drift check ("Continuous protection"). */
+  scheduleEnabled: boolean;
+  /** Time-of-day (HH:MM, 24h) the scheduled drift check runs. */
+  scheduleTime: string;
+  /** Opt-in for auto-backup when the scheduled check finds changes (`--auto-push`). */
+  scheduleAutoPush: boolean;
+  /**
+   * Absolute path of the last capture the user saved to file — the baseline
+   * manifest the scheduled drift check verifies against. Null until a capture
+   * has been saved ("Save this computer first").
+   */
+  scheduleManifestPath: string | null;
 }
 
 /** Legacy settings shape for one-time migration only */
@@ -32,6 +44,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
   profileBackupIds: {},
+  scheduleEnabled: false,
+  scheduleTime: '09:00',
+  scheduleAutoPush: false,
+  scheduleManifestPath: null,
 };
 
 export function loadSettings(): AppSettings {
@@ -110,6 +126,10 @@ export async function loadSettingsWithProfileMigration(
         autoBackupEnabled: rawSettings.autoBackupEnabled,
         autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
         profileBackupIds: rawSettings.profileBackupIds,
+        scheduleEnabled: rawSettings.scheduleEnabled,
+        scheduleTime: rawSettings.scheduleTime,
+        scheduleAutoPush: rawSettings.scheduleAutoPush,
+        scheduleManifestPath: rawSettings.scheduleManifestPath,
       };
       saveSettings(updatedSettings);
       console.debug('[settings] Profile selection migrated to name:', migratedName);
@@ -125,6 +145,10 @@ export async function loadSettingsWithProfileMigration(
         autoBackupEnabled: rawSettings.autoBackupEnabled,
         autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
         profileBackupIds: rawSettings.profileBackupIds,
+        scheduleEnabled: rawSettings.scheduleEnabled,
+        scheduleTime: rawSettings.scheduleTime,
+        scheduleAutoPush: rawSettings.scheduleAutoPush,
+        scheduleManifestPath: rawSettings.scheduleManifestPath,
       };
       saveSettings(updatedSettings);
       return updatedSettings;
@@ -143,6 +167,10 @@ export async function loadSettingsWithProfileMigration(
       autoBackupEnabled: rawSettings.autoBackupEnabled,
       autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
       profileBackupIds: rawSettings.profileBackupIds,
+      scheduleEnabled: rawSettings.scheduleEnabled,
+      scheduleTime: rawSettings.scheduleTime,
+      scheduleAutoPush: rawSettings.scheduleAutoPush,
+      scheduleManifestPath: rawSettings.scheduleManifestPath,
     };
     saveSettings(updatedSettings);
     return updatedSettings;

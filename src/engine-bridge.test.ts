@@ -39,6 +39,10 @@ const baseSettings: AppSettings = {
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
   profileBackupIds: {},
+  scheduleEnabled: false,
+  scheduleTime: '09:00',
+  scheduleAutoPush: false,
+  scheduleManifestPath: null,
 };
 
 describe('engine-bridge type guards', () => {

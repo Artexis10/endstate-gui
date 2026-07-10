@@ -47,6 +47,10 @@ describe('Persistence Boundaries', () => {
         autoBackupEnabled: false,
         autoBackupPromptSeen: false,
         profileBackupIds: {},
+        scheduleEnabled: false,
+        scheduleTime: '09:00',
+        scheduleAutoPush: false,
+        scheduleManifestPath: null,
       };
 
       seedLocalStorage({
@@ -67,6 +71,10 @@ describe('Persistence Boundaries', () => {
         autoBackupEnabled: false,
         autoBackupPromptSeen: false,
         profileBackupIds: {},
+        scheduleEnabled: false,
+        scheduleTime: '09:00',
+        scheduleAutoPush: false,
+        scheduleManifestPath: null,
       };
 
       saveSettings(settings);
@@ -97,6 +105,10 @@ describe('Persistence Boundaries', () => {
         autoBackupEnabled: false,
         autoBackupPromptSeen: false,
         profileBackupIds: {},
+        scheduleEnabled: false,
+        scheduleTime: '09:00',
+        scheduleAutoPush: false,
+        scheduleManifestPath: null,
       };
 
       saveSettings(initial);
@@ -442,6 +454,10 @@ describe('Persistence Boundaries', () => {
         autoBackupEnabled: false,
         autoBackupPromptSeen: false,
         profileBackupIds: {},
+        scheduleEnabled: false,
+        scheduleTime: '09:00',
+        scheduleAutoPush: false,
+        scheduleManifestPath: null,
       };
       saveSettings(settings);
 

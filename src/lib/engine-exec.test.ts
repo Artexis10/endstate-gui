@@ -22,6 +22,10 @@ describe('buildEngineCommand', () => {
     autoBackupEnabled: false,
     autoBackupPromptSeen: false,
     profileBackupIds: {},
+    scheduleEnabled: false,
+    scheduleTime: '09:00',
+    scheduleAutoPush: false,
+    scheduleManifestPath: null,
   };
 
   beforeEach(() => {
@@ -84,6 +88,10 @@ describe('runEndstateOnce', () => {
     autoBackupEnabled: false,
     autoBackupPromptSeen: false,
     profileBackupIds: {},
+    scheduleEnabled: false,
+    scheduleTime: '09:00',
+    scheduleAutoPush: false,
+    scheduleManifestPath: null,
   };
 
   const validEnvelope = {

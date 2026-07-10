@@ -12,6 +12,7 @@ import { motion } from 'framer-motion';
 import markUrl from '../../../../assets/brand/mark-sidebar.svg?url';
 import { HardDrive, Download } from 'lucide-react';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
+import { pluralize } from '@/lib/pluralize';
 
 interface IntentLandingProps {
   onSelectSave: () => void;
@@ -19,6 +20,16 @@ interface IntentLandingProps {
   engineConnected?: boolean;
   saveHasSession?: boolean;
   setupHasSession?: boolean;
+  /**
+   * Drifted-app count from the last scheduled drift check (engine `schedule
+   * status`). When > 0 the amber drift chip takes precedence over the
+   * "Scan complete" session chip. Absent/0 → no drift chip.
+   */
+  driftCount?: number;
+  /** ISO timestamp of the last scheduled drift check (tooltip only). */
+  driftCheckedAt?: string;
+  /** True when the last scheduled drift check failed to complete. */
+  driftCheckFailing?: boolean;
 }
 
 export function IntentLanding({
@@ -27,6 +38,9 @@ export function IntentLanding({
   engineConnected = true,
   saveHasSession,
   setupHasSession,
+  driftCount,
+  driftCheckedAt,
+  driftCheckFailing,
 }: IntentLandingProps) {
   const reduced = prefersReducedMotion();
   const disabled = !engineConnected;
@@ -82,7 +96,41 @@ export function IntentLanding({
               Scan your apps and settings, then save everything as a portable file
             </p>
           </div>
-          {saveHasSession && (
+          {/* Chip slot — one chip at a time. Drift (engine-reported, amber)
+              takes precedence over a failing drift check (muted), which takes
+              precedence over the transient "Scan complete" session chip.
+              Clean / never-run scheduled states render nothing. */}
+          {driftCount != null && driftCount > 0 ? (
+            <motion.div
+              className="absolute top-3 right-3"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, duration: 0.2 }}
+              data-testid="drift-chip"
+            >
+              <span
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-500"
+                title={driftCheckedAt ? `Last checked ${driftCheckedAt}` : undefined}
+              >
+                {driftCount} {pluralize(driftCount, 'app')} drifted since your snapshot
+              </span>
+            </motion.div>
+          ) : driftCheckFailing ? (
+            <motion.div
+              className="absolute top-3 right-3"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, duration: 0.2 }}
+              data-testid="drift-check-failing-chip"
+            >
+              <span
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground"
+                title={driftCheckedAt ? `Last checked ${driftCheckedAt}` : undefined}
+              >
+                Drift check failing
+              </span>
+            </motion.div>
+          ) : saveHasSession ? (
             <motion.div
               className="absolute top-3 right-3"
               initial={{ opacity: 0, scale: 0.8 }}
@@ -93,7 +141,7 @@ export function IntentLanding({
                 Scan complete
               </span>
             </motion.div>
-          )}
+          ) : null}
         </motion.button>
 
         {/* Set up this computer */}

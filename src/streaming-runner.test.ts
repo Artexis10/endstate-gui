@@ -19,6 +19,10 @@ describe('streaming-runner', () => {
     autoBackupEnabled: false,
     autoBackupPromptSeen: false,
     profileBackupIds: {},
+    scheduleEnabled: false,
+    scheduleTime: '09:00',
+    scheduleAutoPush: false,
+    scheduleManifestPath: null,
   };
 
   beforeEach(() => {
