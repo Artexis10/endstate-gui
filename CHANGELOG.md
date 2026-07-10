@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.19.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.18.0...gui-v2.19.0) (2026-07-10)
+
+
+### Features
+
+* **backup:** friendly RATE_LIMITED auth copy + host under displayName ([#124](https://github.com/Artexis10/endstate-gui/issues/124)) ([f58d801](https://github.com/Artexis10/endstate-gui/commit/f58d80171a8788292c16c14181bd51eb7f5230c4))
+* bump engine to v2.20.0 ([#126](https://github.com/Artexis10/endstate-gui/issues/126)) ([5c4e17c](https://github.com/Artexis10/endstate-gui/commit/5c4e17cb767c80a470e45c592039e265f6334520))
+* bump engine to v2.21.0 ([#127](https://github.com/Artexis10/endstate-gui/issues/127)) ([c07ec21](https://github.com/Artexis10/endstate-gui/commit/c07ec21a4259ae5f28c4bc7f0fa26467cca8dcf0))
+* bump engine to v2.22.0 ([#130](https://github.com/Artexis10/endstate-gui/issues/130)) ([80be746](https://github.com/Artexis10/endstate-gui/commit/80be7469f7d5b57ef06fbdd6a067a391b959e6df))
+* Continuous Protection — drift status surface, schedule settings card, drift chip ([#128](https://github.com/Artexis10/endstate-gui/issues/128)) ([eacdc8b](https://github.com/Artexis10/endstate-gui/commit/eacdc8b46f90cb4fb906bb74c1718c2b4014a408))
+* per-app picker in setup preview via apply --only ([#129](https://github.com/Artexis10/endstate-gui/issues/129)) ([8a1d087](https://github.com/Artexis10/endstate-gui/commit/8a1d087231c98a50cc7bb5db289c935a7e77cd54))
+
 ## [2.18.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.17.2...gui-v2.18.0) (2026-06-09)
 
 
