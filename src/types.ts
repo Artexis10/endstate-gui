@@ -52,6 +52,17 @@ export interface EndstateCapabilitiesData {
     jsonOutput?: boolean;
     manualApps?: boolean;
     hostedBackup?: EndstateHostedBackupCapability;
+    /**
+     * Scheduled drift-check capability ("Continuous protection"). Additive in
+     * schema 1.x; absent on engines that predate the `schedule` command family
+     * (≤ 2.21) → the entire feature stays dark. `supported` is true only on
+     * Windows where schtasks.exe is available; `autoPush` advertises that
+     * `schedule run` can capture+push via the persisted keychain session.
+     */
+    schedule?: {
+      supported: boolean;
+      autoPush: boolean;
+    };
   };
   platform?: {
     os: string;
@@ -60,6 +71,87 @@ export interface EndstateCapabilitiesData {
   gitCommit?: string | null;
   gitDirty?: boolean;
   bootstrapTimestamp?: string | null;
+}
+
+// -----------------------------------------------------------------------------
+// Scheduled drift check ("Continuous protection")
+//
+// Response shapes for the `endstate schedule *` subcommand family, per the
+// engine's cli-json-contract.md "Command: schedule". The GUI renders these
+// verbatim — drift truth lives entirely in the engine (CLI is source of truth).
+// -----------------------------------------------------------------------------
+
+/** Aggregated verify counts from a scheduled drift-check run. */
+export interface ScheduleVerifySummary {
+  total: number;
+  pass: number;
+  fail: number;
+}
+
+/** A single drifted item recorded by a scheduled drift-check run. */
+export interface ScheduleDriftItem {
+  id: string;
+  name?: string;
+  status: string;
+  reason?: string;
+}
+
+/** Verify outcome (summary + drifted items) from a scheduled run. */
+export interface ScheduleLastRunVerify {
+  summary: ScheduleVerifySummary;
+  drifted?: ScheduleDriftItem[];
+}
+
+/** Outcome of the optional auto-backup step of a scheduled run. */
+export interface ScheduleLastRunBackup {
+  outcome: 'pushed' | 'skipped' | 'auth_required' | 'error';
+  backupId?: string;
+  versionId?: string;
+}
+
+/** Hard failure that prevented a scheduled run from completing. */
+export interface ScheduleLastRunError {
+  code: string;
+  message: string;
+}
+
+/** Persisted outcome of the most recent scheduled drift-check run. */
+export interface ScheduleLastRun {
+  schemaVersion: string;
+  runId: string;
+  timestampUtc: string;
+  verify?: ScheduleLastRunVerify | null;
+  autoBackup?: ScheduleLastRunBackup | null;
+  error?: ScheduleLastRunError | null;
+}
+
+/** Response shape for `endstate schedule status --json`. */
+export interface ScheduleStatusData {
+  enabled: boolean;
+  manifest?: string;
+  interval?: string;
+  time?: string;
+  autoPush: boolean;
+  taskName?: string;
+  /** Null/absent when the schedule has never run. */
+  lastRun?: ScheduleLastRun | null;
+}
+
+/** Response shape for `endstate schedule enable --json`. */
+export interface ScheduleEnableData {
+  enabled: boolean;
+  manifest: string;
+  interval: string;
+  time: string;
+  autoPush: boolean;
+  taskName: string;
+  root: string;
+}
+
+/** Response shape for `endstate schedule disable --json`. */
+export interface ScheduleDisableData {
+  enabled: boolean;
+  taskName: string;
 }
 
 /**

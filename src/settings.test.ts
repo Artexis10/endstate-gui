@@ -11,12 +11,16 @@ import { setItem } from './lib/storage';
 const NAMESPACED_KEY = 'web:endstate-gui-settings';
 const LEGACY_KEY = 'endstate-gui-settings';
 
-// New auto-backup fields, defaulted off. Reused so the existing round-trip
-// assertions keep matching what loadSettings() now returns.
+// New auto-backup + continuous-protection fields, defaulted off. Reused so the
+// existing round-trip assertions keep matching what loadSettings() now returns.
 const AUTO_BACKUP_DEFAULTS = {
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
   profileBackupIds: {} as Record<string, string>,
+  scheduleEnabled: false,
+  scheduleTime: '09:00',
+  scheduleAutoPush: false,
+  scheduleManifestPath: null as string | null,
 };
 
 describe('settings', () => {
@@ -166,6 +170,10 @@ describe('settings', () => {
       autoBackupEnabled: true,
       autoBackupPromptSeen: true,
       profileBackupIds: { 'my-profile': 'b-123' },
+      scheduleEnabled: false,
+      scheduleTime: '09:00',
+      scheduleAutoPush: false,
+      scheduleManifestPath: null,
     };
 
     it('round-trips the new auto-backup fields through save/load', () => {
@@ -222,6 +230,64 @@ describe('settings', () => {
       expect(migrated.selectedProfileName).toBe('foo');
       expect(migrated.autoBackupEnabled).toBe(true);
       expect(migrated.profileBackupIds).toEqual({ foo: 'b-9' });
+    });
+  });
+
+  describe('continuous-protection fields', () => {
+    it('defaults schedule fields off with 09:00 and no manifest', () => {
+      const loaded = loadSettings();
+      expect(loaded.scheduleEnabled).toBe(false);
+      expect(loaded.scheduleTime).toBe('09:00');
+      expect(loaded.scheduleAutoPush).toBe(false);
+      expect(loaded.scheduleManifestPath).toBeNull();
+    });
+
+    it('round-trips the schedule fields through save/load', () => {
+      saveSettings({
+        ...loadSettings(),
+        scheduleEnabled: true,
+        scheduleTime: '21:30',
+        scheduleAutoPush: true,
+        scheduleManifestPath: 'C:\\snapshots\\this-computer.zip',
+      });
+      const loaded = loadSettings();
+      expect(loaded.scheduleEnabled).toBe(true);
+      expect(loaded.scheduleTime).toBe('21:30');
+      expect(loaded.scheduleAutoPush).toBe(true);
+      expect(loaded.scheduleManifestPath).toBe('C:\\snapshots\\this-computer.zip');
+    });
+
+    it('defaults schedule fields for settings stored before they existed', () => {
+      // A settings blob persisted by an older build — no schedule keys.
+      setItem(
+        'endstate-gui-settings',
+        JSON.stringify({
+          engineMode: 'bundled',
+          customProfilesDirectory: '',
+          selectedProfileName: 'legacy',
+          dryRunEnabled: true,
+          showDetails: false,
+        }),
+      );
+      const loaded = loadSettings();
+      expect(loaded.scheduleEnabled).toBe(false);
+      expect(loaded.scheduleTime).toBe('09:00');
+      expect(loaded.scheduleAutoPush).toBe(false);
+      expect(loaded.scheduleManifestPath).toBeNull();
+    });
+
+    it('preserves the schedule fields through loadSettingsWithProfileMigration', async () => {
+      saveSettings({
+        ...loadSettings(),
+        selectedProfileName: 'my-profile',
+        scheduleEnabled: true,
+        scheduleTime: '07:15',
+        scheduleManifestPath: 'C:\\snapshots\\base.zip',
+      });
+      const migrated = await loadSettingsWithProfileMigration('C:\\profiles');
+      expect(migrated.scheduleEnabled).toBe(true);
+      expect(migrated.scheduleTime).toBe('07:15');
+      expect(migrated.scheduleManifestPath).toBe('C:\\snapshots\\base.zip');
     });
   });
 });

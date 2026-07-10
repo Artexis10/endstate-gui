@@ -58,8 +58,18 @@ import { RestoreWizard } from './components/app/backup/restore-wizard';
 import { ReauthDialog } from './components/app/backup/reauth-dialog';
 import { AutoBackupConsent } from './components/app/backup/auto-backup-consent';
 import { AutoBackupSetting } from './components/app/settings/auto-backup-setting';
+import { ContinuousProtectionSetting } from './components/app/settings/continuous-protection-setting';
 import { runAutoBackup } from './lib/auto-backup';
 import { engineSupportsIfChanged, engineSupportsRename, autoBackupAvailable } from './lib/backup-capabilities';
+import {
+  scheduleEnable,
+  scheduleDisable,
+  scheduleStatus,
+  engineSupportsSchedule,
+  engineSupportsScheduleAutoPush,
+  driftStateFromStatus,
+  ScheduleCommandError,
+} from './lib/schedule-bridge';
 import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
@@ -69,7 +79,7 @@ import { PushProgressDialog } from './components/app/backup/push-progress-dialog
 import { isBackupChunkEvent } from './lib/streaming-events';
 import { hasSeenFirstPushFor, markFirstPushFor } from './lib/first-push-flag';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
-import type { BackupListItem, BackupStatusData } from './types';
+import type { BackupListItem, BackupStatusData, ScheduleStatusData } from './types';
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 'backup';
@@ -225,6 +235,15 @@ function AppContent() {
   const [autoBackupConsentOpen, setAutoBackupConsentOpen] = useState(false);
   // One auth-failure toast per session (no repeats); a ref so it never re-renders.
   const autoBackupAuthToastShownRef = useRef(false);
+
+  // Continuous protection (scheduled drift check). Capability-gated — the
+  // entire surface stays dark unless the engine advertises
+  // `features.schedule.supported` (bundled ≤ 2.21 does not). The GUI renders
+  // engine-owned schedule status only; drift truth stays in the CLI.
+  const [scheduleSupported, setScheduleSupported] = useState(false);
+  const [scheduleAutoPushCapable, setScheduleAutoPushCapable] = useState(false);
+  const [scheduleStatusData, setScheduleStatusData] = useState<ScheduleStatusData | null>(null);
+  const [scheduleBusy, setScheduleBusy] = useState(false);
 
   // Post-save "Push to hosted backup" — fires the existing backupPush wrapper
   // from outside the Backup pane and renders the same PushProgressDialog as
@@ -1147,6 +1166,103 @@ function AppContent() {
     setAutoBackupConsentOpen(false);
   };
 
+  // ---------------------------------------------------------------------------
+  // Continuous protection (scheduled drift check) handlers.
+  //
+  // The Settings toggle IS the consent — no extra dialog. `schedule enable` is
+  // idempotent on the engine side (schtasks /F), so every preference change
+  // simply re-asserts the task with the current config; the engine remains the
+  // single source of truth (its `schedule status` drives the drift chip).
+  // ---------------------------------------------------------------------------
+
+  const refreshScheduleStatus = async () => {
+    try {
+      setScheduleStatusData(await scheduleStatus(settings));
+    } catch (err) {
+      console.warn('schedule status refresh failed:', err);
+    }
+  };
+
+  /** Re-assert `schedule enable` from the persisted preferences (idempotent). */
+  const assertScheduleEnabled = async (opts: {
+    manifest?: string;
+    time?: string;
+    autoPush?: boolean;
+  } = {}) => {
+    const manifest = opts.manifest ?? settings.scheduleManifestPath;
+    if (!manifest) {
+      throw new ScheduleCommandError({
+        code: 'MANIFEST_NOT_FOUND',
+        message: 'No saved capture to verify against. Save this computer first.',
+      });
+    }
+    await scheduleEnable(settings, {
+      manifest,
+      time: opts.time ?? settings.scheduleTime,
+      autoPush: (opts.autoPush ?? settings.scheduleAutoPush) && scheduleAutoPushCapable,
+    });
+  };
+
+  const handleScheduleToggle = async (enabled: boolean) => {
+    setScheduleBusy(true);
+    try {
+      if (enabled) {
+        await assertScheduleEnabled();
+        updateSettings({ scheduleEnabled: true });
+      } else {
+        try {
+          await scheduleDisable(settings);
+        } catch (err) {
+          // Never trap the user in the "on" state: persist the preference off
+          // and surface the engine failure. Status refresh below still shows
+          // engine truth if the task survived.
+          const msg = err instanceof Error ? err.message : String(err);
+          showToast(`Could not remove the scheduled check — ${msg}`, 'error');
+        }
+        updateSettings({ scheduleEnabled: false });
+      }
+      await refreshScheduleStatus();
+    } catch (err) {
+      const msg =
+        err instanceof ScheduleCommandError
+          ? err.remediation ?? err.message
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      showToast(`Could not turn on continuous protection — ${msg}`, 'error');
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
+  const handleScheduleTimeChange = async (time: string) => {
+    updateSettings({ scheduleTime: time });
+    if (!settings.scheduleEnabled) return;
+    setScheduleBusy(true);
+    try {
+      await assertScheduleEnabled({ time });
+      await refreshScheduleStatus();
+    } catch (err) {
+      console.warn('schedule time re-assert failed:', err);
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
+  const handleScheduleAutoPushToggle = async (autoPush: boolean) => {
+    updateSettings({ scheduleAutoPush: autoPush });
+    if (!settings.scheduleEnabled) return;
+    setScheduleBusy(true);
+    try {
+      await assertScheduleEnabled({ autoPush });
+      await refreshScheduleStatus();
+    } catch (err) {
+      console.warn('schedule auto-push re-assert failed:', err);
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
   // Run a silent background auto-push for a freshly-captured profile and map the
   // outcome to the inline chip / paused indicator / one-time toast / settings.
   // No-op surfaces nothing; transient errors are swallowed and retried next capture.
@@ -1338,6 +1454,45 @@ function AppContent() {
       } else {
         setBackupStatusData(null);
         setBackupListData(null);
+      }
+
+      // Continuous protection handshake: dark unless the engine advertises
+      // features.schedule.supported. When supported, fetch engine-owned
+      // schedule status (drives the drift chip), and if the user's persisted
+      // preference says enabled, re-assert the task — enable is idempotent
+      // (schtasks /F), so this self-heals a deleted task or a moved engine exe.
+      const schedSupported = engineSupportsSchedule(capResult.envelope.data);
+      const schedAutoPushCapable = engineSupportsScheduleAutoPush(capResult.envelope.data);
+      setScheduleSupported(schedSupported);
+      setScheduleAutoPushCapable(schedAutoPushCapable);
+      if (schedSupported) {
+        try {
+          const schedStatus = await scheduleStatus(settings);
+          setScheduleStatusData(schedStatus);
+          // Manifest preference: the engine's persisted config first (it is
+          // what the task actually verifies against), then the last saved
+          // capture. No manifest → nothing to self-heal.
+          const manifest = schedStatus.manifest || settings.scheduleManifestPath || undefined;
+          if (settings.scheduleEnabled && manifest) {
+            void scheduleEnable(settings, {
+              manifest,
+              time: settings.scheduleTime,
+              autoPush: settings.scheduleAutoPush && schedAutoPushCapable,
+            })
+              .then(() => scheduleStatus(settings))
+              .then(setScheduleStatusData)
+              .catch((err) => {
+                // Self-heal is best-effort; the Settings toggle still works.
+                console.warn('schedule self-heal failed:', err);
+              });
+          }
+        } catch (err) {
+          // Status failures must not block boot; the feature simply shows no
+          // drift chip until the next successful status read.
+          console.warn('schedule status failed:', err);
+        }
+      } else {
+        setScheduleStatusData(null);
       }
     } catch (err) {
       // Catch any unexpected errors (timeouts, network issues, etc.)
@@ -2463,6 +2618,22 @@ function AppContent() {
                   } else {
                     await invoke('write_text_file', { path: savePath, content: captureResult.draftText });
                   }
+                  // Record the saved capture as the continuous-protection
+                  // baseline. The transient capture cache is wiped at app
+                  // start, so only this durable user-saved copy is a valid
+                  // manifest for the scheduled task. If protection is already
+                  // on, re-point the task at the fresh snapshot (idempotent).
+                  updateSettings({ scheduleManifestPath: savePath });
+                  if (scheduleSupported && settings.scheduleEnabled) {
+                    void scheduleEnable(settings, {
+                      manifest: savePath,
+                      time: settings.scheduleTime,
+                      autoPush: settings.scheduleAutoPush && scheduleAutoPushCapable,
+                    })
+                      .then(() => scheduleStatus(settings))
+                      .then(setScheduleStatusData)
+                      .catch((err) => console.warn('schedule re-point failed:', err));
+                  }
                 } else {
                   // Web / browser-bridge: browser download
                   let blob: Blob;
@@ -2658,6 +2829,10 @@ function AppContent() {
     // Show error banner at top of any page when in error state
     const errorBanner = renderErrorBanner();
 
+    // Drift chip state from the engine's `schedule status` (pure mapping —
+    // no drift logic client-side). never-run/clean render nothing.
+    const scheduleDrift = driftStateFromStatus(scheduleStatusData);
+
     switch (currentPage) {
       case 'landing':
         return (
@@ -2669,6 +2844,9 @@ function AppContent() {
               engineConnected={state.status !== 'error'}
               saveHasSession={flowHasWork.save}
               setupHasSession={flowHasWork.setup}
+              driftCount={scheduleDrift.kind === 'drift' ? scheduleDrift.count : undefined}
+              driftCheckedAt={'checkedAt' in scheduleDrift ? scheduleDrift.checkedAt : undefined}
+              driftCheckFailing={scheduleDrift.kind === 'failing'}
             />
           </div>
         );
@@ -3554,6 +3732,41 @@ function AppContent() {
                   <AutoBackupSetting
                     enabled={settings.autoBackupEnabled}
                     onChange={(v) => updateSettings({ autoBackupEnabled: v })}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Continuous protection (scheduled drift check) — dark unless the
+                engine advertises features.schedule.supported. The auto-push
+                sub-toggle additionally requires the auto-backup runtime
+                conditions AND features.schedule.autoPush. */}
+            {scheduleSupported && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Continuous protection</CardTitle>
+                  <CardDescription>
+                    Check this computer against your last saved snapshot every day.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ContinuousProtectionSetting
+                    enabled={settings.scheduleEnabled}
+                    time={settings.scheduleTime}
+                    autoPush={settings.scheduleAutoPush}
+                    autoPushAvailable={
+                      scheduleAutoPushCapable &&
+                      autoBackupAvailable({
+                        hostedBackupSupported,
+                        ifChangedSupported,
+                        status: backupStatusData,
+                      })
+                    }
+                    manifestAvailable={!!settings.scheduleManifestPath}
+                    busy={scheduleBusy}
+                    onToggle={(v) => void handleScheduleToggle(v)}
+                    onTimeChange={(t) => void handleScheduleTimeChange(t)}
+                    onAutoPushToggle={(v) => void handleScheduleAutoPushToggle(v)}
                   />
                 </CardContent>
               </Card>
