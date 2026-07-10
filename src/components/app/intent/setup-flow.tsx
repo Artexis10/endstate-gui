@@ -71,10 +71,26 @@ function selectablePickerIds(actions: EndstateApplyData['actions']): string[] {
 }
 
 /**
+ * Subset mode is only safe when every installable action carries a manifest
+ * id. An action with a `ref` but no `id` cannot be expressed in `--only`, so
+ * a subset run would silently skip that app — fall back to a full apply
+ * instead of dropping it. (The engine always sets ids today; this guards the
+ * boundary against future envelope shapes.)
+ */
+function hasUnmappableInstallable(actions: EndstateApplyData['actions']): boolean {
+  return (actions ?? []).some((a) => a.ref && !a.id);
+}
+
+/**
  * Build the `--only` id list for a subset apply, in envelope action order:
  * the SELECTED winget app ids plus ALL manual/config-only app ids. Manual ids
  * are always included so the "Settings only" section and restore-intent
  * composition behave exactly as an unfiltered run.
+ *
+ * Note: deselecting a winget app also removes its matched config modules from
+ * the engine's restore scope (subset apply = subset restore), even if that
+ * module is still checked in the module selector — the engine matches modules
+ * against the filtered app set.
  */
 function buildOnlyAppIds(actions: EndstateApplyData['actions'], selected: Set<string>): string[] {
   const out: string[] = [];
@@ -311,7 +327,11 @@ export function SetupFlow({
     // the apply invocation is byte-identical to a picker-less run.
     const pickerIds = selectablePickerIds(previewResult?.actions);
     const selectedCount = pickerIds.filter((id) => selectedAppIds.has(id)).length;
-    const subsetActive = applyOnlySupported && pickerIds.length > 0 && selectedCount < pickerIds.length;
+    const unmappable = hasUnmappableInstallable(previewResult?.actions);
+    if (unmappable && applyOnlySupported) {
+      console.warn('[setup-flow] installable action without a manifest id in preview; per-app subset disabled for this apply');
+    }
+    const subsetActive = applyOnlySupported && !unmappable && pickerIds.length > 0 && selectedCount < pickerIds.length;
     const restoreOpts = settingsCount > 0 ? { restoreIntent, selectedModules } : undefined;
     const options = subsetActive
       ? { ...(restoreOpts ?? {}), onlyAppIds: buildOnlyAppIds(previewResult?.actions, selectedAppIds) }

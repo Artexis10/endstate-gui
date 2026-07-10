@@ -251,4 +251,45 @@ describe('SetupFlow — per-app picker', () => {
       });
     });
   });
+
+  describe('boundary guards', () => {
+    it('falls back to a full apply when an installable action lacks a manifest id', async () => {
+      const base = makePreviewWithActions();
+      const preview = {
+        ...base,
+        appEvents: [...base.appEvents, { app: 'Notepad++.Notepad++', action: 'To install', name: 'Notepad++', timestamp: 4 }],
+        actions: [
+          ...base.actions,
+          { type: 'install', id: null, ref: 'Notepad++.Notepad++', status: 'to_install', message: '' },
+        ],
+      };
+      const onPreview = vi.fn().mockResolvedValue(preview);
+      const onApply = vi.fn().mockResolvedValue({
+        installed: 3, alreadyPresent: 1, failed: 0, skipped: 0, appEvents: [],
+      });
+      await renderToPreviewDone({ onPreview, onApply, applyOnlySupported: true });
+
+      await userEvent.click(screen.getByTestId('app-picker-checkbox-git-git')); // strict subset
+      await userEvent.click(screen.getByTestId('setup-flow-apply'));
+
+      await waitFor(() => expect(onApply).toHaveBeenCalled());
+      // Subset mode is deactivated: the unmappable app would be silently
+      // skipped by a subset run, so no onlyAppIds may be sent.
+      expect(onApply).toHaveBeenCalledWith(mockProfile, undefined);
+    });
+
+    it('renders no picker and keeps Apply enabled when no installable rows exist', async () => {
+      const preview = {
+        installed: 1,
+        alreadyPresent: 0,
+        appEvents: [{ app: 'lightroom', action: 'To install', name: 'Lightroom Classic', timestamp: 1 }],
+        actions: [{ type: 'install', id: 'lightroom', ref: null, status: 'to_install', message: '' }],
+      };
+      const onPreview = vi.fn().mockResolvedValue(preview);
+      await renderToPreviewDone({ onPreview, applyOnlySupported: true });
+
+      expect(screen.queryByTestId('app-picker-header')).not.toBeInTheDocument();
+      expect(screen.getByTestId('setup-flow-apply')).toBeEnabled();
+    });
+  });
 });
