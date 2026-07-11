@@ -1,0 +1,46 @@
+name: WinGet bootstrap watch
+
+# Temporary watcher: the winget publish workflow can only UPDATE an existing
+# package, and SubstrateSystems.Endstate's initial New-Package submission
+# (microsoft/winget-pkgs#397416) is waiting on a human Microsoft moderator.
+# This checks that PR twice a day; once it merges, it dispatches the publish
+# for the latest gui release and disables itself. If the PR is closed without
+# merging, it fails loudly and disables itself so the failure is visible.
+#
+# Safe to delete once the package exists on winget.
+
+on:
+  schedule:
+    - cron: "17 6,18 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check initial-package PR; publish and self-disable when merged
+        run: |
+          state=$(gh pr view 397416 --repo microsoft/winget-pkgs --json state -q .state)
+          echo "microsoft/winget-pkgs#397416 state: $state"
+          case "$state" in
+            MERGED)
+              version=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName | sed 's/^gui-v//')
+              echo "Initial package landed — dispatching winget publish for $version"
+              gh workflow run winget.yml --repo "$GITHUB_REPOSITORY" -f version="$version"
+              gh workflow disable "WinGet bootstrap watch" --repo "$GITHUB_REPOSITORY"
+              ;;
+            CLOSED)
+              echo "::error::winget-pkgs#397416 was closed without merging — the initial package needs manual resubmission"
+              gh workflow disable "WinGet bootstrap watch" --repo "$GITHUB_REPOSITORY"
+              exit 1
+              ;;
+            *)
+              echo "Still waiting on moderation."
+              ;;
+          esac
