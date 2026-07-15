@@ -23,7 +23,7 @@
  * passphrase and key are lost. See contract §1 and §6.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Button } from '@/components/ui/button';
 import { invoke, isTauriRuntime } from '@/lib/tauri-bridge';
@@ -68,6 +68,8 @@ export function RecoveryKeyDialog({
   const [savedFile, setSavedFile] = useState(false);
   const [savedPdf, setSavedPdf] = useState(false);
   const [savedClipboard, setSavedClipboard] = useState(false);
+  const [savingMethod, setSavingMethod] = useState<'file' | 'pdf' | null>(null);
+  const savingMethodRef = useRef<'file' | 'pdf' | null>(null);
   const [continuing, setContinuing] = useState(false);
 
   // Load mnemonic from engine's temp file
@@ -123,7 +125,9 @@ export function RecoveryKeyDialog({
   const wordsJoined = useMemo(() => words.join(' '), [words]);
 
   const handleSaveFile = useCallback(async () => {
-    if (words.length !== TOTAL_WORDS) return;
+    if (words.length !== TOTAL_WORDS || savingMethodRef.current) return;
+    savingMethodRef.current = 'file';
+    setSavingMethod('file');
     try {
       if (isTauriRuntime()) {
         const { save: saveDialog } = await import('@tauri-apps/plugin-dialog');
@@ -148,11 +152,16 @@ export function RecoveryKeyDialog({
         err instanceof Error ? `Save failed: ${err.message}` : 'Save failed',
         'error',
       );
+    } finally {
+      savingMethodRef.current = null;
+      setSavingMethod(null);
     }
   }, [words, wordsJoined, showToast]);
 
   const handleSavePdf = useCallback(async () => {
-    if (words.length !== TOTAL_WORDS) return;
+    if (words.length !== TOTAL_WORDS || savingMethodRef.current) return;
+    savingMethodRef.current = 'pdf';
+    setSavingMethod('pdf');
     try {
       let target: string | null = null;
       if (isTauriRuntime()) {
@@ -218,6 +227,9 @@ export function RecoveryKeyDialog({
         err instanceof Error ? `Save failed: ${err.message}` : 'Save failed',
         'error',
       );
+    } finally {
+      savingMethodRef.current = null;
+      setSavingMethod(null);
     }
   }, [words, email, showToast]);
 
@@ -299,22 +311,24 @@ export function RecoveryKeyDialog({
               icon={<Download className="h-4 w-4" />}
               label="Save to file"
               saved={savedFile}
+              busy={savingMethod === 'file'}
               onClick={handleSaveFile}
-              disabled={words.length !== TOTAL_WORDS}
+              disabled={words.length !== TOTAL_WORDS || savingMethod !== null}
             />
             <SaveMethodButton
               icon={<FileText className="h-4 w-4" />}
               label="Save as PDF"
               saved={savedPdf}
+              busy={savingMethod === 'pdf'}
               onClick={handleSavePdf}
-              disabled={words.length !== TOTAL_WORDS}
+              disabled={words.length !== TOTAL_WORDS || savingMethod !== null}
             />
             <SaveMethodButton
               icon={<Copy className="h-4 w-4" />}
               label="Copy"
               saved={savedClipboard}
               onClick={handleCopy}
-              disabled={words.length !== TOTAL_WORDS}
+              disabled={words.length !== TOTAL_WORDS || savingMethod !== null}
             />
           </div>
 
@@ -349,12 +363,14 @@ function SaveMethodButton({
   icon,
   label,
   saved,
+  busy = false,
   onClick,
   disabled,
 }: {
   icon: React.ReactNode;
   label: string;
   saved: boolean;
+  busy?: boolean;
   onClick: () => void;
   disabled?: boolean;
 }) {
@@ -367,9 +383,16 @@ function SaveMethodButton({
       className="w-full justify-start"
       data-testid={`save-method-${label.replace(/\s+/g, '-').toLowerCase()}`}
       data-saved={saved ? 'true' : 'false'}
+      aria-busy={busy || undefined}
     >
-      {saved ? <Check className="h-4 w-4 mr-2" /> : <span className="mr-2">{icon}</span>}
-      {label}
+      {busy ? (
+        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+      ) : saved ? (
+        <Check className="h-4 w-4 mr-2" />
+      ) : (
+        <span className="mr-2">{icon}</span>
+      )}
+      {busy ? 'Opening...' : label}
       {saved && <span className="sr-only"> (saved)</span>}
     </Button>
   );

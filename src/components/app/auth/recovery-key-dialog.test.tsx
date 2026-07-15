@@ -20,6 +20,7 @@ import { RecoveryKeyDialog } from './recovery-key-dialog';
 const TWENTY_FOUR_WORDS = Array.from({ length: 24 }, (_, i) => `word${i + 1}`).join(' ');
 
 const invokeMock = vi.fn();
+const saveDialogMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/tauri-bridge', () => ({
   invoke: (cmd: string, args?: Record<string, unknown>) => invokeMock(cmd, args),
@@ -30,7 +31,7 @@ vi.mock('@/lib/tauri-bridge', () => ({
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
-  save: vi.fn().mockResolvedValue('C:\\Users\\test\\Downloads\\recovery.txt'),
+  save: saveDialogMock,
 }));
 
 // jsPDF is invoked via `new jsPDF(...)`, so the mock has to be a real
@@ -50,6 +51,8 @@ vi.mock('jspdf', () => {
 });
 
 beforeEach(() => {
+  saveDialogMock.mockReset();
+  saveDialogMock.mockResolvedValue('C:\\Users\\test\\Downloads\\recovery.txt');
   invokeMock.mockReset();
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === 'read_text_file') return Promise.resolve(TWENTY_FOUR_WORDS);
@@ -157,6 +160,43 @@ describe('RecoveryKeyDialog (load-bearing)', () => {
       'write_file_base64',
       expect.objectContaining({ dataBase64: expect.any(String) }),
     );
+  });
+
+  it('shows the pending native dialog and blocks duplicate export attempts', async () => {
+    let finishDialog: (path: string | null) => void = () => {};
+    saveDialogMock.mockImplementationOnce(
+      () => new Promise<string | null>((resolve) => {
+        finishDialog = resolve;
+      }),
+    );
+
+    renderWithProviders(
+      <RecoveryKeyDialog
+        open
+        recoveryKeySavedTo="C:\\Users\\test\\recovery.txt"
+        email="user@example.com"
+        onContinue={vi.fn()}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('recovery-key-grid')).toBeInTheDocument(),
+    );
+
+    const fileButton = screen.getByTestId('save-method-save-to-file');
+    const pdfButton = screen.getByTestId('save-method-save-as-pdf');
+    await userEvent.click(fileButton);
+
+    expect(fileButton).toHaveTextContent('Opening...');
+    expect(fileButton).toBeDisabled();
+    expect(pdfButton).toBeDisabled();
+
+    await userEvent.click(pdfButton);
+    expect(saveDialogMock).toHaveBeenCalledTimes(1);
+
+    finishDialog(null);
+    await waitFor(() => expect(fileButton).toHaveTextContent('Save to file'));
+    expect(fileButton).toBeEnabled();
+    expect(pdfButton).toBeEnabled();
   });
 
   it('does not close on Escape (no-close-path invariant)', async () => {
