@@ -262,6 +262,7 @@ test.describe('Hosted Backup — Manage subscription / Account Portal handoff', 
 
     await expect(page.getByTestId('reauth-dialog')).toBeVisible({ timeout: 5000 });
     await expect(page.getByTestId('backup-pane')).toBeVisible();
+    await expect(page.getByTestId('backup-pane-signed-out')).toHaveCount(0);
 
     const opened = await page.evaluate(() => (window as any).__test_shellOpenCalls);
     expect(opened).toHaveLength(0);

@@ -10,12 +10,12 @@ pub(crate) mod cmd_impl;
 mod engine_adapter;
 mod event_broadcast;
 
-use engine_adapter::{SharedRunState, create_run_state};
+use engine_adapter::{create_run_state, SharedRunState};
 use event_broadcast::EventBroadcaster;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Result of CLI execution returned to the frontend.
 #[derive(Debug, Serialize, Deserialize)]
@@ -1364,7 +1364,23 @@ async fn run_endstate_streaming(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(
+            |app, _arguments, _working_directory| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            },
+        ));
+    }
+
+    builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1372,6 +1388,18 @@ pub fn run() {
         .manage(create_run_state())
         .manage(EventBroadcaster::new())
         .setup(|app| {
+            #[cfg(all(not(debug_assertions), any(windows, target_os = "linux")))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+
+                // Repair missing installer/AppImage protocol registration in
+                // packaged builds without allowing dev builds to replace the
+                // installed handler with a temporary debug executable.
+                // Register the known scheme explicitly. This keeps runtime repair
+                // independent of whether the generated plugin config is present.
+                let _ = app.deep_link().register("endstate");
+            }
+
             // The host window is created programmatically (tauri.conf.json's
             // `app.windows` is empty). This restores the simple always-create
             // bootstrap after the headless dev-bridge experiment (#81) was
