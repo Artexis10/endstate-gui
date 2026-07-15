@@ -20,7 +20,7 @@ import { backupSignup, backupClaim, BackupCommandError } from '@/lib/backup-brid
 import type { BackupSignupData } from '@/types';
 import type { AppSettings } from '@/settings';
 import { invoke } from '@/lib/tauri-bridge';
-import { Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import { friendlyAuthError, type FriendlyAuthError } from './auth-errors';
 import type { AuthTab } from './use-auth-state';
 
@@ -33,6 +33,13 @@ export interface SignUpFormProps {
   settings: AppSettings;
   onSignedUp: (data: BackupSignupData) => void;
   onSwitchTab: (tab: AuthTab) => void;
+  initialClaimMode?: boolean;
+  initialClaimToken?: string;
+  claimMode?: boolean;
+  claimToken?: string;
+  claimTokenPrefilled?: boolean;
+  onClaimModeChange?: (claimMode: boolean) => void;
+  onClaimTokenChange?: (token: string) => void;
 }
 
 /**
@@ -57,16 +64,30 @@ async function buildRecoveryTempPath(): Promise<string> {
   return `${cacheDir}\\recovery-${stamp}.txt`;
 }
 
-export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProps) {
-  const [claimMode, setClaimMode] = useState(false);
+export function SignUpForm({
+  settings,
+  onSignedUp,
+  onSwitchTab,
+  initialClaimMode = false,
+  initialClaimToken = '',
+  claimMode: controlledClaimMode,
+  claimToken: controlledClaimToken,
+  claimTokenPrefilled,
+  onClaimModeChange,
+  onClaimTokenChange,
+}: SignUpFormProps) {
+  const [localClaimMode, setLocalClaimMode] = useState(initialClaimMode);
   const [email, setEmail] = useState('');
-  const [claimCode, setClaimCode] = useState('');
+  const [claimCode, setClaimCode] = useState(initialClaimToken);
   const [passphrase, setPassphrase] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [authError, setAuthError] = useState<FriendlyAuthError | null>(null);
 
-  const normalizedClaim = normalizeClaimCode(claimCode);
+  const claimMode = controlledClaimMode ?? localClaimMode;
+  const effectiveClaimCode = controlledClaimToken ?? claimCode;
+  const showPrefilledClaim = claimTokenPrefilled ?? initialClaimToken.length > 0;
+  const normalizedClaim = normalizeClaimCode(effectiveClaimCode);
   const emailValid = EMAIL_REGEX.test(email.trim());
   const claimValid = CLAIM_CODE_REGEX.test(normalizedClaim);
   const passphraseLongEnough = passphrase.length >= MIN_PASSPHRASE_LENGTH;
@@ -76,7 +97,7 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
 
   // Inline validation messages — only shown after the user has typed
   let inlineError: string | null = null;
-  if (claimMode && claimCode.length > 0 && !claimValid)
+  if (claimMode && effectiveClaimCode.length > 0 && !claimValid)
     inlineError = 'Enter a valid claim code.';
   else if (!claimMode && email.length > 0 && !emailValid)
     inlineError = 'Enter a valid email address.';
@@ -86,8 +107,9 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
     inlineError = 'Passwords do not match.';
 
   const toggleClaimMode = (next: boolean) => {
-    setClaimMode(next);
+    setLocalClaimMode(next);
     setAuthError(null);
+    onClaimModeChange?.(next);
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -121,21 +143,40 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" aria-label="Sign up">
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-4"
+      aria-label={claimMode ? 'Finish account setup' : 'Sign up'}
+    >
       {claimMode ? (
         <div className="flex flex-col gap-1.5">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">Claim code</span>
-            <Input
-              type="text"
-              autoComplete="off"
-              spellCheck={false}
-              value={claimCode}
-              onChange={(e) => setClaimCode(e.target.value)}
-              placeholder="Paste the code from your purchase email"
-              required
-            />
-          </label>
+          {showPrefilledClaim ? (
+            <div className="flex items-start gap-2 rounded-md border border-success/30 bg-success/10 p-3">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium">Your purchase link is ready.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Choose a password to finish setting up your account.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">Purchase code</span>
+              <Input
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={effectiveClaimCode}
+                onChange={(e) => {
+                  setClaimCode(e.target.value);
+                  onClaimTokenChange?.(e.target.value);
+                }}
+                placeholder="Paste the code from your Endstate email"
+                required
+              />
+            </label>
+          )}
           <span className="text-xs text-muted-foreground">
             We&apos;ll use the email on file from your purchase.
           </span>
@@ -205,10 +246,10 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
         {busy ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {claimMode ? 'Claiming account' : 'Creating account'}
+            {claimMode ? 'Finishing setup' : 'Creating account'}
           </>
         ) : claimMode ? (
-          'Claim account'
+          'Finish setup'
         ) : (
           'Create account'
         )}
@@ -222,8 +263,8 @@ export function SignUpForm({ settings, onSignedUp, onSwitchTab }: SignUpFormProp
           className="text-xs"
         >
           {claimMode
-            ? 'Use a regular sign-up instead'
-            : 'Have a Hosted Backup claim code?'}
+            ? 'Use regular sign-up instead'
+            : 'Use purchase code'}
         </Button>
         <Button
           type="button"
