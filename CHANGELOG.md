@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.19.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.19.0...gui-v2.19.1) (2026-07-15)
+
+
+### Bug Fixes
+
+* **ci:** correct winget-releaser action ref, add manual re-run trigger ([#131](https://github.com/Artexis10/endstate-gui/issues/131)) ([37e164c](https://github.com/Artexis10/endstate-gui/commit/37e164c7fa9d796e1d3471d6e097b5d967b90afe))
+* **hosted-backup:** streamline claim onboarding ([79db9c3](https://github.com/Artexis10/endstate-gui/commit/79db9c392cd782160b60424855393eff365ae504))
+
 ## [2.19.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.18.0...gui-v2.19.0) (2026-07-10)
 
 
