@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.19.2](https://github.com/Artexis10/endstate-gui/compare/gui-v2.19.1...gui-v2.19.2) (2026-07-15)
+
+
+### Bug Fixes
+
+* clarify pending recovery key exports ([#136](https://github.com/Artexis10/endstate-gui/issues/136)) ([a15320d](https://github.com/Artexis10/endstate-gui/commit/a15320d2fba9598538ed2bc5ef743a7937717836))
+
 ## [2.19.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.19.0...gui-v2.19.1) (2026-07-15)
 
 
