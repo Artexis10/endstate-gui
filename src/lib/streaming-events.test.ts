@@ -30,9 +30,24 @@ describe('streaming-events', () => {
       captureId: 'photoshop-preferences-2024',
       moduleId: 'apps.photoshop',
       configSetId: 'preferences',
-      sourceInstance: { id: 'source-2024', rawVersion: '25.0' },
-      targetInstanceId: null,
-      targetCandidates: [],
+      sourceInstance: {
+        id: 'source-2024',
+        detectorId: 'photoshop-install',
+        rawVersion: '25.0',
+        normalizedVersion: '25.0.0',
+        evidence: { type: 'registry', appId: 'Adobe.Photoshop', source: 'extra-key' },
+      },
+      targetCandidates: [{
+        id: 'target-2025',
+        moduleId: 'apps.photoshop',
+        detectorId: 'photoshop-install',
+        rawVersion: '26.0',
+        normalizedVersion: '26.0.0',
+        evidence: { type: 'registry', appId: 'Adobe.Photoshop' },
+        targetGeneration: 'g2',
+        targetGenerationFingerprint: 'sha256:generation-current',
+        restoreModuleRevision: 'sha256:module-current',
+      }],
       resolution: 'migrate',
       reason: null,
       migrationPath: ['g1', 'g2'],
@@ -44,6 +59,7 @@ describe('streaming-events', () => {
     }));
 
     expect(event).not.toBeNull();
+    expect(streamingEventsModule.isConfigResolutionEvent(event)).toBe(true);
     expect(event).toMatchObject({
       event: 'config-resolution',
       label: 'Engine supplied label',
@@ -71,6 +87,7 @@ describe('streaming-events', () => {
     }));
 
     expect(event).not.toBeNull();
+    expect(streamingEventsModule.isConfigMigrationEvent(event)).toBe(true);
     expect(event).toMatchObject({
       event: 'config-migration',
       stage: 'rollback',
@@ -81,6 +98,98 @@ describe('streaming-events', () => {
 
   it('exposes a config-migration type guard', () => {
     expect('isConfigMigrationEvent' in streamingEventsModule).toBe(true);
+  });
+
+  it.each([
+    ['missing runId', { runId: undefined }],
+    ['missing timestamp', { timestamp: undefined }],
+    ['unsupported version', { version: 2 }],
+    ['invalid resolution', { resolution: 'newest' }],
+    ['non-array target candidates', { targetCandidates: {} }],
+    ['non-string migration path', { migrationPath: ['g1', 2] }],
+    ['non-nullable target instance', { targetInstanceId: null }],
+    ['non-string engine message', { message: { text: 'bad' } }],
+    ['non-nullable reason', { reason: 42 }],
+    ['non-nullable remediation', { remediation: false }],
+    ['incomplete source evidence', { sourceInstance: { id: 'source-1' } }],
+    ['source evidence without type', {
+      sourceInstance: {
+        id: 'source-1',
+        detectorId: 'photoshop-install',
+        rawVersion: '25.0',
+        normalizedVersion: '25.0.0',
+        evidence: { source: 'registry' },
+      },
+    }],
+    ['incomplete target candidate', {
+      targetCandidates: [{
+        id: 'photoshop-2025',
+        rawVersion: '26.0',
+      }],
+    }],
+    ['non-string candidate generation fingerprint', {
+      targetCandidates: [{
+        id: 'photoshop-2025',
+        moduleId: 'apps.photoshop',
+        detectorId: 'photoshop-install',
+        rawVersion: '26.0',
+        normalizedVersion: '26.0.0',
+        evidence: { type: 'registry' },
+        targetGenerationFingerprint: 123,
+        restoreModuleRevision: 'sha256:module-current',
+      }],
+    }],
+  ])('rejects malformed config-resolution events: %s', (_name, override) => {
+    const malformed = {
+      version: 1,
+      event: 'config-resolution',
+      runId: 'run-1',
+      timestamp: '2026-07-16T10:00:00Z',
+      captureId: 'capture-1',
+      moduleId: 'apps.photoshop',
+      configSetId: 'preferences',
+      targetCandidates: [],
+      resolution: 'migrate',
+      reason: null,
+      migrationPath: ['g1', 'g2'],
+      label: 'Engine label',
+      message: 'Engine message',
+      remediation: null,
+      ...override,
+    };
+
+    expect(parseStreamingEvent(JSON.stringify(malformed))).toBeNull();
+    expect((streamingEventsModule.isConfigResolutionEvent as (event: unknown) => boolean)(malformed))
+      .toBe(false);
+  });
+
+  it.each([
+    ['missing runId', { runId: undefined }],
+    ['invalid stage', { stage: 'copy' }],
+    ['invalid status', { status: 'rolled_back' }],
+    ['non-nullable reason', { reason: false }],
+    ['non-nullable remediation', { remediation: 123 }],
+    ['non-string engine message', { message: null }],
+    ['non-string optional generation', { fromGeneration: 1 }],
+  ])('rejects malformed config-migration events: %s', (_name, override) => {
+    const malformed = {
+      version: 1,
+      event: 'config-migration',
+      runId: 'run-1',
+      timestamp: '2026-07-16T10:00:00Z',
+      captureId: 'capture-1',
+      configSetId: 'preferences',
+      stage: 'rollback',
+      status: 'completed',
+      reason: null,
+      message: 'Engine message',
+      remediation: null,
+      ...override,
+    };
+
+    expect(parseStreamingEvent(JSON.stringify(malformed))).toBeNull();
+    expect((streamingEventsModule.isConfigMigrationEvent as (event: unknown) => boolean)(malformed))
+      .toBe(false);
   });
 
   describe('parseStreamingEvent', () => {

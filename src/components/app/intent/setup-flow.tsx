@@ -17,10 +17,25 @@ import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 import { DropZone } from './drop-zone';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import type { DiscoveredProfile } from '@/file-discovery';
-import type { EndstateApplyData, EndstateEnvelope, EndstateRevertData, RestoreIntent, RestoreModuleRef, BackupListItem } from '@/types';
+import type {
+  ApplyRestoreOptions,
+  BackupListItem,
+  ConfigResolution,
+  ConfigResolutionSummary,
+  EndstateApplyData,
+  EndstateEnvelope,
+  EndstateRevertData,
+  RestoreIntent,
+  RestoreModuleRef,
+  RestoreTargetMapping,
+} from '@/types';
 import type { EngineExecResult } from '@/lib/engine-exec';
+import type { ConfigProgressEvent } from '@/lib/streaming-events';
 import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
 import { ConfigModuleSelector } from '@/components/app/overview/components/config-module-selector';
+import { ConfigResolutionList } from './config-resolution-list';
+import { ConfigMigrationProgress } from './config-migration-progress';
+import { EngineEnvelopeError } from '@/lib/engine-envelope-error';
 import {
   type AppEvent,
   type StatusKey,
@@ -58,6 +73,8 @@ interface PreviewResult {
   restoreModulesAvailable?: RestoreModuleRef[];
   /** Maps winget ID → config module name for apps with settings */
   configModuleMap?: Record<string, string>;
+  configResolutions?: ConfigResolution[];
+  configResolutionSummary?: ConfigResolutionSummary;
 }
 
 /**
@@ -116,6 +133,8 @@ interface ApplyResult {
   configsRestored?: number;
   configsSkipped?: number;
   configsFailed?: number;
+  configResolutions?: ConfigResolution[];
+  configResolutionSummary?: ConfigResolutionSummary;
 }
 
 export interface SetupFlowProps {
@@ -132,6 +151,7 @@ export interface SetupFlowProps {
   isRunning: boolean;
   setupProgress: { message: string; detail?: string } | null;
   liveAppEvents: AppEvent[];
+  liveConfigEvents?: ConfigProgressEvent[];
   onPreview: (profile: DiscoveredProfile) => Promise<PreviewResult>;
   /**
    * `onlyAppIds` is present ONLY when the per-app picker is active and the
@@ -139,7 +159,9 @@ export interface SetupFlowProps {
    * `apply --only <ids>`. All-selected (or picker dark) omits the field so
    * the invocation is identical to today.
    */
-  onApply: (profile: DiscoveredProfile, options?: { restoreIntent?: RestoreIntent; selectedModules?: string[]; onlyAppIds?: string[] }) => Promise<ApplyResult>;
+  onApply: (profile: DiscoveredProfile, options?: ApplyRestoreOptions) => Promise<ApplyResult>;
+  /** Capability gate for explicit `apply --restore-target` mappings. */
+  restoreTargetSupported?: boolean;
   /**
    * Per-app picker capability gate: true only when the engine advertises
    * `apply --only` (see engineSupportsApplyOnly). False → the preview renders
@@ -198,9 +220,11 @@ export function SetupFlow({
   isRunning,
   setupProgress,
   liveAppEvents,
+  liveConfigEvents = [],
   onPreview,
   onApply,
   applyOnlySupported = false,
+  restoreTargetSupported = false,
   onUndoDryRun,
   onUndoExecute,
   onUndoComplete,
@@ -222,9 +246,11 @@ export function SetupFlow({
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [errorRemediation, setErrorRemediation] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [restoreIntent, setRestoreIntent] = useState<RestoreIntent>('apps-only');
   const [selectedModules, setSelectedModules] = useState<string[]>([]);
+  const [restoreTargets, setRestoreTargets] = useState<RestoreTargetMapping[]>([]);
   // Per-app picker selection: manifest app ids currently INCLUDED in the run.
   // Initialized to the full selectable set when a preview completes (default
   // all checked). Presentation-only — planning stays in the engine.
@@ -242,9 +268,11 @@ export function SetupFlow({
       setPreviewResult(null);
       setApplyResult(null);
       setErrorMessage('');
+      setErrorRemediation(null);
       setActiveFilters(new Set());
       setRestoreIntent('apps-only');
       setSelectedModules([]);
+      setRestoreTargets([]);
       setSelectedAppIds(new Set());
       setUndoDryRunData(null);
       setUndoExecuteData(null);
@@ -305,8 +333,11 @@ export function SetupFlow({
     setPreviewResult(null);
     setApplyResult(null);
     setErrorMessage('');
+    setErrorRemediation(null);
     setActiveFilters(new Set());
     setRestoreIntent('apps-only');
+    setSelectedModules([]);
+    setRestoreTargets([]);
     try {
       const result = await onPreview(profile);
       setPreviewResult(result);
@@ -315,6 +346,7 @@ export function SetupFlow({
       setPhase('preview-done');
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Preview failed');
+      setErrorRemediation(err instanceof EngineEnvelopeError ? err.remediation ?? null : null);
       setPhase('error');
     }
   };
@@ -332,13 +364,25 @@ export function SetupFlow({
       console.warn('[setup-flow] installable action without a manifest id in preview; per-app subset disabled for this apply');
     }
     const subsetActive = applyOnlySupported && !unmappable && pickerIds.length > 0 && selectedCount < pickerIds.length;
-    const restoreOpts = settingsCount > 0 ? { restoreIntent, selectedModules } : undefined;
+    const explicitRestoreTargets = restoreIntent === 'apps-and-settings'
+      && selectedModules.length > 0
+      && restoreTargets.length > 0
+      ? restoreTargets
+      : undefined;
+    const restoreOpts: ApplyRestoreOptions | undefined = settingsCount > 0
+      ? {
+          restoreIntent,
+          selectedModules,
+          ...(explicitRestoreTargets ? { restoreTargets: explicitRestoreTargets } : {}),
+        }
+      : undefined;
     const options = subsetActive
       ? { ...(restoreOpts ?? {}), onlyAppIds: buildOnlyAppIds(previewResult?.actions, selectedAppIds) }
       : restoreOpts;
     setPhase('applying');
     setApplyResult(null);
     setErrorMessage('');
+    setErrorRemediation(null);
     setActiveFilters(new Set());
     try {
       const result = await onApply(selectedProfile, options);
@@ -346,6 +390,7 @@ export function SetupFlow({
       setPhase('apply-done');
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Apply failed');
+      setErrorRemediation(err instanceof EngineEnvelopeError ? err.remediation ?? null : null);
       setPhase('error');
     }
   };
@@ -356,8 +401,10 @@ export function SetupFlow({
     setPreviewResult(null);
     setApplyResult(null);
     setErrorMessage('');
+    setErrorRemediation(null);
     setRestoreIntent('apps-only');
     setSelectedModules([]);
+    setRestoreTargets([]);
     setSelectedAppIds(new Set());
     setUndoDryRunData(null);
     setUndoExecuteData(null);
@@ -972,7 +1019,10 @@ export function SetupFlow({
                       restoreIntent={restoreIntent}
                       onRestoreIntentChange={(intent) => {
                         setRestoreIntent(intent);
-                        if (intent === 'apps-only') setSelectedModules([]);
+                        if (intent === 'apps-only') {
+                          setSelectedModules([]);
+                          setRestoreTargets([]);
+                        }
                       }}
                       configModuleCount={settingsCount}
                     />
@@ -993,6 +1043,22 @@ export function SetupFlow({
                         />
                       );
                     })()}
+                  </div>
+                )}
+
+                {(previewResult.configResolutions?.length ?? 0) > 0 && (
+                  <div className="mt-4">
+                    <ConfigResolutionList
+                      resolutions={previewResult.configResolutions ?? []}
+                      restoreTargetSupported={restoreIntent === 'apps-and-settings' && restoreTargetSupported}
+                      targetMappings={restoreTargets}
+                      onTargetMappingChange={(mapping) => {
+                        setRestoreTargets((current) => [
+                          ...current.filter((item) => item.captureId !== mapping.captureId),
+                          mapping,
+                        ]);
+                      }}
+                    />
                   </div>
                 )}
 
@@ -1075,6 +1141,9 @@ export function SetupFlow({
                     })}
                   </div>
                 )}
+                <div className="mt-3">
+                  <ConfigMigrationProgress events={liveConfigEvents} />
+                </div>
               </CardContent>
             </Card>
           </motion.div>
@@ -1126,6 +1195,8 @@ export function SetupFlow({
                     </p>
                   </div>
                 </div>
+
+                <ConfigResolutionList resolutions={applyResult.configResolutions ?? []} />
 
                 {/* Activity summary */}
                 {applyResult.appEvents.length > 0 && (() => {
@@ -1569,6 +1640,11 @@ export function SetupFlow({
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {errorMessage}
                     </p>
+                    {errorRemediation !== null && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {errorRemediation}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <Button variant="secondary" onClick={handleBackToProfiles} className="mt-2">

@@ -35,20 +35,37 @@ export type ConfigResolutionStatus =
   | 'rolled_back'
   | 'rollback_failed';
 
-/** Portable, non-secret instance evidence supplied by the engine. */
+/** Portable detection evidence supplied by the engine. Extra keys are additive. */
+export interface ConfigDetectionEvidence {
+  type: string;
+  appId?: string;
+  backend?: string;
+  platform?: string;
+  ref?: string;
+  driver?: string;
+  [key: string]: unknown;
+}
+
+/** Portable, non-secret source instance supplied by the engine. */
 export interface ConfigInstanceEvidence {
   id: string;
-  moduleId?: string;
-  detectorId?: string;
-  rawVersion?: string;
-  normalizedVersion?: string;
-  evidence?: Record<string, unknown>;
+  detectorId: string;
+  rawVersion: string;
+  normalizedVersion: string;
+  evidence: ConfigDetectionEvidence;
 }
 
 /** Portable target candidate supplied by the engine. */
-export interface ConfigTargetCandidate extends ConfigInstanceEvidence {
+export interface ConfigTargetCandidate {
+  id: string;
+  moduleId: string;
+  detectorId: string;
+  rawVersion: string;
+  normalizedVersion: string;
+  evidence: ConfigDetectionEvidence;
   targetGeneration?: string;
-  restoreModuleRevision?: string;
+  targetGenerationFingerprint?: string;
+  restoreModuleRevision: string;
 }
 
 /** Final engine result for one captured configuration set. */
@@ -68,7 +85,7 @@ export interface ConfigResolution {
   migrationPath: string[];
   captureModuleRevision?: string;
   restoreModuleRevision?: string;
-  resolvedTargets: unknown[];
+  resolvedTargets: string[];
   status: ConfigResolutionStatus;
   label: string;
   message: string;
@@ -92,6 +109,14 @@ export interface ConfigResolutionSummary {
 export interface RestoreTargetMapping {
   captureId: string;
   targetInstanceId: string;
+}
+
+/** Explicit GUI choices supplied to `apply`; omitted fields keep engine defaults. */
+export interface ApplyRestoreOptions {
+  restoreIntent?: RestoreIntent;
+  selectedModules?: string[];
+  onlyAppIds?: string[];
+  restoreTargets?: RestoreTargetMapping[];
 }
 
 export interface EndstateHostedBackupCapability {

@@ -71,8 +71,24 @@ describe('ConfigResolutionList', () => {
             label: 'Engine ambiguity label',
             reason: 'ambiguous_target_instance',
             targetCandidates: [
-              { id: 'instance-z', rawVersion: '25.0' },
-              { id: 'instance-a', rawVersion: '26.0' },
+              {
+                id: 'instance-z',
+                moduleId: 'apps.photoshop',
+                detectorId: 'photoshop-install',
+                rawVersion: '25.0',
+                normalizedVersion: '25.0.0',
+                evidence: { type: 'registry', appId: 'Adobe.Photoshop' },
+                restoreModuleRevision: 'revision-restore',
+              },
+              {
+                id: 'instance-a',
+                moduleId: 'apps.photoshop',
+                detectorId: 'photoshop-install',
+                rawVersion: '26.0',
+                normalizedVersion: '26.0.0',
+                evidence: { type: 'registry', appId: 'Adobe.Photoshop' },
+                restoreModuleRevision: 'revision-restore',
+              },
             ],
           }),
         ]}
@@ -110,13 +126,21 @@ describe('ConfigResolutionList', () => {
             label: 'Engine provenance label',
             sourceInstance: {
               id: 'source-instance',
+              detectorId: 'photoshop-install',
               rawVersion: 'source-25.0',
-              evidence: { kind: 'installed-app', value: 'Source evidence' },
+              normalizedVersion: '25.0.0',
+              evidence: { type: 'installed-app', ref: 'Source evidence' },
             },
             targetCandidates: [{
               id: 'target-instance',
+              moduleId: 'apps.photoshop',
+              detectorId: 'photoshop-install',
               rawVersion: 'target-26.0',
+              normalizedVersion: '26.0.0',
+              evidence: { type: 'installed-app', ref: 'Target evidence' },
               targetGeneration: 'g2',
+              targetGenerationFingerprint: 'fingerprint-target',
+              restoreModuleRevision: 'revision-restore',
             }],
             sourceGeneration: 'g1',
             sourceGenerationFingerprint: 'fingerprint-abc',
@@ -135,6 +159,7 @@ describe('ConfigResolutionList', () => {
     expect(screen.getByText(/source-25\.0/)).toBeInTheDocument();
     expect(screen.getByText(/target-26\.0/)).toBeInTheDocument();
     expect(screen.getByText('fingerprint-abc')).toBeInTheDocument();
+    expect(screen.getByText(/fingerprint-target/)).toBeInTheDocument();
     expect(screen.getByText('["g1","g2"]')).toBeInTheDocument();
     expect(screen.getByText('revision-capture')).toBeInTheDocument();
     expect(screen.getByText('revision-restore')).toBeInTheDocument();
@@ -150,7 +175,15 @@ describe('ConfigResolutionList', () => {
             resolution: 'unknown',
             label: 'Engine ambiguity stays visible',
             reason: 'ambiguous_target_instance',
-            targetCandidates: [{ id: 'candidate-1', rawVersion: '1.0' }],
+            targetCandidates: [{
+              id: 'candidate-1',
+              moduleId: 'apps.photoshop',
+              detectorId: 'photoshop-install',
+              rawVersion: '1.0',
+              normalizedVersion: '1.0.0',
+              evidence: { type: 'registry', appId: 'Adobe.Photoshop' },
+              restoreModuleRevision: 'revision-restore',
+            }],
           }),
         ]}
         restoreTargetSupported={false}
