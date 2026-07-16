@@ -26,9 +26,9 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run strict OpenSpec validation, focused red-green tests, the full unit suite, contract tests, lint, TypeScript/build validation, and relevant Playwright tests.
+- [x] 4.1 Run strict OpenSpec validation, focused red-green tests, the full unit suite, contract tests, lint, TypeScript/build validation, and relevant Playwright tests.
 - [x] 4.2 Review the implementation against engine GUI/event/CLI contracts and request an independent parent review with exact diff scope and verification evidence.
 
-Verification exclusion: `npm run test:contract` currently skips because its legacy
-`endstate.ps1` harness is absent from the current engine repository. The remaining
-strict validation, unit, lint, type/build, and Playwright checks have executed.
+The contract runner executes the current engine binary directly. CI fails when
+the engine is unavailable; local runs may build the sidecar first or set
+`ENDSTATE_ENGINE_PATH` explicitly.
