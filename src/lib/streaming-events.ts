@@ -8,6 +8,12 @@
  * @see docs/cli-json-contract.md for the full contract
  */
 
+import type {
+  ConfigInstanceEvidence,
+  ConfigResolutionKind,
+  ConfigTargetCandidate,
+} from '../types';
+
 /**
  * Event schema version - must match engine version
  */
@@ -190,6 +196,54 @@ export interface RestoreItemEvent extends BaseStreamingEvent {
   message?: string;
 }
 
+/** Final compatibility/target decision emitted before config mutation. */
+export interface ConfigResolutionEvent extends BaseStreamingEvent {
+  event: 'config-resolution';
+  captureId: string;
+  moduleId: string;
+  configSetId: string;
+  sourceInstance?: ConfigInstanceEvidence;
+  sourceInstanceId?: string;
+  targetInstanceId?: string;
+  targetCandidates: ConfigTargetCandidate[];
+  sourceGeneration?: string;
+  sourceGenerationFingerprint?: string;
+  targetGeneration?: string;
+  resolution: ConfigResolutionKind;
+  reason: string | null;
+  migrationPath: string[];
+  captureModuleRevision?: string;
+  restoreModuleRevision?: string;
+  label: string;
+  message: string;
+  remediation: string | null;
+}
+
+export type ConfigMigrationStage =
+  | 'staging'
+  | 'edge'
+  | 'validation'
+  | 'commit'
+  | 'rollback';
+
+export type ConfigMigrationStatus = 'started' | 'completed' | 'failed';
+
+/** Engine-authored, transient migration progress for one config set. */
+export interface ConfigMigrationEvent extends BaseStreamingEvent {
+  event: 'config-migration';
+  captureId: string;
+  configSetId: string;
+  stage: ConfigMigrationStage;
+  fromGeneration?: string;
+  toGeneration?: string;
+  status: ConfigMigrationStatus;
+  reason: string | null;
+  message: string;
+  remediation: string | null;
+}
+
+export type ConfigProgressEvent = ConfigResolutionEvent | ConfigMigrationEvent;
+
 /**
  * Union type for all streaming events
  */
@@ -200,6 +254,8 @@ export type StreamingEvent =
   | ErrorEvent
   | ArtifactEvent
   | RestoreItemEvent
+  | ConfigResolutionEvent
+  | ConfigMigrationEvent
   | BackupChunkEvent;
 
 /**
@@ -227,6 +283,14 @@ export function isArtifactEvent(event: StreamingEvent): event is ArtifactEvent {
 
 export function isRestoreItemEvent(event: StreamingEvent): event is RestoreItemEvent {
   return event.event === 'restore-item';
+}
+
+export function isConfigResolutionEvent(event: StreamingEvent): event is ConfigResolutionEvent {
+  return event.event === 'config-resolution';
+}
+
+export function isConfigMigrationEvent(event: StreamingEvent): event is ConfigMigrationEvent {
+  return event.event === 'config-migration';
 }
 
 export function isBackupChunkEvent(event: StreamingEvent): event is BackupChunkEvent {
@@ -270,6 +334,8 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
       'error',
       'artifact',
       'restore-item',
+      'config-resolution',
+      'config-migration',
       'backup-chunk',
     ];
     if (!validEventTypes.includes(parsed.event)) {

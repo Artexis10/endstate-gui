@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as streamingEventsModule from './streaming-events';
 import {
   parseStreamingEvent,
   parseStreamingEvents,
@@ -22,6 +23,66 @@ import {
 } from './streaming-events';
 
 describe('streaming-events', () => {
+  it('parses config-resolution events without rewriting engine fields', () => {
+    const event = parseStreamingEvent(JSON.stringify({
+      version: 1,
+      event: 'config-resolution',
+      captureId: 'photoshop-preferences-2024',
+      moduleId: 'apps.photoshop',
+      configSetId: 'preferences',
+      sourceInstance: { id: 'source-2024', rawVersion: '25.0' },
+      targetInstanceId: null,
+      targetCandidates: [],
+      resolution: 'migrate',
+      reason: null,
+      migrationPath: ['g1', 'g2'],
+      label: 'Engine supplied label',
+      message: 'Engine supplied message',
+      remediation: null,
+      timestamp: '2026-07-16T10:00:00Z',
+      runId: 'run-1',
+    }));
+
+    expect(event).not.toBeNull();
+    expect(event).toMatchObject({
+      event: 'config-resolution',
+      label: 'Engine supplied label',
+      message: 'Engine supplied message',
+    });
+  });
+
+  it('exposes a config-resolution type guard', () => {
+    expect('isConfigResolutionEvent' in streamingEventsModule).toBe(true);
+  });
+
+  it('parses config-migration progress without translating engine status', () => {
+    const event = parseStreamingEvent(JSON.stringify({
+      version: 1,
+      event: 'config-migration',
+      captureId: 'photoshop-preferences-2024',
+      configSetId: 'preferences',
+      stage: 'rollback',
+      status: 'failed',
+      reason: 'commit_failed',
+      message: 'Engine rollback message',
+      remediation: 'Engine remediation',
+      timestamp: '2026-07-16T10:00:00Z',
+      runId: 'run-1',
+    }));
+
+    expect(event).not.toBeNull();
+    expect(event).toMatchObject({
+      event: 'config-migration',
+      stage: 'rollback',
+      status: 'failed',
+      message: 'Engine rollback message',
+    });
+  });
+
+  it('exposes a config-migration type guard', () => {
+    expect('isConfigMigrationEvent' in streamingEventsModule).toBe(true);
+  });
+
   describe('parseStreamingEvent', () => {
     it('should parse valid phase event', () => {
       const line = '{"version":1,"event":"phase","phase":"apply","timestamp":"2025-01-01T00:00:00.000Z"}';

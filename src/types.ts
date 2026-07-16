@@ -18,6 +18,82 @@ export interface EndstateError {
   hint?: string;
 }
 
+/** Engine-owned compatibility decision for one captured configuration set. */
+export type ConfigResolutionKind =
+  | 'direct'
+  | 'migrate'
+  | 'incompatible'
+  | 'unknown'
+  | 'legacy_unverified';
+
+/** Terminal configuration outcome from a completed command envelope. */
+export type ConfigResolutionStatus =
+  | 'planned'
+  | 'restored'
+  | 'skipped'
+  | 'failed'
+  | 'rolled_back'
+  | 'rollback_failed';
+
+/** Portable, non-secret instance evidence supplied by the engine. */
+export interface ConfigInstanceEvidence {
+  id: string;
+  moduleId?: string;
+  detectorId?: string;
+  rawVersion?: string;
+  normalizedVersion?: string;
+  evidence?: Record<string, unknown>;
+}
+
+/** Portable target candidate supplied by the engine. */
+export interface ConfigTargetCandidate extends ConfigInstanceEvidence {
+  targetGeneration?: string;
+  restoreModuleRevision?: string;
+}
+
+/** Final engine result for one captured configuration set. */
+export interface ConfigResolution {
+  captureId: string;
+  moduleId: string;
+  configSetId: string;
+  sourceInstance?: ConfigInstanceEvidence;
+  sourceInstanceId?: string;
+  targetInstanceId?: string;
+  targetCandidates: ConfigTargetCandidate[];
+  sourceGeneration?: string;
+  sourceGenerationFingerprint?: string;
+  targetGeneration?: string;
+  resolution: ConfigResolutionKind;
+  reason: string | null;
+  migrationPath: string[];
+  captureModuleRevision?: string;
+  restoreModuleRevision?: string;
+  resolvedTargets: unknown[];
+  status: ConfigResolutionStatus;
+  label: string;
+  message: string;
+  remediation: string | null;
+}
+
+/** Engine-owned aggregate counts for configuration resolutions. */
+export interface ConfigResolutionSummary {
+  total: number;
+  direct: number;
+  migrate: number;
+  incompatible: number;
+  unknown: number;
+  legacyUnverified: number;
+  selected: number;
+  skipped: number;
+  failed: number;
+}
+
+/** Explicit capture-to-target choice passed back to the engine. */
+export interface RestoreTargetMapping {
+  captureId: string;
+  targetInstanceId: string;
+}
+
 export interface EndstateHostedBackupCapability {
   supported: boolean;
   minSchemaVersion?: string;
@@ -433,6 +509,10 @@ export interface EndstateApplyData {
   restoreJournalFile?: string;
   restoreFilter?: string[];
   restoreModulesAvailable?: RestoreModuleRef[];
+  /** Generation-aware configuration results; omitted for config-free input. */
+  configResolutions?: ConfigResolution[];
+  /** Engine-owned counts for configResolutions; omitted for config-free input. */
+  configResolutionSummary?: ConfigResolutionSummary;
 }
 
 /** Enriched module reference from engine (v1.5+), or plain string ID from older CLIs. */
@@ -523,6 +603,11 @@ export interface RestoreItem {
   backupPath: string | null;
   targetExisted: boolean;
   message: string | null;
+  captureId?: string;
+  configSetId?: string;
+  targetInstanceId?: string;
+  sourceGeneration?: string;
+  targetGeneration?: string;
 }
 
 export type RestoreItemStatus =

@@ -1,9 +1,9 @@
 ## 1. Engine Contract Consumption
 
-- [ ] 1.1 Add failing tests for config-resolution/config-migration parsing, type guards, and transient state behavior.
-- [ ] 1.2 Add additive config resolution, summary, provenance, restore-item trace, and streaming-event types required to pass the parser tests.
-- [ ] 1.3 Add failing tests for the apply `--restore-target` capability gate and repeatable argument construction.
-- [ ] 1.4 Implement off-by-default capability detection and explicit mapping argument construction without validation or default selection.
+- [x] 1.1 Add failing tests for config-resolution/config-migration parsing, type guards, and transient state behavior.
+- [x] 1.2 Add additive config resolution, summary, provenance, restore-item trace, and streaming-event types required to pass the parser tests.
+- [x] 1.3 Add failing tests for the apply `--restore-target` capability gate and repeatable argument construction.
+- [x] 1.4 Implement off-by-default capability detection and explicit mapping argument construction without validation or default selection.
 - [ ] 1.5 Add failing tests for preserving engine envelope error message and remediation across the setup-flow boundary, then implement the typed error wrapper.
 
 ## 2. Resolution and Progress Presentation

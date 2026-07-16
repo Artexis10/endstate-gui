@@ -21,12 +21,26 @@ import type { EndstateCapabilitiesData } from '../types';
 export function engineSupportsApplyOnly(
   caps: EndstateCapabilitiesData | null | undefined,
 ): boolean {
+  return engineSupportsApplyFlag(caps, '--only');
+}
+
+/** Whether the engine accepts explicit per-capture restore targets on apply. */
+export function engineSupportsApplyRestoreTarget(
+  caps: EndstateCapabilitiesData | null | undefined,
+): boolean {
+  return engineSupportsApplyFlag(caps, '--restore-target');
+}
+
+function engineSupportsApplyFlag(
+  caps: EndstateCapabilitiesData | null | undefined,
+  flag: string,
+): boolean {
   if (!caps) return false;
 
   const commands = (caps as { commands?: unknown }).commands;
   if (commands && typeof commands === 'object' && !Array.isArray(commands)) {
     const apply = (commands as Record<string, { flags?: unknown }>).apply;
-    if (Array.isArray(apply?.flags) && apply!.flags.includes('--only')) {
+    if (Array.isArray(apply?.flags) && apply.flags.includes(flag)) {
       return true;
     }
   }
