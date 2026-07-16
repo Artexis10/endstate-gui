@@ -8,7 +8,7 @@ import {
   EndstateApplyData,
   EndstateCaptureData,
   EndstateRevertData,
-  type RestoreItem,
+  type RestoreResult,
   type RestoreSummary,
   type RestoreModuleRef,
   type ApplyRestoreOptions,
@@ -424,7 +424,7 @@ function AppContent() {
     timestamp?: string;
     wasPreview?: boolean; // Track if this was a preview (for showing Apply button)
     configModuleMap?: Record<string, string>;
-    restoreItems?: RestoreItem[];
+    restoreItems?: RestoreResult[];
     restoreSummary?: RestoreSummary;
     restoreJournalFile?: string;
     restoreModulesAvailable?: RestoreModuleRef[];

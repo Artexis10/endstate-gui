@@ -530,7 +530,7 @@ export interface EndstateApplyData {
   configModuleMap?: Record<string, string>;
   /** Restore summary when --enable-restore is active. */
   restoreSummary?: RestoreSummary;
-  restoreItems?: RestoreItem[];
+  restoreItems?: RestoreResult[];
   restoreJournalFile?: string;
   restoreFilter?: string[];
   restoreModulesAvailable?: RestoreModuleRef[];
@@ -616,18 +616,18 @@ export interface ApplyCounts {
  */
 export type EndstateApplyResultData = EndstateApplyData;
 
-/** Restore item from NDJSON events and JSON envelope */
-export interface RestoreItem {
+/** Final result for one restore action in a completed command envelope. */
+export interface RestoreResult {
   id: string;
-  module: string;
-  restorer: 'copy' | 'merge-json' | 'merge-ini' | 'append';
   source: string;
   target: string;
-  status: RestoreItemStatus;
-  reason: string | null;
-  backupPath: string | null;
-  targetExisted: boolean;
-  message: string | null;
+  status: RestoreResultStatus;
+  backupPath?: string;
+  backupCreated: boolean;
+  targetExistedBefore: boolean;
+  error?: string;
+  warnings?: string[];
+  restoreType?: string;
   captureId?: string;
   configSetId?: string;
   targetInstanceId?: string;
@@ -635,8 +635,7 @@ export interface RestoreItem {
   targetGeneration?: string;
 }
 
-export type RestoreItemStatus =
-  | 'restoring'
+export type RestoreResultStatus =
   | 'restored'
   | 'skipped_up_to_date'
   | 'skipped_missing_source'

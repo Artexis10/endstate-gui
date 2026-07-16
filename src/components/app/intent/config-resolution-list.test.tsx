@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithProviders, screen, userEvent } from '@/test/test-utils';
+import { renderWithProviders, screen, userEvent, within } from '@/test/test-utils';
 import type { ConfigResolution } from '@/types';
 import { useShowDetails } from '@/lib/use-show-details';
 import { ConfigResolutionList } from './config-resolution-list';
@@ -57,6 +57,26 @@ describe('ConfigResolutionList', () => {
     expect(screen.getByText('Engine terminal message')).toBeInTheDocument();
     expect(screen.getByText('Engine remediation')).toBeInTheDocument();
     expect(screen.getByText('rollback_failed')).toBeInTheDocument();
+  });
+
+  it('shows the owning module beside a legacy compatibility warning', () => {
+    renderWithProviders(
+      <ConfigResolutionList
+        resolutions={[
+          resolution({
+            captureId: 'legacy-capture',
+            moduleId: 'apps.photoshop',
+            resolution: 'legacy_unverified',
+            label: 'Compatibility unknown',
+            message: 'Review these legacy settings before restoring them.',
+          }),
+        ]}
+      />,
+    );
+
+    const row = screen.getByTestId('config-resolution-legacy-capture');
+    expect(within(row).getByText('apps.photoshop')).toBeVisible();
+    expect(within(row).getByText('Review these legacy settings before restoring them.')).toBeVisible();
   });
 
   it('offers engine candidates in input order with no default target', async () => {

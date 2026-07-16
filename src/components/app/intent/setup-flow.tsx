@@ -98,6 +98,27 @@ function hasUnmappableInstallable(actions: EndstateApplyData['actions']): boolea
   return (actions ?? []).some((a) => a.ref && !a.id);
 }
 
+function isSelectedConfigModule(moduleId: string, selectedModules: string[]): boolean {
+  const selectionKey = moduleId.startsWith('apps.') ? moduleId.slice('apps.'.length) : moduleId;
+  return selectedModules.some((selectedModule) => {
+    const selectedKey = selectedModule.startsWith('apps.')
+      ? selectedModule.slice('apps.'.length)
+      : selectedModule;
+    return selectedModule === moduleId || selectedKey === selectionKey;
+  });
+}
+
+function selectedCaptureIds(
+  resolutions: ConfigResolution[] | undefined,
+  selectedModules: string[],
+): Set<string> {
+  return new Set(
+    (resolutions ?? [])
+      .filter((resolution) => isSelectedConfigModule(resolution.moduleId, selectedModules))
+      .map((resolution) => resolution.captureId),
+  );
+}
+
 /**
  * Build the `--only` id list for a subset apply, in envelope action order:
  * the SELECTED winget app ids plus ALL manual/config-only app ids. Manual ids
@@ -364,10 +385,14 @@ export function SetupFlow({
       console.warn('[setup-flow] installable action without a manifest id in preview; per-app subset disabled for this apply');
     }
     const subsetActive = applyOnlySupported && !unmappable && pickerIds.length > 0 && selectedCount < pickerIds.length;
+    const allowedCaptureIds = selectedCaptureIds(previewResult?.configResolutions, selectedModules);
+    const relevantRestoreTargets = restoreTargets.filter(
+      (mapping) => allowedCaptureIds.has(mapping.captureId),
+    );
     const explicitRestoreTargets = restoreIntent === 'apps-and-settings'
       && selectedModules.length > 0
-      && restoreTargets.length > 0
-      ? restoreTargets
+      && relevantRestoreTargets.length > 0
+      ? relevantRestoreTargets
       : undefined;
     const restoreOpts: ApplyRestoreOptions | undefined = settingsCount > 0
       ? {
@@ -1039,7 +1064,16 @@ export function SetupFlow({
                         <ConfigModuleSelector
                           modules={modules}
                           selectedModules={selectedModules}
-                          onSelectionChange={setSelectedModules}
+                          onSelectionChange={(moduleIds) => {
+                            setSelectedModules(moduleIds);
+                            const allowedCaptureIds = selectedCaptureIds(
+                              previewResult.configResolutions,
+                              moduleIds,
+                            );
+                            setRestoreTargets((current) => current.filter(
+                              (mapping) => allowedCaptureIds.has(mapping.captureId),
+                            ));
+                          }}
                         />
                       );
                     })()}

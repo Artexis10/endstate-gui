@@ -142,6 +142,91 @@ describe('SetupFlow config generations', () => {
     });
   });
 
+  it('drops target mappings that belong to a deselected module', async () => {
+    const onPreview = vi.fn().mockResolvedValue({
+      installed: 2,
+      alreadyPresent: 0,
+      appEvents: [],
+      restoreModulesAvailable: [
+        { id: 'apps.photoshop', displayName: 'Adobe Photoshop' },
+        { id: 'apps.vscode', displayName: 'Visual Studio Code' },
+      ],
+      configResolutions: [
+        configResolution({
+          captureId: 'photoshop-capture',
+          moduleId: 'apps.photoshop',
+          resolution: 'unknown',
+          label: 'Choose Photoshop target',
+          reason: 'ambiguous_target_instance',
+          targetCandidates: [{
+            id: 'photoshop-2025',
+            moduleId: 'apps.photoshop',
+            detectorId: 'photoshop-install',
+            rawVersion: '26.0',
+            normalizedVersion: '26.0.0',
+            evidence: { type: 'registry', appId: 'Adobe.Photoshop' },
+            restoreModuleRevision: 'revision-restore',
+          }],
+        }),
+        configResolution({
+          captureId: 'vscode-capture',
+          moduleId: 'apps.vscode',
+          resolution: 'unknown',
+          label: 'Choose VS Code target',
+          reason: 'ambiguous_target_instance',
+          targetCandidates: [{
+            id: 'vscode-stable',
+            moduleId: 'apps.vscode',
+            detectorId: 'vscode-install',
+            rawVersion: '1.100',
+            normalizedVersion: '1.100.0',
+            evidence: { type: 'installed-app', appId: 'Microsoft.VisualStudioCode' },
+            restoreModuleRevision: 'revision-restore',
+          }],
+        }),
+      ],
+    });
+    const onApply = vi.fn().mockResolvedValue({
+      installed: 2,
+      alreadyPresent: 0,
+      failed: 0,
+      skipped: 0,
+      appEvents: [],
+    });
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        onPreview={onPreview}
+        onApply={onApply}
+      />,
+    );
+
+    await user.click(screen.getByText('generation-profile'));
+    await screen.findByText('Preview complete');
+    await user.click(screen.getByRole('radio', { name: /settings/i }));
+    await user.click(screen.getByRole('checkbox', { name: 'Adobe Photoshop' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Visual Studio Code' }));
+
+    await user.click(screen.getByRole('combobox', { name: /target for photoshop-capture/i }));
+    await user.click(screen.getByRole('option', { name: 'photoshop-2025 · 26.0' }));
+    await user.click(screen.getByRole('combobox', { name: /target for vscode-capture/i }));
+    await user.click(screen.getByRole('option', { name: 'vscode-stable · 1.100' }));
+
+    await user.click(screen.getByRole('checkbox', { name: 'Adobe Photoshop' }));
+    await user.click(screen.getByTestId('setup-flow-apply'));
+
+    await waitFor(() => expect(onApply).toHaveBeenCalledWith(profile, {
+      restoreIntent: 'apps-and-settings',
+      selectedModules: ['apps.vscode'],
+      restoreTargets: [{
+        captureId: 'vscode-capture',
+        targetInstanceId: 'vscode-stable',
+      }],
+    }));
+  });
+
   it('uses progress only while applying and renders final resolution state from the envelope', async () => {
     const onPreview = vi.fn().mockResolvedValue({
       installed: 1,
