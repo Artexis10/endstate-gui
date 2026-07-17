@@ -159,6 +159,44 @@ describe('SetupFlow command warnings', () => {
     expect(screen.getByTestId(`profile-card-${mockProfile.name}`)).toBeInTheDocument();
   });
 
+  it('clears preview A while preview B is still pending', async () => {
+    const previewBWarning = {
+      code: 'package_advisory',
+      message: 'Warning from preview B.',
+    };
+    const previewB = {
+      ...previewResult,
+      warnings: [previewBWarning],
+    };
+    let resolvePreviewB!: (result: typeof previewB) => void;
+    const pendingPreviewB = new Promise<typeof previewB>((resolve) => {
+      resolvePreviewB = resolve;
+    });
+    const onPreview = vi.fn()
+      .mockResolvedValueOnce(previewResult)
+      .mockReturnValueOnce(pendingPreviewB);
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        onPreview={onPreview}
+        onApply={vi.fn().mockResolvedValue(successfulApply())}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId(`profile-card-${mockProfile.name}`));
+    await screen.findByText(previewWarning.message, { exact: true });
+    await userEvent.click(screen.getByTestId('setup-flow-back'));
+    await userEvent.click(screen.getByTestId(`profile-card-${mockProfile.name}`));
+
+    expect(onPreview).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Previewing changes...')).toBeInTheDocument();
+    expect(screen.queryByText(previewWarning.message, { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /warnings/i })).not.toBeInTheDocument();
+
+    resolvePreviewB(previewB);
+    expect(await screen.findByText(previewBWarning.message, { exact: true })).toBeInTheDocument();
+  });
+
   it('does not change partial-failure status, counts, item copy, or controls', async () => {
     const partialWarning = {
       code: 'driver_advisory',

@@ -62,7 +62,7 @@ async function openSetup(page: Page, includeLiveWarning: boolean) {
                   {
                     code: 'possible_duplicate',
                     message: previewMessage,
-                    driver: 'choco',
+                    driver: 'chocolatey',
                     ref: 'git.install',
                   },
                 ],
@@ -71,7 +71,7 @@ async function openSetup(page: Page, includeLiveWarning: boolean) {
               ? {
                   warnings: [
                     {
-                      code: 'driver_advisory',
+                      code: 'optional_driver_unavailable',
                       message: liveMessage,
                       driver: 'winget',
                       ref: 'Git.Git',

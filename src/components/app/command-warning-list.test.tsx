@@ -53,4 +53,32 @@ describe('CommandWarningList', () => {
     expect(screen.getAllByText(repeated.message, { exact: true })).toHaveLength(2);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('renders driver-only and ref-only context without inventing the absent field', () => {
+    renderWithProviders(
+      <CommandWarningList
+        warnings={[
+          {
+            code: 'optional_driver_unavailable',
+            message: 'Chocolatey is unavailable.',
+            driver: 'chocolatey',
+          },
+          {
+            code: 'package_advisory',
+            message: 'Package-specific advisory.',
+            ref: 'Vendor.Package+Preview',
+          },
+        ]}
+      />,
+    );
+
+    const items = within(screen.getByRole('list')).getAllByRole('listitem');
+
+    expect(within(items[0]).getByText('Driver: chocolatey', { exact: true })).toBeInTheDocument();
+    expect(items[0]).not.toHaveTextContent('Ref:');
+    expect(items[0]).not.toHaveTextContent('Vendor.Package+Preview');
+    expect(within(items[1]).getByText('Ref: Vendor.Package+Preview', { exact: true })).toBeInTheDocument();
+    expect(items[1]).not.toHaveTextContent('Driver:');
+    expect(items[1]).not.toHaveTextContent('chocolatey');
+  });
 });
