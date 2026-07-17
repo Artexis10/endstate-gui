@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.20.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.19.2...gui-v2.20.0) (2026-07-17)
+
+
+### Features
+
+* bump engine to v2.24.0 ([#141](https://github.com/Artexis10/endstate-gui/issues/141)) ([0d64307](https://github.com/Artexis10/endstate-gui/commit/0d643071e735a3384e236f5b5e556ce03435dcce))
+* render engine command warnings ([#143](https://github.com/Artexis10/endstate-gui/issues/143)) ([3297028](https://github.com/Artexis10/endstate-gui/commit/3297028ea2e4ffd2f4a6421277de5861a1e33e41))
+
 ## [2.19.2](https://github.com/Artexis10/endstate-gui/compare/gui-v2.19.1...gui-v2.19.2) (2026-07-15)
 
 
