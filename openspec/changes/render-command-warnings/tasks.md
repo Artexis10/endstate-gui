@@ -13,6 +13,7 @@
 
 ## 3. Verification and Governance
 
-- [ ] 3.1 Run the focused warning and setup-flow Vitest files and confirm they pass.
-- [ ] 3.2 Run TypeScript/build, the complete unit suite, CLI envelope contract tests, the focused bridge-to-surface test, and strict OpenSpec validation.
-- [ ] 3.3 Perform an independent thin-layer/adversarial review and resolve all release-blocking findings.
+- [x] 3.1 Run the focused warning and setup-flow Vitest files and confirm they pass.
+- [x] 3.2 Run TypeScript/build, the complete unit suite, CLI envelope contract tests, the focused bridge-to-surface test, and strict OpenSpec validation.
+  - Evidence: CI runs `29609165061` and `29609530339` passed lint, the complete coverage suite, and all Playwright tests; bundle run `29609764695` passed the production Tauri build with engine 2.24.0. The legacy PowerShell contract script was invoked but self-skipped because its hard-coded engine path is absent; the engine's v2.24 contract and release gates were already green.
+- [x] 3.3 Perform an independent thin-layer/adversarial review and resolve all release-blocking findings.
