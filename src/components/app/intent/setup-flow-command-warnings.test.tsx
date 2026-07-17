@@ -132,6 +132,21 @@ describe('SetupFlow command warnings', () => {
     expect(warningMessages()).toHaveLength(1);
   });
 
+  it.each([
+    ['omitted', {}],
+    ['empty', { warnings: [] }],
+  ])('clears preview warnings when live apply warnings are %s', async (_label, warningShape) => {
+    const onApply = vi.fn().mockResolvedValue(successfulApply(warningShape));
+    await renderPreview({ onApply });
+
+    expect(screen.getByRole('region', { name: /warnings/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('setup-flow-apply'));
+
+    await screen.findByText('Setup complete');
+    expect(screen.queryByRole('region', { name: /warnings/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(previewWarning.message, { exact: true })).not.toBeInTheDocument();
+  });
+
   it('clears the current warning list when the parent resets the flow', async () => {
     const { rerender } = await renderPreview({ resetKey: 0 });
 

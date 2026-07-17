@@ -18,6 +18,14 @@ export interface EndstateError {
   hint?: string;
 }
 
+/** Engine-authored advisory attached to a completed command result. */
+export interface CommandWarning {
+  code: string;
+  message: string;
+  driver?: string;
+  ref?: string;
+}
+
 export interface EndstateHostedBackupCapability {
   supported: boolean;
   minSchemaVersion?: string;
@@ -364,6 +372,7 @@ export interface EndstateVerifyData {
     constraint: string;
   }>;
   items?: VerifyItem[];
+  warnings?: CommandWarning[];
 }
 
 export interface EndstateReportData {
@@ -433,6 +442,7 @@ export interface EndstateApplyData {
   restoreJournalFile?: string;
   restoreFilter?: string[];
   restoreModulesAvailable?: RestoreModuleRef[];
+  warnings?: CommandWarning[];
 }
 
 /** Enriched module reference from engine (v1.5+), or plain string ID from older CLIs. */

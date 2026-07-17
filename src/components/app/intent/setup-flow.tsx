@@ -17,7 +17,7 @@ import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 import { DropZone } from './drop-zone';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import type { DiscoveredProfile } from '@/file-discovery';
-import type { EndstateApplyData, EndstateEnvelope, EndstateRevertData, RestoreIntent, RestoreModuleRef, BackupListItem } from '@/types';
+import type { EndstateApplyData, EndstateEnvelope, EndstateRevertData, RestoreIntent, RestoreModuleRef, BackupListItem, CommandWarning } from '@/types';
 import type { EngineExecResult } from '@/lib/engine-exec';
 import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
 import { ConfigModuleSelector } from '@/components/app/overview/components/config-module-selector';
@@ -33,6 +33,7 @@ import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 import { ProfileCloudBadge } from '@/components/app/backup/profile-cloud-badge';
 import { profileKeyFor } from '@/lib/profile-key';
 import { ProfileStorageChip } from '@/components/app/backup/profile-storage-chip';
+import { CommandWarningList } from '@/components/app/command-warning-list';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
@@ -58,6 +59,7 @@ interface PreviewResult {
   restoreModulesAvailable?: RestoreModuleRef[];
   /** Maps winget ID → config module name for apps with settings */
   configModuleMap?: Record<string, string>;
+  warnings?: CommandWarning[];
 }
 
 /**
@@ -116,6 +118,7 @@ interface ApplyResult {
   configsRestored?: number;
   configsSkipped?: number;
   configsFailed?: number;
+  warnings?: CommandWarning[];
 }
 
 export interface SetupFlowProps {
@@ -811,6 +814,8 @@ export function SetupFlow({
                   </div>
                 </div>
 
+                <CommandWarningList warnings={previewResult.warnings} />
+
                 {/* Activity summary */}
                 {previewResult.appEvents.length > 0 && (
                   <div className="mt-3 border-t pt-3">
@@ -1126,6 +1131,8 @@ export function SetupFlow({
                     </p>
                   </div>
                 </div>
+
+                <CommandWarningList warnings={applyResult.warnings} />
 
                 {/* Activity summary */}
                 {applyResult.appEvents.length > 0 && (() => {
