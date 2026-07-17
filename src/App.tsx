@@ -2047,6 +2047,7 @@ function AppContent() {
       actions: previewActions,
       restoreModulesAvailable,
       configModuleMap,
+      warnings: envelopeData?.warnings,
     };
   };
 
@@ -2420,6 +2421,7 @@ function AppContent() {
       restoreSummary,
       restoreJournalFile: envelopeData?.restoreJournalFile,
       restoreModulesAvailable: restoreModulesAvailableResult,
+      warnings: envelopeData?.warnings,
     };
   };
 
