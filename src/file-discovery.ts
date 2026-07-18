@@ -102,7 +102,7 @@ export async function validateProfile(path: string): Promise<ValidationResult> {
  * Excludes .meta.json files and invalid manifests from the list.
  * 
  * Profile validity is determined by the engine's profile contract:
- * - Must have version field (number, value 1)
+ * - Must have version field (number, supported values 1 or 2)
  * - Must have apps field (array)
  */
 export async function discoverProfileDescriptors(directory: string): Promise<ProfileDescriptor[]> {

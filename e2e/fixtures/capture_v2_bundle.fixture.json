@@ -1,0 +1,13 @@
+{
+  "fileName": "capture-v2.zip",
+  "extractedDirectory": "C:\\test\\profiles\\capture-v2",
+  "manifestPath": "C:\\test\\profiles\\capture-v2\\manifest.jsonc",
+  "manifest": {
+    "version": 2,
+    "name": "capture-v2",
+    "apps": [
+      { "id": "VideoLAN.VLC", "source": "winget" }
+    ],
+    "restore": []
+  }
+}

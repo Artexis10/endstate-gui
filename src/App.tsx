@@ -18,6 +18,7 @@ import { loadDraft, clearDraft } from './lib/draft-store';
 import { resolveDraftContent } from './lib/draft-content-resolver';
 import { resolveProfilePath } from './lib/profile-selection-migration';
 import { discoverProfiles, DiscoveredProfile } from './file-discovery';
+import { findImportedProfile } from './lib/profile-import';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
@@ -183,6 +184,7 @@ function AppContent() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [profilesDirectory, setProfilesDirectory] = useState('');
+  const [profileToOpen, setProfileToOpen] = useState<DiscoveredProfile | null>(null);
   const [selectedProfile, setSelectedProfile] = useState('');
   const [selectedProfilePath, setSelectedProfilePath] = useState('');
   // Refs for immediate access in async callbacks (avoid stale closures)
@@ -656,6 +658,22 @@ function AppContent() {
     }
   };
 
+  const finishProfileImport = async (
+    directory: string,
+    importedPath: string,
+    fileName: string,
+  ) => {
+    const discovered = await discoverProfiles(directory);
+    setProfiles(discovered);
+    const importedProfile = findImportedProfile(discovered, importedPath);
+    if (!importedProfile) {
+      throw new Error('The imported file does not contain a supported Endstate profile');
+    }
+
+    setProfileToOpen(importedProfile);
+    showToast(`Imported ${fileName} — opening setup`, 'success');
+  };
+
   const handleOpenProfilesFolder = async () => {
     if (profilesDirectory) {
       try {
@@ -700,18 +718,18 @@ function AppContent() {
             binary += String.fromCharCode(bytes[i]);
           }
           const base64Data = btoa(binary);
-          await invoke<string>('import_zip_from_base64', {
+          const extractedDirectory = await invoke<string>('import_zip_from_base64', {
             data: base64Data,
             fileName: file.name,
             profilesDir: dir,
           });
-          showToast(`Imported ${file.name}`, 'success');
+          await finishProfileImport(dir, extractedDirectory, file.name);
         } else if (fileName.endsWith('.jsonc') || fileName.endsWith('.json') || fileName.endsWith('.json5')) {
           // Manifest files: read text and write to profiles directory
           const text = await file.text();
           const destPath = `${dir}\\${file.name}`;
           await invoke('write_text_file', { path: destPath, content: text });
-          showToast(`Imported ${file.name}`, 'success');
+          await finishProfileImport(dir, destPath, file.name);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -719,8 +737,6 @@ function AppContent() {
       }
     }
 
-    // Refresh profiles after import
-    await refreshProfiles();
   };
 
   // Import profiles by file path (Tauri mode: Rust handles file I/O directly)
@@ -742,18 +758,18 @@ function AppContent() {
       const fileName = filePath.split(/[/\\]/).pop() || '';
       try {
         if (fileName.toLowerCase().endsWith('.zip')) {
-          await invoke('extract_zip_profile', { zipPath: filePath, profilesDir: dir });
+          const extractedDirectory = await invoke<string>('extract_zip_profile', { zipPath: filePath, profilesDir: dir });
+          await finishProfileImport(dir, extractedDirectory, fileName);
         } else {
-          await invoke('import_profile', { sourcePath: filePath, profilesDir: dir });
+          const importedFileName = await invoke<string>('import_profile', { sourcePath: filePath, profilesDir: dir });
+          const destinationPath = `${dir.replace(/[\\/]+$/, '')}\\${importedFileName}`;
+          await finishProfileImport(dir, destinationPath, fileName);
         }
-        showToast(`Imported ${fileName}`, 'success');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         showToast(`Failed to import ${fileName}: ${msg}`, 'error');
       }
     }
-
-    await refreshProfiles();
   };
 
   // Browse for profile files using native dialog (Tauri mode only)
@@ -2782,6 +2798,7 @@ function AppContent() {
                 const isZip = captureResult.outputFormat === 'zip' && captureResult.outputPath;
                 const ext = isZip ? 'zip' : 'jsonc';
                 const defaultName = `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`;
+                let savedPath: string | undefined;
                 if (isTauriRuntime()) {
                   // Native Tauri: use OS save dialog
                   const { save } = await import('@tauri-apps/plugin-dialog');
@@ -2792,7 +2809,8 @@ function AppContent() {
                       : [{ name: 'Endstate Profile', extensions: ['jsonc'] }],
                     title: 'Save Capture File',
                   });
-                  if (!savePath) return false;
+                  if (!savePath) return { saved: false };
+                  savedPath = savePath;
                   if (isZip) {
                     await invoke('copy_file', { sourcePath: captureResult.outputPath, destPath: savePath });
                   } else {
@@ -2855,7 +2873,15 @@ function AppContent() {
                   URL.revokeObjectURL(url);
                 }
                 showToast('File saved', 'success');
-                return true;
+                return { saved: true, path: savedPath };
+              }}
+              onOpenSavedFolder={async (savedPath) => {
+                const parentDirectory = savedPath.replace(/[\\/][^\\/]+$/, '');
+                const result = await openFolder(parentDirectory);
+                if (!result.ok && result.reason === 'web' && result.path) {
+                  setFolderPathForModal(result.path);
+                  setShowFolderPathModal(true);
+                }
               }}
             />
           </div>
@@ -2865,6 +2891,8 @@ function AppContent() {
             {errorBanner}
             <SetupFlow
               profiles={profiles}
+              profileToOpen={profileToOpen}
+              onProfileToOpenConsumed={() => setProfileToOpen(null)}
               cloudBackupIndex={cloudEntryByKey}
               hostedBackupSupported={hostedBackupSupported}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}

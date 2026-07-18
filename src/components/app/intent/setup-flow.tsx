@@ -196,6 +196,10 @@ interface ApplyResult {
 
 export interface SetupFlowProps {
   profiles: DiscoveredProfile[];
+  /** Newly imported profile that should open directly in setup review. */
+  profileToOpen?: DiscoveredProfile | null;
+  /** Clears the one-shot imported profile handoff after it is consumed. */
+  onProfileToOpenConsumed?: () => void;
   onBack: () => void;
   onProfileSelect: (profile: DiscoveredProfile) => void;
   onOpenProfilesFolder: () => void;
@@ -267,6 +271,8 @@ export interface SetupFlowProps {
 
 export function SetupFlow({
   profiles,
+  profileToOpen,
+  onProfileToOpenConsumed,
   onBack,
   onProfileSelect,
   onOpenProfilesFolder,
@@ -415,6 +421,15 @@ export function SetupFlow({
       setPhase('error');
     }
   };
+
+  useEffect(() => {
+    if (!profileToOpen) return;
+    onProfileToOpenConsumed?.();
+    handleSelectProfile(profileToOpen);
+    // The profile object is a one-shot handoff. Re-running because callback
+    // identities changed would start the engine preview twice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileToOpen]);
 
   const handleApply = async () => {
     if (!selectedProfile) return;

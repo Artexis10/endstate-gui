@@ -1,0 +1,92 @@
+## ADDED Requirements
+
+### Requirement: Capture progress preserves successful meaning
+
+The GUI SHALL render engine capture item statuses `present` with reason `detected`, and compatibility status `captured`, as `DETECTED`. It MUST NOT render either successful capture event as `EXCLUDED`. Final captured app and configuration contents SHALL continue to come from the completed capture envelope.
+
+#### Scenario: Contract capture event is detected
+- **WHEN** capture streaming emits an item with status `present` and reason `detected`
+- **THEN** the progress row is labeled `DETECTED`
+
+#### Scenario: Engine 2.24.1 compatibility event is detected
+- **WHEN** capture streaming emits an item with status `captured`
+- **THEN** the progress row is labeled `DETECTED`
+- **AND** the event is not treated as skipped or excluded
+
+#### Scenario: A filtered item remains excluded
+- **WHEN** capture streaming emits an item with status `skipped` and reason `filtered`, `filtered_runtime`, or `filtered_store`
+- **THEN** the progress row is labeled `EXCLUDED`
+
+### Requirement: Version-compatible local profile validation
+
+The production Tauri validator and browser-bridge validator SHALL accept structurally valid profile manifests with version 1 or version 2. Unsupported versions and structurally invalid manifests SHALL remain invalid.
+
+#### Scenario: Version 1 profile remains valid
+- **WHEN** a manifest contains numeric `version: 1` and an apps array
+- **THEN** local profile validation reports it valid
+
+#### Scenario: Version 2 capture bundle is valid
+- **WHEN** a manifest contains numeric `version: 2`, an apps array, and optional restore actions
+- **THEN** local profile validation reports it valid
+
+#### Scenario: Unsupported future version is rejected
+- **WHEN** a manifest contains a version other than 1 or 2
+- **THEN** local profile validation reports `UNSUPPORTED_VERSION`
+
+### Requirement: ZIP import completes only after activation
+
+The GUI SHALL report a ZIP import as successful only after extraction, validation, discovery, and selection of the imported profile complete. A successful import SHALL open the imported profile in the setup review flow without automatically executing Apply.
+
+#### Scenario: Valid version 2 bundle import
+- **WHEN** the user imports a ZIP whose root manifest is a valid version 2 profile
+- **THEN** the extracted profile appears in the local profile list
+- **AND** that exact profile is selected
+- **AND** its setup review or preview surface is visible
+- **AND** the success message is emitted only after those outcomes
+
+#### Scenario: Extracted manifest fails validation
+- **WHEN** ZIP extraction succeeds but its manifest is invalid or unsupported
+- **THEN** the GUI reports import failure with the validation reason
+- **AND** does not show an import-success message
+
+#### Scenario: Import does not execute setup
+- **WHEN** a valid imported profile is selected and its review surface opens
+- **THEN** no Apply command starts until the user explicitly requests it
+
+### Requirement: Native Save has an explicit completion state
+
+After a capture file is saved, the GUI SHALL preserve the capture result and display a completion state containing the saved filename or path plus actions for Back to home and Save another copy. It SHALL also offer Open folder when the native save path is known.
+
+#### Scenario: Native capture save succeeds
+- **WHEN** the native save dialog returns a path and the capture artifact is copied successfully
+- **THEN** the GUI displays `Backup saved`
+- **AND** provides Back to home, Open folder, and Save another copy actions
+
+#### Scenario: Browser download succeeds
+- **WHEN** the web flow starts a capture download without a known filesystem path
+- **THEN** the GUI displays the saved completion state
+- **AND** omits Open folder
+
+#### Scenario: User returns home
+- **WHEN** the user activates Back to home from the saved completion state
+- **THEN** the primary FlowSelector home surface is displayed
+
+#### Scenario: User saves another copy
+- **WHEN** the user activates Save another copy
+- **THEN** the same preserved capture result is passed through the save dialog again
+
+### Requirement: Capture artifact flow has layered automated coverage
+
+The GUI SHALL have a fast Playwright regression that exercises mocked capture progress through Save and version 2 ZIP import into selected setup review. Release verification SHALL separately exercise the packaged engine and installer boundary.
+
+#### Scenario: Pull request regression test
+- **WHEN** the fast Playwright suite runs in CI
+- **THEN** it verifies a successful capture event renders `DETECTED`
+- **AND** a saved capture reaches the completion state
+- **AND** a version 2 ZIP import becomes the selected visible setup
+- **AND** no winget or real settings capture is required
+
+#### Scenario: Release artifact verification
+- **WHEN** a Windows release candidate is built
+- **THEN** the packaged engine is smoke-tested from the installer
+- **AND** the release does not publish unless the artifact checks succeed

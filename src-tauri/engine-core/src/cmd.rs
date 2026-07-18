@@ -450,12 +450,12 @@ pub fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
             };
         }
     };
-    if version_num != 1 {
+    if !matches!(version_num, 1 | 2) {
         return ValidationResult {
             valid: false,
             errors: vec![ValidationError {
                 code: "UNSUPPORTED_VERSION".to_string(),
-                message: format!("Unsupported profile version: {} (supported: 1)", version_num),
+                message: format!("Unsupported profile version: {} (supported: 1, 2)", version_num),
             }],
             summary: None,
         };
@@ -574,4 +574,35 @@ pub fn validate_profile(path: &str) -> Result<ValidationResult, String> {
         }
     };
     Ok(validate_profile_object(&json))
+}
+
+#[cfg(test)]
+mod profile_validation_tests {
+    use super::validate_profile_object;
+    use serde_json::json;
+
+    #[test]
+    fn accepts_capture_bundle_manifest_v2() {
+        let result = validate_profile_object(&json!({
+            "version": 2,
+            "name": "captured",
+            "apps": [],
+            "restore": []
+        }));
+
+        assert!(result.valid, "{:?}", result.errors);
+        assert_eq!(result.summary.expect("summary").version, 2);
+    }
+
+    #[test]
+    fn rejects_unknown_future_profile_version() {
+        let result = validate_profile_object(&json!({
+            "version": 3,
+            "name": "future",
+            "apps": []
+        }));
+
+        assert!(!result.valid);
+        assert_eq!(result.errors[0].code, "UNSUPPORTED_VERSION");
+    }
 }

@@ -1,0 +1,3 @@
+{"version":1,"runId":"capture-fixture","timestamp":"2026-07-18T12:00:00Z","event":"phase","phase":"capture"}
+{"version":1,"runId":"capture-fixture","timestamp":"2026-07-18T12:00:01Z","event":"item","id":"VideoLAN.VLC","driver":"winget","status":"captured","reason":null,"name":"VLC media player","message":"Captured VLC media player"}
+{"version":1,"runId":"capture-fixture","timestamp":"2026-07-18T12:00:02Z","event":"summary","phase":"capture","counts":{"total":1,"success":1,"skipped":0,"failed":0}}

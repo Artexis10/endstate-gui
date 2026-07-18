@@ -8,7 +8,7 @@ const baseProps = {
   isRunning: false,
   captureProgress: null,
   liveAppEvents: [],
-  onSaveToFile: vi.fn().mockResolvedValue(true),
+  onSaveToFile: vi.fn().mockResolvedValue({ saved: true }),
 };
 
 const captureResult = {

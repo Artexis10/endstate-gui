@@ -348,6 +348,7 @@ export function getPhaseColor(phase?: UiPhase): SemanticColor {
  * - to_install  -> to_install (blue)
  * - installing  -> installing (blue)
  * - installed   -> installed (green)
+ * - captured    -> detected (teal; compatibility with engine v2.24.1)
  * - skipped     -> skipped (yellow)
  * - failed      -> failed (red)
  */
@@ -361,6 +362,8 @@ export function engineStatusToStatusKey(engineStatus: EngineItemStatus): StatusK
       return 'installing';
     case 'installed':
       return 'installed';
+    case 'captured':
+      return 'detected';
     case 'skipped':
       return 'skipped';
     case 'failed':

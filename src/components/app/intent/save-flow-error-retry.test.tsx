@@ -51,7 +51,7 @@ describe('SaveFlow save errors', () => {
     const onSaveToFile = vi
       .fn()
       .mockRejectedValueOnce(new Error('disk full'))
-      .mockResolvedValueOnce(true);
+      .mockResolvedValueOnce({ saved: true });
     await reachSaveFailure(onStartCapture, onSaveToFile);
 
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
@@ -59,6 +59,6 @@ describe('SaveFlow save errors', () => {
     await waitFor(() => expect(onSaveToFile).toHaveBeenCalledTimes(2));
     expect(onSaveToFile).toHaveBeenLastCalledWith(captureResult);
     expect(onStartCapture).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.getByRole('button', { name: /start scan/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Backup saved')).toBeInTheDocument());
   });
 });

@@ -879,13 +879,14 @@ fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
         }
     };
     
-    // Check 4: Version is supported (currently only v1)
-    if version_num != 1 {
+    // Check 4: Version is supported. Capture bundles produced by the current
+    // engine use v2 while existing hand-authored profiles remain v1.
+    if !matches!(version_num, 1 | 2) {
         return ValidationResult {
             valid: false,
             errors: vec![ValidationError {
                 code: "UNSUPPORTED_VERSION".to_string(),
-                message: format!("Unsupported profile version: {} (supported: 1)", version_num),
+                message: format!("Unsupported profile version: {} (supported: 1, 2)", version_num),
             }],
             summary: None,
         };
@@ -1042,6 +1043,37 @@ fn validate_profile(path: String) -> Result<ValidationResult, String> {
     
     // Validate the parsed object
     Ok(validate_profile_object(&json))
+}
+
+#[cfg(test)]
+mod profile_validation_tests {
+    use super::validate_profile_object;
+    use serde_json::json;
+
+    #[test]
+    fn accepts_capture_bundle_manifest_v2() {
+        let result = validate_profile_object(&json!({
+            "version": 2,
+            "name": "captured",
+            "apps": [],
+            "restore": []
+        }));
+
+        assert!(result.valid, "{:?}", result.errors);
+        assert_eq!(result.summary.expect("summary").version, 2);
+    }
+
+    #[test]
+    fn rejects_unknown_future_profile_version() {
+        let result = validate_profile_object(&json!({
+            "version": 3,
+            "name": "future",
+            "apps": []
+        }));
+
+        assert!(!result.valid);
+        assert_eq!(result.errors[0].code, "UNSUPPORTED_VERSION");
+    }
 }
 
 /// Write text to a debug file (DEV-only).
