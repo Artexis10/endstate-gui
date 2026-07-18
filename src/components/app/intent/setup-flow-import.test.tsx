@@ -12,7 +12,12 @@ const importedProfile: DiscoveredProfile = {
 describe('SetupFlow imported profile handoff', () => {
   it('selects and previews a newly imported profile exactly once', async () => {
     const onProfileSelect = vi.fn();
-    const onPreview = vi.fn().mockResolvedValue({ actions: [] });
+    const onPreview = vi.fn().mockResolvedValue({
+      installed: 0,
+      alreadyPresent: 0,
+      appEvents: [],
+      actions: [],
+    });
     const onProfileToOpenConsumed = vi.fn();
 
     renderWithProviders(

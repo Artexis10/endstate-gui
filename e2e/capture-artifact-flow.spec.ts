@@ -124,7 +124,7 @@ test.describe('capture artifact flow regression', () => {
     await page.getByTestId('intent-save').click();
     await page.getByTestId('save-flow-start-scan').click();
 
-    await expect(page.getByText('DETECTED')).toBeVisible();
+  await expect(page.getByText('DETECTED', { exact: true })).toBeVisible();
     await expect(page.getByText('EXCLUDED')).toHaveCount(0);
     await expect(page.getByText('1 setting captured')).toBeVisible();
     await expect(page.getByRole('button', { name: '1 settings' })).toBeVisible();
