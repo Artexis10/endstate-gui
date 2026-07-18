@@ -214,13 +214,6 @@ impl StagingDirectory {
 
         Err("Failed to allocate a unique import staging directory".to_string())
     }
-
-    fn commit_to(&mut self, final_dir: &Path) -> Result<(), String> {
-        fs::rename(&self.path, final_dir)
-            .map_err(|e| format!("Failed to commit imported profile: {}", e))?;
-        self.active = false;
-        Ok(())
-    }
 }
 
 impl Drop for StagingDirectory {
@@ -255,21 +248,48 @@ fn sanitize_file_name(file_name: &str, fallback: &str) -> String {
             }
         })
         .collect::<String>();
-    let sanitized = sanitized.trim_matches(|ch: char| ch == '.' || ch.is_whitespace());
+    let sanitized = sanitized
+        .trim_matches(|ch: char| ch == '.' || ch.is_whitespace())
+        .to_string();
 
-    if sanitized.is_empty() || matches!(sanitized, "." | "..") {
+    let mut safe_name = if sanitized.is_empty() || matches!(sanitized.as_str(), "." | "..") {
         fallback.to_string()
     } else {
-        sanitized.to_string()
+        sanitized
+    };
+    if windows_reserved_basename(&safe_name) {
+        safe_name.insert(0, '_');
     }
+    safe_name
 }
 
-fn collision_free_file_path(directory: &Path, file_name: &str) -> Result<PathBuf, String> {
-    let direct = directory.join(file_name);
-    if !direct.exists() {
-        return Ok(direct);
+fn windows_reserved_basename(component: &str) -> bool {
+    let basename = component
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches(['.', ' '])
+        .to_ascii_uppercase();
+
+    if matches!(basename.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        return true;
     }
 
+    let bytes = basename.as_bytes();
+    bytes.len() == 4 && matches!(&bytes[..3], b"COM" | b"LPT") && matches!(bytes[3], b'1'..=b'9')
+}
+
+fn windows_component_is_unsafe(component: &str) -> bool {
+    component.contains(':')
+        || component.ends_with('.')
+        || component.ends_with(' ')
+        || windows_reserved_basename(component)
+}
+
+fn suffixed_file_name(file_name: &str, suffix: u32) -> String {
+    if suffix == 0 {
+        return file_name.to_string();
+    }
     let path = Path::new(file_name);
     let stem = path
         .file_stem()
@@ -277,42 +297,65 @@ fn collision_free_file_path(directory: &Path, file_name: &str) -> Result<PathBuf
         .unwrap_or("profile");
     let extension = path.extension().and_then(|value| value.to_str());
 
-    for suffix in 1..=u32::MAX {
-        let candidate_name = match extension {
-            Some(extension) if !extension.is_empty() => {
-                format!("{}_{}.{}", stem, suffix, extension)
-            }
-            _ => format!("{}_{}", stem, suffix),
-        };
-        let candidate = directory.join(candidate_name);
-        if !candidate.exists() {
-            return Ok(candidate);
+    match extension {
+        Some(extension) if !extension.is_empty() => {
+            format!("{}_{}.{}", stem, suffix, extension)
         }
+        _ => format!("{}_{}", stem, suffix),
     }
-
-    Err(format!(
-        "Failed to find a collision-free destination for {}",
-        file_name
-    ))
 }
 
-fn collision_free_directory_path(directory: &Path, name: &str) -> Result<PathBuf, String> {
-    let direct = directory.join(name);
-    if !direct.exists() {
-        return Ok(direct);
+fn suffixed_directory_name(name: &str, suffix: u32) -> String {
+    if suffix == 0 {
+        name.to_string()
+    } else {
+        format!("{}_{}", name, suffix)
+    }
+}
+
+struct FinalDirectoryReservation {
+    path: PathBuf,
+    committed: bool,
+}
+
+impl FinalDirectoryReservation {
+    fn create(profiles_dir: &Path, name: &str) -> Result<Self, String> {
+        for suffix in 0..=u32::MAX {
+            let candidate = profiles_dir.join(suffixed_directory_name(name, suffix));
+            match fs::create_dir(&candidate) {
+                Ok(()) => {
+                    return Ok(Self {
+                        path: candidate,
+                        committed: false,
+                    });
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to reserve imported profile destination: {}",
+                        e
+                    ));
+                }
+            }
+        }
+
+        Err(format!(
+            "Failed to reserve a collision-free destination for {}",
+            name
+        ))
     }
 
-    for suffix in 1..=u32::MAX {
-        let candidate = directory.join(format!("{}_{}", name, suffix));
-        if !candidate.exists() {
-            return Ok(candidate);
+    fn mark_committed(&mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for FinalDirectoryReservation {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = fs::remove_dir_all(&self.path);
         }
     }
-
-    Err(format!(
-        "Failed to find a collision-free destination for {}",
-        name
-    ))
 }
 
 fn validation_error(result: &ValidationResult) -> String {
@@ -378,14 +421,27 @@ fn commit_manifest_bytes(
 
     let result = (|| {
         require_valid_profile(&staging_path)?;
-        let final_path = collision_free_file_path(profiles_dir, &safe_file_name)?;
-        let final_path_string = final_path
-            .to_str()
-            .ok_or_else(|| "Invalid destination path encoding".to_string())?
-            .to_string();
-        fs::rename(&staging_path, &final_path)
-            .map_err(|e| format!("Failed to commit imported profile: {}", e))?;
-        Ok(final_path_string)
+
+        for suffix in 0..=u32::MAX {
+            let final_path = profiles_dir.join(suffixed_file_name(&safe_file_name, suffix));
+            let final_path_string = final_path
+                .to_str()
+                .ok_or_else(|| "Invalid destination path encoding".to_string())?
+                .to_string();
+            match fs::hard_link(&staging_path, &final_path) {
+                Ok(()) => {
+                    let _ = fs::remove_file(&staging_path);
+                    return Ok(final_path_string);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(format!("Failed to commit imported profile: {}", e)),
+            }
+        }
+
+        Err(format!(
+            "Failed to find a collision-free destination for {}",
+            safe_file_name
+        ))
     })();
 
     if result.is_err() {
@@ -417,13 +473,11 @@ pub fn import_profile_text(
 
 fn zip_entry_is_unsafe(name: &str) -> bool {
     let normalized = name.replace('\\', "/");
-    let mut components = normalized.split('/');
-    let first = components.next().unwrap_or("");
-    let drive_prefixed = first.as_bytes().get(1) == Some(&b':');
 
     normalized.starts_with('/')
-        || drive_prefixed
-        || normalized.split('/').any(|component| component == "..")
+        || normalized
+            .split('/')
+            .any(|component| component == ".." || windows_component_is_unsafe(component))
         || Path::new(name).components().any(|component| {
             matches!(
                 component,
@@ -443,7 +497,7 @@ fn import_zip_archive<R: Read + Seek>(
         .and_then(|value| value.to_str())
         .unwrap_or("profile");
     let profile_name = sanitize_file_name(raw_stem, "profile");
-    let mut staging = StagingDirectory::create(profiles_dir)?;
+    let staging = StagingDirectory::create(profiles_dir)?;
 
     for index in 0..archive.len() {
         let mut entry = archive
@@ -483,13 +537,29 @@ fn import_zip_archive<R: Read + Seek>(
     }
     require_valid_profile(&staged_manifest)?;
 
-    let final_dir = collision_free_directory_path(profiles_dir, &profile_name)?;
-    let committed_manifest = final_dir.join("manifest.jsonc");
+    let mut reservation = FinalDirectoryReservation::create(profiles_dir, &profile_name)?;
+    let committed_manifest = reservation.path.join("manifest.jsonc");
     let committed_manifest_string = committed_manifest
         .to_str()
         .ok_or_else(|| "Invalid committed manifest path encoding".to_string())?
         .to_string();
-    staging.commit_to(&final_dir)?;
+
+    let staged_entries = fs::read_dir(&staging.path)
+        .map_err(|e| format!("Failed to read staged profile: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to read staged profile entry: {}", e))?;
+    for entry in staged_entries {
+        if entry.file_name() == "manifest.jsonc" {
+            continue;
+        }
+        let destination = reservation.path.join(entry.file_name());
+        fs::rename(entry.path(), destination)
+            .map_err(|e| format!("Failed to move staged profile payload: {}", e))?;
+    }
+
+    fs::hard_link(&staged_manifest, &committed_manifest)
+        .map_err(|e| format!("Failed to publish imported profile manifest: {}", e))?;
+    reservation.mark_committed();
     Ok(committed_manifest_string)
 }
 
@@ -914,10 +984,12 @@ mod profile_validation_tests {
     };
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     use serde_json::json;
+    use std::collections::HashSet;
     use std::fs;
     use std::io::Write;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Barrier};
     use zip::write::SimpleFileOptions;
 
     const VALID_V1: &str = r#"{"version":1,"name":"legacy","apps":[]}"#;
@@ -981,11 +1053,11 @@ mod profile_validation_tests {
     #[test]
     fn accepts_exact_integer_profile_versions_v1_and_v2() {
         for version in [1, 2] {
-        let result = validate_profile_object(&json!({
+            let result = validate_profile_object(&json!({
                 "version": version,
                 "name": "profile",
                 "apps": []
-        }));
+            }));
 
             assert!(result.valid, "version {version}: {:?}", result.errors);
             assert_eq!(result.summary.expect("summary").version, version);
@@ -1053,6 +1125,11 @@ mod profile_validation_tests {
             ("parent", "../escape.txt"),
             ("rooted", "/absolute.txt"),
             ("windows-rooted", "C:/absolute.txt"),
+            ("windows-ads", "payload:stream"),
+            ("windows-device", "NUL.txt"),
+            ("windows-nested-device", "payload/COM1.cfg"),
+            ("windows-trailing-dot", "payload/file."),
+            ("windows-trailing-space", "payload/file "),
         ] {
             let temp = TestDir::new(label);
             let profiles = temp.path().join("profiles");
@@ -1149,6 +1226,68 @@ mod profile_validation_tests {
     }
 
     #[test]
+    fn concurrent_bare_imports_commit_without_clobbering() {
+        const IMPORTS: usize = 24;
+        let temp = TestDir::new("concurrent-bare");
+        let profiles = Arc::new(temp.path().join("profiles"));
+        let barrier = Arc::new(Barrier::new(IMPORTS));
+        let mut handles = Vec::new();
+
+        for index in 0..IMPORTS {
+            let profiles = Arc::clone(&profiles);
+            let barrier = Arc::clone(&barrier);
+            handles.push(std::thread::spawn(move || {
+                let content = format!(r#"{{"version":2,"name":"concurrent-{index}","apps":[]}}"#);
+                barrier.wait();
+                import_profile_text(
+                    &content,
+                    "profile.jsonc",
+                    profiles.to_str().expect("profiles path"),
+                )
+            }));
+        }
+
+        let committed = handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .expect("join importer")
+                    .expect("commit import")
+            })
+            .collect::<HashSet<_>>();
+
+        assert_eq!(committed.len(), IMPORTS);
+        assert_eq!(directory_names(&profiles).len(), IMPORTS);
+        assert!(committed.iter().all(|path| Path::new(path).is_file()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_bare_target_is_preserved_and_import_uses_next_suffix() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TestDir::new("dangling-bare");
+        let profiles = temp.path().join("profiles");
+        fs::create_dir(&profiles).expect("create profiles");
+        let dangling = profiles.join("profile.jsonc");
+        symlink(temp.path().join("missing-manifest"), &dangling).expect("create dangling symlink");
+
+        let committed = import_profile_text(
+            VALID_V2,
+            "profile.jsonc",
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect("import beside dangling target");
+
+        assert_eq!(PathBuf::from(committed), profiles.join("profile_1.jsonc"));
+        assert!(fs::symlink_metadata(&dangling)
+            .expect("dangling target metadata")
+            .file_type()
+            .is_symlink());
+    }
+
+    #[test]
     fn text_import_sanitizes_untrusted_name_to_one_basename() {
         let temp = TestDir::new("text-name");
         let profiles = temp.path().join("profiles");
@@ -1184,5 +1323,87 @@ mod profile_validation_tests {
         assert_eq!(committed, profiles.join("escaped").join("manifest.jsonc"));
         assert!(committed.is_file());
         assert_eq!(directory_names(&profiles), vec!["escaped"]);
+    }
+
+    #[test]
+    fn user_provided_final_names_sanitize_windows_devices() {
+        let temp = TestDir::new("device-name");
+        let profiles = temp.path().join("profiles");
+
+        let committed = import_profile_text(
+            VALID_V2,
+            "NUL.jsonc",
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect("import device-named manifest");
+
+        assert_eq!(PathBuf::from(committed), profiles.join("_NUL.jsonc"));
+    }
+
+    #[test]
+    fn concurrent_zip_imports_reserve_distinct_profile_directories() {
+        const IMPORTS: usize = 16;
+        let temp = TestDir::new("concurrent-zip");
+        let profiles = Arc::new(temp.path().join("profiles"));
+        let zip_path = Arc::new(temp.path().join("capture.zip"));
+        write_zip(&zip_path, &[("manifest.jsonc", VALID_V2)]);
+        let barrier = Arc::new(Barrier::new(IMPORTS));
+        let mut handles = Vec::new();
+
+        for _ in 0..IMPORTS {
+            let profiles = Arc::clone(&profiles);
+            let zip_path = Arc::clone(&zip_path);
+            let barrier = Arc::clone(&barrier);
+            handles.push(std::thread::spawn(move || {
+                barrier.wait();
+                extract_zip_profile(
+                    zip_path.to_str().expect("zip path"),
+                    profiles.to_str().expect("profiles path"),
+                )
+            }));
+        }
+
+        let committed = handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .expect("join importer")
+                    .expect("commit import")
+            })
+            .collect::<HashSet<_>>();
+
+        assert_eq!(committed.len(), IMPORTS);
+        assert_eq!(directory_names(&profiles).len(), IMPORTS);
+        assert!(committed.iter().all(|path| Path::new(path).is_file()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_zip_target_is_preserved_and_import_uses_next_suffix() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TestDir::new("dangling-zip");
+        let profiles = temp.path().join("profiles");
+        let zip_path = temp.path().join("capture.zip");
+        fs::create_dir(&profiles).expect("create profiles");
+        write_zip(&zip_path, &[("manifest.jsonc", VALID_V2)]);
+        let dangling = profiles.join("capture");
+        symlink(temp.path().join("missing-profile"), &dangling).expect("create dangling symlink");
+
+        let committed = extract_zip_profile(
+            zip_path.to_str().expect("zip path"),
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect("import beside dangling target");
+
+        assert_eq!(
+            PathBuf::from(committed),
+            profiles.join("capture_1").join("manifest.jsonc")
+        );
+        assert!(fs::symlink_metadata(&dangling)
+            .expect("dangling target metadata")
+            .file_type()
+            .is_symlink());
     }
 }
