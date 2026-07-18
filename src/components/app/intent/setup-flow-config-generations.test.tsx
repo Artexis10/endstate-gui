@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from '@testing-library/react';
-import { renderWithProviders, screen, userEvent, waitFor } from '@/test/test-utils';
+import { renderWithProviders, screen, userEvent, waitFor, within } from '@/test/test-utils';
 import type { ConfigResolution } from '@/types';
 import { EngineEnvelopeError } from '@/lib/engine-envelope-error';
 import { SetupFlow } from './setup-flow';
@@ -119,6 +119,9 @@ describe('SetupFlow config generations', () => {
     await user.click(screen.getByText('generation-profile'));
     await screen.findByText('Preview complete');
     expect(screen.getByText('Engine legacy warning')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('config-resolution-legacy-capture')).getByText('Adobe Photoshop'),
+    ).toBeVisible();
     await user.click(screen.getByRole('radio', { name: /settings/i }));
 
     const legacyConsent = screen.getByRole('checkbox', { name: 'Adobe Photoshop' });

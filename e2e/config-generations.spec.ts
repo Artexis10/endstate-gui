@@ -13,6 +13,8 @@ test.describe('configuration generations', () => {
         showDetails: true,
       }));
       (window as any).__CONFIG_GENERATION_APPLY_ARGS__ = null;
+      (window as any).__CONFIG_GENERATION_FAIL_WITH_DATA__ = false;
+      (window as any).__CONFIG_GENERATION_PREVIEW_FAIL_WITH_DATA__ = false;
 
       const resolution = (overrides: Record<string, unknown>) => ({
         moduleId: 'apps.photoshop',
@@ -137,6 +139,11 @@ test.describe('configuration generations', () => {
           }
           if (command === 'apply') {
             const isPreview = args.includes('--dry-run');
+            const failPreviewWithData = isPreview
+              && Boolean((window as any).__CONFIG_GENERATION_PREVIEW_FAIL_WITH_DATA__);
+            const failWithData = !isPreview
+              && Boolean((window as any).__CONFIG_GENERATION_FAIL_WITH_DATA__);
+            const commandFailed = failPreviewWithData || failWithData;
             if (!isPreview) {
               (window as any).__CONFIG_GENERATION_APPLY_ARGS__ = [...args];
               const events = [
@@ -190,10 +197,14 @@ test.describe('configuration generations', () => {
                     targetGeneration: 'photoshop-gen-26',
                     resolution: 'migrate',
                     migrationPath: ['photoshop-gen-25', 'photoshop-gen-26'],
-                    status: 'rolled_back',
-                    label: 'Migration rolled back',
-                    message: 'Engine final rollback result',
-                    remediation: 'Engine final rollback remediation',
+                    status: failWithData ? 'rollback_failed' : 'rolled_back',
+                    label: failWithData ? 'Migration rollback failed' : 'Migration rolled back',
+                    message: failWithData
+                      ? 'Engine final rollback failure result'
+                      : 'Engine final rollback result',
+                    remediation: failWithData
+                      ? 'Engine final rollback failure remediation'
+                      : 'Engine final rollback remediation',
                   }),
                   resolution({
                     captureId: 'ambiguous-2',
@@ -206,10 +217,22 @@ test.describe('configuration generations', () => {
                 ];
 
             return {
-              exitCode: 0,
+              exitCode: commandFailed ? 1 : 0,
               envelope: {
-                success: true,
-                error: null,
+                success: !commandFailed,
+                error: failWithData
+                  ? {
+                      code: 'config_generation_migration_failed',
+                      message: 'Engine terminal migration failure',
+                      remediation: 'Engine terminal failure remediation',
+                    }
+                  : failPreviewWithData
+                    ? {
+                        code: 'config_generation_preview_failed',
+                        message: 'Engine preview terminal failure',
+                        remediation: 'Engine preview failure remediation',
+                      }
+                  : null,
                 data: {
                   counts: {
                     installed: 1,
@@ -221,6 +244,9 @@ test.describe('configuration generations', () => {
                   actions: [{ id: 'photoshop', ref: 'Adobe.Photoshop', status: isPreview ? 'to_install' : 'installed' }],
                   restoreModulesAvailable: [{ id: 'photoshop', displayName: 'Adobe Photoshop' }],
                   configModuleMap: { 'Adobe.Photoshop': 'apps.photoshop' },
+                  warnings: commandFailed
+                    ? [{ code: 'config_warning', message: 'Engine warning retained on failure' }]
+                    : undefined,
                   restoreSummary: isPreview
                     ? undefined
                     : { total: 3, restored: 2, skipped: 0, failed: 1, backupLocation: null },
@@ -321,5 +347,39 @@ test.describe('configuration generations', () => {
       '--profile',
       'C:\\test\\profiles\\generation-profile.jsonc',
     ]);
+  });
+
+  test('keeps authoritative config outcomes when a failed envelope also has structured data', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__CONFIG_GENERATION_FAIL_WITH_DATA__ = true;
+    });
+    await page.locator('[data-testid="intent-setup"]').click();
+    await page.locator('[data-testid="profile-card-generation-profile"]').click();
+    await expect(page.getByText('Preview complete')).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('radio', { name: 'Install apps and restore settings' }).click();
+    await page.getByRole('checkbox', { name: 'Adobe Photoshop' }).click();
+    await page.locator('[data-testid="setup-flow-apply"]').click();
+
+    await expect(page.getByText('Engine terminal migration failure')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Engine terminal failure remediation')).toBeVisible();
+    await expect(page.getByText('Engine warning retained on failure')).toBeVisible();
+    await expect(page.getByText('Engine final rollback failure result')).toBeVisible();
+    await expect(page.getByText('rollback_failed')).toBeVisible();
+  });
+
+  test('keeps authoritative preview rows when a failed preview envelope has structured data', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__CONFIG_GENERATION_PREVIEW_FAIL_WITH_DATA__ = true;
+    });
+    await page.locator('[data-testid="intent-setup"]').click();
+    await page.locator('[data-testid="profile-card-generation-profile"]').click();
+
+    await expect(page.getByText('Preview completed with errors')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Engine preview terminal failure')).toBeVisible();
+    await expect(page.getByText('Engine preview failure remediation')).toBeVisible();
+    await expect(page.getByText('Engine legacy consent warning')).toBeVisible();
+    await expect(page.getByText('Engine warning retained on failure')).toBeVisible();
+    await expect(page.locator('[data-testid="setup-flow-apply"]')).toBeDisabled();
   });
 });

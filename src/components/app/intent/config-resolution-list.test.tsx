@@ -59,7 +59,7 @@ describe('ConfigResolutionList', () => {
     expect(screen.getByText('rollback_failed')).toBeInTheDocument();
   });
 
-  it('shows the owning module beside a legacy compatibility warning', () => {
+  it('keeps the raw module id out of the distilled legacy warning row', () => {
     renderWithProviders(
       <ConfigResolutionList
         resolutions={[
@@ -75,8 +75,44 @@ describe('ConfigResolutionList', () => {
     );
 
     const row = screen.getByTestId('config-resolution-legacy-capture');
-    expect(within(row).getByText('apps.photoshop')).toBeVisible();
+    expect(within(row).queryByText('apps.photoshop')).not.toBeInTheDocument();
     expect(within(row).getByText('Review these legacy settings before restoring them.')).toBeVisible();
+  });
+
+  it('associates identical legacy warnings with their human module names', () => {
+    renderWithProviders(
+      <ConfigResolutionList
+        resolutions={[
+          resolution({
+            captureId: 'photoshop-legacy',
+            moduleId: 'apps.photoshop',
+            resolution: 'legacy_unverified',
+            label: 'Compatibility unknown',
+            message: 'Review these legacy settings before restoring them.',
+          }),
+          resolution({
+            captureId: 'vscode-legacy',
+            moduleId: 'apps.vscode',
+            resolution: 'legacy_unverified',
+            label: 'Compatibility unknown',
+            message: 'Review these legacy settings before restoring them.',
+          }),
+        ]}
+        moduleDisplayNames={{
+          'apps.photoshop': 'Adobe Photoshop',
+          'apps.vscode': 'Visual Studio Code',
+        }}
+      />,
+    );
+
+    const photoshopRow = screen.getByTestId('config-resolution-photoshop-legacy');
+    const vscodeRow = screen.getByTestId('config-resolution-vscode-legacy');
+    expect(within(photoshopRow).getByText('Adobe Photoshop')).toBeVisible();
+    expect(within(photoshopRow).queryByText('Visual Studio Code')).not.toBeInTheDocument();
+    expect(within(vscodeRow).getByText('Visual Studio Code')).toBeVisible();
+    expect(within(vscodeRow).queryByText('Adobe Photoshop')).not.toBeInTheDocument();
+    expect(screen.queryByText('apps.photoshop')).not.toBeInTheDocument();
+    expect(screen.queryByText('apps.vscode')).not.toBeInTheDocument();
   });
 
   it('offers engine candidates in input order with no default target', async () => {
@@ -174,8 +210,10 @@ describe('ConfigResolutionList', () => {
       />,
     );
 
+    expect(screen.queryByText('apps.photoshop')).not.toBeInTheDocument();
     expect(screen.queryByText(/source-25\.0/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Configuration details' }));
+    expect(screen.getByText('apps.photoshop')).toBeInTheDocument();
     expect(screen.getByText(/source-25\.0/)).toBeInTheDocument();
     expect(screen.getByText(/target-26\.0/)).toBeInTheDocument();
     expect(screen.getByText('fingerprint-abc')).toBeInTheDocument();

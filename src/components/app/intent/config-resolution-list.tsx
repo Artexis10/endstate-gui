@@ -10,6 +10,7 @@ import { DetailsDisclosure } from '@/components/ui/details-disclosure';
 
 interface ConfigResolutionListProps {
   resolutions: ConfigResolution[];
+  moduleDisplayNames?: Readonly<Record<string, string>>;
   restoreTargetSupported?: boolean;
   targetMappings?: RestoreTargetMapping[];
   onTargetMappingChange?: (mapping: RestoreTargetMapping) => void;
@@ -18,6 +19,7 @@ interface ConfigResolutionListProps {
 export function ConfigResolutionList(
   {
     resolutions,
+    moduleDisplayNames = {},
     restoreTargetSupported = false,
     targetMappings = [],
     onTargetMappingChange,
@@ -37,10 +39,12 @@ export function ConfigResolutionList(
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 space-y-1">
+              {moduleDisplayNames[resolution.moduleId] && (
+                <p className="text-xs font-medium text-foreground">
+                  {moduleDisplayNames[resolution.moduleId]}
+                </p>
+              )}
               <p className="text-sm font-medium">{resolution.label}</p>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                {resolution.moduleId}
-              </p>
               <p className="text-xs text-muted-foreground">{resolution.message}</p>
               {resolution.remediation !== null && (
                 <p className="text-xs text-muted-foreground">{resolution.remediation}</p>

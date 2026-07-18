@@ -24,6 +24,7 @@ import type {
   ConfigResolution,
   ConfigResolutionSummary,
   EndstateApplyData,
+  EndstateError,
   EndstateEnvelope,
   EndstateRevertData,
   RestoreIntent,
@@ -61,6 +62,8 @@ function isConfigOnlyApp(event: AppEvent): boolean {
 }
 
 interface PreviewResult {
+  success?: boolean;
+  error?: EndstateError | null;
   installed: number;
   alreadyPresent: number;
   appEvents: AppEvent[];
@@ -122,6 +125,32 @@ function selectedCaptureIds(
   );
 }
 
+function moduleDisplayNameMap(
+  moduleRefs: RestoreModuleRef[] | undefined,
+): Record<string, string> {
+  const displayNames: Record<string, string> = {};
+  for (const moduleRef of moduleRefs ?? []) {
+    const displayName = moduleRef.displayName?.trim();
+    if (!displayName) continue;
+
+    const shortId = moduleRef.id.startsWith('apps.')
+      ? moduleRef.id.slice('apps.'.length)
+      : moduleRef.id;
+    const qualifiedId = `apps.${shortId}`;
+
+    // A fallback displayName equal to an engine ID is provenance, not friendly
+    // copy. Keep that value in Details instead of leaking it into the distilled row.
+    if (displayName === moduleRef.id || displayName === shortId || displayName === qualifiedId) {
+      continue;
+    }
+
+    displayNames[moduleRef.id] = displayName;
+    displayNames[shortId] = displayName;
+    displayNames[qualifiedId] = displayName;
+  }
+  return displayNames;
+}
+
 /**
  * Build the `--only` id list for a subset apply, in envelope action order:
  * the SELECTED winget app ids plus ALL manual/config-only app ids. Manual ids
@@ -147,6 +176,7 @@ function buildOnlyAppIds(actions: EndstateApplyData['actions'], selected: Set<st
 }
 
 interface ApplyResult {
+  success?: boolean;
   installed: number;
   alreadyPresent: number;
   failed: number;
@@ -154,12 +184,14 @@ interface ApplyResult {
   appEvents: AppEvent[];
   /** Maps winget ID → config module name for apps with settings */
   configModuleMap?: Record<string, string>;
+  restoreModulesAvailable?: RestoreModuleRef[];
   configsRestored?: number;
   configsSkipped?: number;
   configsFailed?: number;
   configResolutions?: ConfigResolution[];
   configResolutionSummary?: ConfigResolutionSummary;
   warnings?: CommandWarning[];
+  error?: EndstateError | null;
 }
 
 export interface SetupFlowProps {
@@ -284,6 +316,14 @@ export function SetupFlow({
   const [undoDryRunData, setUndoDryRunData] = useState<EndstateRevertData | null>(null);
   const [undoExecuteData, setUndoExecuteData] = useState<EndstateRevertData | null>(null);
   const [undoError, setUndoError] = useState('');
+  const previewModuleDisplayNames = moduleDisplayNameMap(
+    previewResult?.restoreModulesAvailable,
+  );
+  const applyModuleDisplayNames = moduleDisplayNameMap(
+    applyResult?.restoreModulesAvailable?.length
+      ? applyResult.restoreModulesAvailable
+      : previewResult?.restoreModulesAvailable,
+  );
 
   // Reset internal state when resetKey changes (parent signals a fresh start)
   useEffect(() => {
@@ -869,12 +909,18 @@ export function SetupFlow({
             transition={transition}
             className="space-y-4"
           >
-            <Card className="border-l-2 border-l-green-500/50">
+            <Card className={`border-l-2 ${previewResult.success === false ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
               <CardContent className="py-6 px-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <Eye className="h-5 w-5 text-green-500" />
+                  {previewResult.success === false ? (
+                    <XCircle className="h-5 w-5 text-amber-500" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-green-500" />
+                  )}
                   <div>
-                    <p className="text-sm font-medium">Preview complete</p>
+                    <p className="text-sm font-medium">
+                      {previewResult.success === false ? 'Preview completed with errors' : 'Preview complete'}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {displayInstalled > 0
                         ? `${displayInstalled} to install, ${displayPresent} already present`
@@ -886,6 +932,17 @@ export function SetupFlow({
                     </p>
                   </div>
                 </div>
+
+                {previewResult.error && (
+                  <div className="mb-4 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2" role="alert">
+                    <p className="text-sm text-foreground">{previewResult.error.message}</p>
+                    {previewResult.error.remediation && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {previewResult.error.remediation}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <CommandWarningList warnings={previewResult.warnings} />
 
@@ -1090,6 +1147,7 @@ export function SetupFlow({
                   <div className="mt-4">
                     <ConfigResolutionList
                       resolutions={previewResult.configResolutions ?? []}
+                      moduleDisplayNames={previewModuleDisplayNames}
                       restoreTargetSupported={restoreIntent === 'apps-and-settings' && restoreTargetSupported}
                       targetMappings={restoreTargets}
                       onTargetMappingChange={(mapping) => {
@@ -1107,7 +1165,7 @@ export function SetupFlow({
                     <Button
                       onClick={handleApply}
                       data-testid="setup-flow-apply"
-                      disabled={pickerEnabled && pickerSelectedCount === 0}
+                      disabled={previewResult.success === false || (pickerEnabled && pickerSelectedCount === 0)}
                       className="bg-green-600 hover:bg-green-700 text-white ring-green-600/30 hover:ring-green-600/50"
                     >
                       <Play className="h-4 w-4 mr-2" />
@@ -1198,17 +1256,17 @@ export function SetupFlow({
             exit={{ opacity: 0, y: -8 }}
             transition={transition}
           >
-            <Card className={`border-l-2 ${applyResult.failed > 0 ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
+            <Card className={`border-l-2 ${applyResult.success === false || applyResult.failed > 0 || applyResult.error ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
               <CardContent className="py-6 px-6">
                 <div className="flex items-center gap-3 mb-4">
-                  {applyResult.failed > 0 ? (
+                  {applyResult.success === false || applyResult.failed > 0 || applyResult.error ? (
                     <XCircle className="h-5 w-5 text-amber-500" />
                   ) : (
                     <CheckCircle2 className="h-5 w-5 text-green-500" />
                   )}
                   <div>
                     <p className="text-sm font-medium">
-                      {applyResult.failed > 0 ? 'Setup completed with errors' : 'Setup complete'}
+                      {applyResult.success === false || applyResult.failed > 0 || applyResult.error ? 'Setup completed with errors' : 'Setup complete'}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {(() => {
@@ -1236,8 +1294,22 @@ export function SetupFlow({
                   </div>
                 </div>
 
+                {applyResult.error && (
+                  <div className="mb-4 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2" role="alert">
+                    <p className="text-sm text-foreground">{applyResult.error.message}</p>
+                    {applyResult.error.remediation && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {applyResult.error.remediation}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <CommandWarningList warnings={applyResult.warnings} />
-                <ConfigResolutionList resolutions={applyResult.configResolutions ?? []} />
+                <ConfigResolutionList
+                  resolutions={applyResult.configResolutions ?? []}
+                  moduleDisplayNames={applyModuleDisplayNames}
+                />
 
                 {/* Activity summary */}
                 {applyResult.appEvents.length > 0 && (() => {

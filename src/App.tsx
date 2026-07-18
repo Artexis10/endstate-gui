@@ -34,6 +34,7 @@ import {
   type EnginePhase,
 } from './lib/streaming-events';
 import { buildRestoreTargetArgs } from './lib/config-restore';
+import { pushBounded } from './lib/bounded-list';
 import { EngineEnvelopeError } from './lib/engine-envelope-error';
 import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
@@ -116,6 +117,8 @@ import type { BackupListItem, BackupStatusData, ScheduleStatusData } from './typ
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 'backup';
+
+const MAX_LIVE_CONFIG_EVENTS = 2000;
 
 interface AppState {
   status: AppStatus;
@@ -1977,6 +1980,9 @@ function AppContent() {
     // Envelope counts are source of truth; fall back to actions array.
     // No streaming counter fallback — those are unreliable (inflated by plan/verify phases).
     const envelopeData = applyResult.envelope?.data;
+    const previewSuccess = applyResult.envelope?.success ?? (applyResult.exitCode === 0);
+    const previewError = applyResult.envelope?.error;
+    const hasConfigTerminalData = (envelopeData?.configResolutions?.length ?? 0) > 0;
     const previewActions = envelopeData?.actions ?? [];
     let installed: number, alreadyPresent: number;
     if (envelopeData?.counts) {
@@ -2013,7 +2019,7 @@ function AppContent() {
         timestamp: new Date().toISOString(),
         profileName: profileName,
         profilePath: profilePath,
-        outcome: 'success',
+        outcome: previewSuccess ? 'success' : 'failed',
         counts: { installed, alreadyPresent },
         durationMs,
         artifactPaths: {
@@ -2028,7 +2034,7 @@ function AppContent() {
       timestamp: new Date().toISOString(),
       profile: profileName,
       profilePath: profilePath,
-      success: true,
+      success: previewSuccess,
       summary: { installed, alreadyPresent },
       artifactPaths: runBundle ? {
         logFile: runBundle.logPath,
@@ -2052,7 +2058,16 @@ function AppContent() {
       }
     }
 
+    if (!previewSuccess && !hasConfigTerminalData) {
+      if (previewError) {
+        throw new EngineEnvelopeError(previewError);
+      }
+      throw new Error('Preview failed');
+    }
+
     return {
+      success: previewSuccess,
+      error: previewError,
       installed,
       alreadyPresent,
       profile: profileName,
@@ -2261,12 +2276,8 @@ function AppContent() {
           // Config events are transient progress only. Final compatibility and
           // restore state comes from the stdout envelope below.
           else if (isConfigResolutionEvent(ndjsonEvent) || isConfigMigrationEvent(ndjsonEvent)) {
-            configProgressEvents.push(ndjsonEvent);
-            setLiveConfigEvents(
-              configProgressEvents.length > 2000
-                ? configProgressEvents.slice(-2000)
-                : [...configProgressEvents],
-            );
+            pushBounded(configProgressEvents, ndjsonEvent, MAX_LIVE_CONFIG_EVENTS);
+            setLiveConfigEvents([...configProgressEvents]);
           }
           // Handle restore-item events
           else if (isRestoreItemEvent(ndjsonEvent)) {
@@ -2367,9 +2378,12 @@ function AppContent() {
     // Partial failure = success:false but error:null with failed > 0
     const isSuccess = applyResult.envelope?.success ?? (applyResult.exitCode === 0);
     const isPartialFailure = !isSuccess && applyResult.envelope?.error === null && failed > 0;
+    const hasConfigTerminalData = (envelopeData?.configResolutions?.length ?? 0) > 0;
     
-    // Only throw for hard errors, not partial failures
-    if (!isSuccess && !isPartialFailure) {
+    // A failed config-generation command can still carry the canonical terminal
+    // resolution/rollback rows. Preserve that structured result for the GUI;
+    // hard failures without terminal data keep the existing error path.
+    if (!isSuccess && !isPartialFailure && !hasConfigTerminalData) {
       if (applyResult.envelope?.error) {
         throw new EngineEnvelopeError(applyResult.envelope.error);
       }
@@ -2446,6 +2460,7 @@ function AppContent() {
     }
 
     return {
+      success: isSuccess,
       installed, alreadyPresent, failed, skipped,
       profile: profileName,
       appEvents: reconciledEvents,
@@ -2457,6 +2472,7 @@ function AppContent() {
       configResolutions: envelopeData?.configResolutions,
       configResolutionSummary: envelopeData?.configResolutionSummary,
       warnings: envelopeData?.warnings,
+      error: applyResult.envelope?.error,
     };
   };
 
@@ -2957,7 +2973,7 @@ function AppContent() {
                 setOverviewActionProgress('setup', { message: 'Evaluating changes' });
                 try {
                   const result = await handlePreviewFromOverview();
-                  setOverviewActionStatus('setup', 'success');
+                  setOverviewActionStatus('setup', result.success === false ? 'error' : 'success');
                   setFlowHasWork(prev => ({ ...prev, setup: true }));
                   return result;
                 } finally {
@@ -2977,7 +2993,10 @@ function AppContent() {
                 setOverviewActionProgress('setup', { message: 'Installing applications...' });
                 try {
                   const result = await handleApplyFromOverview(restoreOptions);
-                  setOverviewActionStatus('setup', result.failed > 0 ? 'error' : 'success');
+                  setOverviewActionStatus(
+                    'setup',
+                    result.success === false || result.failed > 0 ? 'error' : 'success',
+                  );
                   setFlowHasWork(prev => ({ ...prev, setup: true }));
                   return {
                     ...result,
