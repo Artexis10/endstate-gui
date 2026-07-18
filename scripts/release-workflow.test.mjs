@@ -11,6 +11,7 @@ test('release-please creates draft releases for pre-publish verification', async
 test('release workflow publishes only the current package tag as Latest', async () => {
   const workflow = await readFile('.github/workflows/release-please.yml', 'utf8');
 
+  assert.match(workflow, /releaseDraft: true/);
   assert.ok(
     (workflow.match(/--draft=true --prerelease=false --latest=false/g) ?? []).length >= 2,
     'both the pre-build hold and failure backstop must keep the target draft and non-Latest',
