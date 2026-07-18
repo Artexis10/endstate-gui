@@ -173,6 +173,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
+          # release-please creates this release as a draft. tauri-action must
+          # match that state to find the existing release by tag and upload to it.
+          releaseDraft: true
 
       - name: Audit MSI and NSIS contents
         shell: pwsh
