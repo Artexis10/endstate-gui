@@ -12,6 +12,6 @@
 
 ## 3. Rollout
 
-- [ ] 3.1 Merge the CI-only pull request after every new stable context and the required Windows installer audit pass.
-- [ ] 3.2 Require the six stable GitHub Actions contexts on `main` with strict rebasing disabled.
-- [ ] 3.3 Archive this completed OpenSpec change in a follow-up governance pull request.
+- [x] 3.1 Merge the CI-only pull request after every new stable context and the required Windows installer audit pass.
+- [x] 3.2 Require the six stable GitHub Actions contexts on `main` with strict rebasing disabled.
+- [x] 3.3 Archive this completed OpenSpec change in a follow-up governance pull request.
