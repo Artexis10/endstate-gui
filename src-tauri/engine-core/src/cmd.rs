@@ -806,6 +806,254 @@ pub fn strip_jsonc_comments(content: &str) -> String {
     result
 }
 
+fn required_object<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<&'a serde_json::Map<String, serde_json::Value>, String> {
+    object
+        .get(field)
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| format!("required field {field:?} must be an object"))
+}
+
+fn required_array<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<&'a Vec<serde_json::Value>, String> {
+    object
+        .get(field)
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| format!("required field {field:?} must be an array"))
+}
+
+fn required_string<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<&'a str, String> {
+    object
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| format!("required field {field:?} must be a string"))
+}
+
+fn stable_manifest_id(value: &str) -> bool {
+    let mut characters = value.chars();
+    if !matches!(characters.next(), Some('a'..='z')) {
+        return false;
+    }
+
+    let mut separator = false;
+    for character in characters {
+        if character.is_ascii_lowercase() || character.is_ascii_digit() {
+            separator = false;
+        } else if matches!(character, '-' | '.' | '_') && !separator {
+            separator = true;
+        } else {
+            return false;
+        }
+    }
+    !separator
+}
+
+fn lowercase_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+}
+
+fn normalize_numeric_manifest_version(value: &str) -> Option<String> {
+    let mut components = Vec::new();
+    for component in value.trim().split('.') {
+        if component.is_empty() || !component.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        let normalized = component.trim_start_matches('0');
+        components.push(if normalized.is_empty() {
+            "0".to_string()
+        } else {
+            normalized.to_string()
+        });
+    }
+    while components.len() > 1 && components.last().map(String::as_str) == Some("0") {
+        components.pop();
+    }
+    Some(components.join("."))
+}
+
+fn portable_manifest_path(value: &str) -> bool {
+    value == value.trim()
+        && !value.is_empty()
+        && value != "."
+        && !value.starts_with('/')
+        && !value.starts_with('~')
+        && !value.contains(['\\', ':', '$', '%'])
+        && value
+            .split('/')
+            .all(|component| !component.is_empty() && !matches!(component, "." | ".."))
+}
+
+fn validate_v2_config_captures(
+    manifest: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), String> {
+    let captures = required_array(manifest, "configCaptures")?;
+    if captures.is_empty() {
+        return Err("manifest version 2 requires at least one configCapture".to_string());
+    }
+
+    let mut capture_ids = std::collections::HashSet::new();
+    for (capture_index, capture_value) in captures.iter().enumerate() {
+        let capture = capture_value
+            .as_object()
+            .ok_or_else(|| format!("configCaptures[{capture_index}] must be an object"))?;
+        let capture_id = required_string(capture, "captureId")?;
+        let module_id = required_string(capture, "moduleId")?;
+        let config_set_id = required_string(capture, "configSetId")?;
+        let source = required_object(capture, "sourceInstance")?;
+        let source_id = required_string(source, "id")?;
+        let detector_id = required_string(source, "detectorId")?;
+        let raw_version = required_string(source, "rawVersion")?;
+        let normalized_version = required_string(source, "normalizedVersion")?;
+        let source_generation = required_string(capture, "sourceGeneration")?;
+
+        for (field, value) in [
+            ("captureId", capture_id),
+            ("moduleId", module_id),
+            ("configSetId", config_set_id),
+            ("sourceInstance.id", source_id),
+            ("sourceInstance.detectorId", detector_id),
+            ("sourceGeneration", source_generation),
+        ] {
+            if !stable_manifest_id(value) {
+                return Err(format!(
+                    "configCaptures[{capture_index}].{field} {value:?} is not stable lowercase identifier syntax"
+                ));
+            }
+        }
+        if !capture_ids.insert(capture_id) {
+            return Err(format!("duplicate captureId {capture_id:?}"));
+        }
+
+        match normalize_numeric_manifest_version(raw_version) {
+            Some(expected) if normalized_version != expected => {
+                return Err(format!(
+                    "configCaptures[{capture_index}].sourceInstance.normalizedVersion must be canonical {expected:?}"
+                ));
+            }
+            None if !normalized_version.is_empty() => {
+                return Err(format!(
+                    "configCaptures[{capture_index}].sourceInstance.normalizedVersion must be empty for a nonnumeric rawVersion"
+                ));
+            }
+            _ => {}
+        }
+
+        let evidence = required_object(source, "evidence")?;
+        for field in ["appId", "backend", "platform", "ref", "driver"] {
+            if evidence.get(field).is_some_and(|value| !value.is_string()) {
+                return Err(format!(
+                    "configCaptures[{capture_index}].sourceInstance.evidence.{field} must be a string"
+                ));
+            }
+        }
+        match required_string(evidence, "type")? {
+            "package" => {
+                for field in ["backend", "ref"] {
+                    if required_string(evidence, field)?.trim().is_empty() {
+                        return Err(format!(
+                            "configCaptures[{capture_index}].sourceInstance.evidence package {field} must not be empty"
+                        ));
+                    }
+                }
+            }
+            "path" => {}
+            unsupported => {
+                return Err(format!(
+                    "configCaptures[{capture_index}].sourceInstance.evidence.type {unsupported:?} is unsupported"
+                ));
+            }
+        }
+
+        let fingerprint = required_string(capture, "sourceGenerationFingerprint")?;
+        if !lowercase_sha256(fingerprint) {
+            return Err(format!(
+                "configCaptures[{capture_index}].sourceGenerationFingerprint must be lowercase 64-hex SHA-256"
+            ));
+        }
+
+        let capture_module = required_object(capture, "captureModule")?;
+        if capture_module
+            .get("schemaVersion")
+            .and_then(serde_json::Value::as_i64)
+            != Some(2)
+        {
+            return Err(format!(
+                "configCaptures[{capture_index}].captureModule.schemaVersion must be the integer 2"
+            ));
+        }
+        let content_hash = required_string(capture_module, "contentHash")?;
+        if !lowercase_sha256(content_hash) {
+            return Err(format!(
+                "configCaptures[{capture_index}].captureModule.contentHash must be lowercase 64-hex SHA-256"
+            ));
+        }
+        let snapshot_path = required_string(capture_module, "snapshotPath")?;
+        if !portable_manifest_path(snapshot_path)
+            || !snapshot_path.starts_with("provenance/modules/")
+        {
+            return Err(format!(
+                "configCaptures[{capture_index}].captureModule.snapshotPath must be a portable path under provenance/modules/"
+            ));
+        }
+
+        let payload_root = required_string(capture, "payloadRoot")?;
+        let expected_root = format!("configs/{capture_id}");
+        if !portable_manifest_path(payload_root) || payload_root != expected_root {
+            return Err(format!(
+                "configCaptures[{capture_index}].payloadRoot must be {expected_root:?}"
+            ));
+        }
+
+        let payload_manifest = required_array(capture, "payloadManifest")?;
+        let mut previous_path: Option<&str> = None;
+        for (entry_index, entry_value) in payload_manifest.iter().enumerate() {
+            let entry = entry_value.as_object().ok_or_else(|| {
+                format!(
+                    "configCaptures[{capture_index}].payloadManifest[{entry_index}] must be an object"
+                )
+            })?;
+            let relative_path = required_string(entry, "relativePath")?;
+            if !portable_manifest_path(relative_path) {
+                return Err(format!(
+                    "configCaptures[{capture_index}].payloadManifest[{entry_index}].relativePath must be portable"
+                ));
+            }
+            if previous_path.is_some_and(|previous| relative_path <= previous) {
+                return Err(format!(
+                    "configCaptures[{capture_index}].payloadManifest entries must be unique and sorted by relativePath"
+                ));
+            }
+            previous_path = Some(relative_path);
+
+            if !matches!(
+                entry.get("size").and_then(serde_json::Value::as_i64),
+                Some(0..)
+            ) {
+                return Err(format!(
+                    "configCaptures[{capture_index}].payloadManifest[{entry_index}].size must be a nonnegative integer"
+                ));
+            }
+            let sha256 = required_string(entry, "sha256")?;
+            if !lowercase_sha256(sha256) {
+                return Err(format!(
+                    "configCaptures[{capture_index}].payloadManifest[{entry_index}].sha256 must be lowercase 64-hex SHA-256"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Pure validation of a profile manifest object.
 pub fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
     let mut errors = Vec::new();
@@ -863,6 +1111,18 @@ pub fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
             }],
             summary: None,
         };
+    }
+    if version_num == 2 {
+        if let Err(message) = validate_v2_config_captures(obj) {
+            return ValidationResult {
+                valid: false,
+                errors: vec![ValidationError {
+                    code: "INVALID_CONFIG_CAPTURE".to_string(),
+                    message,
+                }],
+                summary: None,
+            };
+        }
     }
     let apps = match obj.get("apps") {
         Some(a) => a,
@@ -997,7 +1257,66 @@ mod profile_validation_tests {
     use zip::write::SimpleFileOptions;
 
     const VALID_V1: &str = r#"{"version":1,"name":"legacy","apps":[]}"#;
-    const VALID_V2: &str = r#"{"version":2,"name":"capture","apps":[],"restore":[]}"#;
+    const VALID_V2: &str = r#"{
+        "version": 2,
+        "name": "capture",
+        "apps": [],
+        "configCaptures": [{
+            "captureId": "fixture-stable-preferences-installed",
+            "moduleId": "apps.fixture-stable",
+            "configSetId": "preferences",
+            "sourceInstance": {
+                "id": "installed",
+                "detectorId": "installed-package",
+                "rawVersion": "1.4.0",
+                "normalizedVersion": "1.4",
+                "evidence": {
+                    "type": "package",
+                    "backend": "winget",
+                    "platform": "windows",
+                    "ref": "Fixture.Stable"
+                }
+            },
+            "sourceGeneration": "g1",
+            "sourceGenerationFingerprint": "da190fe4fcbe22d2d49e60062fdd0b35bde8a3488390a2d8384dbf28792a2458",
+            "captureModule": {
+                "schemaVersion": 2,
+                "contentHash": "0c2c1430dcf9dd86c9bbd15945e342c40c28ea2117a8aee853dc7b5fcd485ed3",
+                "snapshotPath": "provenance/modules/apps.fixture-stable.json"
+            },
+            "payloadRoot": "configs/fixture-stable-preferences-installed",
+            "payloadManifest": [{
+                "relativePath": "settings.json",
+                "size": 22,
+                "sha256": "27dafb2742d0da69a49cc8d206fc9cc429feff09cc3738addcf590d9c4358f97"
+            }]
+        }]
+    }"#;
+    const INCOMPLETE_V2: &str = r#"{"version":2,"name":"incomplete","apps":[]}"#;
+
+    fn valid_v2_value() -> serde_json::Value {
+        serde_json::from_str(VALID_V2).expect("parse valid v2 fixture")
+    }
+
+    fn valid_v2_with_name(name: &str) -> String {
+        let mut value = valid_v2_value();
+        value
+            .as_object_mut()
+            .expect("v2 object")
+            .insert("name".to_string(), json!(name));
+        serde_json::to_string(&value).expect("serialize valid v2 fixture")
+    }
+
+    fn first_config_capture_mut(
+        value: &mut serde_json::Value,
+    ) -> &mut serde_json::Map<String, serde_json::Value> {
+        value
+            .get_mut("configCaptures")
+            .and_then(serde_json::Value::as_array_mut)
+            .and_then(|captures| captures.first_mut())
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("first config capture")
+    }
 
     struct TestDir(PathBuf);
 
@@ -1056,16 +1375,176 @@ mod profile_validation_tests {
 
     #[test]
     fn accepts_exact_integer_profile_versions_v1_and_v2() {
-        for version in [1, 2] {
-            let result = validate_profile_object(&json!({
-                "version": version,
-                "name": "profile",
-                "apps": []
-            }));
+        for (version, value) in [
+            (1, json!({"version": 1, "apps": []})),
+            (2, valid_v2_value()),
+        ] {
+            let result = validate_profile_object(&value);
 
             assert!(result.valid, "version {version}: {:?}", result.errors);
             assert_eq!(result.summary.expect("summary").version, version);
         }
+    }
+
+    #[test]
+    fn rejects_structurally_invalid_v2_config_captures() {
+        type Mutation = fn(&mut serde_json::Value);
+        let cases: Vec<(&str, Mutation)> = vec![
+            ("missing config captures", |value| {
+                value
+                    .as_object_mut()
+                    .expect("manifest object")
+                    .remove("configCaptures");
+            }),
+            ("empty config captures", |value| {
+                value["configCaptures"] = json!([]);
+            }),
+            ("capture id wrong type", |value| {
+                first_config_capture_mut(value).insert("captureId".to_string(), json!(7));
+            }),
+            ("unstable capture id", |value| {
+                first_config_capture_mut(value).insert("captureId".to_string(), json!("Capture-A"));
+            }),
+            ("unstable module id", |value| {
+                first_config_capture_mut(value)
+                    .insert("moduleId".to_string(), json!("Apps.Example"));
+            }),
+            ("unstable config set id", |value| {
+                first_config_capture_mut(value)
+                    .insert("configSetId".to_string(), json!("Preferences"));
+            }),
+            ("unstable source instance id", |value| {
+                first_config_capture_mut(value)["sourceInstance"]["id"] =
+                    json!("Installed Instance");
+            }),
+            ("unstable detector id", |value| {
+                first_config_capture_mut(value)["sourceInstance"]["detectorId"] =
+                    json!("Installed Package");
+            }),
+            ("missing source evidence", |value| {
+                first_config_capture_mut(value)["sourceInstance"]
+                    .as_object_mut()
+                    .expect("source object")
+                    .remove("evidence");
+            }),
+            ("raw version wrong type", |value| {
+                first_config_capture_mut(value)["sourceInstance"]["rawVersion"] = json!(1.4);
+            }),
+            ("normalized version mismatch", |value| {
+                first_config_capture_mut(value)["sourceInstance"]["normalizedVersion"] =
+                    json!("1.4.0");
+            }),
+            ("irregular raw version has normalized value", |value| {
+                let source = first_config_capture_mut(value)["sourceInstance"]
+                    .as_object_mut()
+                    .expect("source object");
+                source.insert("rawVersion".to_string(), json!("release-1.4"));
+                source.insert("normalizedVersion".to_string(), json!("1.4"));
+            }),
+            ("unsupported evidence", |value| {
+                first_config_capture_mut(value)["sourceInstance"]["evidence"]["type"] =
+                    json!("registry");
+            }),
+            ("package evidence missing backend", |value| {
+                first_config_capture_mut(value)["sourceInstance"]["evidence"]
+                    .as_object_mut()
+                    .expect("evidence object")
+                    .remove("backend");
+            }),
+            ("unstable generation id", |value| {
+                first_config_capture_mut(value).insert("sourceGeneration".to_string(), json!("G1"));
+            }),
+            ("uppercase generation fingerprint", |value| {
+                first_config_capture_mut(value).insert(
+                    "sourceGenerationFingerprint".to_string(),
+                    json!("A".repeat(64)),
+                );
+            }),
+            ("wrong capture module schema", |value| {
+                first_config_capture_mut(value)["captureModule"]["schemaVersion"] = json!(1);
+            }),
+            ("short capture module hash", |value| {
+                first_config_capture_mut(value)["captureModule"]["contentHash"] = json!("abc");
+            }),
+            ("snapshot outside provenance modules", |value| {
+                first_config_capture_mut(value)["captureModule"]["snapshotPath"] =
+                    json!("provenance/apps.fixture-stable.json");
+            }),
+            ("snapshot path is not portable", |value| {
+                first_config_capture_mut(value)["captureModule"]["snapshotPath"] =
+                    json!(r"provenance\modules\apps.fixture-stable.json");
+            }),
+            ("wrong payload root", |value| {
+                first_config_capture_mut(value)["payloadRoot"] = json!("configs/other");
+            }),
+            ("traversing payload root", |value| {
+                first_config_capture_mut(value)["payloadRoot"] =
+                    json!("configs/fixture-stable-preferences-installed/../other");
+            }),
+            ("payload manifest wrong type", |value| {
+                first_config_capture_mut(value)["payloadManifest"] = json!({});
+            }),
+            ("absolute payload entry", |value| {
+                first_config_capture_mut(value)["payloadManifest"][0]["relativePath"] =
+                    json!("/settings.json");
+            }),
+            ("negative payload size", |value| {
+                first_config_capture_mut(value)["payloadManifest"][0]["size"] = json!(-1);
+            }),
+            ("fractional payload size", |value| {
+                first_config_capture_mut(value)["payloadManifest"][0]["size"] = json!(1.5);
+            }),
+            ("uppercase payload hash", |value| {
+                first_config_capture_mut(value)["payloadManifest"][0]["sha256"] =
+                    json!("C".repeat(64));
+            }),
+            ("unsorted payload entries", |value| {
+                let entries = first_config_capture_mut(value)["payloadManifest"]
+                    .as_array_mut()
+                    .expect("payload manifest");
+                let mut second = entries[0].clone();
+                second["relativePath"] = json!("a.json");
+                entries.push(second);
+            }),
+            ("duplicate payload entries", |value| {
+                let entries = first_config_capture_mut(value)["payloadManifest"]
+                    .as_array_mut()
+                    .expect("payload manifest");
+                entries.push(entries[0].clone());
+            }),
+            ("duplicate capture ids", |value| {
+                let captures = value["configCaptures"]
+                    .as_array_mut()
+                    .expect("config captures");
+                captures.push(captures[0].clone());
+            }),
+        ];
+
+        for (label, mutate) in cases {
+            let mut value = valid_v2_value();
+            mutate(&mut value);
+
+            let result = validate_profile_object(&value);
+
+            assert!(!result.valid, "{label} was accepted");
+            assert_eq!(result.errors.len(), 1, "{label}: {:?}", result.errors);
+            assert_eq!(result.errors[0].code, "INVALID_CONFIG_CAPTURE", "{label}");
+        }
+    }
+
+    #[test]
+    fn v2_gui_import_boundary_requires_top_level_capture_provenance() {
+        let value = json!({
+            "version": 2,
+            "apps": [],
+            "includes": ["capture-provenance.jsonc"]
+        });
+
+        let result = validate_profile_object(&value);
+
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].code, "INVALID_CONFIG_CAPTURE");
     }
 
     #[test]
@@ -1183,6 +1662,29 @@ mod profile_validation_tests {
     }
 
     #[test]
+    fn incomplete_v2_zip_is_not_committed_or_discoverable() {
+        let temp = TestDir::new("incomplete-v2-zip");
+        let profiles = temp.path().join("profiles");
+        let zip_path = temp.path().join("incomplete.zip");
+        fs::create_dir(&profiles).expect("create profiles");
+        write_zip(&zip_path, &[("manifest.jsonc", INCOMPLETE_V2)]);
+
+        let error = extract_zip_profile(
+            zip_path.to_str().expect("zip path"),
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect_err("incomplete v2 zip must fail");
+
+        assert!(error.contains("INVALID_CONFIG_CAPTURE"), "{error}");
+        assert!(directory_names(&profiles).is_empty());
+        assert!(
+            list_manifest_files(profiles.to_str().expect("profiles path"))
+                .expect("discover manifests")
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn invalid_bare_manifest_does_not_overwrite_existing_profile() {
         let temp = TestDir::new("invalid-bare");
         let profiles = temp.path().join("profiles");
@@ -1204,6 +1706,28 @@ mod profile_validation_tests {
             VALID_V1
         );
         assert_eq!(directory_names(&profiles), vec!["profile.jsonc"]);
+    }
+
+    #[test]
+    fn incomplete_v2_bare_import_is_not_committed_or_discoverable() {
+        let temp = TestDir::new("incomplete-v2-bare");
+        let profiles = temp.path().join("profiles");
+        fs::create_dir(&profiles).expect("create profiles");
+
+        let error = import_profile_text(
+            INCOMPLETE_V2,
+            "incomplete.jsonc",
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect_err("incomplete v2 bare import must fail");
+
+        assert!(error.contains("INVALID_CONFIG_CAPTURE"), "{error}");
+        assert!(directory_names(&profiles).is_empty());
+        assert!(
+            list_manifest_files(profiles.to_str().expect("profiles path"))
+                .expect("discover manifests")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1247,7 +1771,7 @@ mod profile_validation_tests {
             let profiles = Arc::clone(&profiles);
             let barrier = Arc::clone(&barrier);
             handles.push(std::thread::spawn(move || {
-                let content = format!(r#"{{"version":2,"name":"concurrent-{index}","apps":[]}}"#);
+                let content = valid_v2_with_name(&format!("concurrent-{index}"));
                 barrier.wait();
                 import_profile_text(
                     &content,
