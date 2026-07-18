@@ -2065,6 +2065,7 @@ function AppContent() {
       configModuleMap,
       configResolutions: envelopeData?.configResolutions,
       configResolutionSummary: envelopeData?.configResolutionSummary,
+      warnings: envelopeData?.warnings,
     };
   };
 
@@ -2455,6 +2456,7 @@ function AppContent() {
       restoreModulesAvailable: restoreModulesAvailableResult,
       configResolutions: envelopeData?.configResolutions,
       configResolutionSummary: envelopeData?.configResolutionSummary,
+      warnings: envelopeData?.warnings,
     };
   };
 

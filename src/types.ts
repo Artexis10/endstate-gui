@@ -119,6 +119,14 @@ export interface ApplyRestoreOptions {
   restoreTargets?: RestoreTargetMapping[];
 }
 
+/** Engine-authored advisory attached to a completed command result. */
+export interface CommandWarning {
+  code: string;
+  message: string;
+  driver?: string;
+  ref?: string;
+}
+
 export interface EndstateHostedBackupCapability {
   supported: boolean;
   minSchemaVersion?: string;
@@ -465,6 +473,7 @@ export interface EndstateVerifyData {
     constraint: string;
   }>;
   items?: VerifyItem[];
+  warnings?: CommandWarning[];
 }
 
 export interface EndstateReportData {
@@ -538,6 +547,7 @@ export interface EndstateApplyData {
   configResolutions?: ConfigResolution[];
   /** Engine-owned counts for configResolutions; omitted for config-free input. */
   configResolutionSummary?: ConfigResolutionSummary;
+  warnings?: CommandWarning[];
 }
 
 /** Enriched module reference from engine (v1.5+), or plain string ID from older CLIs. */

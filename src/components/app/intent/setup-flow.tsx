@@ -20,6 +20,7 @@ import type { DiscoveredProfile } from '@/file-discovery';
 import type {
   ApplyRestoreOptions,
   BackupListItem,
+  CommandWarning,
   ConfigResolution,
   ConfigResolutionSummary,
   EndstateApplyData,
@@ -48,6 +49,7 @@ import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 import { ProfileCloudBadge } from '@/components/app/backup/profile-cloud-badge';
 import { profileKeyFor } from '@/lib/profile-key';
 import { ProfileStorageChip } from '@/components/app/backup/profile-storage-chip';
+import { CommandWarningList } from '@/components/app/command-warning-list';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
@@ -75,6 +77,7 @@ interface PreviewResult {
   configModuleMap?: Record<string, string>;
   configResolutions?: ConfigResolution[];
   configResolutionSummary?: ConfigResolutionSummary;
+  warnings?: CommandWarning[];
 }
 
 /**
@@ -156,6 +159,7 @@ interface ApplyResult {
   configsFailed?: number;
   configResolutions?: ConfigResolution[];
   configResolutionSummary?: ConfigResolutionSummary;
+  warnings?: CommandWarning[];
 }
 
 export interface SetupFlowProps {
@@ -883,6 +887,8 @@ export function SetupFlow({
                   </div>
                 </div>
 
+                <CommandWarningList warnings={previewResult.warnings} />
+
                 {/* Activity summary */}
                 {previewResult.appEvents.length > 0 && (
                   <div className="mt-3 border-t pt-3">
@@ -1230,6 +1236,7 @@ export function SetupFlow({
                   </div>
                 </div>
 
+                <CommandWarningList warnings={applyResult.warnings} />
                 <ConfigResolutionList resolutions={applyResult.configResolutions ?? []} />
 
                 {/* Activity summary */}
