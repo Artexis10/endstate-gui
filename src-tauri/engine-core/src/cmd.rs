@@ -1097,22 +1097,28 @@ fn validate_v1_config_boundaries(
                 format!("restore[{index}] must be an object"),
             )
         })?;
-        for field in ["legacyCaptureId", "fromModule"] {
-            match restore.get(field) {
-                None | Some(serde_json::Value::Null) => {}
-                Some(value) => {
-                    let attribution = value.as_str().ok_or_else(|| {
-                        (
-                            "INVALID_CONFIG_CAPTURE",
-                            format!("restore[{index}].{field} must be a string"),
-                        )
-                    })?;
-                    if !attribution.trim().is_empty() {
-                        return Err((
-                            "INVALID_CONFIG_CAPTURE",
-                            format!("restore[{index}].{field} requires manifest version 2"),
-                        ));
-                    }
+        if let Some(value) = restore.get("fromModule") {
+            if !value.is_null() && !value.is_string() {
+                return Err((
+                    "INVALID_CONFIG_CAPTURE",
+                    format!("restore[{index}].fromModule must be a string"),
+                ));
+            }
+        }
+        match restore.get("legacyCaptureId") {
+            None | Some(serde_json::Value::Null) => {}
+            Some(value) => {
+                let attribution = value.as_str().ok_or_else(|| {
+                    (
+                        "INVALID_CONFIG_CAPTURE",
+                        format!("restore[{index}].legacyCaptureId must be a string"),
+                    )
+                })?;
+                if !attribution.trim().is_empty() {
+                    return Err((
+                        "INVALID_CONFIG_CAPTURE",
+                        format!("restore[{index}].legacyCaptureId requires manifest version 2"),
+                    ));
                 }
             }
         }
@@ -1915,14 +1921,14 @@ mod profile_validation_tests {
                 },
             ),
             (
-                "restore module attribution",
+                "restore module attribution wrong type",
                 "INVALID_CONFIG_CAPTURE",
                 |value| {
                     value["restore"] = json!([{
                         "type": "copy",
                         "source": "configs/legacy-capture/settings.json",
                         "target": "~/.example/settings.json",
-                        "fromModule": "legacy.example"
+                        "fromModule": 7
                     }]);
                 },
             ),
@@ -1938,6 +1944,25 @@ mod profile_validation_tests {
             assert_eq!(result.errors.len(), 1, "{label}: {:?}", result.errors);
             assert_eq!(result.errors[0].code, expected_code, "{label}");
         }
+    }
+
+    #[test]
+    fn accepts_v1_restore_module_attribution() {
+        let mut value: serde_json::Value = serde_json::from_str(VALID_V1).expect("parse valid v1");
+        value["restore"] = json!([{
+            "type": "copy",
+            "source": "configs/legacy-capture/settings.json",
+            "target": "~/.example/settings.json",
+            "fromModule": "legacy.example"
+        }]);
+
+        let result = validate_profile_object(&value);
+
+        assert!(
+            result.valid,
+            "valid v1 restore was rejected: {:?}",
+            result.errors
+        );
     }
 
     #[test]
