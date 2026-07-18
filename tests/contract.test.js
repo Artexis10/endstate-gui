@@ -96,8 +96,13 @@ async function testCapabilities() {
   if (typeof envelope.success !== 'boolean') {
     throw new Error('Missing or invalid success field');
   }
+  const applyFlags = envelope.data?.commands?.apply?.flags;
+  if (!Array.isArray(applyFlags) || !applyFlags.includes('--restore-target')) {
+    throw new Error('Pinned engine does not advertise apply --restore-target');
+  }
   
   console.log('   ✓ Envelope structure valid');
+  console.log('   ✓ Config generation target mapping supported');
   console.log(`   ✓ CLI version: ${envelope.cliVersion}`);
   console.log(`   ✓ Schema version: ${envelope.schemaVersion}`);
   console.log(`   ✓ Success: ${envelope.success}`);
