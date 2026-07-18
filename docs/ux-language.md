@@ -82,6 +82,36 @@ Emitted in `phase` events:
 - `"verify"` - Verifying current state
 - `"capture"` - Discovering installed apps
 
+### Capture Progress
+
+Capture is indeterminate: the GUI never invents a percentage or estimates completion from time or item counts. Before the first supported engine stage, the Save flow displays **“Starting capture…”**. Supported capture progress stages use GUI-owned copy:
+
+| Engine stage | GUI copy |
+|--------------|----------|
+| `inventory` | “Checking installed apps…” |
+| `settings` | “Collecting app settings…” |
+| `packaging` | “Packaging your setup…” |
+
+Elapsed time is visual-only. At eight seconds the GUI adds: **“Still working — your package manager can take 20 seconds or more on systems with many apps.”** Only stage changes use a polite live region; elapsed seconds are not announced.
+
+Older engines without progress events remain on **“Starting capture…”** until their terminal envelope arrives. Unknown future stage keys are ignored without replacing the last recognized stage.
+
+### Capture Compatibility and Package Sources
+
+The deprecated item status `captured` maps to **Detected** only during capture. Canonical capture items use `status: "present"` with `reason: "detected"`. Unknown item statuses are rejected; they never fall through to **Excluded**.
+
+The engine owns capture source coverage. The GUI invokes ordinary capture without Store include/exclude flags or a Store toggle. An app is labeled **Microsoft Store** only when the engine explicitly reports `source: "msstore"`; the GUI never infers Store identity from a package ID.
+
+Successful capture may include distinct non-fatal warnings:
+
+| Warning code | GUI copy |
+|--------------|----------|
+| `store_source_unavailable` | “Microsoft Store apps could not be included in this capture.” |
+| `winget_source_unavailable` | “Community-repository apps could not be included in this capture.” |
+| `store_version_unpinned` | “Affected Microsoft Store apps will restore to the latest available version rather than the exact captured version.” |
+
+Warnings do not hide captured apps, the produced artifact, or the successful result.
+
 ---
 
 ## GUI StatusKey Enum

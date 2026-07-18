@@ -253,6 +253,9 @@ describe('streaming-runner', () => {
           ],
         })
       );
+      const captureArgs = vi.mocked(invoke).mock.calls[0][1] as { args: string[] };
+      expect(captureArgs.args).not.toContain('--include-store-apps');
+      expect(captureArgs.args).not.toContain('--exclude-store-apps');
     });
 
     it('returns null envelope for malformed JSON', async () => {

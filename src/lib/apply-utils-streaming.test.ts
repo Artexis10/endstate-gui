@@ -157,7 +157,42 @@ describe('engineStatusToStatusKey - Streaming Status Mapping', () => {
     });
 
     it('maps unknown status to "skipped" as fallback', () => {
-      expect(engineStatusToStatusKey('unknown' as any)).toBe('skipped');
+      expect(() => engineStatusToStatusKey('unknown' as any)).toThrow(/unsupported engine item status/i);
+    });
+  });
+
+  describe('legacy capture status compatibility', () => {
+    it('maps deprecated captured status to detected only in capture', () => {
+      const itemEvent: ItemEvent = {
+        version: 1,
+        runId: 'capture-1',
+        timestamp: '2026-07-17T00:00:00Z',
+        event: 'item',
+        id: 'Microsoft.WindowsTerminal_8wekyb3d8bbwe',
+        driver: 'winget',
+        status: 'captured',
+        reason: 'detected',
+      };
+
+      expect(itemEventToAppEvent(itemEvent, 'capture').statusKey).toBe('detected');
+      expect(() => itemEventToAppEvent(itemEvent, 'apply')).toThrow(/only valid during capture/i);
+    });
+
+    it('keeps canonical present plus detected mapped to Detected', () => {
+      const itemEvent: ItemEvent = {
+        version: 1,
+        runId: 'capture-1',
+        timestamp: '2026-07-17T00:00:00Z',
+        event: 'item',
+        id: 'Mozilla.Firefox',
+        driver: 'winget',
+        status: 'present',
+        reason: 'detected',
+      };
+
+      const appEvent = itemEventToAppEvent(itemEvent, 'capture');
+      expect(appEvent.statusKey).toBe('present');
+      expect(getPhaseAwareStatusForEvent({ statusKey: appEvent.statusKey!, phase: 'capture', reason: appEvent.reason }).shortLabel).toBe('DETECTED');
     });
   });
 

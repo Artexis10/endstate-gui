@@ -6,7 +6,7 @@ const baseProps = {
   onBack: vi.fn(),
   engineConnected: true,
   isRunning: false,
-  captureProgress: null,
+  captureStage: null,
   liveAppEvents: [],
   onSaveToFile: vi.fn().mockResolvedValue({ saved: true }),
 };
