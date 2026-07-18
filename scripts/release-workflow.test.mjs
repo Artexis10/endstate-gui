@@ -53,10 +53,14 @@ test('bundle workflow always reports a gate and builds Windows only when classif
 
   assert.match(workflow, /cancel-in-progress: true/);
   assert.match(workflow, /classify-bundle:/);
+  assert.match(workflow, /\.changed_files/);
+  assert.match(workflow, /previous_filename/);
   assert.match(workflow, /node scripts\/ci-bundle-policy\.mjs/);
   assert.match(workflow, /required: \$\{\{ steps\.policy\.outputs\.required \}\}/);
   assert.match(workflow, /if: needs\.classify-bundle\.outputs\.required == 'true'/);
   assert.match(workflow, /bundle-gate:/);
   assert.match(workflow, /needs: \[classify-bundle, tauri-bundle\]/);
   assert.match(workflow, /if: \$\{\{ always\(\) \}\}/);
+  assert.match(workflow, /case "\$BUNDLE_REQUIRED" in/);
+  assert.match(workflow, /true\|false\)/);
 });

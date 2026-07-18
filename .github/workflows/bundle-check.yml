@@ -45,8 +45,21 @@ jobs:
         run: |
           : > changed-files.txt
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+            expected_count="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.changed_files')"
+
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
               --paginate --jq '.[].filename' > changed-files.txt
+
+            actual_count="$(wc -l < changed-files.txt | tr -d '[:space:]')"
+            if [ "$actual_count" != "$expected_count" ]; then
+              echo "::error::GitHub returned $actual_count of $expected_count changed files; refusing to classify a truncated list."
+              exit 1
+            fi
+
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+              --paginate --jq '.[] | select(.previous_filename != null) | .previous_filename' \
+              >> changed-files.txt
+            sort -u changed-files.txt -o changed-files.txt
           fi
 
       - name: Classify bundle impact
@@ -162,6 +175,14 @@ jobs:
             echo "::error::Bundle classification did not succeed: $CLASSIFY_RESULT"
             exit 1
           fi
+
+          case "$BUNDLE_REQUIRED" in
+            true|false) ;;
+            *)
+              echo "::error::Bundle classification returned an invalid required value: '$BUNDLE_REQUIRED'"
+              exit 1
+              ;;
+          esac
 
           if [ "$BUNDLE_REQUIRED" = "true" ]; then
             if [ "$BUNDLE_RESULT" != "success" ]; then

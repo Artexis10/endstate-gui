@@ -31,9 +31,29 @@ test('release-please version PRs defer to the signed draft-release gate', () => 
       eventName: 'pull_request',
       headRef: 'release-please--branches--main--components--gui',
       prAuthor: 'endstate-release-bot[bot]',
-      changedFiles: ['package.json', 'src-tauri/Cargo.toml'],
+      changedFiles: [
+        '.release-please-manifest.json',
+        'CHANGELOG.md',
+        'package-lock.json',
+        'package.json',
+        'src-tauri/Cargo.lock',
+        'src-tauri/Cargo.toml',
+        'src-tauri/tauri.conf.json',
+      ],
     }),
     { required: false, reason: 'release PR uses the signed draft-release gate' },
+  );
+});
+
+test('release-please PRs with any extra file fail closed into Windows packaging', () => {
+  assert.deepEqual(
+    decideBundleBuild({
+      eventName: 'pull_request',
+      headRef: 'release-please--branches--main--components--gui',
+      prAuthor: 'endstate-release-bot[bot]',
+      changedFiles: ['package.json', 'src-tauri/Cargo.toml', 'src-tauri/src/lib.rs'],
+    }),
+    { required: true, reason: 'bundle-sensitive files changed' },
   );
 });
 

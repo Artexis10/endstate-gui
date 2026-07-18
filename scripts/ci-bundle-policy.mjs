@@ -5,6 +5,16 @@ import { pathToFileURL } from 'node:url';
 const RELEASE_PLEASE_BRANCH_PREFIX = 'release-please--branches--main--components--';
 const RELEASE_PLEASE_BOT = 'endstate-release-bot[bot]';
 
+const RELEASE_PLEASE_VERSION_FILES = new Set([
+  '.release-please-manifest.json',
+  'CHANGELOG.md',
+  'package-lock.json',
+  'package.json',
+  'src-tauri/Cargo.lock',
+  'src-tauri/Cargo.toml',
+  'src-tauri/tauri.conf.json',
+]);
+
 const BUNDLE_SENSITIVE_FILES = new Set([
   'ENGINE_VERSION',
   'package.json',
@@ -24,8 +34,12 @@ const BUNDLE_SENSITIVE_FILES = new Set([
 
 const BUNDLE_SENSITIVE_PREFIXES = ['src-tauri/', 'patches/'];
 
+function normalizePath(changedPath) {
+  return String(changedPath).replaceAll('\\', '/');
+}
+
 function isBundleSensitive(changedPath) {
-  const normalizedPath = String(changedPath).replaceAll('\\', '/');
+  const normalizedPath = normalizePath(changedPath);
   return (
     BUNDLE_SENSITIVE_FILES.has(normalizedPath) ||
     BUNDLE_SENSITIVE_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix))
@@ -42,7 +56,15 @@ export function decideBundleBuild({
     return { required: true, reason: 'manual bundle verification requested' };
   }
 
-  if (headRef.startsWith(RELEASE_PLEASE_BRANCH_PREFIX) && prAuthor === RELEASE_PLEASE_BOT) {
+  const isReleasePleaseVersionOnly =
+    changedFiles.length > 0 &&
+    changedFiles.every((changedPath) => RELEASE_PLEASE_VERSION_FILES.has(normalizePath(changedPath)));
+
+  if (
+    headRef.startsWith(RELEASE_PLEASE_BRANCH_PREFIX) &&
+    prAuthor === RELEASE_PLEASE_BOT &&
+    isReleasePleaseVersionOnly
+  ) {
     return { required: false, reason: 'release PR uses the signed draft-release gate' };
   }
 
