@@ -31,15 +31,15 @@ The engine will emit `status: "present"` and `reason: "detected"` for captured p
 
 Changing only the GUI was rejected because it would leave other consumers exposed to an off-contract engine. Changing only the engine was rejected because existing installations and dev binaries already emit `captured`.
 
-### Validate supported manifest versions at the shared Rust boundary
+### Validate supported manifest versions at one shared Rust boundary
 
-Both production Tauri and the browser bridge will accept manifest versions 1 and 2, while preserving object/apps validation. Tests will exercise both validators with the same fixtures to prevent their duplicated implementations drifting again.
+Production Tauri and the browser bridge will delegate to the same Tauri-free validator. It accepts exact integer manifest versions 1 and 2 while preserving object/apps validation; fractional and future versions remain invalid. The shared-core tests run in pull-request CI so the shipping and development paths cannot drift.
 
 Delegating version 2 validation to the external engine for every profile listing was rejected: discovery is a local, frequent operation and the GUI already owns a pure structural validator. Removing validation was rejected because invalid files must not become selectable profiles.
 
 ### Make import an explicit outcome, not an optimistic toast
 
-Extraction returns its destination directory. The frontend refreshes discovery, locates the manifest under that exact directory, and only then reports success. It selects the discovered profile and routes the setup flow to its existing review/preview surface. If discovery cannot produce a profile, import reports a concrete error and does not claim success.
+ZIP and bare-manifest imports stage under the profiles directory, validate before an atomic collision-free commit, and return the exact committed manifest path. ZIP extraction rejects every unsafe archive path and requires `manifest.jsonc` at the contract root. The frontend validates and discovers that exact path, then selects it and waits for the existing engine preview to commit the review surface before reporting success. Validation or preview failures retain their concrete reason and never produce a success message.
 
 Automatically executing Apply was rejected because setup execution must remain an explicit user action. Merely adding a profile card was rejected because the user's intent after choosing a file is to inspect/use that imported setup now.
 
@@ -57,9 +57,9 @@ Engine unit/contract tests verify the exact capture event vocabulary. A packaged
 
 ## Risks / Trade-offs
 
-- **Two Rust validators can drift again** → feed identical v1/v2/unsupported fixtures through both implementations in contract tests; follow-up deduplication is out of scope.
-- **Import selection races profile refresh** → identify the imported manifest by the extraction directory returned from Rust, not by filename or array ordering.
-- **A malicious ZIP can escape its directory** → retain the existing traversal protections and add no new extraction behavior.
+- **Rust validation paths can drift again** → delegate both adapters to one tested shared-core implementation and run it in PR CI.
+- **Import selection races profile refresh** → resolve only the exact committed manifest path returned from Rust, never the first descendant or array match.
+- **A malicious or invalid import can mutate profile storage** → extract/copy only into staging, reject unsafe ZIP components, validate, then atomically commit; clean staging on every error.
 - **The compatibility `captured` status can become permanent debt** → document it as compatibility for engine 2.24.1 and keep the engine contract test authoritative.
 - **Playwright mocks can diverge from shipping artifacts** → release gate still audits and smokes the actual installer and exact public bundle.
 

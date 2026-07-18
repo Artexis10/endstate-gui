@@ -76,4 +76,18 @@ describe('SaveFlow completion', () => {
     fireEvent.click(screen.getByRole('button', { name: /save another copy/i }));
     await waitFor(() => expect(onSaveToFile).toHaveBeenCalledTimes(2));
   });
+
+  it('keeps the saved completion state when a second save is cancelled', async () => {
+    const onSaveToFile = vi
+      .fn()
+      .mockResolvedValueOnce({ saved: true, path: 'C:\\Users\\test\\Downloads\\capture.zip' })
+      .mockResolvedValueOnce({ saved: false });
+
+    await saveCapture(onSaveToFile);
+    fireEvent.click(screen.getByRole('button', { name: /save another copy/i }));
+
+    await waitFor(() => expect(onSaveToFile).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('Backup saved')).toBeInTheDocument();
+    expect(screen.queryByText('Scan complete')).not.toBeInTheDocument();
+  });
 });

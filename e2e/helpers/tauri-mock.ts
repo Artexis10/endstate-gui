@@ -10,7 +10,6 @@ export interface TauriMockOptions {
   initialProfileFiles?: string[];
   /** Serializable result of extracting a tiny mocked capture bundle. */
   zipImport?: {
-    extractedDirectory: string;
     manifestPath: string;
     manifestContent: string;
     summary: { name: string; version: number; appCount: number };
@@ -79,7 +78,17 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         import_zip_from_base64: () => {
           if (!zipImport) throw new Error('TAURI mock: no zipImport fixture configured');
           (window as any).__test_profileFiles.add(zipImport.manifestPath);
-          return zipImport.extractedDirectory;
+          return zipImport.manifestPath;
+        },
+        import_profile_text: (args?: any) => {
+          const profileFiles = (window as any).__test_profileFiles;
+          const fileContents = (window as any).__test_fileContents;
+          const base = String(args?.profilesDir || 'C:\\test\\profiles').replace(/[\\/]+$/, '');
+          const name = String(args?.fileName || 'imported.jsonc').split(/[\\/]/).pop();
+          const path = `${base}\\${name}`;
+          profileFiles.add(path);
+          fileContents.set(path, String(args?.content || ''));
+          return path;
         },
         delete_file: (args?: any) => {
           const operations = (window as any).__test_operations;

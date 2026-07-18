@@ -1,13 +1,48 @@
 {
   "fileName": "capture-v2.zip",
-  "extractedDirectory": "C:\\test\\profiles\\capture-v2",
   "manifestPath": "C:\\test\\profiles\\capture-v2\\manifest.jsonc",
   "manifest": {
     "version": 2,
     "name": "capture-v2",
-    "apps": [
-      { "id": "VideoLAN.VLC", "source": "winget" }
-    ],
-    "restore": []
+    "captured": "2026-07-18T12:00:00Z",
+    "apps": [],
+    "configCaptures": [
+      {
+        "captureId": "fixture-stable-preferences-installed",
+        "moduleId": "apps.fixture-stable",
+        "configSetId": "preferences",
+        "sourceInstance": {
+          "id": "installed",
+          "detectorId": "installed",
+          "rawVersion": "1.4.0",
+          "normalizedVersion": "1.4",
+          "evidence": {
+            "type": "package",
+            "backend": "winget",
+            "platform": "windows",
+            "ref": "Fixture.Stable"
+          }
+        },
+        "sourceGeneration": "g1",
+        "sourceGenerationFingerprint": "da190fe4fcbe22d2d49e60062fdd0b35bde8a3488390a2d8384dbf28792a2458",
+        "captureModule": {
+          "schemaVersion": 2,
+          "contentHash": "0c2c1430dcf9dd86c9bbd15945e342c40c28ea2117a8aee853dc7b5fcd485ed3",
+          "snapshotPath": "provenance/modules/apps.fixture-stable.json"
+        },
+        "payloadRoot": "configs/fixture-stable-preferences-installed",
+        "payloadManifest": [
+          {
+            "relativePath": "settings.json",
+            "size": 22,
+            "sha256": "27dafb2742d0da69a49cc8d206fc9cc429feff09cc3738addcf590d9c4358f97"
+          }
+        ]
+      }
+    ]
+  },
+  "bundleFiles": {
+    "configs/fixture-stable-preferences-installed/settings.json": "{\n  \"theme\": \"dark\"\n}\n",
+    "provenance/modules/apps.fixture-stable.json": "{\"config\":{\"instanceDetectors\":[{\"id\":\"installed\",\"type\":\"package\"}],\"sets\":[{\"displayName\":\"Preferences\",\"generations\":[{\"capture\":{\"files\":[{\"dest\":\"settings.json\",\"optional\":true,\"source\":\"%APPDATA%\\\\Fixture Stable\\\\settings.json\"}]},\"id\":\"g1\",\"order\":1,\"restore\":[{\"backup\":true,\"optional\":true,\"source\":\"settings.json\",\"target\":\"%APPDATA%\\\\Fixture Stable\\\\settings.json\",\"type\":\"copy\"}],\"validate\":[{\"path\":\"settings.json\",\"type\":\"json-parse\"}]}],\"id\":\"preferences\"}]},\"displayName\":\"Fixture Stable\",\"id\":\"apps.fixture-stable\",\"matches\":{\"winget\":[\"Fixture.Stable\"]},\"moduleSchemaVersion\":2,\"sensitivity\":\"low\"}\n"
   }
 }

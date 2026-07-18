@@ -59,6 +59,8 @@ export interface SaveFlowProps {
   onStartCapture: () => Promise<CaptureResult>;
   onSaveToFile: (result: CaptureResult) => Promise<SaveOutcome>;
   onOpenSavedFolder?: (savedPath: string) => void | Promise<void>;
+  /** Reports that the current capture has a durable saved copy. */
+  onSaved?: (savedPath?: string) => void;
   /** Increment to reset internal state (used when parent keeps component mounted) */
   resetKey?: number;
   /** Called when the flow returns to idle (save completed, scan again, etc.) */
@@ -95,6 +97,7 @@ export function SaveFlow({
   onStartCapture,
   onSaveToFile,
   onOpenSavedFolder,
+  onSaved,
   resetKey,
   onFlowReset,
   onPushToHostedBackup,
@@ -182,6 +185,7 @@ export function SaveFlow({
 
   const handleSave = async () => {
     if (!result) return;
+    const cancelledPhase: CapturePhase = phase === 'saved' ? 'saved' : 'done';
     setPhase('saving');
     setErrorMessage('');
     setErrorOrigin(null);
@@ -190,9 +194,10 @@ export function SaveFlow({
       if (outcome.saved) {
         setSavedPath(outcome.path ?? null);
         setPhase('saved');
+        onSaved?.(outcome.path);
       } else {
         // User cancelled save dialog
-        setPhase('done');
+        setPhase(cancelledPhase);
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Save failed');

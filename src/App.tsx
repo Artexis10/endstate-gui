@@ -17,7 +17,7 @@ import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigrati
 import { loadDraft, clearDraft } from './lib/draft-store';
 import { resolveDraftContent } from './lib/draft-content-resolver';
 import { resolveProfilePath } from './lib/profile-selection-migration';
-import { discoverProfiles, DiscoveredProfile } from './file-discovery';
+import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-discovery';
 import { findImportedProfile } from './lib/profile-import';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
@@ -161,6 +161,7 @@ function AppContent() {
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
   const [activeFlowPage, setActiveFlowPage] = useState<'save' | 'setup' | null>(null);
   const [flowHasWork, setFlowHasWork] = useState<Record<'save' | 'setup', boolean>>({ save: false, setup: false });
+  const [saveFlowCompleted, setSaveFlowCompleted] = useState(false);
   const [saveFlowResetKey, setSaveFlowResetKey] = useState(0);
   const [setupFlowResetKey, setSetupFlowResetKey] = useState(0);
   // Navigation handler
@@ -185,6 +186,11 @@ function AppContent() {
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [profilesDirectory, setProfilesDirectory] = useState('');
   const [profileToOpen, setProfileToOpen] = useState<DiscoveredProfile | null>(null);
+  const pendingImportPreviewRef = useRef<{
+    importedPath: string;
+    resolve: () => void;
+    reject: (error: Error) => void;
+  } | null>(null);
   const [selectedProfile, setSelectedProfile] = useState('');
   const [selectedProfilePath, setSelectedProfilePath] = useState('');
   // Refs for immediate access in async callbacks (avoid stale closures)
@@ -663,6 +669,15 @@ function AppContent() {
     importedPath: string,
     fileName: string,
   ) => {
+    const validation = await validateProfile(importedPath);
+    if (!validation.valid) {
+      const reason = validation.errors
+        ?.map((error) => error.message)
+        .filter(Boolean)
+        .join('; ');
+      throw new Error(reason || 'The imported manifest is not a supported Endstate profile');
+    }
+
     const discovered = await discoverProfiles(directory);
     setProfiles(discovered);
     const importedProfile = findImportedProfile(discovered, importedPath);
@@ -670,8 +685,24 @@ function AppContent() {
       throw new Error('The imported file does not contain a supported Endstate profile');
     }
 
-    setProfileToOpen(importedProfile);
-    showToast(`Imported ${fileName} — opening setup`, 'success');
+    await new Promise<void>((resolve, reject) => {
+      if (pendingImportPreviewRef.current) {
+        reject(new Error('Another imported profile is still opening'));
+        return;
+      }
+      pendingImportPreviewRef.current = { importedPath, resolve, reject };
+      setProfileToOpen(importedProfile);
+    });
+    showToast(`Imported ${fileName} — setup review ready`, 'success');
+  };
+
+  const settleImportedProfilePreview = (profile: DiscoveredProfile, error?: Error) => {
+    const pending = pendingImportPreviewRef.current;
+    if (!pending || !findImportedProfile([profile], pending.importedPath)) return;
+
+    pendingImportPreviewRef.current = null;
+    if (error) pending.reject(error);
+    else pending.resolve();
   };
 
   const handleOpenProfilesFolder = async () => {
@@ -718,18 +749,21 @@ function AppContent() {
             binary += String.fromCharCode(bytes[i]);
           }
           const base64Data = btoa(binary);
-          const extractedDirectory = await invoke<string>('import_zip_from_base64', {
+          const importedManifestPath = await invoke<string>('import_zip_from_base64', {
             data: base64Data,
             fileName: file.name,
             profilesDir: dir,
           });
-          await finishProfileImport(dir, extractedDirectory, file.name);
+          await finishProfileImport(dir, importedManifestPath, file.name);
         } else if (fileName.endsWith('.jsonc') || fileName.endsWith('.json') || fileName.endsWith('.json5')) {
-          // Manifest files: read text and write to profiles directory
+          // Manifest files: Rust stages and validates before committing.
           const text = await file.text();
-          const destPath = `${dir}\\${file.name}`;
-          await invoke('write_text_file', { path: destPath, content: text });
-          await finishProfileImport(dir, destPath, file.name);
+          const importedManifestPath = await invoke<string>('import_profile_text', {
+            content: text,
+            fileName: file.name,
+            profilesDir: dir,
+          });
+          await finishProfileImport(dir, importedManifestPath, file.name);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -758,12 +792,11 @@ function AppContent() {
       const fileName = filePath.split(/[/\\]/).pop() || '';
       try {
         if (fileName.toLowerCase().endsWith('.zip')) {
-          const extractedDirectory = await invoke<string>('extract_zip_profile', { zipPath: filePath, profilesDir: dir });
-          await finishProfileImport(dir, extractedDirectory, fileName);
+          const importedManifestPath = await invoke<string>('extract_zip_profile', { zipPath: filePath, profilesDir: dir });
+          await finishProfileImport(dir, importedManifestPath, fileName);
         } else {
-          const importedFileName = await invoke<string>('import_profile', { sourcePath: filePath, profilesDir: dir });
-          const destinationPath = `${dir.replace(/[\\/]+$/, '')}\\${importedFileName}`;
-          await finishProfileImport(dir, destinationPath, fileName);
+          const importedManifestPath = await invoke<string>('import_profile', { sourcePath: filePath, profilesDir: dir });
+          await finishProfileImport(dir, importedManifestPath, fileName);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -2676,9 +2709,10 @@ function AppContent() {
           <div className="space-y-6">
             {errorBanner}
             <SaveFlow
-              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
+              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowCompleted(false); setSaveFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={saveFlowResetKey}
-              onFlowReset={() => setFlowHasWork(prev => ({ ...prev, save: false }))}
+              onFlowReset={() => { setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowCompleted(false); }}
+              onSaved={() => setSaveFlowCompleted(true)}
               engineConnected={state.status !== 'error'}
               isRunning={isRunning}
               captureProgress={actionProgressByAction['capture'] ?? null}
@@ -2742,6 +2776,7 @@ function AppContent() {
                   : undefined
               }
               onStartCapture={async () => {
+                setSaveFlowCompleted(false);
                 setIsRunning(true);
                 setLiveAppEvents([]);
                 setAutoBackupChip('idle');
@@ -2893,6 +2928,8 @@ function AppContent() {
               profiles={profiles}
               profileToOpen={profileToOpen}
               onProfileToOpenConsumed={() => setProfileToOpen(null)}
+              onProfileToOpenPreviewed={(profile) => settleImportedProfilePreview(profile)}
+              onProfileToOpenPreviewFailed={(profile, error) => settleImportedProfilePreview(profile, error)}
               cloudBackupIndex={cloudEntryByKey}
               hostedBackupSupported={hostedBackupSupported}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
@@ -3449,7 +3486,9 @@ function AppContent() {
                       : <Download className="h-4 w-4 text-green-500" />
                     }
                     <p className="text-sm font-medium">
-                      {activeFlowPage === 'save' ? 'You have an unsaved capture' : 'You have setup results to review'}
+                      {activeFlowPage === 'save'
+                        ? saveFlowCompleted ? 'Your backup is saved' : 'You have an unsaved capture'
+                        : 'You have setup results to review'}
                     </p>
                   </div>
                   <Button
@@ -3796,7 +3835,9 @@ function AppContent() {
                       : <Download className="h-4 w-4 text-green-500" />
                     }
                     <p className="text-sm font-medium">
-                      {activeFlowPage === 'save' ? 'You have an unsaved capture' : 'You have setup results to review'}
+                      {activeFlowPage === 'save'
+                        ? saveFlowCompleted ? 'Your backup is saved' : 'You have an unsaved capture'
+                        : 'You have setup results to review'}
                     </p>
                   </div>
                   <Button

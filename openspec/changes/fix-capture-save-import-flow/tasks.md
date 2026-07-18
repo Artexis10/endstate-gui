@@ -10,6 +10,8 @@
 - [x] 2.2 Add failing Rust tests accepting structurally valid v1/v2 manifests and rejecting unsupported versions in production and browser-bridge validators.
 - [x] 2.3 Add failing import-flow tests proving success waits for discovery and selects the exact imported profile.
 - [x] 2.4 Implement capture status compatibility, v1/v2 validation, transactional import outcome, error surfacing, and imported-profile selection/review.
+- [ ] 2.5 Consolidate Rust validation/import helpers, reject unsafe ZIP paths, and atomically validate-before-commit ZIP and bare-manifest imports.
+- [x] 2.6 Gate import success on committed setup preview and surface exact validation/preview errors.
 
 ## 3. Save Completion UX
 
@@ -20,6 +22,7 @@
 
 - [x] 4.1 Add a tiny deterministic v2 bundle fixture and mocked bridge responses.
 - [x] 4.2 Add a fast Playwright scenario covering detected capture progress, Save completion, v2 ZIP import, profile selection, and setup review without invoking winget.
+- [ ] 4.3 Replace semantic fixtures with engine-valid v2 provenance and add shared-core Rust validation/import tests to PR CI.
 
 ## 5. Verification and Release
 

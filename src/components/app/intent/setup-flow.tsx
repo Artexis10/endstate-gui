@@ -7,7 +7,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Download, FolderOpen, RefreshCw, Loader2, CheckCircle2, XCircle, Play, Eye, Trash2, Settings2, RotateCcw, Info, Cloud } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { FilterChip } from '@/components/ui/filter-chip';
@@ -200,6 +200,10 @@ export interface SetupFlowProps {
   profileToOpen?: DiscoveredProfile | null;
   /** Clears the one-shot imported profile handoff after it is consumed. */
   onProfileToOpenConsumed?: () => void;
+  /** Fires after the imported profile preview is committed to the review UI. */
+  onProfileToOpenPreviewed?: (profile: DiscoveredProfile) => void;
+  /** Fires after an imported profile preview failure is committed to the UI. */
+  onProfileToOpenPreviewFailed?: (profile: DiscoveredProfile, error: Error) => void;
   onBack: () => void;
   onProfileSelect: (profile: DiscoveredProfile) => void;
   onOpenProfilesFolder: () => void;
@@ -273,6 +277,8 @@ export function SetupFlow({
   profiles,
   profileToOpen,
   onProfileToOpenConsumed,
+  onProfileToOpenPreviewed,
+  onProfileToOpenPreviewFailed,
   onBack,
   onProfileSelect,
   onOpenProfilesFolder,
@@ -322,6 +328,10 @@ export function SetupFlow({
   const [undoDryRunData, setUndoDryRunData] = useState<EndstateRevertData | null>(null);
   const [undoExecuteData, setUndoExecuteData] = useState<EndstateRevertData | null>(null);
   const [undoError, setUndoError] = useState('');
+  const importedPreviewRef = useRef<{
+    profile: DiscoveredProfile;
+    error?: Error;
+  } | null>(null);
   const previewModuleDisplayNames = moduleDisplayNameMap(
     previewResult?.restoreModulesAvailable,
   );
@@ -392,9 +402,10 @@ export function SetupFlow({
     }
   };
 
-  const handleSelectProfile = (profile: DiscoveredProfile) => {
+  const handleSelectProfile = (profile: DiscoveredProfile, imported = false) => {
     setSelectedProfile(profile);
     onProfileSelect(profile);
+    if (imported) importedPreviewRef.current = { profile };
     // Auto-start preview when a profile is selected
     handlePreview(profile);
   };
@@ -416,16 +427,33 @@ export function SetupFlow({
       setSelectedAppIds(new Set(selectablePickerIds(result.actions)));
       setPhase('preview-done');
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Preview failed');
+      const previewError = err instanceof Error ? err : new Error('Preview failed');
+      if (importedPreviewRef.current?.profile.path === profile.path) {
+        importedPreviewRef.current.error = previewError;
+      }
+      setErrorMessage(previewError.message);
       setErrorRemediation(err instanceof EngineEnvelopeError ? err.remediation ?? null : null);
       setPhase('error');
     }
   };
 
   useEffect(() => {
+    const importedPreview = importedPreviewRef.current;
+    if (!importedPreview) return;
+
+    if (phase === 'preview-done' && previewResult) {
+      importedPreviewRef.current = null;
+      onProfileToOpenPreviewed?.(importedPreview.profile);
+    } else if (phase === 'error' && importedPreview.error) {
+      importedPreviewRef.current = null;
+      onProfileToOpenPreviewFailed?.(importedPreview.profile, importedPreview.error);
+    }
+  }, [phase, previewResult, onProfileToOpenPreviewed, onProfileToOpenPreviewFailed]);
+
+  useEffect(() => {
     if (!profileToOpen) return;
     onProfileToOpenConsumed?.();
-    handleSelectProfile(profileToOpen);
+    handleSelectProfile(profileToOpen, true);
     // The profile object is a one-shot handoff. Re-running because callback
     // identities changed would start the engine preview twice.
     // eslint-disable-next-line react-hooks/exhaustive-deps

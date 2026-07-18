@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { installTauriMock } from './helpers/tauri-mock';
@@ -8,14 +9,19 @@ const bundleFixture = JSON.parse(readFileSync(
   'utf8',
 )) as {
   fileName: string;
-  extractedDirectory: string;
   manifestPath: string;
   manifest: {
     version: number;
     name: string;
-    apps: Array<{ id: string; source: string }>;
-    restore: unknown[];
+    apps: unknown[];
+    configCaptures: Array<{
+      captureId: string;
+      payloadRoot: string;
+      payloadManifest: Array<{ relativePath: string; size: number; sha256: string }>;
+      captureModule: { contentHash: string; snapshotPath: string };
+    }>;
   };
+  bundleFiles: Record<string, string>;
 };
 
 const capturedEvents = readFileSync(
@@ -31,7 +37,6 @@ test.describe('capture artifact flow regression', () => {
     await installTauriMock(page, {
       allowUnknownInvokes: true,
       zipImport: {
-        extractedDirectory: bundleFixture.extractedDirectory,
         manifestPath: bundleFixture.manifestPath,
         manifestContent: JSON.stringify(bundleFixture.manifest),
         summary: {
@@ -43,11 +48,12 @@ test.describe('capture artifact flow regression', () => {
     });
 
     await page.addInitScript((events) => {
+      (window as any).__test_applyCalls = [];
       (window as any).__ENDSTATE_MOCK_ENGINE__ = {
         runEndstateStreaming: async (
           _settings: unknown,
           command: string,
-          _args: string[],
+          args: string[],
           _onEvent: unknown,
           options?: { onNdjsonEvent?: (event: unknown) => void },
         ) => {
@@ -87,6 +93,11 @@ test.describe('capture artifact flow regression', () => {
             };
           }
           if (command === 'apply') {
+            (window as any).__test_applyCalls.push([...args]);
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            if ((window as any).__test_failPreview) {
+              throw new Error('Engine rejected capture provenance');
+            }
             const item = {
               version: 1,
               runId: 'preview-fixture',
@@ -124,7 +135,7 @@ test.describe('capture artifact flow regression', () => {
     await page.getByTestId('intent-save').click();
     await page.getByTestId('save-flow-start-scan').click();
 
-  await expect(page.getByText('DETECTED', { exact: true })).toBeVisible();
+    await expect(page.getByText('DETECTED', { exact: true })).toBeVisible();
     await expect(page.getByText('EXCLUDED')).toHaveCount(0);
     await expect(page.getByText('1 setting captured')).toBeVisible();
     await expect(page.getByRole('button', { name: '1 settings' })).toBeVisible();
@@ -135,6 +146,14 @@ test.describe('capture artifact flow regression', () => {
   });
 
   test('imports a v2 capture bundle and opens setup review', async ({ page }) => {
+    const capture = bundleFixture.manifest.configCaptures[0];
+    const payloadEntry = capture.payloadManifest[0];
+    const payload = bundleFixture.bundleFiles[`${capture.payloadRoot}/${payloadEntry.relativePath}`];
+    const moduleSnapshot = bundleFixture.bundleFiles[capture.captureModule.snapshotPath];
+    expect(Buffer.byteLength(payload)).toBe(payloadEntry.size);
+    expect(createHash('sha256').update(payload).digest('hex')).toBe(payloadEntry.sha256);
+    expect(createHash('sha256').update(moduleSnapshot).digest('hex')).toBe(capture.captureModule.contentHash);
+
     await page.getByTestId('intent-setup').click();
     await page.locator('[data-testid="drop-zone"] input[type="file"]').setInputFiles({
       name: bundleFixture.fileName,
@@ -142,8 +161,27 @@ test.describe('capture artifact flow regression', () => {
       buffer: Buffer.from('mocked capture bundle; extraction is supplied by the semantic bridge fixture'),
     });
 
-    await expect(page.getByText(`Imported ${bundleFixture.fileName} — opening setup`)).toBeVisible();
+    await expect(page.getByText(`Imported ${bundleFixture.fileName} — setup review ready`)).toHaveCount(0);
     await expect(page.getByText('Preview complete')).toBeVisible();
+    await expect(page.getByText(`Imported ${bundleFixture.fileName} — setup review ready`)).toBeVisible();
     await expect(page.getByText(/Setting up from capture-v2/)).toBeVisible();
+
+    const applyCalls = await page.evaluate(() => (window as any).__test_applyCalls as string[][]);
+    expect(applyCalls).toHaveLength(1);
+    expect(applyCalls[0]).toContain(bundleFixture.manifestPath);
+  });
+
+  test('does not report import success when setup preview rejects the bundle', async ({ page }) => {
+    await page.evaluate(() => { (window as any).__test_failPreview = true; });
+    await page.getByTestId('intent-setup').click();
+    await page.locator('[data-testid="drop-zone"] input[type="file"]').setInputFiles({
+      name: bundleFixture.fileName,
+      mimeType: 'application/zip',
+      buffer: Buffer.from('mocked rejected capture bundle'),
+    });
+
+    await expect(page.getByText('Engine rejected capture provenance', { exact: true })).toBeVisible();
+    await expect(page.getByText(`Imported ${bundleFixture.fileName} — setup review ready`)).toHaveCount(0);
+    await expect(page.getByText(/Failed to import capture-v2\.zip/)).toBeVisible();
   });
 });

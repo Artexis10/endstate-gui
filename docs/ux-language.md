@@ -111,7 +111,11 @@ Internal UI status keys (canonical filter/logic keys):
 | `skipped` | `skipped` |
 | `failed` | `failed` |
 
-**Note:** Reason codes further discriminate meaning (see Table 2).
+**Note:** Reason codes further discriminate meaning (see Table 2). During
+capture, contract status `present` with reason `detected` resolves to the GUI
+key `detected`. GUI 2.21.3 also accepts the already-shipped engine 2.24.1
+compatibility status `captured` and resolves it to `detected`; this is not a
+new engine-contract status.
 
 ---
 

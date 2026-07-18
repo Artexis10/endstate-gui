@@ -4,10 +4,7 @@ function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
-/**
- * Resolve the profile created by an import command. Zip imports return an
- * extraction directory; manifest imports return the destination file path.
- */
+/** Resolve the exact manifest path committed by an import command. */
 export function findImportedProfile(
   profiles: DiscoveredProfile[],
   importedPath: string,
@@ -17,6 +14,6 @@ export function findImportedProfile(
 
   return profiles.find((profile) => {
     const profilePath = normalizePath(profile.path);
-    return profilePath === target || profilePath.startsWith(`${target}/`);
+    return profilePath === target;
   }) ?? null;
 }

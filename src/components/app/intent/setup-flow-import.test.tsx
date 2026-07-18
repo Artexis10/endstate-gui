@@ -19,12 +19,16 @@ describe('SetupFlow imported profile handoff', () => {
       actions: [],
     });
     const onProfileToOpenConsumed = vi.fn();
+    const onProfileToOpenPreviewed = vi.fn();
+    const onProfileToOpenPreviewFailed = vi.fn();
 
     renderWithProviders(
       <SetupFlow
         profiles={[importedProfile]}
         profileToOpen={importedProfile}
         onProfileToOpenConsumed={onProfileToOpenConsumed}
+        onProfileToOpenPreviewed={onProfileToOpenPreviewed}
+        onProfileToOpenPreviewFailed={onProfileToOpenPreviewFailed}
         onBack={vi.fn()}
         onProfileSelect={onProfileSelect}
         onOpenProfilesFolder={vi.fn()}
@@ -43,5 +47,39 @@ describe('SetupFlow imported profile handoff', () => {
     expect(onProfileSelect).toHaveBeenCalledWith(importedProfile);
     expect(onProfileToOpenConsumed).toHaveBeenCalledTimes(1);
     expect(onPreview).toHaveBeenCalledTimes(1);
+    expect(onProfileToOpenPreviewed).toHaveBeenCalledWith(importedProfile);
+    expect(onProfileToOpenPreviewFailed).not.toHaveBeenCalled();
+  });
+
+  it('reports an imported profile preview failure without reporting success', async () => {
+    const previewError = new Error('Engine rejected capture provenance');
+    const onProfileToOpenPreviewed = vi.fn();
+    const onProfileToOpenPreviewFailed = vi.fn();
+
+    renderWithProviders(
+      <SetupFlow
+        profiles={[importedProfile]}
+        profileToOpen={importedProfile}
+        onProfileToOpenConsumed={vi.fn()}
+        onProfileToOpenPreviewed={onProfileToOpenPreviewed}
+        onProfileToOpenPreviewFailed={onProfileToOpenPreviewFailed}
+        onBack={vi.fn()}
+        onProfileSelect={vi.fn()}
+        onOpenProfilesFolder={vi.fn()}
+        onRefreshProfiles={vi.fn().mockResolvedValue(undefined)}
+        onFileDrop={vi.fn()}
+        onDeleteProfile={vi.fn()}
+        isRunning={false}
+        setupProgress={null}
+        liveAppEvents={[]}
+        onPreview={vi.fn().mockRejectedValue(previewError)}
+        onApply={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onProfileToOpenPreviewFailed).toHaveBeenCalledWith(importedProfile, previewError);
+    });
+    expect(onProfileToOpenPreviewed).not.toHaveBeenCalled();
   });
 });

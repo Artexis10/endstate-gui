@@ -17,9 +17,9 @@ The GUI SHALL render engine capture item statuses `present` with reason `detecte
 - **WHEN** capture streaming emits an item with status `skipped` and reason `filtered`, `filtered_runtime`, or `filtered_store`
 - **THEN** the progress row is labeled `EXCLUDED`
 
-### Requirement: Version-compatible local profile validation
+### Requirement: Version-compatible shared local profile validation
 
-The production Tauri validator and browser-bridge validator SHALL accept structurally valid profile manifests with version 1 or version 2. Unsupported versions and structurally invalid manifests SHALL remain invalid.
+The production Tauri validator and browser-bridge validator SHALL delegate to one shared validator that accepts structurally valid profile manifests with exact integer version 1 or version 2. Fractional, unsupported, and structurally invalid manifests SHALL remain invalid. Focused shared-validator tests SHALL run in pull-request CI.
 
 #### Scenario: Version 1 profile remains valid
 - **WHEN** a manifest contains numeric `version: 1` and an apps array
@@ -33,9 +33,13 @@ The production Tauri validator and browser-bridge validator SHALL accept structu
 - **WHEN** a manifest contains a version other than 1 or 2
 - **THEN** local profile validation reports `UNSUPPORTED_VERSION`
 
+#### Scenario: Fractional version is rejected
+- **WHEN** a manifest contains numeric `version: 2.5`
+- **THEN** local profile validation reports `UNSUPPORTED_VERSION`
+
 ### Requirement: ZIP import completes only after activation
 
-The GUI SHALL report a ZIP import as successful only after extraction, validation, discovery, and selection of the imported profile complete. A successful import SHALL open the imported profile in the setup review flow without automatically executing Apply.
+The GUI SHALL report a ZIP import as successful only after safe staged extraction, validation, atomic commit, exact discovery, selection, and preview of the imported profile complete. A successful import SHALL open the imported profile in the setup review flow without automatically executing Apply. Bare-manifest imports SHALL follow the same validate-before-commit rule and SHALL NOT overwrite an existing profile.
 
 #### Scenario: Valid version 2 bundle import
 - **WHEN** the user imports a ZIP whose root manifest is a valid version 2 profile
@@ -48,6 +52,16 @@ The GUI SHALL report a ZIP import as successful only after extraction, validatio
 - **WHEN** ZIP extraction succeeds but its manifest is invalid or unsupported
 - **THEN** the GUI reports import failure with the validation reason
 - **AND** does not show an import-success message
+
+#### Scenario: Unsafe ZIP entry is rejected
+- **WHEN** a ZIP contains an absolute, rooted, or parent-traversal entry
+- **THEN** the entire import fails
+- **AND** no partial or committed profile is left in the profiles directory
+
+#### Scenario: Invalid bare manifest cannot replace a profile
+- **WHEN** an imported manifest has the same filename as an existing profile but fails validation
+- **THEN** the existing profile remains unchanged
+- **AND** the invalid manifest is not committed
 
 #### Scenario: Import does not execute setup
 - **WHEN** a valid imported profile is selected and its review surface opens

@@ -14,8 +14,8 @@ const profiles: DiscoveredProfile[] = [
 ];
 
 describe('findImportedProfile', () => {
-  it('finds the manifest discovered under an extracted bundle directory', () => {
-    expect(findImportedProfile(profiles, 'C:\\test\\profiles\\captured-bundle')).toEqual(
+  it('finds the exact manifest path returned by an import command', () => {
+    expect(findImportedProfile(profiles, 'C:\\test\\profiles\\captured-bundle\\manifest.jsonc')).toEqual(
       profiles[1],
     );
   });
@@ -28,5 +28,9 @@ describe('findImportedProfile', () => {
 
   it('does not confuse a sibling directory with a shared prefix', () => {
     expect(findImportedProfile(profiles, 'C:\\test\\profiles\\captured')).toBeNull();
+  });
+
+  it('does not select an arbitrary descendant when only a directory is returned', () => {
+    expect(findImportedProfile(profiles, 'C:\\test\\profiles\\captured-bundle')).toBeNull();
   });
 });
