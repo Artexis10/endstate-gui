@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add a failing engine test requiring capture item events to emit `present` with reason `detected`.
 - [x] 1.2 Restore the engine capture event vocabulary in all package capture backends and run focused Go contract tests.
-- [ ] 1.3 Publish the engine patch and update the GUI engine pin/checksum through the established release flow.
+- [x] 1.3 Publish the engine patch and update the GUI engine pin/checksum through the established release flow.
 
 ## 2. GUI Compatibility and Import
 
