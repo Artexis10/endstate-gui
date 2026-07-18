@@ -8,9 +8,10 @@ import {
   EndstateApplyData,
   EndstateCaptureData,
   EndstateRevertData,
-  type RestoreItem,
+  type RestoreResult,
   type RestoreSummary,
   type RestoreModuleRef,
+  type ApplyRestoreOptions,
 } from './types';
 import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration, clearSelectedProfile } from './settings';
 import { loadDraft, clearDraft } from './lib/draft-store';
@@ -21,8 +22,20 @@ import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, buildOnlyFlagValue, type AppEvent, type UiPhase } from './lib/apply-utils';
-import { engineSupportsApplyOnly } from './lib/apply-capabilities';
-import { isItemEvent, isArtifactEvent, isPhaseEvent, isRestoreItemEvent, type EnginePhase } from './lib/streaming-events';
+import { engineSupportsApplyOnly, engineSupportsApplyRestoreTarget } from './lib/apply-capabilities';
+import {
+  isConfigMigrationEvent,
+  isConfigResolutionEvent,
+  isItemEvent,
+  isArtifactEvent,
+  isPhaseEvent,
+  isRestoreItemEvent,
+  type ConfigProgressEvent,
+  type EnginePhase,
+} from './lib/streaming-events';
+import { buildRestoreTargetArgs } from './lib/config-restore';
+import { pushBounded } from './lib/bounded-list';
+import { EngineEnvelopeError } from './lib/engine-envelope-error';
 import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
@@ -104,6 +117,8 @@ import type { BackupListItem, BackupStatusData, ScheduleStatusData } from './typ
 
 type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 'backup';
+
+const MAX_LIVE_CONFIG_EVENTS = 2000;
 
 interface AppState {
   status: AppStatus;
@@ -321,6 +336,8 @@ function AppContent() {
   // Gates the setup-flow per-app picker; stays dark until the engine
   // advertises `apply --only` in commands.apply.flags. Defaults false.
   const [applyOnlySupported, setApplyOnlySupported] = useState(false);
+  // Gates explicit capture-to-target choices; dark unless advertised.
+  const [restoreTargetSupported, setRestoreTargetSupported] = useState(false);
   const [autoBackupChip, setAutoBackupChip] =
     useState<'idle' | 'backing-up' | 'backed-up' | 'paused'>('idle');
   const [autoBackupAuthPaused, setAutoBackupAuthPaused] = useState(false);
@@ -410,7 +427,7 @@ function AppContent() {
     timestamp?: string;
     wasPreview?: boolean; // Track if this was a preview (for showing Apply button)
     configModuleMap?: Record<string, string>;
-    restoreItems?: RestoreItem[];
+    restoreItems?: RestoreResult[];
     restoreSummary?: RestoreSummary;
     restoreJournalFile?: string;
     restoreModulesAvailable?: RestoreModuleRef[];
@@ -450,6 +467,7 @@ function AppContent() {
     check: null,
   });
   const [liveAppEvents, setLiveAppEvents] = useState<AppEvent[]>([]);
+  const [liveConfigEvents, setLiveConfigEvents] = useState<ConfigProgressEvent[]>([]);
   const [, setLiveCounters] = useState<LiveCounters>({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
 
   // Throttled streaming updates: during engine runs, events arrive faster than
@@ -1518,6 +1536,7 @@ function AppContent() {
       setRenameSupported(engineSupportsRename(capResult.envelope.data));
       // Per-app setup picker gate: dark unless `apply --only` is advertised.
       setApplyOnlySupported(engineSupportsApplyOnly(capResult.envelope.data));
+      setRestoreTargetSupported(engineSupportsApplyRestoreTarget(capResult.envelope.data));
       if (supported) {
         try {
           const status = await readAndApplyBackupStatus();
@@ -1961,6 +1980,9 @@ function AppContent() {
     // Envelope counts are source of truth; fall back to actions array.
     // No streaming counter fallback — those are unreliable (inflated by plan/verify phases).
     const envelopeData = applyResult.envelope?.data;
+    const previewSuccess = applyResult.envelope?.success ?? (applyResult.exitCode === 0);
+    const previewError = applyResult.envelope?.error;
+    const hasConfigTerminalData = (envelopeData?.configResolutions?.length ?? 0) > 0;
     const previewActions = envelopeData?.actions ?? [];
     let installed: number, alreadyPresent: number;
     if (envelopeData?.counts) {
@@ -1997,7 +2019,7 @@ function AppContent() {
         timestamp: new Date().toISOString(),
         profileName: profileName,
         profilePath: profilePath,
-        outcome: 'success',
+        outcome: previewSuccess ? 'success' : 'failed',
         counts: { installed, alreadyPresent },
         durationMs,
         artifactPaths: {
@@ -2012,7 +2034,7 @@ function AppContent() {
       timestamp: new Date().toISOString(),
       profile: profileName,
       profilePath: profilePath,
-      success: true,
+      success: previewSuccess,
       summary: { installed, alreadyPresent },
       artifactPaths: runBundle ? {
         logFile: runBundle.logPath,
@@ -2036,7 +2058,16 @@ function AppContent() {
       }
     }
 
+    if (!previewSuccess && !hasConfigTerminalData) {
+      if (previewError) {
+        throw new EngineEnvelopeError(previewError);
+      }
+      throw new Error('Preview failed');
+    }
+
     return {
+      success: previewSuccess,
+      error: previewError,
       installed,
       alreadyPresent,
       profile: profileName,
@@ -2047,12 +2078,14 @@ function AppContent() {
       actions: previewActions,
       restoreModulesAvailable,
       configModuleMap,
+      configResolutions: envelopeData?.configResolutions,
+      configResolutionSummary: envelopeData?.configResolutionSummary,
       warnings: envelopeData?.warnings,
     };
   };
 
 
-  const handleApplyFromOverview = async (restoreOptions?: { restoreIntent?: import('./types').RestoreIntent; selectedModules?: string[]; onlyAppIds?: string[] }) => {
+  const handleApplyFromOverview = async (restoreOptions?: ApplyRestoreOptions) => {
     // Use refs for immediate access (state may not have settled in async callbacks)
     const profileName = selectedProfileRef.current || selectedProfile;
     const profilePath = selectedProfilePathRef.current || selectedProfilePath;
@@ -2080,6 +2113,7 @@ function AppContent() {
 
     // Track apply live activity via NDJSON events
     const appEventList: AppEvent[] = [];
+    const configProgressEvents: ConfigProgressEvent[] = [];
     const appEventIndex = new Map<string, number>();
     const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 };
     const verifyCounters = { confirmed: 0, missing: 0, total: 0 };
@@ -2100,6 +2134,7 @@ function AppContent() {
     if (restoreOptions?.restoreIntent === 'apps-and-settings' && restoreOptions.selectedModules && restoreOptions.selectedModules.length > 0) {
       applyArgs.push('--enable-restore');
       applyArgs.push('--restore-filter', restoreOptions.selectedModules.join(','));
+      applyArgs.push(...buildRestoreTargetArgs(restoreOptions.restoreTargets ?? []));
     }
     // Per-app subset (setup-flow picker). The picker passes manifest app ids
     // only when the user selected a strict subset; all-selected omits the
@@ -2238,6 +2273,12 @@ function AppContent() {
               });
             }
           }
+          // Config events are transient progress only. Final compatibility and
+          // restore state comes from the stdout envelope below.
+          else if (isConfigResolutionEvent(ndjsonEvent) || isConfigMigrationEvent(ndjsonEvent)) {
+            pushBounded(configProgressEvents, ndjsonEvent, MAX_LIVE_CONFIG_EVENTS);
+            setLiveConfigEvents([...configProgressEvents]);
+          }
           // Handle restore-item events
           else if (isRestoreItemEvent(ndjsonEvent)) {
             // Map restore status to a display-friendly AppEvent
@@ -2337,10 +2378,16 @@ function AppContent() {
     // Partial failure = success:false but error:null with failed > 0
     const isSuccess = applyResult.envelope?.success ?? (applyResult.exitCode === 0);
     const isPartialFailure = !isSuccess && applyResult.envelope?.error === null && failed > 0;
+    const hasConfigTerminalData = (envelopeData?.configResolutions?.length ?? 0) > 0;
     
-    // Only throw for hard errors, not partial failures
-    if (!isSuccess && !isPartialFailure) {
-      throw new Error(applyResult.envelope?.error?.message || 'Apply failed');
+    // A failed config-generation command can still carry the canonical terminal
+    // resolution/rollback rows. Preserve that structured result for the GUI;
+    // hard failures without terminal data keep the existing error path.
+    if (!isSuccess && !isPartialFailure && !hasConfigTerminalData) {
+      if (applyResult.envelope?.error) {
+        throw new EngineEnvelopeError(applyResult.envelope.error);
+      }
+      throw new Error('Apply failed');
     }
     
     // Persist run artifacts (logs, diagnostics, summary)
@@ -2413,6 +2460,7 @@ function AppContent() {
     }
 
     return {
+      success: isSuccess,
       installed, alreadyPresent, failed, skipped,
       profile: profileName,
       appEvents: reconciledEvents,
@@ -2421,7 +2469,10 @@ function AppContent() {
       restoreSummary,
       restoreJournalFile: envelopeData?.restoreJournalFile,
       restoreModulesAvailable: restoreModulesAvailableResult,
+      configResolutions: envelopeData?.configResolutions,
+      configResolutionSummary: envelopeData?.configResolutionSummary,
       warnings: envelopeData?.warnings,
+      error: applyResult.envelope?.error,
     };
   };
 
@@ -2907,19 +2958,22 @@ function AppContent() {
               isRunning={isRunning}
               setupProgress={actionProgressByAction['setup'] ?? null}
               liveAppEvents={liveAppEvents}
+              liveConfigEvents={liveConfigEvents}
               applyOnlySupported={applyOnlySupported}
+              restoreTargetSupported={restoreTargetSupported}
               onPreview={async (profile) => {
                 setProfileSelection(profile.name, profile.path);
                 updateSettings({ selectedProfileName: profile.name });
                 setIsRunning(true);
                 setLiveAppEvents([]);
+                setLiveConfigEvents([]);
                 setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
                 setOverviewRunningAction('setup');
                 setOverviewActionStatus('setup', 'running');
                 setOverviewActionProgress('setup', { message: 'Evaluating changes' });
                 try {
                   const result = await handlePreviewFromOverview();
-                  setOverviewActionStatus('setup', 'success');
+                  setOverviewActionStatus('setup', result.success === false ? 'error' : 'success');
                   setFlowHasWork(prev => ({ ...prev, setup: true }));
                   return result;
                 } finally {
@@ -2932,13 +2986,17 @@ function AppContent() {
                 updateSettings({ selectedProfileName: profile.name });
                 setIsRunning(true);
                 setLiveAppEvents([]);
+                setLiveConfigEvents([]);
                 setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
                 setOverviewRunningAction('setup');
                 setOverviewActionStatus('setup', 'running');
                 setOverviewActionProgress('setup', { message: 'Installing applications...' });
                 try {
                   const result = await handleApplyFromOverview(restoreOptions);
-                  setOverviewActionStatus('setup', result.failed > 0 ? 'error' : 'success');
+                  setOverviewActionStatus(
+                    'setup',
+                    result.success === false || result.failed > 0 ? 'error' : 'success',
+                  );
                   setFlowHasWork(prev => ({ ...prev, setup: true }));
                   return {
                     ...result,

@@ -8,6 +8,12 @@
  * @see docs/cli-json-contract.md for the full contract
  */
 
+import type {
+  ConfigInstanceEvidence,
+  ConfigResolutionKind,
+  ConfigTargetCandidate,
+} from '../types';
+
 /**
  * Event schema version - must match engine version
  */
@@ -190,6 +196,54 @@ export interface RestoreItemEvent extends BaseStreamingEvent {
   message?: string;
 }
 
+/** Final compatibility/target decision emitted before config mutation. */
+export interface ConfigResolutionEvent extends BaseStreamingEvent {
+  event: 'config-resolution';
+  captureId: string;
+  moduleId: string;
+  configSetId: string;
+  sourceInstance?: ConfigInstanceEvidence;
+  sourceInstanceId?: string;
+  targetInstanceId?: string;
+  targetCandidates: ConfigTargetCandidate[];
+  sourceGeneration?: string;
+  sourceGenerationFingerprint?: string;
+  targetGeneration?: string;
+  resolution: ConfigResolutionKind;
+  reason: string | null;
+  migrationPath: string[];
+  captureModuleRevision?: string;
+  restoreModuleRevision?: string;
+  label: string;
+  message: string;
+  remediation: string | null;
+}
+
+export type ConfigMigrationStage =
+  | 'staging'
+  | 'edge'
+  | 'validation'
+  | 'commit'
+  | 'rollback';
+
+export type ConfigMigrationStatus = 'started' | 'completed' | 'failed';
+
+/** Engine-authored, transient migration progress for one config set. */
+export interface ConfigMigrationEvent extends BaseStreamingEvent {
+  event: 'config-migration';
+  captureId: string;
+  configSetId: string;
+  stage: ConfigMigrationStage;
+  fromGeneration?: string;
+  toGeneration?: string;
+  status: ConfigMigrationStatus;
+  reason: string | null;
+  message: string;
+  remediation: string | null;
+}
+
+export type ConfigProgressEvent = ConfigResolutionEvent | ConfigMigrationEvent;
+
 /**
  * Union type for all streaming events
  */
@@ -200,6 +254,8 @@ export type StreamingEvent =
   | ErrorEvent
   | ArtifactEvent
   | RestoreItemEvent
+  | ConfigResolutionEvent
+  | ConfigMigrationEvent
   | BackupChunkEvent;
 
 /**
@@ -227,6 +283,44 @@ export function isArtifactEvent(event: StreamingEvent): event is ArtifactEvent {
 
 export function isRestoreItemEvent(event: StreamingEvent): event is RestoreItemEvent {
   return event.event === 'restore-item';
+}
+
+export function isConfigResolutionEvent(event: unknown): event is ConfigResolutionEvent {
+  if (!isRecord(event) || !hasConfigEventBase(event, 'config-resolution')) return false;
+
+  return typeof event.captureId === 'string'
+    && typeof event.moduleId === 'string'
+    && typeof event.configSetId === 'string'
+    && isOptionalConfigInstanceEvidence(event.sourceInstance)
+    && isOptionalString(event.sourceInstanceId)
+    && isOptionalString(event.targetInstanceId)
+    && Array.isArray(event.targetCandidates)
+    && event.targetCandidates.every(isConfigTargetCandidate)
+    && isOptionalString(event.sourceGeneration)
+    && isOptionalString(event.sourceGenerationFingerprint)
+    && isOptionalString(event.targetGeneration)
+    && CONFIG_RESOLUTIONS.has(event.resolution as ConfigResolutionKind)
+    && isNullableString(event.reason)
+    && isStringArray(event.migrationPath)
+    && isOptionalString(event.captureModuleRevision)
+    && isOptionalString(event.restoreModuleRevision)
+    && typeof event.label === 'string'
+    && typeof event.message === 'string'
+    && isNullableString(event.remediation);
+}
+
+export function isConfigMigrationEvent(event: unknown): event is ConfigMigrationEvent {
+  if (!isRecord(event) || !hasConfigEventBase(event, 'config-migration')) return false;
+
+  return typeof event.captureId === 'string'
+    && typeof event.configSetId === 'string'
+    && CONFIG_MIGRATION_STAGES.has(event.stage as ConfigMigrationStage)
+    && isOptionalString(event.fromGeneration)
+    && isOptionalString(event.toGeneration)
+    && CONFIG_MIGRATION_STATUSES.has(event.status as ConfigMigrationStatus)
+    && isNullableString(event.reason)
+    && typeof event.message === 'string'
+    && isNullableString(event.remediation);
 }
 
 export function isBackupChunkEvent(event: StreamingEvent): event is BackupChunkEvent {
@@ -270,9 +364,21 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
       'error',
       'artifact',
       'restore-item',
+      'config-resolution',
+      'config-migration',
       'backup-chunk',
     ];
     if (!validEventTypes.includes(parsed.event)) {
+      return null;
+    }
+
+    // New config events cross directly into transient UI state, so validate
+    // their full wire shape. Older event parsing remains intentionally
+    // unchanged for backward compatibility.
+    if (parsed.event === 'config-resolution' && !isConfigResolutionEvent(parsed)) {
+      return null;
+    }
+    if (parsed.event === 'config-migration' && !isConfigMigrationEvent(parsed)) {
       return null;
     }
 
@@ -281,6 +387,89 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
     // Invalid JSON - silently ignore per contract
     return null;
   }
+}
+
+const CONFIG_RESOLUTIONS = new Set<ConfigResolutionKind>([
+  'direct',
+  'migrate',
+  'incompatible',
+  'unknown',
+  'legacy_unverified',
+]);
+
+const CONFIG_MIGRATION_STAGES = new Set<ConfigMigrationStage>([
+  'staging',
+  'edge',
+  'validation',
+  'commit',
+  'rollback',
+]);
+
+const CONFIG_MIGRATION_STATUSES = new Set<ConfigMigrationStatus>([
+  'started',
+  'completed',
+  'failed',
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasConfigEventBase(
+  event: Record<string, unknown>,
+  eventName: ConfigResolutionEvent['event'] | ConfigMigrationEvent['event'],
+): boolean {
+  return event.version === STREAMING_EVENT_VERSION
+    && event.event === eventName
+    && typeof event.runId === 'string'
+    && typeof event.timestamp === 'string';
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function isNullableString(value: unknown): boolean {
+  return value === null || typeof value === 'string';
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isConfigInstanceEvidence(value: unknown): value is ConfigInstanceEvidence {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.detectorId === 'string'
+    && typeof value.rawVersion === 'string'
+    && typeof value.normalizedVersion === 'string'
+    && isDetectionEvidence(value.evidence);
+}
+
+function isOptionalConfigInstanceEvidence(
+  value: unknown,
+): value is ConfigInstanceEvidence | undefined {
+  return value === undefined || isConfigInstanceEvidence(value);
+}
+
+function isConfigTargetCandidate(value: unknown): value is ConfigTargetCandidate {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.moduleId === 'string'
+    && typeof value.detectorId === 'string'
+    && typeof value.rawVersion === 'string'
+    && typeof value.normalizedVersion === 'string'
+    && isDetectionEvidence(value.evidence)
+    && isOptionalString(value.targetGeneration)
+    && isOptionalString(value.targetGenerationFingerprint)
+    && typeof value.restoreModuleRevision === 'string';
+}
+
+function isDetectionEvidence(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.type !== 'string') return false;
+
+  return ['appId', 'backend', 'platform', 'ref', 'driver']
+    .every((key) => isOptionalString(value[key]));
 }
 
 /**

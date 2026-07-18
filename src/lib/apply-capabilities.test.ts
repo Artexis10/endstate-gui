@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { engineSupportsApplyOnly } from './apply-capabilities';
+import {
+  engineSupportsApplyOnly,
+  engineSupportsApplyRestoreTarget,
+} from './apply-capabilities';
 import type { EndstateCapabilitiesData } from '../types';
 
 /** Build a capabilities payload in the real engine's map shape. */
@@ -53,5 +56,13 @@ describe('engineSupportsApplyOnly', () => {
       commands: { verify: { supported: true, flags: ['--only'] } },
     } as unknown as EndstateCapabilitiesData;
     expect(engineSupportsApplyOnly(caps)).toBe(false);
+  });
+});
+
+describe('engineSupportsApplyRestoreTarget', () => {
+  it('activates only when apply advertises --restore-target', () => {
+    expect(engineSupportsApplyRestoreTarget(capsWithApplyFlags(['--restore-target']))).toBe(true);
+    expect(engineSupportsApplyRestoreTarget(capsWithApplyFlags(['--only']))).toBe(false);
+    expect(engineSupportsApplyRestoreTarget(undefined)).toBe(false);
   });
 });

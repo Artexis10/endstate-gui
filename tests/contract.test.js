@@ -1,14 +1,31 @@
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
-const ENDSTATE_SCRIPT_PATH = process.env.ENDSTATE_SCRIPT_PATH
-  || 'C:\\Users\\user\\Desktop\\projects\\endstate\\endstate.ps1';
+const testDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(testDir, '..');
+const configuredEnginePath = process.env.ENDSTATE_ENGINE_PATH;
+const engineCandidates = configuredEnginePath
+  ? [configuredEnginePath]
+  : [
+      join(repoRoot, 'src-tauri', 'binaries', 'endstate-x86_64-pc-windows-msvc.exe'),
+      join(repoRoot, '..', 'endstate', 'go-engine', 'endstate.exe'),
+    ];
+const ENDSTATE_ENGINE_PATH = engineCandidates.find((candidate) => existsSync(candidate));
+const engineRequired = configuredEnginePath != null
+  || (process.env.CI != null && process.env.CI !== 'false');
 
 function checkEndstateAvailable() {
-  if (!existsSync(ENDSTATE_SCRIPT_PATH)) {
-    console.log('⚠️  Endstate not found at:', ENDSTATE_SCRIPT_PATH);
-    console.log('   Skipping contract tests.');
+  if (!ENDSTATE_ENGINE_PATH) {
+    const message = configuredEnginePath
+      ? `Configured engine not found at ${configuredEnginePath}`
+      : `Endstate engine not found. Checked: ${engineCandidates.join(', ')}`;
+    if (engineRequired) {
+      throw new Error(message);
+    }
+    console.log(`⚠️  ${message}`);
+    console.log('   Run npm run build or set ENDSTATE_ENGINE_PATH; skipping outside CI.');
     return false;
   }
   return true;
@@ -17,18 +34,14 @@ function checkEndstateAvailable() {
 function runEndstate(command, args = []) {
   return new Promise((resolve, reject) => {
     const fullArgs = [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      ENDSTATE_SCRIPT_PATH,
       command,
       '--json',
       ...args,
     ];
 
-    const proc = spawn('pwsh', fullArgs, {
+    const proc = spawn(ENDSTATE_ENGINE_PATH, fullArgs, {
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     });
 
     let stdout = '';
@@ -83,8 +96,13 @@ async function testCapabilities() {
   if (typeof envelope.success !== 'boolean') {
     throw new Error('Missing or invalid success field');
   }
+  const applyFlags = envelope.data?.commands?.apply?.flags;
+  if (!Array.isArray(applyFlags) || !applyFlags.includes('--restore-target')) {
+    throw new Error('Pinned engine does not advertise apply --restore-target');
+  }
   
   console.log('   ✓ Envelope structure valid');
+  console.log('   ✓ Config generation target mapping supported');
   console.log(`   ✓ CLI version: ${envelope.cliVersion}`);
   console.log(`   ✓ Schema version: ${envelope.schemaVersion}`);
   console.log(`   ✓ Success: ${envelope.success}`);
@@ -171,12 +189,12 @@ async function testApplyMissing() {
 async function runTests() {
   console.log('🧪 Contract Integration Tests');
   console.log('================================');
-  
-  if (!checkEndstateAvailable()) {
-    process.exit(0);
-  }
 
   try {
+    if (!checkEndstateAvailable()) {
+      process.exit(0);
+    }
+    console.log('Engine:', ENDSTATE_ENGINE_PATH);
     await testCapabilities();
     await testReport();
     await testVerifyMissing();

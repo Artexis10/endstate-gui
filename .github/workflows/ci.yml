@@ -41,6 +41,48 @@ jobs:
           flags: unittests
           fail_ci_if_error: false
 
+  # Exercise the GUI's machine-consumed contract against the exact released
+  # engine pinned for bundling. This keeps additive capability consumption
+  # honest without depending on a sibling source checkout in CI.
+  engine-contract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download pinned engine
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < ENGINE_VERSION)"
+          gh release download "v${version}" \
+            --repo Artexis10/endstate \
+            --pattern endstate-linux-amd64 \
+            --pattern endstate-linux-amd64.sha256
+
+          expected="$(tr -d '[:space:]' < endstate-linux-amd64.sha256)"
+          actual="$(sha256sum endstate-linux-amd64 | cut -d ' ' -f 1)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Pinned engine checksum mismatch for v${version}"
+            exit 1
+          fi
+          chmod +x endstate-linux-amd64
+
+      - name: Run live engine contract tests
+        env:
+          ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate-linux-amd64
+        run: npm run test:contract
+
   # Regression guard for the standalone dev bridge (PR #87). The dev bridge was
   # extracted out of the Tauri process specifically so it links NONE of the
   # native GUI stack (tao / wry / webview2-com) — that layer was the source of

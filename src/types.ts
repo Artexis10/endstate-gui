@@ -18,6 +18,107 @@ export interface EndstateError {
   hint?: string;
 }
 
+/** Engine-owned compatibility decision for one captured configuration set. */
+export type ConfigResolutionKind =
+  | 'direct'
+  | 'migrate'
+  | 'incompatible'
+  | 'unknown'
+  | 'legacy_unverified';
+
+/** Terminal configuration outcome from a completed command envelope. */
+export type ConfigResolutionStatus =
+  | 'planned'
+  | 'restored'
+  | 'skipped'
+  | 'failed'
+  | 'rolled_back'
+  | 'rollback_failed';
+
+/** Portable detection evidence supplied by the engine. Extra keys are additive. */
+export interface ConfigDetectionEvidence {
+  type: string;
+  appId?: string;
+  backend?: string;
+  platform?: string;
+  ref?: string;
+  driver?: string;
+  [key: string]: unknown;
+}
+
+/** Portable, non-secret source instance supplied by the engine. */
+export interface ConfigInstanceEvidence {
+  id: string;
+  detectorId: string;
+  rawVersion: string;
+  normalizedVersion: string;
+  evidence: ConfigDetectionEvidence;
+}
+
+/** Portable target candidate supplied by the engine. */
+export interface ConfigTargetCandidate {
+  id: string;
+  moduleId: string;
+  detectorId: string;
+  rawVersion: string;
+  normalizedVersion: string;
+  evidence: ConfigDetectionEvidence;
+  targetGeneration?: string;
+  targetGenerationFingerprint?: string;
+  restoreModuleRevision: string;
+}
+
+/** Final engine result for one captured configuration set. */
+export interface ConfigResolution {
+  captureId: string;
+  moduleId: string;
+  configSetId: string;
+  sourceInstance?: ConfigInstanceEvidence;
+  sourceInstanceId?: string;
+  targetInstanceId?: string;
+  targetCandidates: ConfigTargetCandidate[];
+  sourceGeneration?: string;
+  sourceGenerationFingerprint?: string;
+  targetGeneration?: string;
+  resolution: ConfigResolutionKind;
+  reason: string | null;
+  migrationPath: string[];
+  captureModuleRevision?: string;
+  restoreModuleRevision?: string;
+  resolvedTargets: string[];
+  status: ConfigResolutionStatus;
+  label: string;
+  message: string;
+  remediation: string | null;
+}
+
+/** Engine-owned aggregate counts for configuration resolutions. */
+export interface ConfigResolutionSummary {
+  total: number;
+  direct: number;
+  migrate: number;
+  incompatible: number;
+  unknown: number;
+  legacyUnverified: number;
+  selected: number;
+  skipped: number;
+  failed: number;
+}
+
+/** Explicit capture-to-target choice passed back to the engine. */
+export interface RestoreTargetMapping {
+  captureId: string;
+  targetInstanceId: string;
+}
+
+/** Explicit GUI choices supplied to `apply`; omitted fields keep engine defaults. */
+export interface ApplyRestoreOptions {
+  restoreIntent?: RestoreIntent;
+  selectedModules?: string[];
+  onlyAppIds?: string[];
+  restoreTargets?: RestoreTargetMapping[];
+}
+
 /** Engine-authored advisory attached to a completed command result. */
 export interface CommandWarning {
   code: string;
@@ -438,10 +539,14 @@ export interface EndstateApplyData {
   configModuleMap?: Record<string, string>;
   /** Restore summary when --enable-restore is active. */
   restoreSummary?: RestoreSummary;
-  restoreItems?: RestoreItem[];
+  restoreItems?: RestoreResult[];
   restoreJournalFile?: string;
   restoreFilter?: string[];
   restoreModulesAvailable?: RestoreModuleRef[];
+  /** Generation-aware configuration results; omitted for config-free input. */
+  configResolutions?: ConfigResolution[];
+  /** Engine-owned counts for configResolutions; omitted for config-free input. */
+  configResolutionSummary?: ConfigResolutionSummary;
   warnings?: CommandWarning[];
 }
 
@@ -521,22 +626,26 @@ export interface ApplyCounts {
  */
 export type EndstateApplyResultData = EndstateApplyData;
 
-/** Restore item from NDJSON events and JSON envelope */
-export interface RestoreItem {
+/** Final result for one restore action in a completed command envelope. */
+export interface RestoreResult {
   id: string;
-  module: string;
-  restorer: 'copy' | 'merge-json' | 'merge-ini' | 'append';
   source: string;
   target: string;
-  status: RestoreItemStatus;
-  reason: string | null;
-  backupPath: string | null;
-  targetExisted: boolean;
-  message: string | null;
+  status: RestoreResultStatus;
+  backupPath?: string;
+  backupCreated: boolean;
+  targetExistedBefore: boolean;
+  error?: string;
+  warnings?: string[];
+  restoreType?: string;
+  captureId?: string;
+  configSetId?: string;
+  targetInstanceId?: string;
+  sourceGeneration?: string;
+  targetGeneration?: string;
 }
 
-export type RestoreItemStatus =
-  | 'restoring'
+export type RestoreResultStatus =
   | 'restored'
   | 'skipped_up_to_date'
   | 'skipped_missing_source'

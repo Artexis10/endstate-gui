@@ -5,7 +5,7 @@ import { CheckCircle2, AlertTriangle, Copy, Package, Loader2, Settings, FolderAr
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { DetailsDisclosure } from '../ui/details-disclosure';
 import { useShowDetails } from '@/lib/use-show-details';
-import type { ApplyItem, ApplyCounts, RestoreItem, RestoreSummary } from '../../types';
+import type { ApplyItem, ApplyCounts, RestoreResult, RestoreSummary } from '../../types';
 import {
   categorizeApplyItems,
   countCategorizedItems,
@@ -29,7 +29,7 @@ interface ApplyResultModalProps {
   currentProgress?: { currentApp: string; action: string };  // Real-time progress during apply
   rawLogs?: string;
   rawEnvelope?: object;
-  restoreItems?: RestoreItem[];
+  restoreItems?: RestoreResult[];
   restoreSummary?: RestoreSummary;
   restoreJournalFile?: string;
   onRevertSettings?: () => void;
