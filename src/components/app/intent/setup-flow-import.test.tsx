@@ -43,7 +43,9 @@ describe('SetupFlow imported profile handoff', () => {
       />,
     );
 
-    await waitFor(() => expect(onPreview).toHaveBeenCalledWith(importedProfile));
+    await waitFor(() => {
+      expect(onProfileToOpenPreviewed).toHaveBeenCalledWith(importedProfile);
+    });
     expect(onProfileSelect).toHaveBeenCalledWith(importedProfile);
     expect(onProfileToOpenConsumed).toHaveBeenCalledTimes(1);
     expect(onPreview).toHaveBeenCalledTimes(1);
