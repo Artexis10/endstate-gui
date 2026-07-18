@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.21.1](https://github.com/Artexis10/endstate-gui/compare/gui-v2.21.0...gui-v2.21.1) (2026-07-18)
+
+
+### Bug Fixes
+
+* **release:** pin engine v2.24.1 ([b82558f](https://github.com/Artexis10/endstate-gui/commit/b82558f61366968001346549abf720a172d3d16a))
+
 ## [2.21.0](https://github.com/Artexis10/endstate-gui/compare/gui-v2.20.0...gui-v2.21.0) (2026-07-18)
 
 
