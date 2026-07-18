@@ -6,8 +6,10 @@
 //! all engine spawn sites must use it.
 
 use std::fs;
-use std::path::Path;
+use std::io::{Read, Seek, Write};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -184,21 +186,341 @@ pub fn ensure_dir(path: &str) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format!("Failed to create directory: {}", e))
 }
 
+const IMPORT_STAGING_PREFIX: &str = ".endstate-import-staging-";
+
+struct StagingDirectory {
+    path: PathBuf,
+    active: bool,
+}
+
+impl StagingDirectory {
+    fn create(profiles_dir: &Path) -> Result<Self, String> {
+        fs::create_dir_all(profiles_dir)
+            .map_err(|e| format!("Failed to create profiles directory: {}", e))?;
+
+        for _ in 0..1000 {
+            let candidate = profiles_dir.join(unique_staging_name());
+            match fs::create_dir(&candidate) {
+                Ok(()) => {
+                    return Ok(Self {
+                        path: candidate,
+                        active: true,
+                    });
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(format!("Failed to create import staging directory: {}", e)),
+            }
+        }
+
+        Err("Failed to allocate a unique import staging directory".to_string())
+    }
+
+    fn commit_to(&mut self, final_dir: &Path) -> Result<(), String> {
+        fs::rename(&self.path, final_dir)
+            .map_err(|e| format!("Failed to commit imported profile: {}", e))?;
+        self.active = false;
+        Ok(())
+    }
+}
+
+impl Drop for StagingDirectory {
+    fn drop(&mut self) {
+        if self.active {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
+fn unique_staging_name() -> String {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+    format!(
+        "{}{}-{}",
+        IMPORT_STAGING_PREFIX,
+        std::process::id(),
+        NEXT_ID.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+fn sanitize_file_name(file_name: &str, fallback: &str) -> String {
+    let normalized = file_name.replace('\\', "/");
+    let basename = normalized.rsplit('/').next().unwrap_or("");
+    let sanitized = basename
+        .chars()
+        .map(|ch| {
+            if ch.is_control() || matches!(ch, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+            {
+                '_'
+            } else {
+                ch
+            }
+        })
+        .collect::<String>();
+    let sanitized = sanitized.trim_matches(|ch: char| ch == '.' || ch.is_whitespace());
+
+    if sanitized.is_empty() || matches!(sanitized, "." | "..") {
+        fallback.to_string()
+    } else {
+        sanitized.to_string()
+    }
+}
+
+fn collision_free_file_path(directory: &Path, file_name: &str) -> Result<PathBuf, String> {
+    let direct = directory.join(file_name);
+    if !direct.exists() {
+        return Ok(direct);
+    }
+
+    let path = Path::new(file_name);
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("profile");
+    let extension = path.extension().and_then(|value| value.to_str());
+
+    for suffix in 1..=u32::MAX {
+        let candidate_name = match extension {
+            Some(extension) if !extension.is_empty() => {
+                format!("{}_{}.{}", stem, suffix, extension)
+            }
+            _ => format!("{}_{}", stem, suffix),
+        };
+        let candidate = directory.join(candidate_name);
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(format!(
+        "Failed to find a collision-free destination for {}",
+        file_name
+    ))
+}
+
+fn collision_free_directory_path(directory: &Path, name: &str) -> Result<PathBuf, String> {
+    let direct = directory.join(name);
+    if !direct.exists() {
+        return Ok(direct);
+    }
+
+    for suffix in 1..=u32::MAX {
+        let candidate = directory.join(format!("{}_{}", name, suffix));
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(format!(
+        "Failed to find a collision-free destination for {}",
+        name
+    ))
+}
+
+fn validation_error(result: &ValidationResult) -> String {
+    let reasons = result
+        .errors
+        .iter()
+        .map(|error| format!("{}: {}", error.code, error.message))
+        .collect::<Vec<_>>()
+        .join("; ");
+    if reasons.is_empty() {
+        "Profile validation failed for an unknown reason".to_string()
+    } else {
+        format!("Profile validation failed: {}", reasons)
+    }
+}
+
+fn require_valid_profile(path: &Path) -> Result<(), String> {
+    let path_string = path
+        .to_str()
+        .ok_or_else(|| "Invalid profile path encoding".to_string())?;
+    let result = validate_profile(path_string)?;
+    if result.valid {
+        Ok(())
+    } else {
+        Err(validation_error(&result))
+    }
+}
+
+fn create_staged_manifest(profiles_dir: &Path, content: &[u8]) -> Result<PathBuf, String> {
+    fs::create_dir_all(profiles_dir)
+        .map_err(|e| format!("Failed to create profiles directory: {}", e))?;
+
+    for _ in 0..1000 {
+        let candidate = profiles_dir.join(format!("{}.jsonc", unique_staging_name()));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(mut file) => {
+                if let Err(e) = file.write_all(content) {
+                    drop(file);
+                    let _ = fs::remove_file(&candidate);
+                    return Err(format!("Failed to write staged profile: {}", e));
+                }
+                return Ok(candidate);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("Failed to create staged profile: {}", e)),
+        }
+    }
+
+    Err("Failed to allocate a unique staged profile".to_string())
+}
+
+fn commit_manifest_bytes(
+    content: &[u8],
+    file_name: &str,
+    profiles_dir: &Path,
+) -> Result<String, String> {
+    let safe_file_name = sanitize_file_name(file_name, "profile.jsonc");
+    let staging_path = create_staged_manifest(profiles_dir, content)?;
+
+    let result = (|| {
+        require_valid_profile(&staging_path)?;
+        let final_path = collision_free_file_path(profiles_dir, &safe_file_name)?;
+        let final_path_string = final_path
+            .to_str()
+            .ok_or_else(|| "Invalid destination path encoding".to_string())?
+            .to_string();
+        fs::rename(&staging_path, &final_path)
+            .map_err(|e| format!("Failed to commit imported profile: {}", e))?;
+        Ok(final_path_string)
+    })();
+
+    if result.is_err() {
+        let _ = fs::remove_file(&staging_path);
+    }
+    result
+}
+
 pub fn import_profile(source_path: &str, profiles_dir: &str) -> Result<String, String> {
     let source = Path::new(source_path);
-    let dest_dir = Path::new(profiles_dir);
     if !source.exists() || !source.is_file() {
         return Err("Source file does not exist".to_string());
     }
     let file_name = source
         .file_name()
+        .and_then(|value| value.to_str())
         .ok_or_else(|| "Invalid source file name".to_string())?;
-    let dest_path = dest_dir.join(file_name);
-    fs::copy(source, &dest_path).map_err(|e| format!("Failed to copy file: {}", e))?;
-    file_name
+    let content = fs::read(source).map_err(|e| format!("Failed to read source profile: {}", e))?;
+    commit_manifest_bytes(&content, file_name, Path::new(profiles_dir))
+}
+
+pub fn import_profile_text(
+    content: &str,
+    file_name: &str,
+    profiles_dir: &str,
+) -> Result<String, String> {
+    commit_manifest_bytes(content.as_bytes(), file_name, Path::new(profiles_dir))
+}
+
+fn zip_entry_is_unsafe(name: &str) -> bool {
+    let normalized = name.replace('\\', "/");
+    let mut components = normalized.split('/');
+    let first = components.next().unwrap_or("");
+    let drive_prefixed = first.as_bytes().get(1) == Some(&b':');
+
+    normalized.starts_with('/')
+        || drive_prefixed
+        || normalized.split('/').any(|component| component == "..")
+        || Path::new(name).components().any(|component| {
+            matches!(
+                component,
+                Component::Prefix(_) | Component::RootDir | Component::ParentDir
+            )
+        })
+}
+
+fn import_zip_archive<R: Read + Seek>(
+    mut archive: zip::ZipArchive<R>,
+    file_name: &str,
+    profiles_dir: &Path,
+) -> Result<String, String> {
+    let safe_file_name = sanitize_file_name(file_name, "profile.zip");
+    let raw_stem = Path::new(&safe_file_name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("profile");
+    let profile_name = sanitize_file_name(raw_stem, "profile");
+    let mut staging = StagingDirectory::create(profiles_dir)?;
+
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|e| format!("Failed to read zip entry {}: {}", index, e))?;
+        let entry_name = entry.name().to_string();
+        if zip_entry_is_unsafe(&entry_name) {
+            return Err(format!("Unsafe zip entry path rejected: {}", entry_name));
+        }
+        let enclosed_name = entry
+            .enclosed_name()
+            .ok_or_else(|| format!("Unsafe zip entry path rejected: {}", entry_name))?;
+        let output_path = staging.path.join(enclosed_name);
+
+        if entry.is_dir() {
+            fs::create_dir_all(&output_path)
+                .map_err(|e| format!("Failed to create zip directory {}: {}", entry_name, e))?;
+        } else {
+            if let Some(parent) = output_path.parent() {
+                fs::create_dir_all(parent).map_err(|e| {
+                    format!(
+                        "Failed to create parent for zip entry {}: {}",
+                        entry_name, e
+                    )
+                })?;
+            }
+            let mut output = fs::File::create(&output_path)
+                .map_err(|e| format!("Failed to create zip entry {}: {}", entry_name, e))?;
+            std::io::copy(&mut entry, &mut output)
+                .map_err(|e| format!("Failed to extract zip entry {}: {}", entry_name, e))?;
+        }
+    }
+
+    let staged_manifest = staging.path.join("manifest.jsonc");
+    if !staged_manifest.is_file() {
+        return Err("Zip archive must contain manifest.jsonc at the archive root".to_string());
+    }
+    require_valid_profile(&staged_manifest)?;
+
+    let final_dir = collision_free_directory_path(profiles_dir, &profile_name)?;
+    let committed_manifest = final_dir.join("manifest.jsonc");
+    let committed_manifest_string = committed_manifest
         .to_str()
-        .ok_or_else(|| "Invalid file name encoding".to_string())
-        .map(|s| s.to_string())
+        .ok_or_else(|| "Invalid committed manifest path encoding".to_string())?
+        .to_string();
+    staging.commit_to(&final_dir)?;
+    Ok(committed_manifest_string)
+}
+
+pub fn extract_zip_profile(zip_path: &str, profiles_dir: &str) -> Result<String, String> {
+    let source = Path::new(zip_path);
+    if !source.exists() || !source.is_file() {
+        return Err("Zip file does not exist".to_string());
+    }
+    let file_name = source
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "Invalid zip file name".to_string())?;
+    let file = fs::File::open(source).map_err(|e| format!("Failed to open zip file: {}", e))?;
+    let archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Failed to read zip archive: {}", e))?;
+    import_zip_archive(archive, file_name, Path::new(profiles_dir))
+}
+
+pub fn import_zip_from_base64(
+    data: &str,
+    file_name: &str,
+    profiles_dir: &str,
+) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let bytes = STANDARD
+        .decode(data)
+        .map_err(|e| format!("Failed to decode base64 zip: {}", e))?;
+    let archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
+        .map_err(|e| format!("Failed to read zip archive: {}", e))?;
+    import_zip_archive(archive, file_name, Path::new(profiles_dir))
 }
 
 pub fn show_file_dialog() -> Result<Option<String>, String> {
@@ -226,6 +548,10 @@ pub fn list_manifest_files(directory: &str) -> Result<Vec<String>, String> {
 
     fn is_manifest(path: &Path) -> bool {
         path.is_file()
+            && !path
+                .file_name()
+                .map(|name| name.to_string_lossy().starts_with(IMPORT_STAGING_PREFIX))
+                .unwrap_or(false)
             && path
                 .extension()
                 .map(|ext| {
@@ -235,8 +561,7 @@ pub fn list_manifest_files(directory: &str) -> Result<Vec<String>, String> {
                 .unwrap_or(false)
     }
 
-    let entries =
-        fs::read_dir(dir_path).map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries = fs::read_dir(dir_path).map_err(|e| format!("Failed to read directory: {}", e))?;
     let mut manifest_files = Vec::new();
     for entry in entries {
         if let Ok(entry) = entry {
@@ -250,7 +575,7 @@ pub fn list_manifest_files(directory: &str) -> Result<Vec<String>, String> {
                 // (e.g. Setups/my-capture/manifest.jsonc)
                 // Skip known non-profile directories
                 let dir_name = entry.file_name().to_string_lossy().to_lowercase();
-                if dir_name == "runs" {
+                if dir_name == "runs" || dir_name.starts_with(IMPORT_STAGING_PREFIX) {
                     continue;
                 }
                 if let Ok(sub_entries) = fs::read_dir(&path) {
@@ -345,8 +670,7 @@ pub fn write_text_file_debug(filename: &str, content: &str) -> Result<String, St
         std::fs::create_dir_all(&debug_dir)
             .map_err(|e| format!("Failed to create debug dir: {}", e))?;
         let path = debug_dir.join(filename);
-        std::fs::write(&path, content)
-            .map_err(|e| format!("Failed to write debug file: {}", e))?;
+        std::fs::write(&path, content).map_err(|e| format!("Failed to write debug file: {}", e))?;
         Ok(path.display().to_string())
     }
     #[cfg(not(debug_assertions))]
@@ -437,14 +761,17 @@ pub fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
             };
         }
     };
-    let version_num = match version.as_i64().or_else(|| version.as_f64().map(|f| f as i64)) {
+    let version_num = match version.as_i64() {
         Some(v) => v,
         None => {
             return ValidationResult {
                 valid: false,
                 errors: vec![ValidationError {
                     code: "INVALID_VERSION_TYPE".to_string(),
-                    message: format!("Field 'version' must be a number, got: {}", version),
+                    message: format!(
+                        "Field 'version' must be the exact JSON integer 1 or 2, got: {}",
+                        version
+                    ),
                 }],
                 summary: None,
             };
@@ -455,7 +782,10 @@ pub fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
             valid: false,
             errors: vec![ValidationError {
                 code: "UNSUPPORTED_VERSION".to_string(),
-                message: format!("Unsupported profile version: {} (supported: 1, 2)", version_num),
+                message: format!(
+                    "Unsupported profile version: {} (supported: 1, 2)",
+                    version_num
+                ),
             }],
             summary: None,
         };
@@ -578,20 +908,88 @@ pub fn validate_profile(path: &str) -> Result<ValidationResult, String> {
 
 #[cfg(test)]
 mod profile_validation_tests {
-    use super::validate_profile_object;
+    use super::{
+        extract_zip_profile, import_profile, import_profile_text, import_zip_from_base64,
+        validate_profile_object,
+    };
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     use serde_json::json;
+    use std::fs;
+    use std::io::Write;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use zip::write::SimpleFileOptions;
+
+    const VALID_V1: &str = r#"{"version":1,"name":"legacy","apps":[]}"#;
+    const VALID_V2: &str = r#"{"version":2,"name":"capture","apps":[],"restore":[]}"#;
+
+    struct TestDir(PathBuf);
+
+    impl TestDir {
+        fn new(label: &str) -> Self {
+            static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "endstate-core-{}-{}-{}",
+                label,
+                std::process::id(),
+                NEXT_ID.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir(&path).expect("create test directory");
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn write_zip(path: &Path, entries: &[(&str, &str)]) {
+        let file = fs::File::create(path).expect("create zip");
+        let mut writer = zip::ZipWriter::new(file);
+        for (name, content) in entries {
+            writer
+                .start_file(*name, SimpleFileOptions::default())
+                .expect("start zip entry");
+            writer
+                .write_all(content.as_bytes())
+                .expect("write zip entry");
+        }
+        writer.finish().expect("finish zip");
+    }
+
+    fn directory_names(path: &Path) -> Vec<String> {
+        let mut names = fs::read_dir(path)
+            .expect("read directory")
+            .map(|entry| {
+                entry
+                    .expect("read entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    }
 
     #[test]
-    fn accepts_capture_bundle_manifest_v2() {
+    fn accepts_exact_integer_profile_versions_v1_and_v2() {
+        for version in [1, 2] {
         let result = validate_profile_object(&json!({
-            "version": 2,
-            "name": "captured",
-            "apps": [],
-            "restore": []
+                "version": version,
+                "name": "profile",
+                "apps": []
         }));
 
-        assert!(result.valid, "{:?}", result.errors);
-        assert_eq!(result.summary.expect("summary").version, 2);
+            assert!(result.valid, "version {version}: {:?}", result.errors);
+            assert_eq!(result.summary.expect("summary").version, version);
+        }
     }
 
     #[test]
@@ -604,5 +1002,187 @@ mod profile_validation_tests {
 
         assert!(!result.valid);
         assert_eq!(result.errors[0].code, "UNSUPPORTED_VERSION");
+    }
+
+    #[test]
+    fn rejects_fractional_and_string_profile_versions() {
+        for version in [json!(2.5), json!("2")] {
+            let result = validate_profile_object(&json!({
+                "version": version,
+                "name": "invalid",
+                "apps": []
+            }));
+
+            assert!(!result.valid, "accepted version {version}");
+            assert_eq!(result.errors[0].code, "INVALID_VERSION_TYPE");
+        }
+    }
+
+    #[test]
+    fn valid_v2_zip_commits_and_returns_root_manifest_path() {
+        let temp = TestDir::new("valid-zip");
+        let profiles = temp.path().join("profiles");
+        let zip_path = temp.path().join("capture.zip");
+        fs::create_dir(&profiles).expect("create profiles");
+        write_zip(
+            &zip_path,
+            &[("manifest.jsonc", VALID_V2), ("payload/settings.txt", "ok")],
+        );
+
+        let committed = extract_zip_profile(
+            zip_path.to_str().expect("zip path"),
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect("import valid zip");
+        let manifest = PathBuf::from(committed);
+
+        assert_eq!(manifest.file_name().unwrap(), "manifest.jsonc");
+        assert_eq!(manifest.parent().unwrap().file_name().unwrap(), "capture");
+        assert!(manifest.is_file());
+        assert!(manifest
+            .parent()
+            .unwrap()
+            .join("payload/settings.txt")
+            .is_file());
+        assert_eq!(directory_names(&profiles), vec!["capture"]);
+    }
+
+    #[test]
+    fn unsafe_zip_entries_reject_the_whole_import_and_cleanup() {
+        for (label, unsafe_name) in [
+            ("parent", "../escape.txt"),
+            ("rooted", "/absolute.txt"),
+            ("windows-rooted", "C:/absolute.txt"),
+        ] {
+            let temp = TestDir::new(label);
+            let profiles = temp.path().join("profiles");
+            let zip_path = temp.path().join("unsafe.zip");
+            fs::create_dir(&profiles).expect("create profiles");
+            write_zip(
+                &zip_path,
+                &[("manifest.jsonc", VALID_V2), (unsafe_name, "unsafe")],
+            );
+
+            let error = extract_zip_profile(
+                zip_path.to_str().expect("zip path"),
+                profiles.to_str().expect("profiles path"),
+            )
+            .expect_err("unsafe zip must fail");
+
+            assert!(error.contains("Unsafe zip entry"), "{error}");
+            assert!(directory_names(&profiles).is_empty(), "{label}");
+        }
+    }
+
+    #[test]
+    fn invalid_zip_manifest_rejects_and_cleans_up_staging() {
+        let temp = TestDir::new("invalid-zip");
+        let profiles = temp.path().join("profiles");
+        let zip_path = temp.path().join("invalid.zip");
+        fs::create_dir(&profiles).expect("create profiles");
+        write_zip(
+            &zip_path,
+            &[("manifest.jsonc", r#"{"version":2.5,"apps":[]}"#)],
+        );
+
+        let error = extract_zip_profile(
+            zip_path.to_str().expect("zip path"),
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect_err("invalid manifest must fail");
+
+        assert!(error.contains("validation"), "{error}");
+        assert!(directory_names(&profiles).is_empty());
+    }
+
+    #[test]
+    fn invalid_bare_manifest_does_not_overwrite_existing_profile() {
+        let temp = TestDir::new("invalid-bare");
+        let profiles = temp.path().join("profiles");
+        let sources = temp.path().join("sources");
+        fs::create_dir(&profiles).expect("create profiles");
+        fs::create_dir(&sources).expect("create sources");
+        fs::write(profiles.join("profile.jsonc"), VALID_V1).expect("write existing");
+        let source = sources.join("profile.jsonc");
+        fs::write(&source, r#"{"version":2.5,"apps":[]}"#).expect("write source");
+
+        import_profile(
+            source.to_str().expect("source path"),
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect_err("invalid import must fail");
+
+        assert_eq!(
+            fs::read_to_string(profiles.join("profile.jsonc")).unwrap(),
+            VALID_V1
+        );
+        assert_eq!(directory_names(&profiles), vec!["profile.jsonc"]);
+    }
+
+    #[test]
+    fn valid_bare_import_uses_collision_free_manifest_path() {
+        let temp = TestDir::new("valid-bare");
+        let profiles = temp.path().join("profiles");
+        let sources = temp.path().join("sources");
+        fs::create_dir(&profiles).expect("create profiles");
+        fs::create_dir(&sources).expect("create sources");
+        fs::write(profiles.join("profile.jsonc"), VALID_V1).expect("write existing");
+        let source = sources.join("profile.jsonc");
+        fs::write(&source, VALID_V2).expect("write source");
+
+        let committed = import_profile(
+            source.to_str().expect("source path"),
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect("import valid manifest");
+
+        assert_eq!(PathBuf::from(&committed), profiles.join("profile_1.jsonc"));
+        assert_eq!(
+            fs::read_to_string(profiles.join("profile.jsonc")).unwrap(),
+            VALID_V1
+        );
+        assert_eq!(fs::read_to_string(&committed).unwrap(), VALID_V2);
+        assert_eq!(
+            directory_names(&profiles),
+            vec!["profile.jsonc", "profile_1.jsonc"]
+        );
+    }
+
+    #[test]
+    fn text_import_sanitizes_untrusted_name_to_one_basename() {
+        let temp = TestDir::new("text-name");
+        let profiles = temp.path().join("profiles");
+
+        let committed = import_profile_text(
+            VALID_V2,
+            "../nested\\unsafe:name.jsonc",
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect("import text manifest");
+
+        let committed = PathBuf::from(committed);
+        assert_eq!(committed.parent().unwrap(), profiles);
+        assert_eq!(committed.file_name().unwrap(), "unsafe_name.jsonc");
+    }
+
+    #[test]
+    fn base64_zip_import_cannot_escape_through_untrusted_file_name() {
+        let temp = TestDir::new("base64-name");
+        let profiles = temp.path().join("profiles");
+        let zip_path = temp.path().join("source.zip");
+        write_zip(&zip_path, &[("manifest.jsonc", VALID_V2)]);
+        let data = STANDARD.encode(fs::read(&zip_path).expect("read zip"));
+
+        let committed = import_zip_from_base64(
+            &data,
+            "../../nested\\escaped.zip",
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect("import base64 zip");
+
+        let committed = PathBuf::from(committed);
+        assert_eq!(committed, profiles.join("escaped").join("manifest.jsonc"));
+        assert!(committed.is_file());
+        assert_eq!(directory_names(&profiles), vec!["escaped"]);
     }
 }

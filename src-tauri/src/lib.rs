@@ -364,93 +364,10 @@ fn ensure_dir(path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Extract a zip file into the profiles directory.
-///
-/// Creates a subfolder named after the zip file (without extension),
-/// extracts all contents into it, and returns the folder path.
-///
-/// # Arguments
-/// * `zip_path` - Path to the zip file to extract
-/// * `profiles_dir` - Destination profiles directory
-///
-/// # Returns
-/// * `Ok(String)` - Path to the extracted folder
-/// * `Err(String)` - Failed to extract
+/// Validate, stage, and commit a ZIP profile through the shared core importer.
 #[tauri::command]
 fn extract_zip_profile(zip_path: String, profiles_dir: String) -> Result<String, String> {
-    use std::path::Path;
-    use std::io::Read;
-
-    let source = Path::new(&zip_path);
-    let dest_dir = Path::new(&profiles_dir);
-
-    if !source.exists() || !source.is_file() {
-        return Err("Zip file does not exist".to_string());
-    }
-
-    // Derive folder name from zip filename (without extension)
-    let stem = source
-        .file_stem()
-        .ok_or_else(|| "Invalid zip file name".to_string())?
-        .to_str()
-        .ok_or_else(|| "Invalid file name encoding".to_string())?;
-
-    let extract_dir = dest_dir.join(stem);
-
-    // Collision avoidance: if folder exists, add suffix
-    let mut final_dir = extract_dir.clone();
-    let mut suffix = 1u32;
-    while final_dir.exists() {
-        final_dir = dest_dir.join(format!("{}_{}", stem, suffix));
-        suffix += 1;
-        if suffix > 100 {
-            return Err("Too many collisions for folder name".to_string());
-        }
-    }
-
-    fs::create_dir_all(&final_dir)
-        .map_err(|e| format!("Failed to create extraction directory: {}", e))?;
-
-    // Open and extract the zip
-    let file = fs::File::open(source)
-        .map_err(|e| format!("Failed to open zip file: {}", e))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("Failed to read zip archive: {}", e))?;
-
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)
-            .map_err(|e| format!("Failed to read zip entry: {}", e))?;
-
-        let entry_name = entry.name().to_string();
-
-        // Security: reject entries with path traversal
-        if entry_name.contains("..") {
-            continue;
-        }
-
-        let out_path = final_dir.join(&entry_name);
-
-        if entry.is_dir() {
-            fs::create_dir_all(&out_path)
-                .map_err(|e| format!("Failed to create directory {}: {}", entry_name, e))?;
-        } else {
-            // Ensure parent directory exists
-            if let Some(parent) = out_path.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("Failed to create parent dir: {}", e))?;
-            }
-            let mut buf = Vec::new();
-            entry.read_to_end(&mut buf)
-                .map_err(|e| format!("Failed to read zip entry {}: {}", entry_name, e))?;
-            fs::write(&out_path, &buf)
-                .map_err(|e| format!("Failed to write {}: {}", entry_name, e))?;
-        }
-    }
-
-    final_dir
-        .to_str()
-        .ok_or_else(|| "Invalid path encoding".to_string())
-        .map(|s| s.to_string())
+    endstate_engine_core::cmd::extract_zip_profile(&zip_path, &profiles_dir)
 }
 
 /// Side-write the embedded `manifest.jsonc` from a capture bundle zip.
@@ -499,82 +416,26 @@ fn extract_zip_manifest(zip_path: String, dest_path: String) -> Result<(), Strin
     Ok(())
 }
 
-/// Import a zip file from base64-encoded data.
-///
-/// Decodes base64 data, writes to a temp file, extracts to the profiles
-/// directory, and cleans up the temp file.
-///
-/// # Arguments
-/// * `data` - Base64-encoded zip file content
-/// * `file_name` - Original file name (used for folder naming)
-/// * `profiles_dir` - Destination profiles directory
-///
-/// # Returns
-/// * `Ok(String)` - Path to the extracted folder
-/// * `Err(String)` - Failed to import
+/// Decode and import a browser-provided ZIP through the shared core importer.
 #[tauri::command]
 fn import_zip_from_base64(data: String, file_name: String, profiles_dir: String) -> Result<String, String> {
-    use base64::Engine;
-
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(&data)
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
-
-    // Write to temp file
-    let local_data = dirs::data_local_dir()
-        .ok_or_else(|| "Cannot determine local data directory".to_string())?;
-    let temp_dir = local_data.join("Endstate").join("cache").join("imports");
-    fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
-    let temp_path = temp_dir.join(&file_name);
-    fs::write(&temp_path, &bytes)
-        .map_err(|e| format!("Failed to write temp file: {}", e))?;
-
-    // Extract using existing function
-    let result = extract_zip_profile(
-        temp_path.to_str().unwrap_or_default().to_string(),
-        profiles_dir,
-    );
-
-    // Clean up temp file
-    let _ = fs::remove_file(&temp_path);
-
-    result
+    endstate_engine_core::cmd::import_zip_from_base64(&data, &file_name, &profiles_dir)
 }
 
-/// Copy a file to the profiles directory.
-///
-/// # Arguments
-/// * `source_path` - Path to the source file
-/// * `profiles_dir` - Destination profiles directory
-///
-/// # Returns
-/// * `Ok(String)` - Name of the copied file (basename)
-/// * `Err(String)` - Failed to copy file
+/// Validate, stage, and commit a bare manifest through the shared core importer.
 #[tauri::command]
 fn import_profile(source_path: String, profiles_dir: String) -> Result<String, String> {
-    use std::path::Path;
-    
-    let source = Path::new(&source_path);
-    let dest_dir = Path::new(&profiles_dir);
-    
-    if !source.exists() || !source.is_file() {
-        return Err("Source file does not exist".to_string());
-    }
-    
-    let file_name = source
-        .file_name()
-        .ok_or_else(|| "Invalid source file name".to_string())?;
-    
-    let dest_path = dest_dir.join(file_name);
-    
-    fs::copy(source, &dest_path)
-        .map_err(|e| format!("Failed to copy file: {}", e))?;
-    
-    file_name
-        .to_str()
-        .ok_or_else(|| "Invalid file name encoding".to_string())
-        .map(|s| s.to_string())
+    endstate_engine_core::cmd::import_profile(&source_path, &profiles_dir)
+}
+
+/// Validate, stage, and commit a browser/drop manifest through shared core.
+#[tauri::command]
+fn import_profile_text(
+    content: String,
+    file_name: String,
+    profiles_dir: String,
+) -> Result<String, String> {
+    endstate_engine_core::cmd::import_profile_text(&content, &file_name, &profiles_dir)
 }
 
 /// Show a file picker dialog for selecting a profile file.
@@ -741,222 +602,6 @@ fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to rename file: {}", e))
 }
 
-/// Profile validation result returned from validate_profile command.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ValidationResult {
-    pub valid: bool,
-    pub errors: Vec<ValidationError>,
-    pub summary: Option<ProfileSummary>,
-}
-
-/// Validation error with code and message.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ValidationError {
-    pub code: String,
-    pub message: String,
-}
-
-/// Profile summary for valid profiles.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProfileSummary {
-    pub name: String,
-    pub version: i32,
-    pub app_count: i32,
-    pub captured: Option<String>,
-}
-
-/// Strip JSONC comments (// and /* */) from content.
-/// This is a simple implementation that handles most common cases.
-fn strip_jsonc_comments(content: &str) -> String {
-    let mut result = String::with_capacity(content.len());
-    let mut chars = content.chars().peekable();
-    let mut in_string = false;
-    let mut escape_next = false;
-    
-    while let Some(c) = chars.next() {
-        if escape_next {
-            result.push(c);
-            escape_next = false;
-            continue;
-        }
-        
-        if c == '\\' && in_string {
-            result.push(c);
-            escape_next = true;
-            continue;
-        }
-        
-        if c == '"' && !escape_next {
-            in_string = !in_string;
-            result.push(c);
-            continue;
-        }
-        
-        if !in_string && c == '/' {
-            if let Some(&next) = chars.peek() {
-                if next == '/' {
-                    // Single-line comment - skip to end of line
-                    chars.next(); // consume second /
-                    while let Some(&ch) = chars.peek() {
-                        if ch == '\n' {
-                            break;
-                        }
-                        chars.next();
-                    }
-                    continue;
-                } else if next == '*' {
-                    // Multi-line comment - skip to */
-                    chars.next(); // consume *
-                    while let Some(ch) = chars.next() {
-                        if ch == '*' {
-                            if let Some(&'/') = chars.peek() {
-                                chars.next(); // consume /
-                                break;
-                            }
-                        }
-                    }
-                    continue;
-                }
-            }
-        }
-        
-        result.push(c);
-    }
-    
-    result
-}
-
-/// Pure validation of a profile manifest object.
-/// No IO, no process spawning - just validates the structure.
-fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
-    let mut errors = Vec::new();
-    
-    // Check 1: Must be an object
-    let obj = match json.as_object() {
-        Some(o) => o,
-        None => {
-            return ValidationResult {
-                valid: false,
-                errors: vec![ValidationError {
-                    code: "NOT_AN_OBJECT".to_string(),
-                    message: "Profile must be a JSON object".to_string(),
-                }],
-                summary: None,
-            };
-        }
-    };
-    
-    // Check 2: Version field exists
-    let version = match obj.get("version") {
-        Some(v) => v,
-        None => {
-            return ValidationResult {
-                valid: false,
-                errors: vec![ValidationError {
-                    code: "MISSING_VERSION".to_string(),
-                    message: "No 'version' field present".to_string(),
-                }],
-                summary: None,
-            };
-        }
-    };
-    
-    // Check 3: Version is a number
-    let version_num = match version.as_i64().or_else(|| version.as_f64().map(|f| f as i64)) {
-        Some(v) => v,
-        None => {
-            return ValidationResult {
-                valid: false,
-                errors: vec![ValidationError {
-                    code: "INVALID_VERSION_TYPE".to_string(),
-                    message: format!("Field 'version' must be a number, got: {}", version),
-                }],
-                summary: None,
-            };
-        }
-    };
-    
-    // Check 4: Version is supported. Capture bundles produced by the current
-    // engine use v2 while existing hand-authored profiles remain v1.
-    if !matches!(version_num, 1 | 2) {
-        return ValidationResult {
-            valid: false,
-            errors: vec![ValidationError {
-                code: "UNSUPPORTED_VERSION".to_string(),
-                message: format!("Unsupported profile version: {} (supported: 1, 2)", version_num),
-            }],
-            summary: None,
-        };
-    }
-    
-    // Check 5: Apps field exists
-    let apps = match obj.get("apps") {
-        Some(a) => a,
-        None => {
-            return ValidationResult {
-                valid: false,
-                errors: vec![ValidationError {
-                    code: "MISSING_APPS".to_string(),
-                    message: "No 'apps' field present".to_string(),
-                }],
-                summary: None,
-            };
-        }
-    };
-    
-    // Check 6: Apps is an array
-    let apps_array = match apps.as_array() {
-        Some(a) => a,
-        None if apps.is_null() => &vec![], // null is acceptable, treat as empty
-        None => {
-            return ValidationResult {
-                valid: false,
-                errors: vec![ValidationError {
-                    code: "INVALID_APPS_TYPE".to_string(),
-                    message: "Field 'apps' must be an array".to_string(),
-                }],
-                summary: None,
-            };
-        }
-    };
-    
-    // Optional: Warn about app entries missing 'id' (not a hard failure for backward compat)
-    for (idx, app) in apps_array.iter().enumerate() {
-        if let Some(app_obj) = app.as_object() {
-            if !app_obj.contains_key("id") || app_obj.get("id").map(|v| v.as_str().unwrap_or("").is_empty()).unwrap_or(true) {
-                errors.push(ValidationError {
-                    code: "INVALID_APP_ENTRY".to_string(),
-                    message: format!("App entry at index {} is missing 'id' field", idx + 1),
-                });
-            }
-        }
-    }
-    
-    // Profile is valid - build summary
-    let name = obj.get("name")
-        .and_then(|n| n.as_str())
-        .unwrap_or("")
-        .to_string();
-    
-    let captured = obj.get("captured")
-        .and_then(|c| c.as_str())
-        .map(|s| s.to_string());
-    
-    ValidationResult {
-        valid: true,
-        errors, // May contain warnings about missing app IDs
-        summary: Some(ProfileSummary {
-            name,
-            version: version_num as i32,
-            app_count: apps_array.len() as i32,
-            captured,
-        }),
-    }
-}
-
 /// Validate a profile manifest against the Endstate profile contract.
 ///
 /// This is a pure file-based validation - reads the file, parses JSON/JSONC,
@@ -969,111 +614,10 @@ fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
 /// * `Ok(ValidationResult)` - Validation completed (check valid field)
 /// * `Err(String)` - Failed to read/parse file
 #[tauri::command]
-fn validate_profile(path: String) -> Result<ValidationResult, String> {
-    use std::path::Path;
-    
-    let file_path = Path::new(&path);
-    
-    // Check 1: File must exist
-    if !file_path.exists() {
-        return Ok(ValidationResult {
-            valid: false,
-            errors: vec![ValidationError {
-                code: "FILE_NOT_FOUND".to_string(),
-                message: format!("File does not exist: {}", path),
-            }],
-            summary: None,
-        });
-    }
-    
-    // Check 2: Must be a file
-    if !file_path.is_file() {
-        return Ok(ValidationResult {
-            valid: false,
-            errors: vec![ValidationError {
-                code: "NOT_A_FILE".to_string(),
-                message: format!("Path is not a file: {}", path),
-            }],
-            summary: None,
-        });
-    }
-    
-    // Read file content
-    let content = match fs::read_to_string(file_path) {
-        Ok(c) => c,
-        Err(e) => {
-            return Ok(ValidationResult {
-                valid: false,
-                errors: vec![ValidationError {
-                    code: "READ_ERROR".to_string(),
-                    message: format!("Failed to read file: {}", e),
-                }],
-                summary: None,
-            });
-        }
-    };
-    
-    // Strip JSONC comments for .jsonc and .json5 files
-    let ext = file_path.extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    
-    let json_content = if ext == "jsonc" || ext == "json5" {
-        strip_jsonc_comments(&content)
-    } else {
-        // Also strip comments from .json files since they might have them
-        strip_jsonc_comments(&content)
-    };
-    
-    // Parse JSON
-    let json: serde_json::Value = match serde_json::from_str(&json_content) {
-        Ok(j) => j,
-        Err(e) => {
-            return Ok(ValidationResult {
-                valid: false,
-                errors: vec![ValidationError {
-                    code: "PARSE_ERROR".to_string(),
-                    message: format!("Invalid JSON/JSONC syntax: {}", e),
-                }],
-                summary: None,
-            });
-        }
-    };
-    
-    // Validate the parsed object
-    Ok(validate_profile_object(&json))
-}
-
-#[cfg(test)]
-mod profile_validation_tests {
-    use super::validate_profile_object;
-    use serde_json::json;
-
-    #[test]
-    fn accepts_capture_bundle_manifest_v2() {
-        let result = validate_profile_object(&json!({
-            "version": 2,
-            "name": "captured",
-            "apps": [],
-            "restore": []
-        }));
-
-        assert!(result.valid, "{:?}", result.errors);
-        assert_eq!(result.summary.expect("summary").version, 2);
-    }
-
-    #[test]
-    fn rejects_unknown_future_profile_version() {
-        let result = validate_profile_object(&json!({
-            "version": 3,
-            "name": "future",
-            "apps": []
-        }));
-
-        assert!(!result.valid);
-        assert_eq!(result.errors[0].code, "UNSUPPORTED_VERSION");
-    }
+fn validate_profile(
+    path: String,
+) -> Result<endstate_engine_core::cmd::ValidationResult, String> {
+    endstate_engine_core::cmd::validate_profile(&path)
 }
 
 /// Write text to a debug file (DEV-only).
@@ -1459,6 +1003,7 @@ pub fn run() {
             get_capture_cache_directory,
             ensure_dir,
             import_profile,
+            import_profile_text,
             extract_zip_profile,
             extract_zip_manifest,
             import_zip_from_base64,

@@ -88,14 +88,17 @@ jobs:
   # native GUI stack (tao / wry / webview2-com) — that layer was the source of
   # the intermittent 0xc0000374 heap corruption (our Rust is zero-`unsafe`).
   # The fix holds only as long as nothing re-links that surface into the bridge
-  # crate. This job fails the build the moment one of those crates reappears in
-  # endstate-dev-bridge's dependency tree. Pure metadata (`cargo tree`), no
-  # build, resolved against the Windows target from Linux — fast.
+  # crate. This job runs the cheap shared-core tests, then fails the moment one
+  # of those crates reappears in endstate-dev-bridge's dependency tree. The
+  # dependency assertion is pure metadata resolved against Windows from Linux.
   dev-bridge-no-gui-deps:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Run shared-core Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p endstate-engine-core
 
       - name: Assert dev-bridge links no GUI crates
         working-directory: src-tauri
