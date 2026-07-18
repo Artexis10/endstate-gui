@@ -2,11 +2,11 @@ name: bundle-check
 
 # Catch installer-bundle regressions BEFORE they merge.
 #
-# The release pipeline (release-please.yml) publishes the GitHub Release the
-# instant a release PR merges, then builds installers in a separate job. So a
-# change that breaks Tauri bundling — e.g. a tauri.conf.json `resources` entry
-# pointing at an engine file that no longer exists — is not caught until release
-# time, where it ships an assetless "Latest" and breaks /download + the updater.
+# The release pipeline (release-please.yml) creates a draft GitHub Release when
+# a release PR merges, then builds installers in a separate job. This PR gate
+# catches broken resource staging, bundle contents, and packaged-engine catalog
+# loading before that release build; the release remains draft if any backstop
+# still fails.
 #
 # This job runs the *real* Tauri bundler on every PR that touches files which can
 # affect the bundle, and fails the PR if bundling fails. It mirrors the release
@@ -23,8 +23,13 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/engine-resources.mjs'
+      - 'scripts/engine-resources.test.mjs'
       - 'scripts/audit-windows-installer.mjs'
+      - 'scripts/smoke-packaged-engine.mjs'
+      - 'scripts/release-workflow.test.mjs'
+      - 'release-please-config.json'
       - '.github/workflows/bundle-check.yml'
+      - '.github/workflows/release-please.yml'
   workflow_dispatch:
 
 permissions:
@@ -76,6 +81,9 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Test engine resource and release contracts
+        run: npm run engine:test-resources
+
       - name: Stage and validate engine resources
         run: npm run engine:stage
 
@@ -98,3 +106,12 @@ jobs:
             npm run engine:audit-installer -- $installer.FullName
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+
+      # Both formats are statically audited above. Execute the extracted NSIS
+      # tree once because MSI and NSIS share the same staged catalog + sidecar.
+      - name: Smoke packaged engine catalog
+        shell: pwsh
+        run: |
+          $nsis = @(Get-ChildItem 'src-tauri/target/release/bundle' -Recurse -File -Filter '*.exe')
+          if ($nsis.Count -eq 0) { throw 'NSIS installer not found for smoke test.' }
+          npm run engine:smoke-installer -- $nsis[0].FullName

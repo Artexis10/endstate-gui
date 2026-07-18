@@ -19,9 +19,11 @@ on:
 # Release-please runs under the endstate-release-bot GitHub App identity
 # (App ID + private key live as RELEASE_PLEASE_APP_* secrets). The minted
 # installation token is a non-GITHUB_TOKEN credential, so the PRs and
-# releases it creates fire `pull_request` and `release: published` events
-# normally — bypassing the recursion-protection rule that previously
-# silently swallowed every cascade from this workflow. The earlier
+# releases it creates fire `pull_request` events normally. Releases are created
+# as drafts and published only after installers and updater assets pass the
+# content and executable smoke gates below.
+# This bypasses the recursion-protection rule that previously silently
+# swallowed every cascade from this workflow. The earlier
 # `dispatch-ci` shim job is no longer needed.
 
 permissions:
@@ -61,18 +63,15 @@ jobs:
       contents: write
 
     steps:
-      # Hold the freshly-published release OUT of "Latest" until installers and
-      # latest.json are uploaded and verified below. release-please publishes the
-      # release the instant the PR merges; if this build then fails, an assetless
-      # release must never be what /download and the auto-updater resolve. Marking
-      # it prerelease makes /releases/latest skip it and keep serving the last good
-      # release. Promoted back to Latest only after the verify step passes.
-      - name: Hold release as prerelease until installers are verified
+      # release-please creates automated releases as drafts. Re-runs and manual
+      # dispatches enforce the same hold before touching assets, so failure can
+      # never expose a partially rebuilt release or change /releases/latest.
+      - name: Hold release as draft until installers are verified
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
-        run: gh release edit "$TAG" --repo Artexis10/endstate-gui --prerelease=true --latest=false
+        run: gh release edit "$TAG" --repo Artexis10/endstate-gui --draft=true --prerelease=false --latest=false
 
       - uses: actions/checkout@v4
         with:
@@ -156,6 +155,9 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Test engine resource and release contracts
+        run: npm run engine:test-resources
+
       - name: Stage and validate engine resources
         run: npm run engine:stage
 
@@ -186,6 +188,15 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
+      # Both formats are statically audited above. Execute the extracted NSIS
+      # tree once because MSI and NSIS share the same staged catalog + sidecar.
+      - name: Smoke packaged engine catalog
+        shell: pwsh
+        run: |
+          $nsis = @(Get-ChildItem 'src-tauri/target/release/bundle' -Recurse -File -Filter '*.exe')
+          if ($nsis.Count -eq 0) { throw 'NSIS installer not found for smoke test.' }
+          npm run engine:smoke-installer -- $nsis[0].FullName
+
       - name: Verify installers + latest.json uploaded
         shell: bash
         env:
@@ -205,26 +216,34 @@ jobs:
           fi
           echo "Verified installers + latest.json present in $TAG." | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # All artifacts confirmed present — safe to make this the release users get.
-      - name: Promote release to Latest
+      # Publish every verified target, but only the tag matching main's current
+      # package version may become Latest. Manual rebuilds of older tags stay
+      # published and explicitly non-Latest.
+      - name: Publish verified release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
         run: |
-          gh release edit "$TAG" --repo Artexis10/endstate-gui --prerelease=false --latest
-          echo "Promoted $TAG to Latest." | tee -a "$GITHUB_STEP_SUMMARY"
+          EXPECTED_TAG="gui-v$(node -p "require('./package.json').version")"
+          if [ "$TAG" = "$EXPECTED_TAG" ]; then
+            gh release edit "$TAG" --repo Artexis10/endstate-gui --draft=false --prerelease=false --latest
+            echo "Published $TAG as Latest." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            gh release edit "$TAG" --repo Artexis10/endstate-gui --draft=false --prerelease=false --latest=false
+            echo "Published historical $TAG without changing Latest ($EXPECTED_TAG)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
-      # Backstop: if the build or verify failed (or was cancelled), leave the
-      # release as a prerelease so /releases/latest keeps resolving the previous
-      # good release. An assetless release can never be served as "Latest".
-      - name: On failure, keep the release out of Latest
+      # Backstop: if build, audit, smoke, or asset verification fails, keep the
+      # target draft and non-Latest. /download and the updater continue serving
+      # the previous verified release.
+      - name: On failure, keep the release draft and out of Latest
         if: ${{ failure() || cancelled() }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
         run: |
-          gh release edit "$TAG" --repo Artexis10/endstate-gui --prerelease=true --latest=false || true
-          echo "::error::Release $TAG did not produce verified installers and was held as prerelease (NOT Latest). /download and the updater keep serving the previous good release. Investigate and re-run." \
+          gh release edit "$TAG" --repo Artexis10/endstate-gui --draft=true --prerelease=false --latest=false || true
+          echo "::error::Release $TAG did not produce verified installers and remains draft (NOT Latest). /download and the updater keep serving the previous good release. Investigate and re-run." \
             | tee -a "$GITHUB_STEP_SUMMARY"
