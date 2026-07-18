@@ -26,8 +26,18 @@ The production Tauri validator and browser-bridge validator SHALL delegate to on
 - **THEN** local profile validation reports it valid
 
 #### Scenario: Version 2 capture bundle is valid
-- **WHEN** a manifest contains numeric `version: 2`, an apps array, and optional restore actions
+- **WHEN** a self-contained capture manifest contains numeric `version: 2`, an apps array, and a nonempty top-level `configCaptures[]` whose provenance and payload records satisfy the engine 2.24.2 structural-isolation contract
 - **THEN** local profile validation reports it valid
+
+#### Scenario: Include-dependent version 2 root is rejected at the GUI import boundary
+- **WHEN** an imported version 2 root manifest omits top-level `configCaptures[]` and relies on external includes for provenance
+- **THEN** local profile validation reports `INVALID_CONFIG_CAPTURE`
+- **AND** the GUI does not commit the import, because bare imports cannot preserve an external include graph and capture ZIPs are required to be self-contained
+
+#### Scenario: Generation and legacy lanes remain structurally isolated
+- **WHEN** a manifest exposes a generation payload through flat restore fallback, overlaps generation and legacy payload roots, or contains inconsistent legacy lane, module, or restore attribution
+- **THEN** local profile validation reports the engine-compatible structural error
+- **AND** the invalid manifest is not committed
 
 #### Scenario: Unsupported future version is rejected
 - **WHEN** a manifest contains a version other than 1 or 2
@@ -67,6 +77,16 @@ The GUI SHALL report a ZIP import as successful only after safe staged extractio
 - **WHEN** a valid imported profile is selected and its review surface opens
 - **THEN** no Apply command starts until the user explicitly requests it
 
+#### Scenario: Native drop opens visible setup review
+- **WHEN** the user drops a supported profile file anywhere in the native window while the engine and import coordinator are idle
+- **THEN** the GUI routes to the Setup flow before import preview begins
+- **AND** concurrent native drops are rejected until the active import preview settles
+
+#### Scenario: Native drop is blocked during engine work
+- **WHEN** capture, preview, apply, or another profile import is active
+- **THEN** a native profile drop is rejected before any staging or import command runs
+- **AND** the GUI explains that the current operation must finish first
+
 ### Requirement: Native Save has an explicit completion state
 
 After a capture file is saved, the GUI SHALL preserve the capture result and display a completion state containing the saved filename or path plus actions for Back to home and Save another copy. It SHALL also offer Open folder when the native save path is known.
@@ -88,6 +108,10 @@ After a capture file is saved, the GUI SHALL preserve the capture result and dis
 #### Scenario: User saves another copy
 - **WHEN** the user activates Save another copy
 - **THEN** the same preserved capture result is passed through the save dialog again
+
+#### Scenario: Retried second-save cancellation preserves completion
+- **WHEN** a second save fails, the user retries, and then cancels the save dialog
+- **THEN** the GUI returns to the original `Backup saved` completion state and preserves its saved path
 
 ### Requirement: Capture artifact flow has layered automated coverage
 

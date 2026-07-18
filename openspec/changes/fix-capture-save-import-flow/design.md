@@ -33,13 +33,15 @@ Changing only the GUI was rejected because it would leave other consumers expose
 
 ### Validate supported manifest versions at one shared Rust boundary
 
-Production Tauri and the browser bridge will delegate to the same Tauri-free validator. It accepts exact integer manifest versions 1 and 2 while preserving object/apps validation; fractional and future versions remain invalid. The shared-core tests run in pull-request CI so the shipping and development paths cannot drift.
+Production Tauri and the browser bridge will delegate to the same Tauri-free validator. It accepts exact integer manifest versions 1 and 2 while preserving object/apps validation; fractional and future versions remain invalid. Version 2 imports are self-contained capture artifacts: their root manifest must carry a nonempty top-level `configCaptures[]`, and generation/legacy payload roots, module lists, and flat restore attribution must satisfy the pinned engine's structural-isolation rules before publication. Include-dependent version 2 roots are intentionally rejected at this GUI import boundary because a bare-file import cannot preserve an external include graph, while capture ZIPs are contractually self-contained. The shared-core tests run in pull-request CI so the shipping and development paths cannot drift.
 
 Delegating version 2 validation to the external engine for every profile listing was rejected: discovery is a local, frequent operation and the GUI already owns a pure structural validator. Removing validation was rejected because invalid files must not become selectable profiles.
 
 ### Make import an explicit outcome, not an optimistic toast
 
 ZIP and bare-manifest imports stage under the profiles directory, validate before an atomic collision-free commit, and return the exact committed manifest path. ZIP extraction rejects every unsafe archive path and requires `manifest.jsonc` at the contract root. The frontend validates and discovers that exact path, then selects it and waits for the existing engine preview to commit the review surface before reporting success. Validation or preview failures retain their concrete reason and never produce a success message.
+
+Native window drops share one import lease with the Setup drop zone and file picker. A native drop is rejected before staging while any engine operation or import preview is active; otherwise the GUI routes to Setup before starting the import so preview and success can never occur on a hidden flow.
 
 Automatically executing Apply was rejected because setup execution must remain an explicit user action. Merely adding a profile card was rejected because the user's intent after choosing a file is to inspect/use that imported setup now.
 
