@@ -19,6 +19,7 @@ import { resolveDraftContent } from './lib/draft-content-resolver';
 import { resolveProfilePath } from './lib/profile-selection-migration';
 import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-discovery';
 import { findImportedProfile } from './lib/profile-import';
+import { createNativeProfileDropHandler, createProfileImportCoordinator } from './lib/native-profile-drop';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
@@ -121,6 +122,7 @@ type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 'backup';
 
 const MAX_LIVE_CONFIG_EVENTS = 2000;
+const PROFILE_IMPORT_BUSY_MESSAGE = 'Finish the current operation or setup review before importing another profile.';
 
 interface AppState {
   status: AppStatus;
@@ -191,6 +193,7 @@ function AppContent() {
     resolve: () => void;
     reject: (error: Error) => void;
   } | null>(null);
+  const profileImportCoordinatorRef = useRef(createProfileImportCoordinator());
   const [selectedProfile, setSelectedProfile] = useState('');
   const [selectedProfilePath, setSelectedProfilePath] = useState('');
   // Refs for immediate access in async callbacks (avoid stale closures)
@@ -214,7 +217,13 @@ function AppContent() {
     verify: null,
   });
 
-  const [isRunning, setIsRunning] = useState(false);
+  const [isRunning, setIsRunningState] = useState(false);
+  const isRunningRef = useRef(isRunning);
+  isRunningRef.current = isRunning;
+  const setIsRunning = (running: boolean) => {
+    isRunningRef.current = running;
+    setIsRunningState(running);
+  };
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_runLogs, setRunLogs] = useState<string>('');
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -722,7 +731,7 @@ function AppContent() {
   };
 
   // Handle file drops from the Setup flow drop zone (ADR-001)
-  const handleFileDrop = async (files: File[]) => {
+  const importDroppedFiles = async (files: File[]) => {
     // Resolve profiles directory on-demand if startup init hasn't completed yet
     let dir = profilesDirectory;
     if (!dir) {
@@ -773,8 +782,26 @@ function AppContent() {
 
   };
 
+  const runProfileImport = async (operation: () => Promise<void>) => {
+    const lease = profileImportCoordinatorRef.current.tryAcquire();
+    if (!lease) {
+      showToast(PROFILE_IMPORT_BUSY_MESSAGE, 'error');
+      return;
+    }
+
+    try {
+      await operation();
+    } finally {
+      lease.release();
+    }
+  };
+
+  const handleFileDrop = async (files: File[]) => {
+    await runProfileImport(() => importDroppedFiles(files));
+  };
+
   // Import profiles by file path (Tauri mode: Rust handles file I/O directly)
-  const handleFilePathImport = async (paths: string[]) => {
+  const importFilePaths = async (paths: string[]) => {
     // Resolve profiles directory on-demand if startup init hasn't completed yet
     let dir = profilesDirectory;
     if (!dir) {
@@ -803,6 +830,10 @@ function AppContent() {
         showToast(`Failed to import ${fileName}: ${msg}`, 'error');
       }
     }
+  };
+
+  const handleFilePathImport = async (paths: string[]) => {
+    await runProfileImport(() => importFilePaths(paths));
   };
 
   // Browse for profile files using native dialog (Tauri mode only)
@@ -867,8 +898,18 @@ function AppContent() {
   // Tauri drag-drop: listen for native file drops and import to profiles.
   // Use refs to avoid stale closures and ensure proper async cleanup.
   const dragDropUnlistenRef = useRef<(() => void) | undefined>();
-  const handleFilePathImportRef = useRef(handleFilePathImport);
-  handleFilePathImportRef.current = handleFilePathImport;
+  const nativeProfileDropHandler = createNativeProfileDropHandler({
+    isRunning: () => isRunningRef.current,
+    coordinator: profileImportCoordinatorRef.current,
+    openSetup: () => {
+      setCurrentPage('setup');
+      setActiveFlowPage('setup');
+    },
+    importPaths: importFilePaths,
+    onBlocked: () => showToast(PROFILE_IMPORT_BUSY_MESSAGE, 'error'),
+  });
+  const nativeProfileDropHandlerRef = useRef(nativeProfileDropHandler);
+  nativeProfileDropHandlerRef.current = nativeProfileDropHandler;
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -880,16 +921,7 @@ function AppContent() {
         if (cancelled) return;
         const webview = getCurrentWebviewWindow();
         const unlisten = await webview.onDragDropEvent((event) => {
-          if (event.payload.type === 'drop') {
-            const paths = event.payload.paths as string[];
-            const accepted = paths.filter((p) => {
-              const name = p.toLowerCase();
-              return name.endsWith('.zip') || name.endsWith('.json') || name.endsWith('.jsonc') || name.endsWith('.json5');
-            });
-            if (accepted.length > 0) {
-              handleFilePathImportRef.current(accepted);
-            }
-          }
+          nativeProfileDropHandlerRef.current(event);
         });
         if (cancelled) {
           unlisten();

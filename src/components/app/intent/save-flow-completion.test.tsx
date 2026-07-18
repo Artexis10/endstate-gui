@@ -90,4 +90,24 @@ describe('SaveFlow completion', () => {
     expect(screen.getByText('Backup saved')).toBeInTheDocument();
     expect(screen.queryByText('Scan complete')).not.toBeInTheDocument();
   });
+
+  it('returns to the saved completion after a failed second save is retried and cancelled', async () => {
+    const firstSavedPath = 'C:\\Users\\test\\Downloads\\capture.zip';
+    const onSaveToFile = vi
+      .fn()
+      .mockResolvedValueOnce({ saved: true, path: firstSavedPath })
+      .mockRejectedValueOnce(new Error('The destination is unavailable'))
+      .mockResolvedValueOnce({ saved: false });
+
+    await saveCapture(onSaveToFile);
+    fireEvent.click(screen.getByRole('button', { name: /save another copy/i }));
+
+    await screen.findByText('Save failed');
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+
+    await waitFor(() => expect(onSaveToFile).toHaveBeenCalledTimes(3));
+    expect(screen.getByText('Backup saved')).toBeInTheDocument();
+    expect(screen.getByText(firstSavedPath)).toBeInTheDocument();
+    expect(screen.queryByText('Scan complete')).not.toBeInTheDocument();
+  });
 });

@@ -110,6 +110,7 @@ export function SaveFlow({
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [savedPath, setSavedPath] = useState<string | null>(null);
+  const [hasSavedCopy, setHasSavedCopy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [errorOrigin, setErrorOrigin] = useState<ErrorOrigin>(null);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
@@ -133,6 +134,7 @@ export function SaveFlow({
       setPhase('idle');
       setResult(null);
       setSavedPath(null);
+      setHasSavedCopy(false);
       setErrorMessage('');
       setErrorOrigin(null);
       setActiveFilters(new Set());
@@ -169,6 +171,8 @@ export function SaveFlow({
   const handleStartScan = async () => {
     setPhase('scanning');
     setResult(null);
+    setSavedPath(null);
+    setHasSavedCopy(false);
     setErrorMessage('');
     setErrorOrigin(null);
     setActiveFilters(new Set());
@@ -185,7 +189,7 @@ export function SaveFlow({
 
   const handleSave = async () => {
     if (!result) return;
-    const cancelledPhase: CapturePhase = phase === 'saved' ? 'saved' : 'done';
+    const cancelledPhase: CapturePhase = hasSavedCopy ? 'saved' : 'done';
     setPhase('saving');
     setErrorMessage('');
     setErrorOrigin(null);
@@ -193,6 +197,7 @@ export function SaveFlow({
       const outcome = await onSaveToFile(result);
       if (outcome.saved) {
         setSavedPath(outcome.path ?? null);
+        setHasSavedCopy(true);
         setPhase('saved');
         onSaved?.(outcome.path);
       } else {
@@ -210,6 +215,7 @@ export function SaveFlow({
     setPhase('idle');
     setResult(null);
     setSavedPath(null);
+    setHasSavedCopy(false);
     setErrorMessage('');
     setErrorOrigin(null);
     onFlowReset?.();
