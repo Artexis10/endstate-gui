@@ -8,35 +8,75 @@ name: bundle-check
 # loading before that release build; the release remains draft if any backstop
 # still fails.
 #
-# This job runs the *real* Tauri bundler on every PR that touches files which can
-# affect the bundle, and fails the PR if bundling fails. It mirrors the release
-# job's engine setup but skips signing and publishing (MSI + NSIS, updater
-# artifacts disabled) so no signing secret is needed and it stays comparatively
-# fast. The goal is only to exercise resource bundling, not to ship anything.
+# Every PR reports a stable bundle-gate result. A cheap Linux classifier starts
+# the real Windows bundler only when bundle-sensitive files changed. Automated
+# Release Please version PRs defer to the signed draft-release build after merge.
+# The pre-merge build skips signing and publishing (MSI + NSIS, updater artifacts
+# disabled); its goal is only to exercise resource bundling, not to ship anything.
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'src-tauri/**'
-      - 'ENGINE_VERSION'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'scripts/engine-resources.mjs'
-      - 'scripts/engine-resources.test.mjs'
-      - 'scripts/audit-windows-installer.mjs'
-      - 'scripts/smoke-packaged-engine.mjs'
-      - 'scripts/release-workflow.test.mjs'
-      - 'release-please-config.json'
-      - '.github/workflows/bundle-check.yml'
-      - '.github/workflows/release-please.yml'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  classify-bundle:
+    runs-on: ubuntu-latest
+    outputs:
+      required: ${{ steps.policy.outputs.required }}
+      reason: ${{ steps.policy.outputs.reason }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect pull-request paths
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          : > changed-files.txt
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            expected_count="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.changed_files')"
+
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+              --paginate --jq '.[].filename' > changed-files.txt
+
+            actual_count="$(wc -l < changed-files.txt | tr -d '[:space:]')"
+            if [ "$actual_count" != "$expected_count" ]; then
+              echo "::error::GitHub returned $actual_count of $expected_count changed files; refusing to classify a truncated list."
+              exit 1
+            fi
+
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+              --paginate --jq '.[] | select(.previous_filename != null) | .previous_filename' \
+              >> changed-files.txt
+            sort -u changed-files.txt -o changed-files.txt
+          fi
+
+      - name: Classify bundle impact
+        id: policy
+        env:
+          PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+        run: node scripts/ci-bundle-policy.mjs < changed-files.txt >> "$GITHUB_OUTPUT"
+
+      - name: Summarize decision
+        env:
+          REQUIRED: ${{ steps.policy.outputs.required }}
+          REASON: ${{ steps.policy.outputs.reason }}
+        run: echo "Windows bundle required=$REQUIRED — $REASON" >> "$GITHUB_STEP_SUMMARY"
+
   tauri-bundle:
+    needs: classify-bundle
+    if: needs.classify-bundle.outputs.required == 'true'
     runs-on: windows-latest
 
     steps:
@@ -115,3 +155,45 @@ jobs:
           $nsis = @(Get-ChildItem 'src-tauri/target/release/bundle' -Recurse -File -Filter '*.exe')
           if ($nsis.Count -eq 0) { throw 'NSIS installer not found for smoke test.' }
           npm run engine:smoke-installer -- $nsis[0].FullName
+
+  bundle-gate:
+    needs: [classify-bundle, tauri-bundle]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Enforce classified bundle result
+        shell: bash
+        env:
+          CLASSIFY_RESULT: ${{ needs.classify-bundle.result }}
+          BUNDLE_REQUIRED: ${{ needs.classify-bundle.outputs.required }}
+          BUNDLE_RESULT: ${{ needs.tauri-bundle.result }}
+        run: |
+          set -euo pipefail
+
+          if [ "$CLASSIFY_RESULT" != "success" ]; then
+            echo "::error::Bundle classification did not succeed: $CLASSIFY_RESULT"
+            exit 1
+          fi
+
+          case "$BUNDLE_REQUIRED" in
+            true|false) ;;
+            *)
+              echo "::error::Bundle classification returned an invalid required value: '$BUNDLE_REQUIRED'"
+              exit 1
+              ;;
+          esac
+
+          if [ "$BUNDLE_REQUIRED" = "true" ]; then
+            if [ "$BUNDLE_RESULT" != "success" ]; then
+              echo "::error::Windows bundle was required but finished as: $BUNDLE_RESULT"
+              exit 1
+            fi
+            echo "Required Windows bundle audit passed."
+          else
+            if [ "$BUNDLE_RESULT" != "skipped" ]; then
+              echo "::error::Windows bundle was not required but finished as: $BUNDLE_RESULT"
+              exit 1
+            fi
+            echo "Windows bundle correctly skipped by policy."
+          fi

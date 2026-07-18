@@ -50,10 +50,10 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # tauri.conf.json and Cargo.toml are updated as part of the Release PR
-      # itself via release-please-config.json's `extra-files`. No post-merge
-      # sync step required — this avoids a direct push to main that would
-      # otherwise need to bypass the verify-engine-pin required check.
+      # tauri.conf.json, Cargo.toml, and Cargo.lock are updated as part of the
+      # Release PR itself via release-please-config.json's `extra-files`. No
+      # post-merge sync step required — this avoids a direct push to main that
+      # would otherwise need to bypass the verify-engine-pin required check.
 
   build:
     needs: release-please
