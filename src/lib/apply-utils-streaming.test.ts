@@ -221,6 +221,30 @@ describe('engineStatusToStatusKey - Streaming Status Mapping', () => {
 });
 
 describe('itemEventToAppEvent - Streaming Event Conversion', () => {
+  it('maps the engine 2.24.1 captured compatibility status to detected during capture', () => {
+    const itemEvent = {
+      version: 1,
+      runId: 'capture-compat',
+      timestamp: '2026-07-18T00:00:00.000Z',
+      event: 'item',
+      id: 'VideoLAN.VLC',
+      driver: 'winget',
+      status: 'captured',
+      reason: null,
+      name: 'VLC media player',
+    } as unknown as ItemEvent;
+
+    const appEvent = itemEventToAppEvent(itemEvent, 'capture');
+    const status = getPhaseAwareStatusForEvent({
+      statusKey: appEvent.statusKey!,
+      phase: 'capture',
+      reason: appEvent.reason,
+    });
+
+    expect(appEvent.statusKey).toBe('detected');
+    expect(status.shortLabel).toBe('DETECTED');
+  });
+
   it('converts ItemEvent to AppEvent with correct fields', () => {
     const itemEvent: ItemEvent = {
       version: 1,

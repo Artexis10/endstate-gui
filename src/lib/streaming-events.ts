@@ -40,6 +40,7 @@ export type EngineItemStatus =
   | 'installing'   // In progress
   | 'installed'    // Successfully installed
   | 'present'      // Already on system
+  | 'captured'     // Legacy engine capture success (tolerated for compatibility)
   | 'skipped'      // Skipped by filter/policy
   | 'failed';      // Failed
 

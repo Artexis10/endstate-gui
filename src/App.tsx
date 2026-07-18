@@ -17,7 +17,9 @@ import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigrati
 import { loadDraft, clearDraft } from './lib/draft-store';
 import { resolveDraftContent } from './lib/draft-content-resolver';
 import { resolveProfilePath } from './lib/profile-selection-migration';
-import { discoverProfiles, DiscoveredProfile } from './file-discovery';
+import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-discovery';
+import { findImportedProfile } from './lib/profile-import';
+import { createNativeProfileDropHandler, createProfileImportCoordinator } from './lib/native-profile-drop';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
@@ -120,6 +122,7 @@ type AppStatus = 'loading' | 'ready' | 'error';
 type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 'backup';
 
 const MAX_LIVE_CONFIG_EVENTS = 2000;
+const PROFILE_IMPORT_BUSY_MESSAGE = 'Finish the current operation or setup review before importing another profile.';
 
 interface AppState {
   status: AppStatus;
@@ -160,6 +163,7 @@ function AppContent() {
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
   const [activeFlowPage, setActiveFlowPage] = useState<'save' | 'setup' | null>(null);
   const [flowHasWork, setFlowHasWork] = useState<Record<'save' | 'setup', boolean>>({ save: false, setup: false });
+  const [saveFlowCompleted, setSaveFlowCompleted] = useState(false);
   const [saveFlowResetKey, setSaveFlowResetKey] = useState(0);
   const [setupFlowResetKey, setSetupFlowResetKey] = useState(0);
   // Navigation handler
@@ -183,6 +187,13 @@ function AppContent() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [profilesDirectory, setProfilesDirectory] = useState('');
+  const [profileToOpen, setProfileToOpen] = useState<DiscoveredProfile | null>(null);
+  const pendingImportPreviewRef = useRef<{
+    importedPath: string;
+    resolve: () => void;
+    reject: (error: Error) => void;
+  } | null>(null);
+  const profileImportCoordinatorRef = useRef(createProfileImportCoordinator());
   const [selectedProfile, setSelectedProfile] = useState('');
   const [selectedProfilePath, setSelectedProfilePath] = useState('');
   // Refs for immediate access in async callbacks (avoid stale closures)
@@ -206,7 +217,13 @@ function AppContent() {
     verify: null,
   });
 
-  const [isRunning, setIsRunning] = useState(false);
+  const [isRunning, setIsRunningState] = useState(false);
+  const isRunningRef = useRef(isRunning);
+  isRunningRef.current = isRunning;
+  const setIsRunning = (running: boolean) => {
+    isRunningRef.current = running;
+    setIsRunningState(running);
+  };
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_runLogs, setRunLogs] = useState<string>('');
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -656,6 +673,47 @@ function AppContent() {
     }
   };
 
+  const finishProfileImport = async (
+    directory: string,
+    importedPath: string,
+    fileName: string,
+  ) => {
+    const validation = await validateProfile(importedPath);
+    if (!validation.valid) {
+      const reason = validation.errors
+        ?.map((error) => error.message)
+        .filter(Boolean)
+        .join('; ');
+      throw new Error(reason || 'The imported manifest is not a supported Endstate profile');
+    }
+
+    const discovered = await discoverProfiles(directory);
+    setProfiles(discovered);
+    const importedProfile = findImportedProfile(discovered, importedPath);
+    if (!importedProfile) {
+      throw new Error('The imported file does not contain a supported Endstate profile');
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      if (pendingImportPreviewRef.current) {
+        reject(new Error('Another imported profile is still opening'));
+        return;
+      }
+      pendingImportPreviewRef.current = { importedPath, resolve, reject };
+      setProfileToOpen(importedProfile);
+    });
+    showToast(`Imported ${fileName} — setup review ready`, 'success');
+  };
+
+  const settleImportedProfilePreview = (profile: DiscoveredProfile, error?: Error) => {
+    const pending = pendingImportPreviewRef.current;
+    if (!pending || !findImportedProfile([profile], pending.importedPath)) return;
+
+    pendingImportPreviewRef.current = null;
+    if (error) pending.reject(error);
+    else pending.resolve();
+  };
+
   const handleOpenProfilesFolder = async () => {
     if (profilesDirectory) {
       try {
@@ -673,7 +731,7 @@ function AppContent() {
   };
 
   // Handle file drops from the Setup flow drop zone (ADR-001)
-  const handleFileDrop = async (files: File[]) => {
+  const importDroppedFiles = async (files: File[]) => {
     // Resolve profiles directory on-demand if startup init hasn't completed yet
     let dir = profilesDirectory;
     if (!dir) {
@@ -700,18 +758,21 @@ function AppContent() {
             binary += String.fromCharCode(bytes[i]);
           }
           const base64Data = btoa(binary);
-          await invoke<string>('import_zip_from_base64', {
+          const importedManifestPath = await invoke<string>('import_zip_from_base64', {
             data: base64Data,
             fileName: file.name,
             profilesDir: dir,
           });
-          showToast(`Imported ${file.name}`, 'success');
+          await finishProfileImport(dir, importedManifestPath, file.name);
         } else if (fileName.endsWith('.jsonc') || fileName.endsWith('.json') || fileName.endsWith('.json5')) {
-          // Manifest files: read text and write to profiles directory
+          // Manifest files: Rust stages and validates before committing.
           const text = await file.text();
-          const destPath = `${dir}\\${file.name}`;
-          await invoke('write_text_file', { path: destPath, content: text });
-          showToast(`Imported ${file.name}`, 'success');
+          const importedManifestPath = await invoke<string>('import_profile_text', {
+            content: text,
+            fileName: file.name,
+            profilesDir: dir,
+          });
+          await finishProfileImport(dir, importedManifestPath, file.name);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -719,12 +780,28 @@ function AppContent() {
       }
     }
 
-    // Refresh profiles after import
-    await refreshProfiles();
+  };
+
+  const runProfileImport = async (operation: () => Promise<void>) => {
+    const lease = profileImportCoordinatorRef.current.tryAcquire();
+    if (!lease) {
+      showToast(PROFILE_IMPORT_BUSY_MESSAGE, 'error');
+      return;
+    }
+
+    try {
+      await operation();
+    } finally {
+      lease.release();
+    }
+  };
+
+  const handleFileDrop = async (files: File[]) => {
+    await runProfileImport(() => importDroppedFiles(files));
   };
 
   // Import profiles by file path (Tauri mode: Rust handles file I/O directly)
-  const handleFilePathImport = async (paths: string[]) => {
+  const importFilePaths = async (paths: string[]) => {
     // Resolve profiles directory on-demand if startup init hasn't completed yet
     let dir = profilesDirectory;
     if (!dir) {
@@ -742,18 +819,21 @@ function AppContent() {
       const fileName = filePath.split(/[/\\]/).pop() || '';
       try {
         if (fileName.toLowerCase().endsWith('.zip')) {
-          await invoke('extract_zip_profile', { zipPath: filePath, profilesDir: dir });
+          const importedManifestPath = await invoke<string>('extract_zip_profile', { zipPath: filePath, profilesDir: dir });
+          await finishProfileImport(dir, importedManifestPath, fileName);
         } else {
-          await invoke('import_profile', { sourcePath: filePath, profilesDir: dir });
+          const importedManifestPath = await invoke<string>('import_profile', { sourcePath: filePath, profilesDir: dir });
+          await finishProfileImport(dir, importedManifestPath, fileName);
         }
-        showToast(`Imported ${fileName}`, 'success');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         showToast(`Failed to import ${fileName}: ${msg}`, 'error');
       }
     }
+  };
 
-    await refreshProfiles();
+  const handleFilePathImport = async (paths: string[]) => {
+    await runProfileImport(() => importFilePaths(paths));
   };
 
   // Browse for profile files using native dialog (Tauri mode only)
@@ -818,8 +898,18 @@ function AppContent() {
   // Tauri drag-drop: listen for native file drops and import to profiles.
   // Use refs to avoid stale closures and ensure proper async cleanup.
   const dragDropUnlistenRef = useRef<(() => void) | undefined>();
-  const handleFilePathImportRef = useRef(handleFilePathImport);
-  handleFilePathImportRef.current = handleFilePathImport;
+  const nativeProfileDropHandler = createNativeProfileDropHandler({
+    isRunning: () => isRunningRef.current,
+    coordinator: profileImportCoordinatorRef.current,
+    openSetup: () => {
+      setCurrentPage('setup');
+      setActiveFlowPage('setup');
+    },
+    importPaths: importFilePaths,
+    onBlocked: () => showToast(PROFILE_IMPORT_BUSY_MESSAGE, 'error'),
+  });
+  const nativeProfileDropHandlerRef = useRef(nativeProfileDropHandler);
+  nativeProfileDropHandlerRef.current = nativeProfileDropHandler;
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -831,16 +921,7 @@ function AppContent() {
         if (cancelled) return;
         const webview = getCurrentWebviewWindow();
         const unlisten = await webview.onDragDropEvent((event) => {
-          if (event.payload.type === 'drop') {
-            const paths = event.payload.paths as string[];
-            const accepted = paths.filter((p) => {
-              const name = p.toLowerCase();
-              return name.endsWith('.zip') || name.endsWith('.json') || name.endsWith('.jsonc') || name.endsWith('.json5');
-            });
-            if (accepted.length > 0) {
-              handleFilePathImportRef.current(accepted);
-            }
-          }
+          nativeProfileDropHandlerRef.current(event);
         });
         if (cancelled) {
           unlisten();
@@ -2660,9 +2741,10 @@ function AppContent() {
           <div className="space-y-6">
             {errorBanner}
             <SaveFlow
-              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
+              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowCompleted(false); setSaveFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={saveFlowResetKey}
-              onFlowReset={() => setFlowHasWork(prev => ({ ...prev, save: false }))}
+              onFlowReset={() => { setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowCompleted(false); }}
+              onSaved={() => setSaveFlowCompleted(true)}
               engineConnected={state.status !== 'error'}
               isRunning={isRunning}
               captureProgress={actionProgressByAction['capture'] ?? null}
@@ -2726,6 +2808,7 @@ function AppContent() {
                   : undefined
               }
               onStartCapture={async () => {
+                setSaveFlowCompleted(false);
                 setIsRunning(true);
                 setLiveAppEvents([]);
                 setAutoBackupChip('idle');
@@ -2782,6 +2865,7 @@ function AppContent() {
                 const isZip = captureResult.outputFormat === 'zip' && captureResult.outputPath;
                 const ext = isZip ? 'zip' : 'jsonc';
                 const defaultName = `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`;
+                let savedPath: string | undefined;
                 if (isTauriRuntime()) {
                   // Native Tauri: use OS save dialog
                   const { save } = await import('@tauri-apps/plugin-dialog');
@@ -2792,7 +2876,8 @@ function AppContent() {
                       : [{ name: 'Endstate Profile', extensions: ['jsonc'] }],
                     title: 'Save Capture File',
                   });
-                  if (!savePath) return false;
+                  if (!savePath) return { saved: false };
+                  savedPath = savePath;
                   if (isZip) {
                     await invoke('copy_file', { sourcePath: captureResult.outputPath, destPath: savePath });
                   } else {
@@ -2855,7 +2940,15 @@ function AppContent() {
                   URL.revokeObjectURL(url);
                 }
                 showToast('File saved', 'success');
-                return true;
+                return { saved: true, path: savedPath };
+              }}
+              onOpenSavedFolder={async (savedPath) => {
+                const parentDirectory = savedPath.replace(/[\\/][^\\/]+$/, '');
+                const result = await openFolder(parentDirectory);
+                if (!result.ok && result.reason === 'web' && result.path) {
+                  setFolderPathForModal(result.path);
+                  setShowFolderPathModal(true);
+                }
               }}
             />
           </div>
@@ -2865,6 +2958,10 @@ function AppContent() {
             {errorBanner}
             <SetupFlow
               profiles={profiles}
+              profileToOpen={profileToOpen}
+              onProfileToOpenConsumed={() => setProfileToOpen(null)}
+              onProfileToOpenPreviewed={(profile) => settleImportedProfilePreview(profile)}
+              onProfileToOpenPreviewFailed={(profile, error) => settleImportedProfilePreview(profile, error)}
               cloudBackupIndex={cloudEntryByKey}
               hostedBackupSupported={hostedBackupSupported}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
@@ -3421,7 +3518,9 @@ function AppContent() {
                       : <Download className="h-4 w-4 text-green-500" />
                     }
                     <p className="text-sm font-medium">
-                      {activeFlowPage === 'save' ? 'You have an unsaved capture' : 'You have setup results to review'}
+                      {activeFlowPage === 'save'
+                        ? saveFlowCompleted ? 'Your backup is saved' : 'You have an unsaved capture'
+                        : 'You have setup results to review'}
                     </p>
                   </div>
                   <Button
@@ -3768,7 +3867,9 @@ function AppContent() {
                       : <Download className="h-4 w-4 text-green-500" />
                     }
                     <p className="text-sm font-medium">
-                      {activeFlowPage === 'save' ? 'You have an unsaved capture' : 'You have setup results to review'}
+                      {activeFlowPage === 'save'
+                        ? saveFlowCompleted ? 'Your backup is saved' : 'You have an unsaved capture'
+                        : 'You have setup results to review'}
                     </p>
                   </div>
                   <Button

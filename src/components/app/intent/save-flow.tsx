@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2, Cloud } from 'lucide-react';
+import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2, Cloud, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FilterChip } from '@/components/ui/filter-chip';
 import { NavButton } from '@/components/ui/nav-button';
@@ -23,7 +23,7 @@ import { formatAppIdentity } from '@/lib/app-identity';
 import type { CaptureConfigModule, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 
-type CapturePhase = 'idle' | 'scanning' | 'done' | 'error' | 'saving';
+type CapturePhase = 'idle' | 'scanning' | 'done' | 'error' | 'saving' | 'saved';
 type ErrorOrigin = 'scan' | 'save' | null;
 
 interface CaptureAppEntry {
@@ -45,6 +45,11 @@ interface CaptureResult {
   configModules?: CaptureConfigModule[];
 }
 
+export interface SaveOutcome {
+  saved: boolean;
+  path?: string;
+}
+
 export interface SaveFlowProps {
   onBack: () => void;
   engineConnected: boolean;
@@ -52,7 +57,10 @@ export interface SaveFlowProps {
   captureProgress: { message: string; detail?: string } | null;
   liveAppEvents: AppEvent[];
   onStartCapture: () => Promise<CaptureResult>;
-  onSaveToFile: (result: CaptureResult) => Promise<boolean>;
+  onSaveToFile: (result: CaptureResult) => Promise<SaveOutcome>;
+  onOpenSavedFolder?: (savedPath: string) => void | Promise<void>;
+  /** Reports that the current capture has a durable saved copy. */
+  onSaved?: (savedPath?: string) => void;
   /** Increment to reset internal state (used when parent keeps component mounted) */
   resetKey?: number;
   /** Called when the flow returns to idle (save completed, scan again, etc.) */
@@ -88,6 +96,8 @@ export function SaveFlow({
   liveAppEvents,
   onStartCapture,
   onSaveToFile,
+  onOpenSavedFolder,
+  onSaved,
   resetKey,
   onFlowReset,
   onPushToHostedBackup,
@@ -99,6 +109,8 @@ export function SaveFlow({
 }: SaveFlowProps) {
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [result, setResult] = useState<CaptureResult | null>(null);
+  const [savedPath, setSavedPath] = useState<string | null>(null);
+  const [hasSavedCopy, setHasSavedCopy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [errorOrigin, setErrorOrigin] = useState<ErrorOrigin>(null);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
@@ -121,6 +133,8 @@ export function SaveFlow({
     if (resetKey !== undefined && resetKey > 0) {
       setPhase('idle');
       setResult(null);
+      setSavedPath(null);
+      setHasSavedCopy(false);
       setErrorMessage('');
       setErrorOrigin(null);
       setActiveFilters(new Set());
@@ -157,6 +171,8 @@ export function SaveFlow({
   const handleStartScan = async () => {
     setPhase('scanning');
     setResult(null);
+    setSavedPath(null);
+    setHasSavedCopy(false);
     setErrorMessage('');
     setErrorOrigin(null);
     setActiveFilters(new Set());
@@ -173,19 +189,20 @@ export function SaveFlow({
 
   const handleSave = async () => {
     if (!result) return;
+    const cancelledPhase: CapturePhase = hasSavedCopy ? 'saved' : 'done';
     setPhase('saving');
     setErrorMessage('');
     setErrorOrigin(null);
     try {
-      const saved = await onSaveToFile(result);
-      if (saved) {
-        // Reset for another capture
-        setPhase('idle');
-        setResult(null);
-        onFlowReset?.();
+      const outcome = await onSaveToFile(result);
+      if (outcome.saved) {
+        setSavedPath(outcome.path ?? null);
+        setHasSavedCopy(true);
+        setPhase('saved');
+        onSaved?.(outcome.path);
       } else {
         // User cancelled save dialog
-        setPhase('done');
+        setPhase(cancelledPhase);
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Save failed');
@@ -197,6 +214,8 @@ export function SaveFlow({
   const handleScanAgain = () => {
     setPhase('idle');
     setResult(null);
+    setSavedPath(null);
+    setHasSavedCopy(false);
     setErrorMessage('');
     setErrorOrigin(null);
     onFlowReset?.();
@@ -538,6 +557,48 @@ export function SaveFlow({
                   >
                     {scanCooldown ? 'Wait...' : 'Scan again'}
                   </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Saved: durable completion state with explicit next actions */}
+        {phase === 'saved' && result && (
+          <motion.div
+            key="saved"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={transition}
+          >
+            <Card className="border-l-2 border-l-green-500/50">
+              <CardContent className="py-8 px-6">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">Backup saved</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Your apps and settings are ready to use when setting up another computer.
+                    </p>
+                    {savedPath && (
+                      <p className="text-xs text-muted-foreground mt-3 break-all">{savedPath}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 mt-6">
+                  <Button onClick={onBack}>Back to home</Button>
+                  {savedPath && onOpenSavedFolder && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void onOpenSavedFolder(savedPath)}
+                    >
+                      <FolderOpen className="h-4 w-4 mr-2" />
+                      Open folder
+                    </Button>
+                  )}
+                  <Button variant="ghost" onClick={handleSave}>Save another copy</Button>
                 </div>
               </CardContent>
             </Card>

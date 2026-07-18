@@ -4,7 +4,7 @@ This document links to the canonical profile contract maintained in the Endstate
 
 ## Canonical Source
 
-**See:** [Endstate Engine - Profile Contract](https://github.com/user/endstate/blob/main/docs/profile-contract.md)
+**See:** [Endstate Engine - Profile Contract](https://github.com/Artexis10/endstate/blob/main/docs/contracts/profile-contract.md)
 
 For local development, the contract is located at:
 ```
@@ -16,8 +16,9 @@ For local development, the contract is located at:
 The profile contract defines:
 
 1. **Profile Signature** — What makes a valid profile manifest
-   - `version` field (number, must be `1`)
+   - `version` field (supported integer `1` or `2`)
    - `apps` field (array, may be empty)
+   - version `2` capture bundles include generation-aware `configCaptures[]`
 
 2. **Candidate Files** — Extensions `.json`, `.jsonc`, `.json5`
 
@@ -38,7 +39,8 @@ The profile contract defines:
 
 ## GUI Implementation
 
-The GUI uses the engine validator via Tauri command:
+The GUI uses one shared Tauri-free validator through the Tauri command and
+development bridge:
 
 ```typescript
 // Validate a profile file

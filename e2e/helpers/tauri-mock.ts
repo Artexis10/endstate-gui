@@ -8,6 +8,12 @@ export interface TauriMockOptions {
   allowUnknownInvokes?: boolean;
   /** Initial set of profile file paths for list_manifest_files */
   initialProfileFiles?: string[];
+  /** Serializable result of extracting a tiny mocked capture bundle. */
+  zipImport?: {
+    manifestPath: string;
+    manifestContent: string;
+    summary: { name: string; version: number; appCount: number };
+  };
 }
 
 export async function installTauriMock(page: Page, options: TauriMockOptions = {}) {
@@ -15,6 +21,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
   const enableEventListeners = options.enableEventListeners || false;
   const allowUnknownInvokes = options.allowUnknownInvokes || false;
   const initialProfileFiles = options.initialProfileFiles || [];
+  const zipImport = options.zipImport;
 
   // Enable E2E mode flag so app installs E2E hooks even when reusing dev server
   await page.addInitScript(() => {
@@ -22,7 +29,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
   });
 
   await page.addInitScript(
-    ({ customHandlers, enableEventListeners, allowUnknownInvokes, initialProfileFiles }) => {
+    ({ customHandlers, enableEventListeners, allowUnknownInvokes, initialProfileFiles, zipImport }) => {
       // Initialize test trackers for file operations
       // These MUST be initialized before any invoke handlers run
       (window as any).__test_operations = (window as any).__test_operations || [];
@@ -31,6 +38,9 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       (window as any).__test_deleteFileCalls = (window as any).__test_deleteFileCalls || [];
       (window as any).__test_writeFileCalls = (window as any).__test_writeFileCalls || [];
       (window as any).__test_fileContents = (window as any).__test_fileContents || new Map<string, string>();
+      if (zipImport) {
+        (window as any).__test_fileContents.set(zipImport.manifestPath, zipImport.manifestContent);
+      }
 
       // In-memory plugin-store implementation
       const pluginStoreData = new Map<string, any>();
@@ -59,7 +69,29 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           const profileFiles = (window as any).__test_profileFiles;
           return profileFiles.has(args?.path);
         },
-        validate_profile: () => ({ valid: true, summary: { name: 'test', version: 1, appCount: 0 } }),
+        validate_profile: (args?: any) => {
+          if (zipImport && args?.path === zipImport.manifestPath) {
+            return { valid: true, errors: [], summary: zipImport.summary };
+          }
+          return { valid: true, summary: { name: 'test', version: 1, appCount: 0 } };
+        },
+        import_zip_from_base64: () => {
+          if (!zipImport) throw new Error('TAURI mock: no zipImport fixture configured');
+          (window as any).__test_profileFiles.add(zipImport.manifestPath);
+          return zipImport.manifestPath;
+        },
+        import_profile_text: (args?: any) => {
+          const operations = (window as any).__test_operations;
+          const profileFiles = (window as any).__test_profileFiles;
+          const fileContents = (window as any).__test_fileContents;
+          const base = String(args?.profilesDir || 'C:\\test\\profiles').replace(/[\\/]+$/, '');
+          const name = String(args?.fileName || 'imported.jsonc').split(/[\\/]/).pop();
+          const path = `${base}\\${name}`;
+          profileFiles.add(path);
+          fileContents.set(path, String(args?.content || ''));
+          operations.push({ type: 'import_profile_text', path });
+          return path;
+        },
         delete_file: (args?: any) => {
           const operations = (window as any).__test_operations;
           const deleteFileCalls = (window as any).__test_deleteFileCalls;
@@ -212,7 +244,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         }
       };
     },
-    { customHandlers, enableEventListeners, allowUnknownInvokes, initialProfileFiles }
+    { customHandlers, enableEventListeners, allowUnknownInvokes, initialProfileFiles, zipImport }
   );
 }
 
