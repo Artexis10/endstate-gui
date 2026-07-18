@@ -19,6 +19,7 @@
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:contract": "node tests/contract.test.js",
+    "test:ci-policy": "node --test scripts/ci-bundle-policy.test.mjs scripts/release-workflow.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:fast": "playwright test --workers=50% --fully-parallel",
     "test:e2e:ci": "playwright test --workers=1",
@@ -35,7 +36,7 @@
     "version:check": "node scripts/check-version-sync.mjs",
     "lint": "eslint src",
     "engine:stage": "node scripts/engine-resources.mjs",
-    "engine:test-resources": "node --test scripts/engine-resources.test.mjs scripts/release-workflow.test.mjs",
+    "engine:test-resources": "node --test scripts/ci-bundle-policy.test.mjs scripts/engine-resources.test.mjs scripts/release-workflow.test.mjs",
     "engine:audit-installer": "node scripts/audit-windows-installer.mjs",
     "engine:smoke-installer": "node scripts/smoke-packaged-engine.mjs",
     "engine:refresh": "node scripts/refresh-engine.mjs"

@@ -6,7 +6,7 @@ Make pull-request CI fail closed on meaningful regressions while avoiding duplic
 
 ## Design
 
-Every pull request keeps the fast Linux checks: frontend unit/coverage, the pinned-engine contract, shared Rust-core tests plus the dev-bridge dependency guard, and semantic Playwright journeys. Stale runs for superseded commits are cancelled.
+Every pull request keeps the fast Linux checks: frontend type-check/production build and unit/coverage, CI policy contracts, the pinned-engine contract, locked shared Rust-core tests plus the dev-bridge dependency guard, and semantic Playwright journeys. Stale runs for superseded commits are cancelled.
 
 The installer workflow runs for every pull request so it always reports one stable `bundle-gate` status. A small Linux classifier decides whether the real Windows bundle job is required:
 
@@ -18,6 +18,8 @@ The installer workflow runs for every pull request so it always reports one stab
 `bundle-gate` runs after classification and the optional Windows job. It succeeds only when classification succeeded and, when required, the Windows build succeeded. This gives branch protection a status that exists on every pull request without paying the latency of Windows packaging on unrelated changes.
 
 Branch protection requires the frontend tests, engine contract, Rust/bridge guard, Playwright, engine pin, and `bundle-gate`. The branch does not require strict rebasing, which would create extra reruns for no material safety gain here.
+
+Release Please updates the GUI package entry in `Cargo.lock` alongside `Cargo.toml`. Rust CI uses `--locked`, making unexpected dependency or root-version drift a failure instead of silently rewriting the lockfile.
 
 ## Testing
 

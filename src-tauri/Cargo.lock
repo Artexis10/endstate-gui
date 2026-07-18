@@ -1025,7 +1025,7 @@ dependencies = [
 
 [[package]]
 name = "endstate-gui"
-version = "2.19.0"
+version = "2.21.3"
 dependencies = [
  "base64 0.22.1",
  "dirs 5.0.1",
