@@ -52,6 +52,17 @@ The GUI SHALL surface engine package-source and Store-portability warnings witho
 
 #### Scenario: Multiple capture warnings are reported
 
-- **WHEN** the engine returns multiple warning objects with distinct codes and sources
+- **WHEN** the engine returns multiple source-coverage or Store-portability warning objects with distinct codes and sources
 - **THEN** the GUI preserves and displays each distinct warning
 - **AND** it does not collapse a source-coverage warning into an unrelated portability warning
+
+### Requirement: Optional backend absence is not promoted as a capture problem
+
+The GUI SHALL omit `optional_driver_unavailable` from the primary capture-result warnings while preserving the engine-authored result for diagnostics and SHALL continue to surface package-source coverage failures.
+
+#### Scenario: Chocolatey is not installed
+
+- **WHEN** a successful capture includes warning code `optional_driver_unavailable` for Chocolatey
+- **THEN** the primary Save result does not display that warning
+- **AND** the successful result, captured apps, and artifact remain unchanged
+- **AND** any accompanying `winget_source_unavailable` or `store_source_unavailable` warning remains visible

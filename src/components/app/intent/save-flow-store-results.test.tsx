@@ -82,4 +82,37 @@ describe('SaveFlow Store capture results', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
     expect(screen.getByTestId('save-flow-save-file')).toBeInTheDocument();
   });
+
+  it('does not promote an unavailable optional backend to a primary capture warning', async () => {
+    renderWithProviders(
+      <SaveFlow
+        onBack={vi.fn()}
+        engineConnected
+        isRunning={false}
+        captureStage={null}
+        liveAppEvents={[]}
+        onStartCapture={vi.fn().mockResolvedValue({
+          count: 1,
+          draftText: '{}',
+          apps: [{ id: 'Mozilla.Firefox', source: 'winget' }],
+          warnings: [
+            {
+              code: 'optional_driver_unavailable',
+              message: 'Optional capture driver chocolatey is unavailable',
+              driver: 'chocolatey',
+            },
+          ],
+        })}
+        onSaveToFile={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start scan' }));
+    await waitFor(() => expect(screen.getByText('Scan complete')).toBeInTheDocument());
+
+    expect(screen.queryByLabelText('Capture warnings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Optional capture driver chocolatey is unavailable')).not.toBeInTheDocument();
+    expect(screen.getByText('Mozilla.Firefox')).toBeInTheDocument();
+    expect(screen.getByTestId('save-flow-save-file')).toBeInTheDocument();
+  });
 });

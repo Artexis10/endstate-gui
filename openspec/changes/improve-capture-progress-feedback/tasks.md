@@ -22,6 +22,7 @@
 - [x] 4.1 Preserve and display the engine-reported `msstore` source in capture activity/details without inferring it from package IDs.
 - [x] 4.2 Surface `store_source_unavailable`, `winget_source_unavailable`, and `store_version_unpinned` distinctly while keeping the successful capture result intact.
 - [x] 4.3 Confirm the GUI invokes ordinary capture without a Store-specific include flag or toggle.
+- [x] 4.4 Keep `optional_driver_unavailable` in engine diagnostics but omit it from the primary capture-result warnings.
 
 ## 5. Document and integrate
 
@@ -31,6 +32,6 @@
 
 ## 6. Verification
 
-- [ ] 6.1 Run targeted Vitest suites for streaming events, status mapping, Save flow, Store-result visibility, and App capture wiring.
+- [x] 6.1 Run targeted Vitest suites for streaming events, status mapping, Save flow, Store-result visibility, and App capture wiring.
 - [x] 6.2 Run type checking and the repository's required validation commands.
 - [x] 6.3 Perform an independent reviewer/verifier pass and resolve findings without touching unrelated hosted-backup or generated Tauri-schema changes.

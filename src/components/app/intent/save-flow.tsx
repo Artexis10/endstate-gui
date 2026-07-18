@@ -285,6 +285,9 @@ export function SaveFlow({
     if (refs.length === 0) return true;
     return !refs.some(ref => appIds.has(ref.toLowerCase()));
   });
+  const visibleWarnings = (result?.warnings ?? []).filter(
+    warning => warning.code !== 'optional_driver_unavailable',
+  );
 
   return (
     <motion.div
@@ -451,10 +454,10 @@ export function SaveFlow({
                   )}
                 </div>
 
-                {(result.warnings?.length ?? 0) > 0 && (
+                {visibleWarnings.length > 0 && (
                   <div className="mt-3 border-t pt-3" aria-label="Capture warnings">
                     <ul className="space-y-2">
-                      {result.warnings!.map((warning, index) => (
+                      {visibleWarnings.map((warning, index) => (
                         <li
                           key={`${warning.code}-${warning.source}-${index}`}
                           className="flex items-start gap-2 text-xs text-warning"

@@ -109,6 +109,7 @@ Successful capture may include distinct non-fatal warnings:
 | `store_source_unavailable` | “Microsoft Store apps could not be included in this capture.” |
 | `winget_source_unavailable` | “Community-repository apps could not be included in this capture.” |
 | `store_version_unpinned` | “Affected Microsoft Store apps will restore to the latest available version rather than the exact captured version.” |
+| `optional_driver_unavailable` | Not shown in the primary result. Retained in engine output and technical diagnostics. |
 
 Warnings do not hide captured apps, the produced artifact, or the successful result.
 

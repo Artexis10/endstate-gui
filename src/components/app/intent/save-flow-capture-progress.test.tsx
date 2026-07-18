@@ -33,6 +33,6 @@ describe('SaveFlow capture progress', () => {
     );
 
     expect(screen.getByText('Collecting app settings…')).toBeInTheDocument();
-    expect(screen.getByText('Mozilla Firefox')).toBeInTheDocument();
+    expect(screen.getByText('Mozilla.Firefox')).toBeInTheDocument();
   });
 });

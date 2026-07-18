@@ -67,6 +67,8 @@ The final envelope remains authoritative. Store apps appear with the engine-repo
 
 Against an older engine, the GUI displays only the packages and warnings that engine actually reports. It does not claim that Store coverage was attempted.
 
+An unavailable optional package backend is normal capability absence, not partial coverage of that backend: without Chocolatey installed there is no Chocolatey-owned package database to enumerate. The GUI therefore omits `optional_driver_unavailable` from the primary capture-result warnings while preserving the engine-authored warning in the result envelope and technical diagnostics. Source coverage warnings such as `winget_source_unavailable` and `store_source_unavailable` remain visible.
+
 ## Risks / Trade-offs
 
 - **[Risk] New GUI with old engine never receives a stage event** → The immediate “Starting capture…” state, elapsed time, and delayed reassurance remain visible for the full run.
