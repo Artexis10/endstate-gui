@@ -136,7 +136,7 @@ jobs:
           echo "Placed endstate v${VERSION} at sidecar locations." | tee -a $GITHUB_STEP_SUMMARY
 
       # Shallow checkout of the engine repo at the pinned version to obtain
-      # resource files (modules/, VERSION, SCHEMA_VERSION) bundled in the installer.
+      # resource files (modules/ and SCHEMA_VERSION) bundled in the installer.
       # No build occurs here — the binary was downloaded above.
       # TODO: remove once the engine release publishes a modules asset directly.
       - uses: actions/checkout@v4
@@ -147,12 +147,6 @@ jobs:
           fetch-depth: 1
           token: ${{ secrets.ENGINE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
 
-      # payload/ is gitignored (user-specific captured config); create the
-      # minimum structure so the Tauri resource glob resolves in CI.
-      - name: Create empty payload directory
-        shell: bash
-        run: mkdir -p endstate/payload/apps
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -161,6 +155,9 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Stage and validate engine resources
+        run: npm run engine:stage
 
       # Build, sign, and upload via the first-party Tauri action. Signing env
       # vars are read natively by the Tauri CLI (contract, not an action detail).
@@ -174,6 +171,20 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
+
+      - name: Audit MSI and NSIS contents
+        shell: pwsh
+        run: |
+          $bundleRoot = 'src-tauri/target/release/bundle'
+          $msi = @(Get-ChildItem $bundleRoot -Recurse -File -Filter '*.msi')
+          $nsis = @(Get-ChildItem $bundleRoot -Recurse -File -Filter '*.exe')
+          if ($msi.Count -eq 0 -or $nsis.Count -eq 0) {
+            throw "Expected both MSI and NSIS installers under $bundleRoot."
+          }
+          foreach ($installer in @($msi + $nsis)) {
+            npm run engine:audit-installer -- $installer.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Verify installers + latest.json uploaded
         shell: bash

@@ -34,6 +34,8 @@
     "version:show": "node -e \"console.log(require('./package.json').version)\"",
     "version:check": "node scripts/check-version-sync.mjs",
     "lint": "eslint src",
+    "engine:stage": "node scripts/engine-resources.mjs",
+    "engine:audit-installer": "node scripts/audit-windows-installer.mjs",
     "engine:refresh": "node scripts/refresh-engine.mjs"
   },
   "dependencies": {

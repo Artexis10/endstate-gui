@@ -30,9 +30,8 @@
       "binaries/endstate"
     ],
     "resources": {
-      "../endstate/modules/": "engine/modules/",
-      "../endstate/payload/": "engine/payload/",
-      "../endstate/SCHEMA_VERSION": "engine/SCHEMA_VERSION"
+      "engine/modules/": "engine/modules/",
+      "engine/SCHEMA_VERSION": "engine/SCHEMA_VERSION"
     },
     "windows": {
       "nsis": {

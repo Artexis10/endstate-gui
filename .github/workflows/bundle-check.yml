@@ -10,7 +10,7 @@ name: bundle-check
 #
 # This job runs the *real* Tauri bundler on every PR that touches files which can
 # affect the bundle, and fails the PR if bundling fails. It mirrors the release
-# job's engine setup but skips signing and publishing (NSIS only, updater
+# job's engine setup but skips signing and publishing (MSI + NSIS, updater
 # artifacts disabled) so no signing secret is needed and it stays comparatively
 # fast. The goal is only to exercise resource bundling, not to ship anything.
 
@@ -22,6 +22,9 @@ on:
       - 'ENGINE_VERSION'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/engine-resources.mjs'
+      - 'scripts/audit-windows-installer.mjs'
+      - '.github/workflows/bundle-check.yml'
   workflow_dispatch:
 
 permissions:
@@ -55,9 +58,7 @@ jobs:
           cp endstate.exe src-tauri/target/release/endstate.exe
 
       # Shallow checkout of the engine repo at the pinned version to obtain the
-      # resource files (modules/, SCHEMA_VERSION, ...) bundled into the installer.
-      # These are exactly the paths tauri.conf.json `resources` references, so if
-      # one is missing/renamed the bundle step below fails — which is the point.
+      # resource files (modules/ and SCHEMA_VERSION) bundled into the installer.
       - uses: actions/checkout@v4
         with:
           repository: Artexis10/endstate
@@ -65,10 +66,6 @@ jobs:
           path: endstate
           fetch-depth: 1
           token: ${{ secrets.ENGINE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Create empty payload directory
-        shell: bash
-        run: mkdir -p endstate/payload/apps
 
       - uses: actions/setup-node@v4
         with:
@@ -79,9 +76,25 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      # The real bundler — NSIS only, updater artifacts off (no signing key
-      # required). Resource bundling is shared across targets, so this still fails
-      # on a missing/renamed `resources` path just like a full release build would.
+      - name: Stage and validate engine resources
+        run: npm run engine:stage
+
+      # The real bundler — MSI + NSIS, updater artifacts off (no signing key
+      # required). Both installer formats are audited below.
       - name: Tauri bundle check (no signing, no publish)
         shell: bash
-        run: npm run tauri build -- --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+        run: npm run tauri build -- --bundles msi,nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Audit MSI and NSIS contents
+        shell: pwsh
+        run: |
+          $bundleRoot = 'src-tauri/target/release/bundle'
+          $msi = @(Get-ChildItem $bundleRoot -Recurse -File -Filter '*.msi')
+          $nsis = @(Get-ChildItem $bundleRoot -Recurse -File -Filter '*.exe')
+          if ($msi.Count -eq 0 -or $nsis.Count -eq 0) {
+            throw "Expected both MSI and NSIS installers under $bundleRoot."
+          }
+          foreach ($installer in @($msi + $nsis)) {
+            npm run engine:audit-installer -- $installer.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }

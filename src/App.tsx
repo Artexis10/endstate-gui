@@ -42,6 +42,7 @@ import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
 import { IntentLanding, SaveFlow, SetupFlow } from './components/app/intent';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
+import { shouldDeleteCaptureArtifact } from './lib/capture-artifact-lifecycle';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
@@ -1878,8 +1879,10 @@ function AppContent() {
       console.log('[CAPTURE] envelope outputPath:', envelopeOutputPath);
     }
 
-    // Delete temp file immediately after reading (skip in DEV to allow inspection)
-    if (!import.meta.env.DEV) {
+    // Preserve ZIP bundles for the completed SaveFlow result: Save and Hosted
+    // Backup consume the engine-owned path after capture returns. Startup cache
+    // cleanup remains the safety net for abandoned bundles.
+    if (shouldDeleteCaptureArtifact(import.meta.env.DEV, envelopeData?.outputFormat)) {
       try {
         await invoke('delete_file_silent', { path: outputPath });
       } catch {
