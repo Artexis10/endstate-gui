@@ -93,6 +93,9 @@ test.describe('capture artifact flow regression', () => {
             };
           }
           if (command === 'apply') {
+            if (!args.includes('--dry-run')) {
+              throw new Error('Capture import regression test forbids non-dry-run apply');
+            }
             (window as any).__test_applyCalls.push([...args]);
             await new Promise((resolve) => setTimeout(resolve, 250));
             if ((window as any).__test_failPreview) {
@@ -169,6 +172,7 @@ test.describe('capture artifact flow regression', () => {
     const applyCalls = await page.evaluate(() => (window as any).__test_applyCalls as string[][]);
     expect(applyCalls).toHaveLength(1);
     expect(applyCalls[0]).toContain(bundleFixture.manifestPath);
+    expect(applyCalls[0]).toContain('--dry-run');
   });
 
   test('does not report import success when setup preview rejects the bundle', async ({ page }) => {
@@ -183,5 +187,19 @@ test.describe('capture artifact flow regression', () => {
     await expect(page.getByText('Engine rejected capture provenance', { exact: true })).toBeVisible();
     await expect(page.getByText(`Imported ${bundleFixture.fileName} — setup review ready`)).toHaveCount(0);
     await expect(page.getByText(/Failed to import capture-v2\.zip/)).toBeVisible();
+  });
+
+  test('stages browser manifest imports through the transactional command', async ({ page }) => {
+    await page.getByTestId('intent-setup').click();
+    await page.locator('[data-testid="drop-zone"] input[type="file"]').setInputFiles({
+      name: 'portable-profile.jsonc',
+      mimeType: 'application/json',
+      buffer: Buffer.from('{"version":1,"name":"portable-profile","apps":[]}'),
+    });
+
+    await expect(page.getByText('Imported portable-profile.jsonc — setup review ready')).toBeVisible();
+    const operations = await page.evaluate(() => (window as any).__test_operations as Array<{ type: string }>);
+    expect(operations.filter((operation) => operation.type === 'import_profile_text')).toHaveLength(1);
+    expect(operations.filter((operation) => operation.type === 'write_text_file')).toHaveLength(0);
   });
 });

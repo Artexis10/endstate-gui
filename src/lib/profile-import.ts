@@ -1,7 +1,9 @@
 import type { DiscoveredProfile } from '@/file-discovery';
 
 function normalizePath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const windowsPath = path.includes('\\') || /^[a-z]:\//i.test(path);
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  return windowsPath ? normalized.toLowerCase() : normalized;
 }
 
 /** Resolve the exact manifest path committed by an import command. */

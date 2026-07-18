@@ -82,4 +82,44 @@ describe('SetupFlow imported profile handoff', () => {
     });
     expect(onProfileToOpenPreviewed).not.toHaveBeenCalled();
   });
+
+  it('treats a resolved unsuccessful engine preview as import failure', async () => {
+    const onProfileToOpenPreviewed = vi.fn();
+    const onProfileToOpenPreviewFailed = vi.fn();
+
+    renderWithProviders(
+      <SetupFlow
+        profiles={[importedProfile]}
+        profileToOpen={importedProfile}
+        onProfileToOpenConsumed={vi.fn()}
+        onProfileToOpenPreviewed={onProfileToOpenPreviewed}
+        onProfileToOpenPreviewFailed={onProfileToOpenPreviewFailed}
+        onBack={vi.fn()}
+        onProfileSelect={vi.fn()}
+        onOpenProfilesFolder={vi.fn()}
+        onRefreshProfiles={vi.fn().mockResolvedValue(undefined)}
+        onFileDrop={vi.fn()}
+        onDeleteProfile={vi.fn()}
+        isRunning={false}
+        setupProgress={null}
+        liveAppEvents={[]}
+        onPreview={vi.fn().mockResolvedValue({
+          success: false,
+          error: { code: 'INVALID_PROFILE', message: 'Engine rejected capture provenance' },
+          installed: 0,
+          alreadyPresent: 0,
+          appEvents: [],
+          actions: [],
+        })}
+        onApply={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(onProfileToOpenPreviewFailed).toHaveBeenCalledTimes(1));
+    expect(onProfileToOpenPreviewFailed.mock.calls[0][0]).toEqual(importedProfile);
+    expect(onProfileToOpenPreviewFailed.mock.calls[0][1]).toMatchObject({
+      message: 'Engine rejected capture provenance',
+    });
+    expect(onProfileToOpenPreviewed).not.toHaveBeenCalled();
+  });
 });

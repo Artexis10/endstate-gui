@@ -81,6 +81,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           return zipImport.manifestPath;
         },
         import_profile_text: (args?: any) => {
+          const operations = (window as any).__test_operations;
           const profileFiles = (window as any).__test_profileFiles;
           const fileContents = (window as any).__test_fileContents;
           const base = String(args?.profilesDir || 'C:\\test\\profiles').replace(/[\\/]+$/, '');
@@ -88,6 +89,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           const path = `${base}\\${name}`;
           profileFiles.add(path);
           fileContents.set(path, String(args?.content || ''));
+          operations.push({ type: 'import_profile_text', path });
           return path;
         },
         delete_file: (args?: any) => {

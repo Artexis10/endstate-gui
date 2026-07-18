@@ -423,6 +423,11 @@ export function SetupFlow({
     try {
       const result = await onPreview(profile);
       setPreviewResult(result);
+      if (result.success === false && importedPreviewRef.current?.profile.path === profile.path) {
+        importedPreviewRef.current.error = new Error(
+          result.error?.message || 'Preview completed with errors',
+        );
+      }
       // Picker default: everything checked (identical to an unfiltered apply).
       setSelectedAppIds(new Set(selectablePickerIds(result.actions)));
       setPhase('preview-done');
@@ -441,10 +446,13 @@ export function SetupFlow({
     const importedPreview = importedPreviewRef.current;
     if (!importedPreview) return;
 
-    if (phase === 'preview-done' && previewResult) {
+    if (phase === 'preview-done' && previewResult && !importedPreview.error) {
       importedPreviewRef.current = null;
       onProfileToOpenPreviewed?.(importedPreview.profile);
-    } else if (phase === 'error' && importedPreview.error) {
+    } else if (
+      (phase === 'error' || phase === 'preview-done')
+      && importedPreview.error
+    ) {
       importedPreviewRef.current = null;
       onProfileToOpenPreviewFailed?.(importedPreview.profile, importedPreview.error);
     }

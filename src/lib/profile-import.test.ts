@@ -33,4 +33,13 @@ describe('findImportedProfile', () => {
   it('does not select an arbitrary descendant when only a directory is returned', () => {
     expect(findImportedProfile(profiles, 'C:\\test\\profiles\\captured-bundle')).toBeNull();
   });
+
+  it('preserves case-sensitive exact matching for POSIX paths', () => {
+    const posixProfiles: DiscoveredProfile[] = [
+      { name: 'captured', path: '/profiles/Captured/manifest.jsonc' },
+    ];
+
+    expect(findImportedProfile(posixProfiles, '/profiles/captured/manifest.jsonc')).toBeNull();
+    expect(findImportedProfile(posixProfiles, '/profiles/Captured/manifest.jsonc')).toEqual(posixProfiles[0]);
+  });
 });
