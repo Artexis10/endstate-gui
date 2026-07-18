@@ -24,6 +24,7 @@ import type { CaptureConfigModule, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 
 type CapturePhase = 'idle' | 'scanning' | 'done' | 'error' | 'saving';
+type ErrorOrigin = 'scan' | 'save' | null;
 
 interface CaptureAppEntry {
   id: string;
@@ -99,6 +100,7 @@ export function SaveFlow({
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [errorOrigin, setErrorOrigin] = useState<ErrorOrigin>(null);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [scanCooldown, setScanCooldown] = useState(false);
   const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,6 +122,7 @@ export function SaveFlow({
       setPhase('idle');
       setResult(null);
       setErrorMessage('');
+      setErrorOrigin(null);
       setActiveFilters(new Set());
     }
   }, [resetKey]);
@@ -155,6 +158,7 @@ export function SaveFlow({
     setPhase('scanning');
     setResult(null);
     setErrorMessage('');
+    setErrorOrigin(null);
     setActiveFilters(new Set());
     try {
       const captureResult = await onStartCapture();
@@ -162,6 +166,7 @@ export function SaveFlow({
       setPhase('done');
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Capture failed');
+      setErrorOrigin('scan');
       setPhase('error');
     }
   };
@@ -169,6 +174,8 @@ export function SaveFlow({
   const handleSave = async () => {
     if (!result) return;
     setPhase('saving');
+    setErrorMessage('');
+    setErrorOrigin(null);
     try {
       const saved = await onSaveToFile(result);
       if (saved) {
@@ -182,6 +189,7 @@ export function SaveFlow({
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Save failed');
+      setErrorOrigin('save');
       setPhase('error');
     }
   };
@@ -190,7 +198,16 @@ export function SaveFlow({
     setPhase('idle');
     setResult(null);
     setErrorMessage('');
+    setErrorOrigin(null);
     onFlowReset?.();
+  };
+
+  const handleRetry = () => {
+    if (errorOrigin === 'save' && result) {
+      void handleSave();
+      return;
+    }
+    handleScanAgain();
   };
 
   // Tail of live events for activity display (filter out phase separator headers)
@@ -541,7 +558,9 @@ export function SaveFlow({
                 <div className="flex items-center gap-3 mb-4">
                   <XCircle className="h-5 w-5 text-red-500" />
                   <div>
-                    <p className="text-sm font-medium">Scan failed</p>
+                    <p className="text-sm font-medium">
+                      {errorOrigin === 'save' ? 'Save failed' : 'Scan failed'}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {errorMessage}
                     </p>
@@ -549,7 +568,7 @@ export function SaveFlow({
                 </div>
                 <Button
                   variant="secondary"
-                  onClick={handleScanAgain}
+                  onClick={handleRetry}
                   className="mt-2"
                 >
                   Try again
