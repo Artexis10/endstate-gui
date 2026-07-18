@@ -275,8 +275,12 @@ fn windows_reserved_basename(component: &str) -> bool {
         return true;
     }
 
-    let bytes = basename.as_bytes();
-    bytes.len() == 4 && matches!(&bytes[..3], b"COM" | b"LPT") && matches!(bytes[3], b'1'..=b'9')
+    matches!(
+        basename
+            .strip_prefix("COM")
+            .or_else(|| basename.strip_prefix("LPT")),
+        Some("1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³")
+    )
 }
 
 fn windows_component_is_unsafe(component: &str) -> bool {
@@ -980,7 +984,7 @@ pub fn validate_profile(path: &str) -> Result<ValidationResult, String> {
 mod profile_validation_tests {
     use super::{
         extract_zip_profile, import_profile, import_profile_text, import_zip_from_base64,
-        validate_profile_object,
+        list_manifest_files, validate_profile_object,
     };
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     use serde_json::json;
@@ -988,7 +992,7 @@ mod profile_validation_tests {
     use std::fs;
     use std::io::Write;
     use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Arc, Barrier};
     use zip::write::SimpleFileOptions;
 
@@ -1128,6 +1132,12 @@ mod profile_validation_tests {
             ("windows-ads", "payload:stream"),
             ("windows-device", "NUL.txt"),
             ("windows-nested-device", "payload/COM1.cfg"),
+            ("windows-nested-com-superscript-1", "payload/COM¹.cfg"),
+            ("windows-nested-com-superscript-2", "payload/COM².cfg"),
+            ("windows-nested-com-superscript-3", "payload/COM³.cfg"),
+            ("windows-nested-lpt-superscript-1", "payload/LPT¹.cfg"),
+            ("windows-nested-lpt-superscript-2", "payload/LPT².cfg"),
+            ("windows-nested-lpt-superscript-3", "payload/LPT³.cfg"),
             ("windows-trailing-dot", "payload/file."),
             ("windows-trailing-space", "payload/file "),
         ] {
@@ -1260,6 +1270,23 @@ mod profile_validation_tests {
         assert_eq!(committed.len(), IMPORTS);
         assert_eq!(directory_names(&profiles).len(), IMPORTS);
         assert!(committed.iter().all(|path| Path::new(path).is_file()));
+
+        let surviving_names = committed
+            .iter()
+            .map(|path| {
+                let content = fs::read_to_string(path).expect("read committed manifest");
+                serde_json::from_str::<serde_json::Value>(&content)
+                    .expect("parse committed manifest")
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .expect("manifest name")
+                    .to_string()
+            })
+            .collect::<HashSet<_>>();
+        let expected_names = (0..IMPORTS)
+            .map(|index| format!("concurrent-{index}"))
+            .collect::<HashSet<_>>();
+        assert_eq!(surviving_names, expected_names);
     }
 
     #[cfg(unix)]
@@ -1330,14 +1357,24 @@ mod profile_validation_tests {
         let temp = TestDir::new("device-name");
         let profiles = temp.path().join("profiles");
 
-        let committed = import_profile_text(
-            VALID_V2,
-            "NUL.jsonc",
-            profiles.to_str().expect("profiles path"),
-        )
-        .expect("import device-named manifest");
+        for (unsafe_name, safe_name) in [
+            ("NUL.jsonc", "_NUL.jsonc"),
+            ("COM¹.jsonc", "_COM¹.jsonc"),
+            ("COM².jsonc", "_COM².jsonc"),
+            ("COM³.jsonc", "_COM³.jsonc"),
+            ("LPT¹.jsonc", "_LPT¹.jsonc"),
+            ("LPT².jsonc", "_LPT².jsonc"),
+            ("LPT³.jsonc", "_LPT³.jsonc"),
+        ] {
+            let committed = import_profile_text(
+                VALID_V2,
+                unsafe_name,
+                profiles.to_str().expect("profiles path"),
+            )
+            .expect("import device-named manifest");
 
-        assert_eq!(PathBuf::from(committed), profiles.join("_NUL.jsonc"));
+            assert_eq!(PathBuf::from(committed), profiles.join(safe_name));
+        }
     }
 
     #[test]
@@ -1346,8 +1383,42 @@ mod profile_validation_tests {
         let temp = TestDir::new("concurrent-zip");
         let profiles = Arc::new(temp.path().join("profiles"));
         let zip_path = Arc::new(temp.path().join("capture.zip"));
-        write_zip(&zip_path, &[("manifest.jsonc", VALID_V2)]);
+        fs::create_dir(&*profiles).expect("create profiles");
+        write_zip(
+            &zip_path,
+            &[
+                ("manifest.jsonc", VALID_V2),
+                ("payload/settings.txt", "payload-complete"),
+            ],
+        );
         let barrier = Arc::new(Barrier::new(IMPORTS));
+        let imports_finished = Arc::new(AtomicBool::new(false));
+        let observer = {
+            let profiles = Arc::clone(&profiles);
+            let imports_finished = Arc::clone(&imports_finished);
+            std::thread::spawn(move || {
+                let assert_discovered_payloads = || {
+                    let manifests = list_manifest_files(profiles.to_str().expect("profiles path"))
+                        .expect("discover manifests");
+                    for manifest in manifests {
+                        let payload = Path::new(&manifest)
+                            .parent()
+                            .expect("manifest parent")
+                            .join("payload/settings.txt");
+                        assert_eq!(
+                            fs::read_to_string(payload).expect("read discovered payload"),
+                            "payload-complete"
+                        );
+                    }
+                };
+
+                while !imports_finished.load(Ordering::Acquire) {
+                    assert_discovered_payloads();
+                    std::thread::yield_now();
+                }
+                assert_discovered_payloads();
+            })
+        };
         let mut handles = Vec::new();
 
         for _ in 0..IMPORTS {
@@ -1363,19 +1434,28 @@ mod profile_validation_tests {
             }));
         }
 
-        let committed = handles
+        let joined = handles
             .into_iter()
-            .map(|handle| {
-                handle
-                    .join()
-                    .expect("join importer")
-                    .expect("commit import")
-            })
+            .map(std::thread::JoinHandle::join)
+            .collect::<Vec<_>>();
+        imports_finished.store(true, Ordering::Release);
+        observer.join().expect("join discovery observer");
+
+        let committed = joined
+            .into_iter()
+            .map(|result| result.expect("join importer").expect("commit import"))
             .collect::<HashSet<_>>();
 
         assert_eq!(committed.len(), IMPORTS);
         assert_eq!(directory_names(&profiles).len(), IMPORTS);
         assert!(committed.iter().all(|path| Path::new(path).is_file()));
+        assert!(committed.iter().all(|manifest| {
+            Path::new(manifest)
+                .parent()
+                .expect("manifest parent")
+                .join("payload/settings.txt")
+                .is_file()
+        }));
     }
 
     #[cfg(unix)]
