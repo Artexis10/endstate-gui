@@ -1054,6 +1054,308 @@ fn validate_v2_config_captures(
     Ok(())
 }
 
+fn v1_optional_array<'a>(
+    manifest: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<&'a [serde_json::Value], String> {
+    match manifest.get(field) {
+        None | Some(serde_json::Value::Null) => Ok(&[]),
+        Some(value) => value
+            .as_array()
+            .map(Vec::as_slice)
+            .ok_or_else(|| format!("field {field:?} must be an array")),
+    }
+}
+
+fn validate_v1_config_boundaries(
+    manifest: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), (&'static str, String)> {
+    let captures = v1_optional_array(manifest, "configCaptures")
+        .map_err(|message| ("INVALID_CONFIG_CAPTURE", message))?;
+    if !captures.is_empty() {
+        return Err((
+            "CONFIG_CAPTURES_REQUIRE_V2",
+            "nonempty configCaptures requires manifest version 2".to_string(),
+        ));
+    }
+
+    let lanes = v1_optional_array(manifest, "legacyConfigLanes")
+        .map_err(|message| ("INVALID_CONFIG_CAPTURE", message))?;
+    if !lanes.is_empty() {
+        return Err((
+            "INVALID_CONFIG_CAPTURE",
+            "nonempty legacyConfigLanes requires manifest version 2".to_string(),
+        ));
+    }
+
+    let restores = v1_optional_array(manifest, "restore")
+        .map_err(|message| ("INVALID_CONFIG_CAPTURE", message))?;
+    for (index, restore_value) in restores.iter().enumerate() {
+        let restore = restore_value.as_object().ok_or_else(|| {
+            (
+                "INVALID_CONFIG_CAPTURE",
+                format!("restore[{index}] must be an object"),
+            )
+        })?;
+        for field in ["legacyCaptureId", "fromModule"] {
+            match restore.get(field) {
+                None | Some(serde_json::Value::Null) => {}
+                Some(value) => {
+                    let attribution = value.as_str().ok_or_else(|| {
+                        (
+                            "INVALID_CONFIG_CAPTURE",
+                            format!("restore[{index}].{field} must be a string"),
+                        )
+                    })?;
+                    if !attribution.trim().is_empty() {
+                        return Err((
+                            "INVALID_CONFIG_CAPTURE",
+                            format!("restore[{index}].{field} requires manifest version 2"),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn v2_optional_array<'a>(
+    manifest: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<&'a [serde_json::Value], String> {
+    match manifest.get(field) {
+        None => Ok(&[]),
+        Some(value) => value
+            .as_array()
+            .map(Vec::as_slice)
+            .ok_or_else(|| format!("field {field:?} must be a non-null array")),
+    }
+}
+
+fn optional_restore_string<'a>(
+    restore: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    index: usize,
+) -> Result<&'a str, String> {
+    match restore.get(field) {
+        None | Some(serde_json::Value::Null) => Ok(""),
+        Some(value) => value
+            .as_str()
+            .ok_or_else(|| format!("restore[{index}].{field} must be a string")),
+    }
+}
+
+fn validate_restore_field_types(
+    restore: &serde_json::Map<String, serde_json::Value>,
+    index: usize,
+) -> Result<(), String> {
+    for field in [
+        "type",
+        "source",
+        "target",
+        "pattern",
+        "reason",
+        "fromModule",
+        "legacyCaptureId",
+        "key",
+        "valueName",
+        "valueType",
+        "data",
+    ] {
+        optional_restore_string(restore, field, index)?;
+    }
+    for field in ["backup", "optional"] {
+        if let Some(value) = restore.get(field) {
+            if !value.is_null() && !value.is_boolean() {
+                return Err(format!("restore[{index}].{field} must be a boolean"));
+            }
+        }
+    }
+    if let Some(exclude) = restore.get("exclude") {
+        if !exclude.is_null()
+            && !exclude
+                .as_array()
+                .is_some_and(|values| values.iter().all(serde_json::Value::is_string))
+        {
+            return Err(format!(
+                "restore[{index}].exclude must be an array of strings"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn portable_roots_overlap(left: &str, right: &str) -> bool {
+    let left = left.to_lowercase();
+    let right = right.to_lowercase();
+    left == right || left.starts_with(&(right.clone() + "/")) || right.starts_with(&(left + "/"))
+}
+
+fn normalize_legacy_restore_source(source: &str) -> Result<String, String> {
+    let portable = source.trim().replace('\\', "/");
+    let portable = portable.strip_prefix("./").unwrap_or(&portable);
+    if !portable_manifest_path(portable) {
+        return Err("source is not a portable ordinary restore path".to_string());
+    }
+    Ok(portable.to_string())
+}
+
+fn validate_v2_legacy_isolation(
+    manifest: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), String> {
+    let captures = required_array(manifest, "configCaptures")?;
+    let mut all_capture_ids = std::collections::HashSet::new();
+    let mut generation_modules = std::collections::HashSet::new();
+    let mut protected_roots = Vec::new();
+    for capture_value in captures {
+        let capture = capture_value
+            .as_object()
+            .ok_or_else(|| "configCapture must be an object".to_string())?;
+        let capture_id = required_string(capture, "captureId")?;
+        let module_id = required_string(capture, "moduleId")?;
+        let payload_root = required_string(capture, "payloadRoot")?;
+        all_capture_ids.insert(capture_id);
+        generation_modules.insert(module_id);
+        protected_roots.push(payload_root);
+    }
+
+    let lanes = v2_optional_array(manifest, "legacyConfigLanes")?;
+    let mut lane_by_id = std::collections::HashMap::new();
+    let mut legacy_modules = std::collections::HashSet::new();
+    for (index, lane_value) in lanes.iter().enumerate() {
+        let lane = lane_value
+            .as_object()
+            .ok_or_else(|| format!("legacyConfigLanes[{index}] must be an object"))?;
+        let capture_id = required_string(lane, "captureId")?;
+        let module_id = required_string(lane, "moduleId")?;
+        let payload_root = required_string(lane, "payloadRoot")?;
+        if !stable_manifest_id(capture_id) || !stable_manifest_id(module_id) {
+            return Err(format!(
+                "legacyConfigLanes[{index}] has an invalid captureId or moduleId"
+            ));
+        }
+        if lane
+            .get("moduleSchemaVersion")
+            .and_then(serde_json::Value::as_i64)
+            != Some(1)
+        {
+            return Err(format!(
+                "legacyConfigLanes[{index}].moduleSchemaVersion must be the integer 1"
+            ));
+        }
+        let expected_root = format!("configs/{capture_id}");
+        if !portable_manifest_path(payload_root) || payload_root != expected_root {
+            return Err(format!(
+                "legacyConfigLanes[{index}].payloadRoot must be {expected_root:?}"
+            ));
+        }
+        if !all_capture_ids.insert(capture_id) {
+            return Err(format!(
+                "duplicate captureId {capture_id:?} across config captures and legacy lanes"
+            ));
+        }
+        if !legacy_modules.insert(module_id) {
+            return Err(format!("duplicate legacy lane moduleId {module_id:?}"));
+        }
+        if generation_modules.contains(module_id) {
+            return Err(format!(
+                "module {module_id:?} cannot have both generation and legacy lanes"
+            ));
+        }
+        if protected_roots
+            .iter()
+            .any(|existing| portable_roots_overlap(existing, payload_root))
+        {
+            return Err(format!(
+                "legacy payload root {payload_root:?} overlaps a protected config root"
+            ));
+        }
+
+        lane_by_id.insert(capture_id, (module_id, payload_root));
+        protected_roots.push(payload_root);
+    }
+
+    let config_modules = v2_optional_array(manifest, "configModules")?;
+    let mut listed_modules = std::collections::HashSet::new();
+    for (index, module_value) in config_modules.iter().enumerate() {
+        let module_id = module_value
+            .as_str()
+            .ok_or_else(|| format!("configModules[{index}] must be a string"))?;
+        if !stable_manifest_id(module_id) {
+            return Err(format!("configModules[{index}] is not a stable module ID"));
+        }
+        if !listed_modules.insert(module_id) {
+            return Err(format!(
+                "configModules contains duplicate module {module_id:?}"
+            ));
+        }
+    }
+    if listed_modules != legacy_modules {
+        return Err("configModules must exactly equal the legacy lane module set".to_string());
+    }
+
+    let restores = v2_optional_array(manifest, "restore")?;
+    let mut used_lanes = std::collections::HashSet::new();
+    for (index, restore_value) in restores.iter().enumerate() {
+        let restore = restore_value
+            .as_object()
+            .ok_or_else(|| format!("restore[{index}] must be an object"))?;
+        validate_restore_field_types(restore, index)?;
+        let legacy_capture_id = optional_restore_string(restore, "legacyCaptureId", index)?;
+        let from_module = optional_restore_string(restore, "fromModule", index)?;
+        let source = optional_restore_string(restore, "source", index)?;
+
+        if legacy_capture_id.is_empty() && from_module.is_empty() {
+            if !source.trim().is_empty() {
+                let source = normalize_legacy_restore_source(source)?;
+                if protected_roots
+                    .iter()
+                    .any(|root| portable_roots_overlap(&source, root))
+                {
+                    return Err(format!(
+                        "restore[{index}].source must not overlap a protected config payload root"
+                    ));
+                }
+            }
+            continue;
+        }
+
+        if !stable_manifest_id(legacy_capture_id) {
+            return Err(format!(
+                "restore[{index}].legacyCaptureId must identify one legacy lane"
+            ));
+        }
+        let (lane_module, lane_root) = lane_by_id.get(legacy_capture_id).ok_or_else(|| {
+            format!(
+                "restore[{index}].legacyCaptureId {legacy_capture_id:?} does not resolve to a legacy lane"
+            )
+        })?;
+        if from_module != *lane_module {
+            return Err(format!(
+                "restore[{index}].fromModule {from_module:?} does not match legacy lane module {lane_module:?}"
+            ));
+        }
+        if !source.trim().is_empty() {
+            let source = normalize_legacy_restore_source(source)?;
+            if source != *lane_root && !source.starts_with(&format!("{lane_root}/")) {
+                return Err(format!(
+                    "restore[{index}].source must remain under legacy payload root {lane_root:?}"
+                ));
+            }
+        }
+        used_lanes.insert(legacy_capture_id);
+    }
+    for capture_id in lane_by_id.keys() {
+        if !used_lanes.contains(capture_id) {
+            return Err(format!(
+                "legacy lane {capture_id:?} is not used by any flat restore entry"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Pure validation of a profile manifest object.
 pub fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
     let mut errors = Vec::new();
@@ -1112,17 +1414,22 @@ pub fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
             summary: None,
         };
     }
-    if version_num == 2 {
-        if let Err(message) = validate_v2_config_captures(obj) {
-            return ValidationResult {
-                valid: false,
-                errors: vec![ValidationError {
-                    code: "INVALID_CONFIG_CAPTURE".to_string(),
-                    message,
-                }],
-                summary: None,
-            };
-        }
+    let config_validation = if version_num == 1 {
+        validate_v1_config_boundaries(obj)
+    } else {
+        validate_v2_config_captures(obj)
+            .and_then(|_| validate_v2_legacy_isolation(obj))
+            .map_err(|message| ("INVALID_CONFIG_CAPTURE", message))
+    };
+    if let Err((code, message)) = config_validation {
+        return ValidationResult {
+            valid: false,
+            errors: vec![ValidationError {
+                code: code.to_string(),
+                message,
+            }],
+            summary: None,
+        };
     }
     let apps = match obj.get("apps") {
         Some(a) => a,
@@ -1307,6 +1614,35 @@ mod profile_validation_tests {
         serde_json::to_string(&value).expect("serialize valid v2 fixture")
     }
 
+    fn valid_v2_with_legacy_lane() -> serde_json::Value {
+        let mut value = valid_v2_value();
+        value["legacyConfigLanes"] = json!([{
+            "captureId": "legacy-capture",
+            "moduleId": "legacy.example",
+            "moduleSchemaVersion": 1,
+            "payloadRoot": "configs/legacy-capture"
+        }]);
+        value["configModules"] = json!(["legacy.example"]);
+        value["restore"] = json!([{
+            "type": "copy",
+            "source": "configs/legacy-capture/settings.json",
+            "target": "~/.example/settings.json",
+            "fromModule": "legacy.example",
+            "legacyCaptureId": "legacy-capture"
+        }]);
+        value
+    }
+
+    fn invalid_generation_fallback_v2() -> String {
+        let mut value = valid_v2_value();
+        value["restore"] = json!([{
+            "type": "copy",
+            "source": "./configs/fixture-stable-preferences-installed/settings.json",
+            "target": "~/.fixture/settings.json"
+        }]);
+        serde_json::to_string(&value).expect("serialize invalid fallback fixture")
+    }
+
     fn first_config_capture_mut(
         value: &mut serde_json::Value,
     ) -> &mut serde_json::Map<String, serde_json::Value> {
@@ -1316,6 +1652,17 @@ mod profile_validation_tests {
             .and_then(|captures| captures.first_mut())
             .and_then(serde_json::Value::as_object_mut)
             .expect("first config capture")
+    }
+
+    fn first_legacy_lane_mut(
+        value: &mut serde_json::Value,
+    ) -> &mut serde_json::Map<String, serde_json::Value> {
+        value
+            .get_mut("legacyConfigLanes")
+            .and_then(serde_json::Value::as_array_mut)
+            .and_then(|lanes| lanes.first_mut())
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("first legacy lane")
     }
 
     struct TestDir(PathBuf);
@@ -1533,6 +1880,212 @@ mod profile_validation_tests {
     }
 
     #[test]
+    fn dispatches_v1_away_from_v2_only_config_fields() {
+        type Mutation = fn(&mut serde_json::Value);
+        let cases: Vec<(&str, &str, Mutation)> = vec![
+            (
+                "nonempty config captures",
+                "CONFIG_CAPTURES_REQUIRE_V2",
+                |value| {
+                    value["configCaptures"] = valid_v2_value()["configCaptures"].clone();
+                },
+            ),
+            (
+                "nonempty legacy config lanes",
+                "INVALID_CONFIG_CAPTURE",
+                |value| {
+                    value["legacyConfigLanes"] = json!([{
+                        "captureId": "legacy-capture",
+                        "moduleId": "legacy.example",
+                        "moduleSchemaVersion": 1,
+                        "payloadRoot": "configs/legacy-capture"
+                    }]);
+                },
+            ),
+            (
+                "restore legacy capture attribution",
+                "INVALID_CONFIG_CAPTURE",
+                |value| {
+                    value["restore"] = json!([{
+                        "type": "copy",
+                        "source": "configs/legacy-capture/settings.json",
+                        "target": "~/.example/settings.json",
+                        "legacyCaptureId": "legacy-capture"
+                    }]);
+                },
+            ),
+            (
+                "restore module attribution",
+                "INVALID_CONFIG_CAPTURE",
+                |value| {
+                    value["restore"] = json!([{
+                        "type": "copy",
+                        "source": "configs/legacy-capture/settings.json",
+                        "target": "~/.example/settings.json",
+                        "fromModule": "legacy.example"
+                    }]);
+                },
+            ),
+        ];
+
+        for (label, expected_code, mutate) in cases {
+            let mut value = serde_json::from_str(VALID_V1).expect("parse valid v1");
+            mutate(&mut value);
+
+            let result = validate_profile_object(&value);
+
+            assert!(!result.valid, "{label} was accepted");
+            assert_eq!(result.errors.len(), 1, "{label}: {:?}", result.errors);
+            assert_eq!(result.errors[0].code, expected_code, "{label}");
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_v2_legacy_isolation_and_attribution() {
+        type Mutation = fn(&mut serde_json::Value);
+        let cases: Vec<(&str, Mutation)> = vec![
+            ("null legacy lanes", |value| {
+                value["legacyConfigLanes"] = serde_json::Value::Null;
+            }),
+            ("malformed legacy lanes", |value| {
+                value["legacyConfigLanes"] = json!({});
+            }),
+            ("malformed legacy lane entry", |value| {
+                value["legacyConfigLanes"] = json!(["legacy-capture"]);
+            }),
+            ("missing legacy lane field", |value| {
+                first_legacy_lane_mut(value).remove("payloadRoot");
+            }),
+            ("legacy capture id wrong type", |value| {
+                first_legacy_lane_mut(value).insert("captureId".to_string(), json!(7));
+            }),
+            ("unstable legacy capture id", |value| {
+                first_legacy_lane_mut(value)
+                    .insert("captureId".to_string(), json!("Legacy Capture"));
+            }),
+            ("unstable legacy module id", |value| {
+                first_legacy_lane_mut(value)
+                    .insert("moduleId".to_string(), json!("Legacy Example"));
+            }),
+            ("wrong legacy module schema", |value| {
+                first_legacy_lane_mut(value).insert("moduleSchemaVersion".to_string(), json!(2));
+            }),
+            ("wrong legacy payload root", |value| {
+                first_legacy_lane_mut(value)
+                    .insert("payloadRoot".to_string(), json!("configs/other"));
+            }),
+            ("nonportable legacy payload root", |value| {
+                first_legacy_lane_mut(value).insert(
+                    "payloadRoot".to_string(),
+                    json!("configs/legacy-capture/../other"),
+                );
+            }),
+            ("duplicate capture id across lane types", |value| {
+                let capture_id = value["configCaptures"][0]["captureId"].clone();
+                let lane = first_legacy_lane_mut(value);
+                lane.insert("captureId".to_string(), capture_id.clone());
+                lane.insert(
+                    "payloadRoot".to_string(),
+                    json!(format!(
+                        "configs/{}",
+                        capture_id.as_str().expect("capture id")
+                    )),
+                );
+            }),
+            ("duplicate legacy module id", |value| {
+                let lanes = value["legacyConfigLanes"]
+                    .as_array_mut()
+                    .expect("legacy lanes");
+                let mut second = lanes[0].clone();
+                second["captureId"] = json!("legacy-other");
+                second["payloadRoot"] = json!("configs/legacy-other");
+                lanes.push(second);
+            }),
+            ("module has generation and legacy lanes", |value| {
+                first_legacy_lane_mut(value)
+                    .insert("moduleId".to_string(), json!("apps.fixture-stable"));
+                value["configModules"] = json!(["apps.fixture-stable"]);
+            }),
+            ("null config modules", |value| {
+                value["configModules"] = serde_json::Value::Null;
+            }),
+            ("malformed config modules", |value| {
+                value["configModules"] = json!({});
+            }),
+            ("malformed listed module", |value| {
+                value["configModules"] = json!([7]);
+            }),
+            ("unstable listed module", |value| {
+                value["configModules"] = json!(["Legacy Example"]);
+            }),
+            ("duplicate listed module", |value| {
+                value["configModules"] = json!(["legacy.example", "legacy.example"]);
+            }),
+            ("missing listed legacy module", |value| {
+                value["configModules"] = json!([]);
+            }),
+            ("extraneous listed module", |value| {
+                value["configModules"] = json!(["legacy.example", "legacy.other"]);
+            }),
+            ("null restore", |value| {
+                value["restore"] = serde_json::Value::Null;
+            }),
+            ("malformed restore", |value| {
+                value["restore"] = json!({});
+            }),
+            ("malformed restore entry", |value| {
+                value["restore"] = json!(["copy"]);
+            }),
+            ("malformed restore attribution", |value| {
+                value["restore"][0]["legacyCaptureId"] = json!(7);
+            }),
+            ("ordinary restore overlaps generation payload", |value| {
+                value["restore"] = json!([{
+                    "type": "copy",
+                    "source": "./CONFIGS/FIXTURE-STABLE-PREFERENCES-INSTALLED/settings.json",
+                    "target": "~/.fixture/settings.json"
+                }]);
+            }),
+            ("attributed restore missing capture id", |value| {
+                value["restore"][0]
+                    .as_object_mut()
+                    .expect("restore object")
+                    .remove("legacyCaptureId");
+            }),
+            ("attributed restore unknown capture id", |value| {
+                value["restore"][0]["legacyCaptureId"] = json!("legacy-other");
+            }),
+            ("attributed restore module mismatch", |value| {
+                value["restore"][0]["fromModule"] = json!("legacy.other");
+            }),
+            ("attributed restore escapes lane root", |value| {
+                value["restore"][0]["source"] = json!("configs/other/settings.json");
+            }),
+            ("legacy lane is unused", |value| {
+                value["restore"] = json!([]);
+            }),
+        ];
+
+        for (label, mutate) in cases {
+            let mut value = valid_v2_with_legacy_lane();
+            mutate(&mut value);
+
+            let result = validate_profile_object(&value);
+
+            assert!(!result.valid, "{label} was accepted");
+            assert_eq!(result.errors.len(), 1, "{label}: {:?}", result.errors);
+            assert_eq!(result.errors[0].code, "INVALID_CONFIG_CAPTURE", "{label}");
+        }
+    }
+
+    #[test]
+    fn accepts_v2_with_an_attributed_legacy_lane() {
+        let result = validate_profile_object(&valid_v2_with_legacy_lane());
+
+        assert!(result.valid, "{:?}", result.errors);
+    }
+
+    #[test]
     fn v2_gui_import_boundary_requires_top_level_capture_provenance() {
         let value = json!({
             "version": 2,
@@ -1685,6 +2238,30 @@ mod profile_validation_tests {
     }
 
     #[test]
+    fn generation_payload_fallback_zip_is_not_committed_or_discoverable() {
+        let temp = TestDir::new("generation-fallback-zip");
+        let profiles = temp.path().join("profiles");
+        let zip_path = temp.path().join("fallback.zip");
+        let manifest = invalid_generation_fallback_v2();
+        fs::create_dir(&profiles).expect("create profiles");
+        write_zip(&zip_path, &[("manifest.jsonc", &manifest)]);
+
+        let error = extract_zip_profile(
+            zip_path.to_str().expect("zip path"),
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect_err("generation payload fallback zip must fail");
+
+        assert!(error.contains("INVALID_CONFIG_CAPTURE"), "{error}");
+        assert!(directory_names(&profiles).is_empty());
+        assert!(
+            list_manifest_files(profiles.to_str().expect("profiles path"))
+                .expect("discover manifests")
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn invalid_bare_manifest_does_not_overwrite_existing_profile() {
         let temp = TestDir::new("invalid-bare");
         let profiles = temp.path().join("profiles");
@@ -1720,6 +2297,29 @@ mod profile_validation_tests {
             profiles.to_str().expect("profiles path"),
         )
         .expect_err("incomplete v2 bare import must fail");
+
+        assert!(error.contains("INVALID_CONFIG_CAPTURE"), "{error}");
+        assert!(directory_names(&profiles).is_empty());
+        assert!(
+            list_manifest_files(profiles.to_str().expect("profiles path"))
+                .expect("discover manifests")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn generation_payload_fallback_bare_is_not_committed_or_discoverable() {
+        let temp = TestDir::new("generation-fallback-bare");
+        let profiles = temp.path().join("profiles");
+        let manifest = invalid_generation_fallback_v2();
+        fs::create_dir(&profiles).expect("create profiles");
+
+        let error = import_profile_text(
+            &manifest,
+            "fallback.jsonc",
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect_err("generation payload fallback bare import must fail");
 
         assert!(error.contains("INVALID_CONFIG_CAPTURE"), "{error}");
         assert!(directory_names(&profiles).is_empty());
