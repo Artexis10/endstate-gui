@@ -37,15 +37,15 @@
 
 ## 6. Protect The Connected Journey
 
-- [ ] 6.1 Update the semantic Playwright journey to assert zero preview calls after ZIP import, click **Review setup**, and verify install-only then restore-enabled preview arguments.
-- [ ] 6.2 Complete that journey by selecting a settings module, issuing live Apply with `--enable-restore --restore-filter`, asserting the semantic restore journal, and completing undo dry-run plus live revert.
-- [ ] 6.3 Add a Playwright `DataTransfer` hover/drop scenario that observes acceptance before drop, cleared state after leave/drop, and one import per supported file in order.
-- [ ] 6.4 Keep the mocked PR journey free of real winget/settings mutation and confirm the existing Windows gate audits MSI and NSIS plus smoke-tests the packaged engine without adding dependencies or lockfile churn.
+- [x] 6.1 Update the semantic Playwright journey to assert zero preview calls after ZIP import, click **Review setup**, and verify install-only then restore-enabled preview arguments.
+- [x] 6.2 Complete that journey by selecting a settings module, issuing live Apply with `--enable-restore --restore-filter`, asserting the semantic restore journal, and completing undo dry-run plus live revert.
+- [x] 6.3 Add a Playwright `DataTransfer` hover/drop scenario that observes acceptance before drop, cleared state after leave/drop, and one import per supported file in order.
+- [x] 6.4 Keep the mocked PR journey free of real winget/settings mutation and confirm the existing Windows gate audits MSI and NSIS plus smoke-tests the packaged engine without adding dependencies or lockfile churn.
 
 ## 7. Verification And Delivery
 
-- [ ] 7.1 Run the focused Vitest files while implementing each red/green slice, then run `npm run test:unit`, `npm run lint`, and `npm run build`.
-- [ ] 7.2 Run the focused `e2e/capture-artifact-flow.spec.ts` and drag scenario, then `npm run test:e2e:ci`, `npm run test:contract`, and `npm run openspec:validate:ci`.
-- [ ] 7.3 Inspect the final diff for accidental engine, dependency, `Cargo.lock`, generated artifact, or unrelated design changes and remove any such drift.
-- [ ] 7.4 Obtain an independent code review against this proposal, design, and every scenario; address findings and rerun affected verification.
+- [x] 7.1 Run the focused Vitest files while implementing each red/green slice, then run `npm run test:unit`, `npm run lint`, and `npm run build`.
+- [x] 7.2 Run the focused `e2e/capture-artifact-flow.spec.ts` and drag scenario, then `npm run test:e2e:ci`, `npm run test:contract`, and `npm run openspec:validate:ci`.
+- [x] 7.3 Inspect the final diff for accidental engine, dependency, `Cargo.lock`, generated artifact, or unrelated design changes and remove any such drift.
+- [x] 7.4 Obtain an independent code review against this proposal, design, and every scenario; address findings and rerun affected verification.
 - [ ] 7.5 Push the GUI branch, confirm required pull-request checks including the Windows bundle gate, merge through the normal review path, and verify the resulting patch release publishes working MSI and NSIS installers before declaring the fix shipped.
