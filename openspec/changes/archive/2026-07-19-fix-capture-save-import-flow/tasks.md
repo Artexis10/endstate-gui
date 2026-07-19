@@ -27,6 +27,6 @@
 ## 5. Verification and Release
 
 - [x] 5.1 Run focused unit/Rust tests, TypeScript build, OpenSpec strict validation, and the new Playwright test.
-- [ ] 5.2 Run independent review and address only confirmed findings.
+- [x] 5.2 Run independent review and address only confirmed findings.
 - [x] 5.3 Build and audit signed MSI/NSIS artifacts, smoke the packaged engine, and exercise capture-save-import against the release candidate.
 - [x] 5.4 Publish the GUI hotfix only after all artifact gates pass and confirm it is GitHub Latest.

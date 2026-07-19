@@ -27,27 +27,10 @@ const previewResult = {
   actions: [],
 };
 
-type ImportContractProps = Omit<
-  SetupFlowProps,
-  | 'profileToOpen'
-  | 'onProfileToOpenConsumed'
-  | 'onProfileToOpenPreviewed'
-  | 'onProfileToOpenPreviewFailed'
-> & {
-  recentlyImportedProfile?: DiscoveredProfile | null;
-  onRecentlyImportedConsumed?: () => void;
-};
-
-type RedSetupFlowProps = ImportContractProps & {
-  /** Keeps the RED suite pointed at the current implicit-preview regression. */
-  profileToOpen?: DiscoveredProfile | null;
-};
-
-function makeProps(overrides: Partial<RedSetupFlowProps> = {}): RedSetupFlowProps {
+function makeProps(overrides: Partial<SetupFlowProps> = {}): SetupFlowProps {
   return {
     profiles: [existingProfile, importedProfile],
     recentlyImportedProfile: importedProfile,
-    profileToOpen: importedProfile,
     onRecentlyImportedConsumed: vi.fn(),
     onBack: vi.fn(),
     onProfileSelect: vi.fn(),
@@ -64,10 +47,8 @@ function makeProps(overrides: Partial<RedSetupFlowProps> = {}): RedSetupFlowProp
   };
 }
 
-function setupFlow(props: RedSetupFlowProps) {
-  // The cast keeps this RED test executable while the wished-for import props
-  // replace the legacy auto-open props in production.
-  return <SetupFlow {...(props as SetupFlowProps)} />;
+function setupFlow(props: SetupFlowProps) {
+  return <SetupFlow {...props} />;
 }
 
 describe('SetupFlow imported profile handoff', () => {
@@ -90,6 +71,7 @@ describe('SetupFlow imported profile handoff', () => {
     const existingCard = screen.getByTestId('profile-card-existing-profile');
     expect(within(importedCard).getByText('Imported')).toBeVisible();
     expect(within(importedCard).getByRole('button', { name: 'Review setup' })).toBeVisible();
+    expect(within(importedCard).getByRole('button', { name: 'Delete captured-bundle' })).not.toHaveAttribute('tabindex', '-1');
     expect(within(existingCard).queryByText('Imported')).not.toBeInTheDocument();
     expect(within(existingCard).queryByRole('button', { name: 'Review setup' })).not.toBeInTheDocument();
 
@@ -103,7 +85,6 @@ describe('SetupFlow imported profile handoff', () => {
     rerender(setupFlow({
       ...props,
       recentlyImportedProfile: null,
-      profileToOpen: null,
     }));
     await user.click(screen.getByRole('button', { name: 'Back to profiles' }));
     expect(screen.queryByText('Imported')).not.toBeInTheDocument();
@@ -123,7 +104,6 @@ describe('SetupFlow imported profile handoff', () => {
       ...props,
       profiles: [existingProfile, importedProfile, laterImportedProfile],
       recentlyImportedProfile: laterImportedProfile,
-      profileToOpen: laterImportedProfile,
     }));
 
     expect(within(screen.getByTestId('profile-card-captured-bundle')).queryByText('Imported')).not.toBeInTheDocument();
@@ -141,14 +121,13 @@ describe('SetupFlow imported profile handoff', () => {
     const { rerender } = renderWithProviders(setupFlow(props));
 
     const importedCard = screen.getByTestId('profile-card-captured-bundle');
-    await user.click(within(importedCard).getAllByRole('button')[0]);
+    await user.click(within(importedCard).getByRole('button', { name: 'Delete captured-bundle' }));
     expect(onDeleteProfile).toHaveBeenCalledWith(importedProfile.path, importedProfile.name);
 
     rerender(setupFlow({
       ...props,
       profiles: [existingProfile],
       recentlyImportedProfile: null,
-      profileToOpen: null,
     }));
 
     expect(screen.queryByText('Imported')).not.toBeInTheDocument();
@@ -166,7 +145,6 @@ describe('SetupFlow imported profile handoff', () => {
     rerender(setupFlow({
       ...props,
       recentlyImportedProfile: null,
-      profileToOpen: null,
       resetKey: 1,
     }));
 
@@ -195,7 +173,6 @@ describe('SetupFlow imported profile handoff', () => {
     rerender(setupFlow({
       ...props,
       recentlyImportedProfile: null,
-      profileToOpen: null,
     }));
     await user.click(screen.getByRole('button', { name: 'Back to profiles' }));
     expect(screen.getByTestId('profile-card-captured-bundle')).toBeVisible();

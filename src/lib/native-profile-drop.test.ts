@@ -46,7 +46,9 @@ describe('native profile drop handling', () => {
     handleDrag({ payload: { type: 'enter', paths: ['C:\\Downloads\\capture.zip'] } });
     expect(setDragAccepted).toHaveBeenLastCalledWith(true);
 
-    handleDrag({ payload: { type: 'over', paths: ['C:\\Downloads\\capture.zip'] } });
+    // Tauri v2 over events may omit paths; acceptance established by enter
+    // remains visible until a terminal lifecycle event.
+    handleDrag({ payload: { type: 'over' } });
     expect(setDragAccepted).toHaveBeenLastCalledWith(true);
     expect(dependencies.importPaths).not.toHaveBeenCalled();
 
@@ -55,6 +57,24 @@ describe('native profile drop handling', () => {
 
     handleDrag({ payload: { type: 'enter', paths: ['C:\\Downloads\\capture.zip'] } });
     handleDrag({ payload: { type: 'cancel' } });
+    expect(setDragAccepted).toHaveBeenLastCalledWith(false);
+  });
+
+  it('clears App-owned acceptance when the native listener owner unmounts', () => {
+    const setDragAccepted = vi.fn();
+    const handleDrag = createNativeProfileDropHandler({
+      isRunning: () => false,
+      coordinator: createProfileImportCoordinator(),
+      openSetup: vi.fn(),
+      importPaths: vi.fn().mockResolvedValue(undefined),
+      onBlocked: vi.fn(),
+      setDragAccepted,
+    });
+
+    handleDrag({ payload: { type: 'enter', paths: ['C:\\Downloads\\capture.zip'] } });
+    expect(setDragAccepted).toHaveBeenLastCalledWith(true);
+
+    handleDrag.dispose();
     expect(setDragAccepted).toHaveBeenLastCalledWith(false);
   });
 

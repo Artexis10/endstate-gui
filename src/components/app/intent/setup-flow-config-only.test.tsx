@@ -79,19 +79,20 @@ describe('SetupFlow — Config-only (manual) app distinction', () => {
     vi.clearAllMocks();
   });
 
-  it('shows manual apps in a separate "Settings only" section', async () => {
+  it('shows manual apps in a section that says app installation is not included', async () => {
     await navigateToPreview(makePreviewWithManualApps());
 
-    expect(screen.getByText('Settings only')).toBeInTheDocument();
+    expect(screen.getByText('Settings only — app installation not included')).toBeInTheDocument();
+    expect(screen.getByText(/can restore these settings.*cannot install/i)).toBeInTheDocument();
     // Config-only apps should show their display names
     expect(screen.getByText('Adobe Lightroom Classic')).toBeInTheDocument();
     expect(screen.getByText('Claude Code')).toBeInTheDocument();
   });
 
-  it('does not show "Settings only" section when no manual apps', async () => {
+  it('does not show the settings-only section when no manual apps exist', async () => {
     await navigateToPreview(makePreviewWingetOnly());
 
-    expect(screen.queryByText('Settings only')).not.toBeInTheDocument();
+    expect(screen.queryByText('Settings only — app installation not included')).not.toBeInTheDocument();
   });
 
   it('manual apps do not count in the "X apps" badge', async () => {
@@ -101,7 +102,7 @@ describe('SetupFlow — Config-only (manual) app distinction', () => {
     expect(screen.getByText('4 apps')).toBeInTheDocument();
   });
 
-  it('manual apps show status labels in "Settings only" section', async () => {
+  it('manual apps show status labels in the settings-only section', async () => {
     await navigateToPreview(makePreviewWithManualApps());
 
     // Winget apps should still have status labels
@@ -109,7 +110,7 @@ describe('SetupFlow — Config-only (manual) app distinction', () => {
     expect(screen.getByText('Docker Desktop')).toBeInTheDocument();
 
     // Config-only section exists with status labels and gear icons
-    const section = screen.getByText('Settings only');
+    const section = screen.getByText('Settings only — app installation not included');
     expect(section).toBeInTheDocument();
   });
 

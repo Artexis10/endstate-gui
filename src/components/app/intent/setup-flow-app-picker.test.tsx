@@ -218,7 +218,7 @@ describe('SetupFlow — per-app picker', () => {
 
       const appsAndSettingsRadio = screen.getByRole('radio', { name: /settings/i });
       await userEvent.click(appsAndSettingsRadio);
-      await userEvent.click(screen.getByRole('checkbox', { name: /^Git$/ }));
+      await userEvent.click(await screen.findByRole('checkbox', { name: /^Git$/ }));
 
       await userEvent.click(screen.getByTestId('app-picker-checkbox-firefox'));
       await userEvent.click(screen.getByTestId('setup-flow-apply'));

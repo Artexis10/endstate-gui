@@ -449,6 +449,12 @@ export function SaveFlow({
                 {/* Unified app + settings list */}
                 {result.apps.length > 0 && (
                   <div className="mt-3 border-t pt-3">
+                    <div className="mb-2">
+                      <p className="text-xs font-medium">Apps found on this PC</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        These apps are included for setup on another computer.
+                      </p>
+                    </div>
                     <div className="flex items-center gap-1.5 mb-2">
                       <FilterChip
                         onClick={clearFilters}
@@ -459,14 +465,20 @@ export function SaveFlow({
                         {result.apps.length} apps
                       </FilterChip>
                       {settingsCount > 0 && (
-                        <FilterChip
-                          onClick={() => toggleFilter('settings')}
-                          pressed={activeFilters.has('settings')}
-                          dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
-                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
-                        >
-                          {settingsCount} settings
-                        </FilterChip>
+                        <>
+                          <FilterChip
+                            onClick={() => toggleFilter('settings')}
+                            pressed={activeFilters.has('settings')}
+                            dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
+                            className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                          >
+                            {settingsCount} settings
+                          </FilterChip>
+                          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} aria-hidden="true" />
+                            Settings captured
+                          </span>
+                        </>
                       )}
                     </div>
                     <div className="space-y-1 max-h-64 overflow-y-auto">
@@ -479,7 +491,10 @@ export function SaveFlow({
                             <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>DETECTED</span>
                             <span className="w-4 flex-shrink-0 flex justify-center">
                               {hasSettings && (
-                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
+                                <Settings2
+                                  className={`h-3 w-3 ${getColorClasses('success').text}`}
+                                  aria-label="Settings captured for this app"
+                                />
                               )}
                             </span>
                             <span className="truncate">
@@ -495,7 +510,12 @@ export function SaveFlow({
                 {/* Config-only modules: detected via settings, not winget */}
                 {configOnlyModules.length > 0 && (
                   <div className="mt-3 border-t pt-3" data-testid="config-only-section">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Settings detected for:</p>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Settings only — app installation not included
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 mb-2">
+                      Endstate captured these settings, but this backup does not include an app installer.
+                    </p>
                     <div className="space-y-1">
                       {configOnlyModules.map(mod => (
                         <div key={mod.id} className="flex items-center gap-2 text-xs">

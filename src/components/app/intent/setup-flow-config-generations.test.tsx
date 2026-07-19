@@ -13,6 +13,13 @@ const profile = {
   isBundle: true,
 };
 
+const otherProfile = {
+  ...profile,
+  name: 'other-generation-profile',
+  path: 'C:\\profiles\\other-generation-profile.zip',
+  displayName: 'other-generation-profile',
+};
+
 function configResolution(
   overrides: Partial<ConfigResolution> & Pick<ConfigResolution, 'captureId' | 'resolution' | 'label'>,
 ): ConfigResolution {
@@ -60,6 +67,31 @@ const baseProps = {
 describe('SetupFlow config generations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('keeps native acceptance visible when previewing replaces the Setup drop zone', async () => {
+    const pending = deferred<{
+      installed: number;
+      alreadyPresent: number;
+      appEvents: [];
+    }>();
+    const onPreview = vi.fn().mockReturnValue(pending.promise);
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        onPreview={onPreview}
+        nativeDragAccepted
+      />,
+    );
+
+    expect(screen.getByTestId('drop-zone')).toHaveTextContent('Drop to import');
+    await user.click(screen.getByText('generation-profile'));
+    await waitFor(() => expect(onPreview).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByTestId('drop-zone')).not.toBeInTheDocument();
+    expect(screen.getByTestId('native-profile-drop-feedback')).toHaveTextContent('Drop to import');
   });
 
   it('summarizes install-only settings once without presenting restore-disabled resolutions', async () => {
@@ -395,6 +427,46 @@ describe('SetupFlow config generations', () => {
     expect(screen.queryByText('Older generation app')).not.toBeInTheDocument();
   });
 
+  it('resets restore consent before previewing a different profile', async () => {
+    const preview = {
+      installed: 1,
+      alreadyPresent: 0,
+      appEvents: [{
+        app: 'Vendor.Alpha',
+        action: 'To install',
+        name: 'Alpha package',
+        timestamp: 1,
+      }],
+      restoreModulesAvailable: [{ id: 'alpha', displayName: 'Alpha settings' }],
+    };
+    const onPreview = vi.fn().mockResolvedValue(preview);
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        profiles={[profile, otherProfile]}
+        onPreview={onPreview}
+      />,
+    );
+
+    await user.click(screen.getByText('generation-profile'));
+    await screen.findByText('Preview complete');
+    await user.click(screen.getByRole('radio', { name: /settings/i }));
+    await screen.findByRole('checkbox', { name: 'Alpha settings' });
+    await user.click(screen.getByRole('checkbox', { name: 'Alpha settings' }));
+
+    await user.click(screen.getByRole('button', { name: 'Back to profiles' }));
+    await user.click(screen.getByText('other-generation-profile'));
+
+    await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(3, otherProfile, {
+      restoreIntent: 'apps-only',
+    }));
+    await screen.findByText('Preview complete');
+    expect(screen.getByRole('radio', { name: /apps only/i })).toBeChecked();
+    expect(screen.queryByTestId('config-module-selector')).not.toBeInTheDocument();
+  });
+
   it('drops target mappings that belong to a deselected module', async () => {
     const onPreview = vi.fn().mockResolvedValue({
       installed: 2,
@@ -459,7 +531,7 @@ describe('SetupFlow config generations', () => {
     await user.click(screen.getByText('generation-profile'));
     await screen.findByText('Preview complete');
     await user.click(screen.getByRole('radio', { name: /settings/i }));
-    await user.click(screen.getByRole('checkbox', { name: 'Adobe Photoshop' }));
+    await user.click(await screen.findByRole('checkbox', { name: 'Adobe Photoshop' }));
     await user.click(screen.getByRole('checkbox', { name: 'Visual Studio Code' }));
 
     await user.click(screen.getByRole('combobox', { name: /target for photoshop-capture/i }));

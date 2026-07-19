@@ -5,7 +5,7 @@
  * Renders as a prominent drop area within the Set up flow.
  */
 
-import { useState, useCallback, useRef, useEffect, type DragEvent } from 'react';
+import { useState, useCallback, useEffect, useRef, type DragEvent } from 'react';
 import { motion } from 'framer-motion';
 import { Upload } from 'lucide-react';
 import { prefersReducedMotion } from '@/lib/motion';
@@ -13,60 +13,49 @@ import { prefersReducedMotion } from '@/lib/motion';
 const ACCEPTED_EXTENSIONS = ['.zip', '.json', '.jsonc', '.json5'];
 const ACCEPTED_INPUT = ACCEPTED_EXTENSIONS.join(',');
 
-/** Check if running inside the Tauri runtime */
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_IPC__' in window;
-}
-
 interface DropZoneProps {
   onFileDrop: (files: File[]) => void;
   /** In Tauri mode, use a native dialog instead of HTML file input */
   onBrowse?: () => void;
   disabled?: boolean;
+  /** Controlled native Tauri drag state. App owns the native listener. */
+  nativeDragAccepted?: boolean;
 }
 
-export function DropZone({ onFileDrop, onBrowse, disabled = false }: DropZoneProps) {
-  const [isDragOver, setIsDragOver] = useState(false);
+interface NativeProfileDropFeedbackProps {
+  visible: boolean;
+}
+
+export function NativeProfileDropFeedback({ visible }: NativeProfileDropFeedbackProps) {
+  if (!visible) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="fixed inset-x-6 bottom-6 z-50 flex items-center justify-center gap-2 rounded-xl border border-green-500/50 bg-background/95 px-5 py-4 text-sm font-medium text-green-500 shadow-lg backdrop-blur"
+      role="status"
+      data-testid="native-profile-drop-feedback"
+    >
+      <Upload className="h-4 w-4" aria-hidden="true" />
+      Drop to import
+    </motion.div>
+  );
+}
+
+export function DropZone({
+  onFileDrop,
+  onBrowse,
+  disabled = false,
+  nativeDragAccepted = false,
+}: DropZoneProps) {
+  const [browserDragAccepted, setBrowserDragAccepted] = useState(false);
   const reduced = prefersReducedMotion();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const tauriUnlistenRef = useRef<(() => void) | undefined>();
+  const isDragOver = !disabled && (browserDragAccepted || nativeDragAccepted);
 
-  // In Tauri, WebView2 intercepts file drag events at the OS level before they
-  // reach the DOM. Listen for Tauri's native drag-drop events to drive the
-  // isDragOver animation state, since HTML5 onDragOver/onDragLeave never fire.
   useEffect(() => {
-    if (!isTauri()) return;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-        if (cancelled) return;
-        const webview = getCurrentWebviewWindow();
-        const unlisten = await webview.onDragDropEvent((event) => {
-          if (disabled) return;
-          const t = event.payload.type;
-          if (t === 'enter' || t === 'over') {
-            setIsDragOver(true);
-          } else if (t === 'leave' || t === 'drop') {
-            setIsDragOver(false);
-          }
-        });
-        if (cancelled) {
-          unlisten();
-        } else {
-          tauriUnlistenRef.current = unlisten;
-        }
-      } catch {
-        // Tauri API unavailable
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      tauriUnlistenRef.current?.();
-      tauriUnlistenRef.current = undefined;
-    };
+    if (disabled) setBrowserDragAccepted(false);
   }, [disabled]);
 
   const isAcceptedFile = useCallback((file: File) => {
@@ -74,24 +63,40 @@ export function DropZone({ onFileDrop, onBrowse, disabled = false }: DropZonePro
     return ACCEPTED_EXTENSIONS.some(ext => name.endsWith(ext));
   }, []);
 
+  const hasAcceptedBrowserFile = useCallback((files?: FileList) => {
+    if (!files) return true;
+    const candidates = Array.from(files);
+    // Some browsers hide file names until drop. Preserve their native hover
+    // feedback when no inspectable files are exposed yet.
+    return candidates.length === 0 || candidates.some(isAcceptedFile);
+  }, [isAcceptedFile]);
+
+  const handleDragEnter = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!disabled) {
+      setBrowserDragAccepted(hasAcceptedBrowserFile(e.dataTransfer?.files));
+    }
+  }, [disabled, hasAcceptedBrowserFile]);
+
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     if (!disabled) {
-      setIsDragOver(true);
+      setBrowserDragAccepted(hasAcceptedBrowserFile(e.dataTransfer?.files));
     }
-  }, [disabled]);
+  }, [disabled, hasAcceptedBrowserFile]);
 
   const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(false);
+    setBrowserDragAccepted(false);
   }, []);
 
   const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(false);
+    setBrowserDragAccepted(false);
 
     if (disabled) return;
 
@@ -122,6 +127,7 @@ export function DropZone({ onFileDrop, onBrowse, disabled = false }: DropZonePro
   return (
     <motion.div
       onClick={handleClick}
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

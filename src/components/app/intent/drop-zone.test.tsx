@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders, screen, fireEvent } from '../../../test/test-utils';
-import { DropZone } from './drop-zone';
+import { DropZone, NativeProfileDropFeedback } from './drop-zone';
 
 function createFile(name: string): File {
   return new File(['content'], name, { type: 'application/octet-stream' });
@@ -196,5 +196,24 @@ describe('DropZone', () => {
     expect(input).toBeTruthy();
     expect(input.accept).toBe('.zip,.json,.jsonc,.json5');
     expect(input.getAttribute('aria-hidden')).toBe('true');
+  });
+});
+
+describe('NativeProfileDropFeedback', () => {
+  it('shows App-level landing feedback and clears with controlled state', () => {
+    const { rerender } = renderWithProviders(<NativeProfileDropFeedback visible />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Drop to import');
+
+    rerender(<NativeProfileDropFeedback visible={false} />);
+    expect(screen.queryByTestId('native-profile-drop-feedback')).not.toBeInTheDocument();
+  });
+
+  it('leaves no native feedback behind after its owning surface unmounts', () => {
+    const { unmount } = renderWithProviders(<NativeProfileDropFeedback visible />);
+    expect(screen.getByTestId('native-profile-drop-feedback')).toBeVisible();
+
+    unmount();
+    expect(screen.queryByTestId('native-profile-drop-feedback')).not.toBeInTheDocument();
   });
 });
