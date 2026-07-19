@@ -13,6 +13,13 @@ const profile = {
   isBundle: true,
 };
 
+const otherProfile = {
+  ...profile,
+  name: 'other-generation-profile',
+  path: 'C:\\profiles\\other-generation-profile.zip',
+  displayName: 'other-generation-profile',
+};
+
 function configResolution(
   overrides: Partial<ConfigResolution> & Pick<ConfigResolution, 'captureId' | 'resolution' | 'label'>,
 ): ConfigResolution {
@@ -28,6 +35,16 @@ function configResolution(
     remediation: null,
     ...overrides,
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 const baseProps = {
@@ -52,8 +69,205 @@ describe('SetupFlow config generations', () => {
     vi.clearAllMocks();
   });
 
-  it('keeps legacy consent unchecked and forwards only an explicit target mapping', async () => {
+  it('keeps native acceptance visible when previewing replaces the Setup drop zone', async () => {
+    const pending = deferred<{
+      installed: number;
+      alreadyPresent: number;
+      appEvents: [];
+    }>();
+    const onPreview = vi.fn().mockReturnValue(pending.promise);
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        onPreview={onPreview}
+        nativeDragAccepted
+      />,
+    );
+
+    expect(screen.getByTestId('drop-zone')).toHaveTextContent('Drop to import');
+    await user.click(screen.getByText('generation-profile'));
+    await waitFor(() => expect(onPreview).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByTestId('drop-zone')).not.toBeInTheDocument();
+    expect(screen.getByTestId('native-profile-drop-feedback')).toHaveTextContent('Drop to import');
+  });
+
+  it('summarizes install-only settings once without presenting restore-disabled resolutions', async () => {
     const onPreview = vi.fn().mockResolvedValue({
+      installed: 1,
+      alreadyPresent: 0,
+      appEvents: [{
+        app: 'Adobe.Photoshop',
+        action: 'To install',
+        name: 'Adobe Photoshop',
+        timestamp: 1,
+      }],
+      restoreModulesAvailable: [
+        { id: 'photoshop', displayName: 'Adobe Photoshop' },
+        { id: 'vscode', displayName: 'Visual Studio Code' },
+      ],
+      configResolutions: [
+        configResolution({
+          captureId: 'photoshop-disabled',
+          resolution: 'unknown',
+          label: 'Settings restore disabled',
+          message: 'Settings restore is not enabled for this invocation',
+        }),
+        configResolution({
+          captureId: 'vscode-disabled',
+          moduleId: 'apps.vscode',
+          resolution: 'unknown',
+          label: 'Settings restore disabled',
+          message: 'Settings restore is not enabled for this invocation',
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+
+    renderWithProviders(<SetupFlow {...baseProps} onPreview={onPreview} />);
+
+    await user.click(screen.getByText('generation-profile'));
+    await screen.findByText('Preview complete');
+
+    expect(onPreview).toHaveBeenCalledWith(profile, { restoreIntent: 'apps-only' });
+    expect(screen.getAllByText("2 settings are available but won't be restored")).toHaveLength(1);
+    expect(screen.queryByTestId('config-resolution-photoshop-disabled')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-vscode-disabled')).not.toBeInTheDocument();
+    expect(screen.queryByText('Settings restore is not enabled for this invocation')).not.toBeInTheDocument();
+  });
+
+  it('retries a failed settings preview without exposing stale configuration state', async () => {
+    const installOnlyPreview = {
+      installed: 1,
+      alreadyPresent: 0,
+      appEvents: [{ app: 'Vendor.Alpha', action: 'To install', name: 'Alpha package', timestamp: 1 }],
+      restoreModulesAvailable: [{ id: 'alpha', displayName: 'Alpha settings' }],
+    };
+    const recoveredSettingsPreview = {
+      ...installOnlyPreview,
+      configResolutions: [configResolution({
+        captureId: 'recovered-settings',
+        resolution: 'direct',
+        label: 'Recovered settings preview',
+      })],
+    };
+    const onPreview = vi.fn()
+      .mockResolvedValueOnce(installOnlyPreview)
+      .mockRejectedValueOnce(new Error('Settings preview unavailable'))
+      .mockResolvedValueOnce(recoveredSettingsPreview);
+    const user = userEvent.setup();
+
+    renderWithProviders(<SetupFlow {...baseProps} onPreview={onPreview} />);
+
+    await user.click(screen.getByText('generation-profile'));
+    await screen.findByText('Preview complete');
+    await user.click(screen.getByRole('radio', { name: /settings/i }));
+
+    expect(await screen.findByText('Settings preview unavailable')).toBeVisible();
+    expect(screen.queryByTestId('config-module-selector')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-recovered-settings')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue with apps only' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Retry settings preview' }));
+
+    await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(3, profile, {
+      restoreIntent: 'apps-and-settings',
+    }));
+    expect(await screen.findByRole('checkbox', { name: 'Alpha settings' })).not.toBeChecked();
+    expect(screen.getByText('Recovered settings preview')).toBeVisible();
+    expect(screen.queryByText('Settings preview unavailable')).not.toBeInTheDocument();
+  });
+
+  it('retries an engine-declared unsuccessful settings preview', async () => {
+    const installOnlyPreview = {
+      installed: 1,
+      alreadyPresent: 0,
+      appEvents: [{ app: 'Vendor.Alpha', action: 'To install', name: 'Alpha package', timestamp: 1 }],
+      restoreModulesAvailable: [{ id: 'alpha', displayName: 'Alpha settings' }],
+    };
+    const unsuccessfulSettingsPreview = {
+      ...installOnlyPreview,
+      success: false,
+      error: { code: 'SETTINGS_PREVIEW_FAILED', message: 'Engine settings preview failed' },
+      configResolutions: [configResolution({
+        captureId: 'failed-settings',
+        resolution: 'legacy_unverified',
+        label: 'Engine-authored settings warning',
+      })],
+    };
+    const onPreview = vi.fn()
+      .mockResolvedValueOnce(installOnlyPreview)
+      .mockResolvedValueOnce(unsuccessfulSettingsPreview)
+      .mockResolvedValueOnce(installOnlyPreview);
+    const user = userEvent.setup();
+
+    renderWithProviders(<SetupFlow {...baseProps} onPreview={onPreview} />);
+
+    await user.click(screen.getByText('generation-profile'));
+    await screen.findByText('Preview complete');
+    await user.click(screen.getByRole('radio', { name: /settings/i }));
+
+    expect(await screen.findByText('Preview completed with errors')).toBeVisible();
+    expect(screen.getByText('Engine settings preview failed')).toBeVisible();
+    expect(screen.getByText('Engine-authored settings warning')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Retry settings preview' }));
+
+    await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(3, profile, {
+      restoreIntent: 'apps-and-settings',
+    }));
+    expect(await screen.findByText('Preview complete')).toBeVisible();
+    expect(screen.queryByText('Engine settings preview failed')).not.toBeInTheDocument();
+  });
+
+  it('does not label a failed live Apply as a settings-preview retry', async () => {
+    const preview = {
+      installed: 1,
+      alreadyPresent: 0,
+      appEvents: [{ app: 'Vendor.Alpha', action: 'To install', name: 'Alpha package', timestamp: 1 }],
+      restoreModulesAvailable: [{ id: 'alpha', displayName: 'Alpha settings' }],
+    };
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        onPreview={vi.fn().mockResolvedValue(preview)}
+        onApply={vi.fn().mockRejectedValue(new Error('Live Apply unavailable'))}
+      />,
+    );
+
+    await user.click(screen.getByText('generation-profile'));
+    await screen.findByText('Preview complete');
+    await user.click(screen.getByRole('radio', { name: /settings/i }));
+    await user.click(await screen.findByRole('checkbox', { name: 'Alpha settings' }));
+    await user.click(screen.getByTestId('setup-flow-apply'));
+
+    expect(await screen.findByText('Live Apply unavailable')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Retry settings preview' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue with apps only' })).toBeVisible();
+  });
+
+  it('keeps legacy consent unchecked and forwards only an explicit target mapping', async () => {
+    const installOnlyPreview = {
+      installed: 1,
+      alreadyPresent: 0,
+      appEvents: [{
+        app: 'Adobe.Photoshop',
+        action: 'To install',
+        name: 'Adobe Photoshop',
+        timestamp: 1,
+      }],
+      restoreModulesAvailable: [{ id: 'photoshop', displayName: 'Adobe Photoshop' }],
+      configResolutions: [configResolution({
+        captureId: 'restore-disabled',
+        resolution: 'unknown',
+        label: 'Settings restore disabled',
+        message: 'Settings restore is not enabled for this invocation',
+      })],
+    };
+    const restoreEnabledPreview = {
       installed: 1,
       alreadyPresent: 0,
       appEvents: [{
@@ -98,7 +312,10 @@ describe('SetupFlow config generations', () => {
           ],
         }),
       ],
-    });
+    };
+    const onPreview = vi.fn()
+      .mockResolvedValueOnce(installOnlyPreview)
+      .mockResolvedValueOnce(restoreEnabledPreview);
     const onApply = vi.fn().mockResolvedValue({
       installed: 1,
       alreadyPresent: 0,
@@ -118,11 +335,16 @@ describe('SetupFlow config generations', () => {
 
     await user.click(screen.getByText('generation-profile'));
     await screen.findByText('Preview complete');
-    expect(screen.getByText('Engine legacy warning')).toBeInTheDocument();
+    expect(screen.queryByText('Engine legacy warning')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: /settings/i }));
+
+    await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(2, profile, {
+      restoreIntent: 'apps-and-settings',
+    }));
+    expect(await screen.findByText('Engine legacy warning')).toBeInTheDocument();
     expect(
       within(screen.getByTestId('config-resolution-legacy-capture')).getByText('Adobe Photoshop'),
     ).toBeVisible();
-    await user.click(screen.getByRole('radio', { name: /settings/i }));
 
     const legacyConsent = screen.getByRole('checkbox', { name: 'Adobe Photoshop' });
     expect(legacyConsent).not.toBeChecked();
@@ -143,6 +365,217 @@ describe('SetupFlow config generations', () => {
         targetInstanceId: 'photoshop-2025',
       }],
     });
+  });
+
+  it('refreshes both restore intents, blocks Apply while pending, and preserves stable app choices', async () => {
+    const installOnlyPreview = {
+      installed: 2,
+      alreadyPresent: 0,
+      appEvents: [
+        { app: 'Vendor.Alpha', action: 'To install', name: 'Alpha package', timestamp: 1 },
+        { app: 'Vendor.Bravo', action: 'To install', name: 'Bravo package', timestamp: 2 },
+      ],
+      actions: [
+        { type: 'install', id: 'alpha', ref: 'Vendor.Alpha', status: 'to_install', message: '' },
+        { type: 'install', id: 'bravo', ref: 'Vendor.Bravo', status: 'to_install', message: '' },
+      ],
+      restoreModulesAvailable: [{ id: 'photoshop', displayName: 'Catalog Photoshop' }],
+      configResolutions: [configResolution({
+        captureId: 'install-only-stale',
+        resolution: 'unknown',
+        label: 'Settings restore disabled',
+      })],
+    };
+    const restoreEnabledPreview = {
+      ...installOnlyPreview,
+      appEvents: [
+        { app: 'Vendor.Bravo', action: 'To install', name: 'Bravo package', timestamp: 3 },
+        { app: 'Vendor.Alpha', action: 'To install', name: 'Alpha package', timestamp: 4 },
+      ],
+      actions: [
+        { type: 'install', id: 'bravo', ref: 'Vendor.Bravo', status: 'to_install', message: '' },
+        { type: 'install', id: 'alpha', ref: 'Vendor.Alpha', status: 'to_install', message: '' },
+      ],
+      configModuleMap: { 'Vendor.Alpha': 'apps.photoshop' },
+      configResolutions: [configResolution({
+        captureId: 'restore-target',
+        resolution: 'unknown',
+        label: 'Choose an engine target',
+        reason: 'ambiguous_target_instance',
+        targetCandidates: [{
+          id: 'photoshop-current',
+          moduleId: 'apps.photoshop',
+          detectorId: 'photoshop-install',
+          rawVersion: '26.0',
+          normalizedVersion: '26.0.0',
+          evidence: { type: 'registry', appId: 'Vendor.Alpha' },
+          restoreModuleRevision: 'revision-restore',
+        }],
+      })],
+    };
+    const freshInstallOnlyPreview = {
+      ...installOnlyPreview,
+      appEvents: [
+        { app: 'Vendor.Alpha', action: 'To install', name: 'Fresh install-only Alpha', timestamp: 5 },
+        { app: 'Vendor.Bravo', action: 'To install', name: 'Fresh install-only Bravo', timestamp: 6 },
+      ],
+    };
+    const restorePending = deferred<typeof restoreEnabledPreview>();
+    const installOnlyPending = deferred<typeof freshInstallOnlyPreview>();
+    const onPreview = vi.fn()
+      .mockResolvedValueOnce(installOnlyPreview)
+      .mockReturnValueOnce(restorePending.promise)
+      .mockReturnValueOnce(installOnlyPending.promise);
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        onPreview={onPreview}
+        applyOnlySupported
+        restoreTargetSupported
+      />,
+    );
+
+    await user.click(screen.getByText('generation-profile'));
+    await screen.findByText('Preview complete');
+    await user.click(screen.getByTestId('app-picker-checkbox-bravo'));
+    expect(screen.getByTestId('app-picker-checkbox-alpha')).toBeChecked();
+    expect(screen.getByTestId('app-picker-checkbox-bravo')).not.toBeChecked();
+
+    await user.click(screen.getByRole('radio', { name: /settings/i }));
+
+    await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(2, profile, {
+      restoreIntent: 'apps-and-settings',
+    }));
+    expect(screen.getByTestId('setup-flow-apply')).toBeDisabled();
+    expect(screen.queryByTestId('config-module-selector')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-install-only-stale')).not.toBeInTheDocument();
+
+    await act(async () => {
+      restorePending.resolve(restoreEnabledPreview);
+    });
+
+    expect(await screen.findByRole('checkbox', { name: 'Catalog Photoshop' })).not.toBeChecked();
+    expect(screen.getByTestId('app-picker-checkbox-alpha')).toBeChecked();
+    expect(screen.getByTestId('app-picker-checkbox-bravo')).not.toBeChecked();
+    await user.click(screen.getByRole('checkbox', { name: 'Catalog Photoshop' }));
+    await user.click(screen.getByRole('combobox', { name: /target for restore-target/i }));
+    await user.click(screen.getByRole('option', { name: 'photoshop-current · 26.0' }));
+
+    await user.click(screen.getByRole('radio', { name: /apps only/i }));
+
+    await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(3, profile, {
+      restoreIntent: 'apps-only',
+    }));
+    expect(screen.getByTestId('setup-flow-apply')).toBeDisabled();
+    expect(screen.queryByTestId('config-module-selector')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-restore-target')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /target for restore-target/i })).not.toBeInTheDocument();
+
+    await act(async () => {
+      installOnlyPending.resolve(freshInstallOnlyPreview);
+    });
+
+    expect(await screen.findByText('Fresh install-only Alpha')).toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-install-only-stale')).not.toBeInTheDocument();
+  });
+
+  it('ignores an older same-profile install-only generation after a reset starts a newer one', async () => {
+    const older = deferred<{
+      installed: number;
+      alreadyPresent: number;
+      appEvents: Array<{ app: string; action: string; name: string; timestamp: number }>;
+    }>();
+    const newer = deferred<{
+      installed: number;
+      alreadyPresent: number;
+      appEvents: Array<{ app: string; action: string; name: string; timestamp: number }>;
+    }>();
+    const onPreview = vi.fn()
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(
+      <SetupFlow {...baseProps} onPreview={onPreview} resetKey={0} />,
+    );
+
+    await user.click(screen.getByText('generation-profile'));
+    await waitFor(() => expect(onPreview).toHaveBeenCalledTimes(1));
+
+    rerender(<SetupFlow {...baseProps} onPreview={onPreview} resetKey={1} />);
+    await user.click(await screen.findByText('generation-profile'));
+    await waitFor(() => expect(onPreview).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      newer.resolve({
+        installed: 1,
+        alreadyPresent: 0,
+        appEvents: [{
+          app: 'Vendor.Newest',
+          action: 'To install',
+          name: 'Newest generation app',
+          timestamp: 2,
+        }],
+      });
+    });
+    expect(await screen.findByText('Newest generation app')).toBeInTheDocument();
+
+    await act(async () => {
+      older.resolve({
+        installed: 1,
+        alreadyPresent: 0,
+        appEvents: [{
+          app: 'Vendor.Older',
+          action: 'To install',
+          name: 'Older generation app',
+          timestamp: 1,
+        }],
+      });
+    });
+
+    expect(screen.getByText('Newest generation app')).toBeInTheDocument();
+    expect(screen.queryByText('Older generation app')).not.toBeInTheDocument();
+  });
+
+  it('resets restore consent before previewing a different profile', async () => {
+    const preview = {
+      installed: 1,
+      alreadyPresent: 0,
+      appEvents: [{
+        app: 'Vendor.Alpha',
+        action: 'To install',
+        name: 'Alpha package',
+        timestamp: 1,
+      }],
+      restoreModulesAvailable: [{ id: 'alpha', displayName: 'Alpha settings' }],
+    };
+    const onPreview = vi.fn().mockResolvedValue(preview);
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        profiles={[profile, otherProfile]}
+        onPreview={onPreview}
+      />,
+    );
+
+    await user.click(screen.getByText('generation-profile'));
+    await screen.findByText('Preview complete');
+    await user.click(screen.getByRole('radio', { name: /settings/i }));
+    await screen.findByRole('checkbox', { name: 'Alpha settings' });
+    await user.click(screen.getByRole('checkbox', { name: 'Alpha settings' }));
+
+    await user.click(screen.getByTestId('setup-flow-back'));
+    await user.click(screen.getByText('other-generation-profile'));
+
+    await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(3, otherProfile, {
+      restoreIntent: 'apps-only',
+    }));
+    await screen.findByText('Preview complete');
+    expect(screen.getByRole('radio', { name: /apps only/i })).toBeChecked();
+    expect(screen.queryByTestId('config-module-selector')).not.toBeInTheDocument();
   });
 
   it('drops target mappings that belong to a deselected module', async () => {
@@ -209,7 +642,7 @@ describe('SetupFlow config generations', () => {
     await user.click(screen.getByText('generation-profile'));
     await screen.findByText('Preview complete');
     await user.click(screen.getByRole('radio', { name: /settings/i }));
-    await user.click(screen.getByRole('checkbox', { name: 'Adobe Photoshop' }));
+    await user.click(await screen.findByRole('checkbox', { name: 'Adobe Photoshop' }));
     await user.click(screen.getByRole('checkbox', { name: 'Visual Studio Code' }));
 
     await user.click(screen.getByRole('combobox', { name: /target for photoshop-capture/i }));

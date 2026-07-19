@@ -66,7 +66,7 @@ describe('SetupFlow — Restore module selection', () => {
     const appsAndSettingsRadio = screen.getByRole('radio', { name: /settings/i });
     await userEvent.click(appsAndSettingsRadio);
 
-    const selector = screen.getByTestId('config-module-selector');
+    const selector = await screen.findByTestId('config-module-selector');
     expect(selector).toBeInTheDocument();
     // Display names should match app event names, not raw module IDs
     expect(within(selector).getByText('Visual Studio Code')).toBeInTheDocument();
@@ -90,6 +90,7 @@ describe('SetupFlow — Restore module selection', () => {
     const appsAndSettingsRadio = screen.getByRole('radio', { name: /settings/i });
     await userEvent.click(appsAndSettingsRadio);
 
+    await screen.findByTestId('config-module-selector');
     const checkboxes = screen.getAllByRole('checkbox');
     checkboxes.forEach(cb => {
       expect(cb).not.toBeChecked();
@@ -156,11 +157,52 @@ describe('SetupFlow — Restore module selection', () => {
     await userEvent.click(appsAndSettingsRadio);
 
     // Check "Visual Studio Code" (display name from app event)
-    const vscodeCheckbox = screen.getByRole('checkbox', { name: /visual studio code/i });
+    const vscodeCheckbox = await screen.findByRole('checkbox', { name: /visual studio code/i });
     await userEvent.click(vscodeCheckbox);
 
     const applyButton = screen.getByTestId('setup-flow-apply');
     await userEvent.click(applyButton);
+
+    expect(onApply).toHaveBeenCalledWith(
+      mockProfile,
+      expect.objectContaining({
+        restoreIntent: 'apps-and-settings',
+        selectedModules: ['vscode'],
+      }),
+    );
+  });
+
+  it('can restore selected settings when every application is already present', async () => {
+    const previewResult = {
+      installed: 0,
+      alreadyPresent: 89,
+      appEvents: [
+        { app: 'Microsoft.VisualStudioCode', action: 'OK', name: 'Visual Studio Code', timestamp: 1 },
+      ],
+      restoreModulesAvailable: [{ id: 'vscode', displayName: 'Visual Studio Code' }],
+      configModuleMap: { 'Microsoft.VisualStudioCode': 'apps.vscode' } as Record<string, string>,
+    };
+    const onPreview = vi.fn().mockResolvedValue(previewResult);
+    const onApply = vi.fn().mockReturnValue(new Promise(() => {}));
+
+    renderWithProviders(
+      <SetupFlow {...baseProps} onPreview={onPreview} onApply={onApply} />
+    );
+
+    await userEvent.click(screen.getByText('test-profile'));
+    await screen.findByText('Preview complete');
+    expect(screen.queryByTestId('setup-flow-apply')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: /settings/i }));
+    const vscodeCheckbox = await screen.findByRole('checkbox', { name: /visual studio code/i });
+    expect(screen.queryByTestId('setup-flow-apply')).not.toBeInTheDocument();
+
+    await userEvent.click(vscodeCheckbox);
+    const applyButton = screen.getByTestId('setup-flow-apply');
+    expect(applyButton).toBeEnabled();
+    await userEvent.click(applyButton);
+
+    expect(screen.getByText('Applying setup...')).toBeVisible();
 
     expect(onApply).toHaveBeenCalledWith(
       mockProfile,
@@ -191,6 +233,7 @@ describe('SetupFlow — Restore module selection', () => {
     const appsAndSettingsRadio = screen.getByRole('radio', { name: /settings/i });
     await userEvent.click(appsAndSettingsRadio);
 
+    await screen.findByTestId('config-module-selector');
     const applyButton = screen.getByTestId('setup-flow-apply');
     await userEvent.click(applyButton);
 
@@ -224,13 +267,17 @@ describe('SetupFlow — Restore module selection', () => {
     await userEvent.click(appsAndSettingsRadio);
 
     // Check a module
-    const vscodeCheckbox = screen.getByRole('checkbox', { name: /visual studio code/i });
+    const vscodeCheckbox = await screen.findByRole('checkbox', { name: /visual studio code/i });
     await userEvent.click(vscodeCheckbox);
 
     // Switch back to apps-only
     const appsOnlyRadio = screen.getByRole('radio', { name: /apps only/i });
     await userEvent.click(appsOnlyRadio);
 
+    await waitFor(() => {
+      expect(onPreview).toHaveBeenCalledTimes(3);
+      expect(screen.getByRole('radio', { name: /apps only/i })).toBeChecked();
+    });
     const applyButton = screen.getByTestId('setup-flow-apply');
     await userEvent.click(applyButton);
 
@@ -270,7 +317,7 @@ describe('SetupFlow — Restore module selection', () => {
     await userEvent.click(appsAndSettingsRadio);
 
     // Uses engine-provided displayName
-    expect(screen.getByText('Some App')).toBeInTheDocument();
+    expect(await screen.findByText('Some App')).toBeInTheDocument();
   });
 
   it('select all button selects all modules', async () => {
@@ -291,7 +338,7 @@ describe('SetupFlow — Restore module selection', () => {
     await userEvent.click(appsAndSettingsRadio);
 
     // Click "Select all"
-    const toggleAll = screen.getByTestId('config-module-toggle-all');
+    const toggleAll = await screen.findByTestId('config-module-toggle-all');
     expect(toggleAll).toHaveTextContent('Select all');
     await userEvent.click(toggleAll);
 

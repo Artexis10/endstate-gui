@@ -12,6 +12,7 @@ import {
   type RestoreSummary,
   type RestoreModuleRef,
   type ApplyRestoreOptions,
+  type RestoreIntent,
 } from './types';
 import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration, clearSelectedProfile } from './settings';
 import { loadDraft, clearDraft } from './lib/draft-store';
@@ -41,7 +42,7 @@ import { EngineEnvelopeError } from './lib/engine-envelope-error';
 import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
-import { IntentLanding, SaveFlow, SetupFlow } from './components/app/intent';
+import { IntentLanding, NativeProfileDropFeedback, SaveFlow, SetupFlow } from './components/app/intent';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
 import { shouldDeleteCaptureArtifact } from './lib/capture-artifact-lifecycle';
@@ -123,6 +124,7 @@ type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 
 
 const MAX_LIVE_CONFIG_EVENTS = 2000;
 const PROFILE_IMPORT_BUSY_MESSAGE = 'Finish the current operation or setup review before importing another profile.';
+const PROFILE_IMPORT_NAVIGATION_MESSAGE = 'Finish importing this profile before leaving Setup.';
 
 interface AppState {
   status: AppStatus;
@@ -166,8 +168,21 @@ function AppContent() {
   const [saveFlowCompleted, setSaveFlowCompleted] = useState(false);
   const [saveFlowResetKey, setSaveFlowResetKey] = useState(0);
   const [setupFlowResetKey, setSetupFlowResetKey] = useState(0);
+  const [isProfileImporting, setIsProfileImportingState] = useState(false);
+  const isProfileImportingRef = useRef(isProfileImporting);
+  isProfileImportingRef.current = isProfileImporting;
+  const setIsProfileImporting = (importing: boolean) => {
+    isProfileImportingRef.current = importing;
+    setIsProfileImportingState(importing);
+  };
+  const blockProfileImportNavigation = () => {
+    if (!isProfileImportingRef.current) return false;
+    showToast(PROFILE_IMPORT_NAVIGATION_MESSAGE, 'info');
+    return true;
+  };
   // Navigation handler
   const handleNavigate = async (page: PageType) => {
+    if (page !== 'setup' && blockProfileImportNavigation()) return;
     // Remember flow page for direct back-navigation from settings/reports
     if ((currentPage === 'save' || currentPage === 'setup') && page !== 'landing' && page !== 'save' && page !== 'setup') {
       setPreviousPage(currentPage);
@@ -187,12 +202,8 @@ function AppContent() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   const [profilesDirectory, setProfilesDirectory] = useState('');
-  const [profileToOpen, setProfileToOpen] = useState<DiscoveredProfile | null>(null);
-  const pendingImportPreviewRef = useRef<{
-    importedPath: string;
-    resolve: () => void;
-    reject: (error: Error) => void;
-  } | null>(null);
+  const [recentlyImportedProfile, setRecentlyImportedProfile] = useState<DiscoveredProfile | null>(null);
+  const [nativeDragAccepted, setNativeDragAccepted] = useState(false);
   const profileImportCoordinatorRef = useRef(createProfileImportCoordinator());
   const [selectedProfile, setSelectedProfile] = useState('');
   const [selectedProfilePath, setSelectedProfilePath] = useState('');
@@ -640,6 +651,7 @@ function AppContent() {
   
   // Go back to previous page
   const handleBack = () => {
+    if (blockProfileImportNavigation()) return;
     if (previousPage) {
       setCurrentPage(previousPage);
       setPreviousPage(null);
@@ -694,24 +706,8 @@ function AppContent() {
       throw new Error('The imported file does not contain a supported Endstate profile');
     }
 
-    await new Promise<void>((resolve, reject) => {
-      if (pendingImportPreviewRef.current) {
-        reject(new Error('Another imported profile is still opening'));
-        return;
-      }
-      pendingImportPreviewRef.current = { importedPath, resolve, reject };
-      setProfileToOpen(importedProfile);
-    });
+    setRecentlyImportedProfile(importedProfile);
     showToast(`Imported ${fileName} — setup review ready`, 'success');
-  };
-
-  const settleImportedProfilePreview = (profile: DiscoveredProfile, error?: Error) => {
-    const pending = pendingImportPreviewRef.current;
-    if (!pending || !findImportedProfile([profile], pending.importedPath)) return;
-
-    pendingImportPreviewRef.current = null;
-    if (error) pending.reject(error);
-    else pending.resolve();
   };
 
   const handleOpenProfilesFolder = async () => {
@@ -789,9 +785,11 @@ function AppContent() {
       return;
     }
 
+    setIsProfileImporting(true);
     try {
       await operation();
     } finally {
+      setIsProfileImporting(false);
       lease.release();
     }
   };
@@ -899,14 +897,24 @@ function AppContent() {
   // Use refs to avoid stale closures and ensure proper async cleanup.
   const dragDropUnlistenRef = useRef<(() => void) | undefined>();
   const nativeProfileDropHandler = createNativeProfileDropHandler({
-    isRunning: () => isRunningRef.current,
+    isRunning: () => isRunningRef.current || isProfileImportingRef.current,
     coordinator: profileImportCoordinatorRef.current,
     openSetup: () => {
+      setSetupFlowResetKey((key) => key + 1);
+      setFlowHasWork((previous) => ({ ...previous, setup: false }));
       setCurrentPage('setup');
       setActiveFlowPage('setup');
     },
-    importPaths: importFilePaths,
+    importPaths: async (paths) => {
+      setIsProfileImporting(true);
+      try {
+        await importFilePaths(paths);
+      } finally {
+        setIsProfileImporting(false);
+      }
+    },
     onBlocked: () => showToast(PROFILE_IMPORT_BUSY_MESSAGE, 'error'),
+    setDragAccepted: setNativeDragAccepted,
   });
   const nativeProfileDropHandlerRef = useRef(nativeProfileDropHandler);
   nativeProfileDropHandlerRef.current = nativeProfileDropHandler;
@@ -935,6 +943,7 @@ function AppContent() {
 
     return () => {
       cancelled = true;
+      nativeProfileDropHandlerRef.current.dispose();
       dragDropUnlistenRef.current?.();
       dragDropUnlistenRef.current = undefined;
     };
@@ -1139,6 +1148,9 @@ function AppContent() {
     try {
       // Delete both setup and metadata files
       await deleteProfileFiles(deleteProfilePath);
+      if (recentlyImportedProfile?.path === deleteProfilePath) {
+        setRecentlyImportedProfile(null);
+      }
       
       // Refresh profiles to get updated list
       const dir = await loadProfilesDirectory();
@@ -1987,7 +1999,7 @@ function AppContent() {
     return { count: capturedCount, draftText, apps: appsList, appsIncluded: enrichedAppsIncluded, envelopeData };
   };
 
-  const handlePreviewFromOverview = async () => {
+  const handlePreviewFromOverview = async (restoreIntent: RestoreIntent = 'apps-only') => {
     // Use refs for immediate access (state may not have settled in async callbacks)
     const profileName = selectedProfileRef.current || selectedProfile;
     const profilePath = selectedProfilePathRef.current || selectedProfilePath;
@@ -2017,10 +2029,15 @@ function AppContent() {
     const previewAppEvents: AppEvent[] = [];
     let previewPhase: EnginePhase = 'apply';
     
+    const previewArgs = ['--profile', profilePath, '--dry-run'];
+    if (restoreIntent === 'apps-and-settings') {
+      previewArgs.push('--enable-restore');
+    }
+
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
       'apply',
-      ['--profile', profilePath, '--dry-run'],
+      previewArgs,
       (event: StreamEvent) => {
         // Collect raw output for Technical Details only
         if (event.type === 'stdout' || event.type === 'stderr') {
@@ -2569,7 +2586,7 @@ function AppContent() {
       // Ctrl+, opens Settings (emergency shortcut)
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault();
-        setCurrentPage('settings');
+        void handleNavigate('settings');
       }
     };
 
@@ -2958,10 +2975,8 @@ function AppContent() {
             {errorBanner}
             <SetupFlow
               profiles={profiles}
-              profileToOpen={profileToOpen}
-              onProfileToOpenConsumed={() => setProfileToOpen(null)}
-              onProfileToOpenPreviewed={(profile) => settleImportedProfilePreview(profile)}
-              onProfileToOpenPreviewFailed={(profile, error) => settleImportedProfilePreview(profile, error)}
+              recentlyImportedProfile={recentlyImportedProfile}
+              onRecentlyImportedConsumed={() => setRecentlyImportedProfile(null)}
               cloudBackupIndex={cloudEntryByKey}
               hostedBackupSupported={hostedBackupSupported}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
@@ -3039,9 +3054,9 @@ function AppContent() {
                     }
                   : undefined
               }
-              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, setup: false })); setSetupFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
+              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, setup: false })); setRecentlyImportedProfile(null); setNativeDragAccepted(false); setSetupFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={setupFlowResetKey}
-              onFlowReset={() => setFlowHasWork(prev => ({ ...prev, setup: false }))}
+              onFlowReset={() => { setFlowHasWork(prev => ({ ...prev, setup: false })); setRecentlyImportedProfile(null); }}
               onProfileSelect={(profile) => {
                 setProfileSelection(profile.name, profile.path);
                 updateSettings({ selectedProfileName: profile.name });
@@ -3049,6 +3064,8 @@ function AppContent() {
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
               onFileDrop={handleFileDrop}
+              profileImportActive={isProfileImporting}
+              nativeDragAccepted={nativeDragAccepted}
               onBrowse={isTauriRuntime() ? handleBrowseFiles : undefined}
               onDeleteProfile={(path: string, displayName: string) => {
                 setDeleteProfilePath(path);
@@ -3061,7 +3078,7 @@ function AppContent() {
               liveConfigEvents={liveConfigEvents}
               applyOnlySupported={applyOnlySupported}
               restoreTargetSupported={restoreTargetSupported}
-              onPreview={async (profile) => {
+              onPreview={async (profile, previewOptions) => {
                 setProfileSelection(profile.name, profile.path);
                 updateSettings({ selectedProfileName: profile.name });
                 setIsRunning(true);
@@ -3072,7 +3089,7 @@ function AppContent() {
                 setOverviewActionStatus('setup', 'running');
                 setOverviewActionProgress('setup', { message: 'Evaluating changes' });
                 try {
-                  const result = await handlePreviewFromOverview();
+                  const result = await handlePreviewFromOverview(previewOptions.restoreIntent);
                   setOverviewActionStatus('setup', result.success === false ? 'error' : 'success');
                   setFlowHasWork(prev => ({ ...prev, setup: true }));
                   return result;
@@ -3090,7 +3107,7 @@ function AppContent() {
                 setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
                 setOverviewRunningAction('setup');
                 setOverviewActionStatus('setup', 'running');
-                setOverviewActionProgress('setup', { message: 'Installing applications...' });
+                setOverviewActionProgress('setup', { message: 'Applying setup...' });
                 try {
                   const result = await handleApplyFromOverview(restoreOptions);
                   setOverviewActionStatus(
@@ -4147,12 +4164,15 @@ function AppContent() {
         {renderPage()}
       </AppShell>
 
+      <NativeProfileDropFeedback visible={nativeDragAccepted && currentPage !== 'setup'} />
+
       <CommandPalette
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
         onNavigate={handleNavigate}
         showBackupNav={hostedBackupSupported}
         onUndoSettings={() => {
+          if (blockProfileImportNavigation()) return;
           setSetupPendingUndo(true);
           setCurrentPage('setup');
         }}

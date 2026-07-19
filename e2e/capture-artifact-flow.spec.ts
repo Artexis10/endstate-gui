@@ -70,7 +70,7 @@ async function installConnectedJourneyFixture(page: Page) {
     const state = {
       captureBase64: bundleBase64,
       importedBase64: null as string | null,
-      previewArgs: null as string[] | null,
+      previewArgs: [] as string[][],
       applyArgs: null as string[] | null,
       revertArgs: [] as string[][],
       restoreJournal: null as string | null,
@@ -176,9 +176,9 @@ async function installConnectedJourneyFixture(page: Page) {
         const item = appItem(isPreview ? 'to_install' : 'installed');
         options?.onNdjsonEvent?.(item);
         if (isPreview) {
-          state.previewArgs = [...args];
+          state.previewArgs.push([...args]);
         } else {
-          if (!state.previewArgs) {
+          if (state.previewArgs.length === 0) {
             throw new Error('Connected journey cannot apply before preview');
           }
           if (!args.includes('--enable-restore') || !args.includes('--restore-filter') || !args.includes(moduleId)) {
@@ -435,9 +435,15 @@ test.describe('capture artifact flow regression', () => {
       buffer: downloadedBytes,
     });
 
-    await expect(page.getByText('Preview complete')).toBeVisible();
     await expect(page.getByText(`Imported ${download.suggestedFilename()} — setup review ready`)).toBeVisible();
+    const importedCard = page.getByTestId(`profile-card-${bundleFixture.manifest.name}`);
+    await expect(importedCard.getByText('Imported', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__test_connectedJourney.previewArgs)).toEqual([]);
+
+    await importedCard.getByRole('button', { name: 'Review setup' }).click();
+    await expect(page.getByText('Preview complete')).toBeVisible();
     await page.getByRole('radio', { name: 'Install apps and restore settings' }).click();
+    await expect(page.getByRole('checkbox', { name: connectedSettingsDisplayName })).toBeVisible();
     await page.getByRole('checkbox', { name: connectedSettingsDisplayName }).click();
     await page.getByTestId('setup-flow-apply').click();
 
@@ -453,7 +459,8 @@ test.describe('capture artifact flow regression', () => {
     const journey = await page.evaluate(() => (window as any).__test_connectedJourney);
     expect(journey.importedBase64).toBe(connectedJourneyBundle.toString('base64'));
     expect(journey.previewArgs).toEqual([
-      '--profile', bundleFixture.manifestPath, '--dry-run',
+      ['--profile', bundleFixture.manifestPath, '--dry-run'],
+      ['--profile', bundleFixture.manifestPath, '--dry-run', '--enable-restore'],
     ]);
     expect(journey.applyArgs).toEqual([
       '--profile', bundleFixture.manifestPath,
@@ -462,7 +469,7 @@ test.describe('capture artifact flow regression', () => {
     expect(journey.revertArgs).toEqual([['--dry-run'], []]);
   });
 
-  test('imports a v2 capture bundle and opens setup review', async ({ page }) => {
+  test('imports a v2 capture bundle and waits for explicit setup review', async ({ page }) => {
     const capture = bundleFixture.manifest.configCaptures[0];
     const payloadEntry = capture.payloadManifest[0];
     const payload = bundleFixture.bundleFiles[`${capture.payloadRoot}/${payloadEntry.relativePath}`];
@@ -478,18 +485,25 @@ test.describe('capture artifact flow regression', () => {
       buffer: Buffer.from('mocked capture bundle; extraction is supplied by the semantic bridge fixture'),
     });
 
-    await expect(page.getByText(`Imported ${bundleFixture.fileName} — setup review ready`)).toHaveCount(0);
-    await expect(page.getByText('Preview complete')).toBeVisible();
     await expect(page.getByText(`Imported ${bundleFixture.fileName} — setup review ready`)).toBeVisible();
+    const importedCard = page.getByTestId(`profile-card-${bundleFixture.manifest.name}`);
+    await expect(importedCard.getByText('Imported', { exact: true })).toBeVisible();
+    await expect(importedCard.getByRole('button', { name: 'Review setup' })).toBeVisible();
+    await expect(page.getByText('Preview complete')).toHaveCount(0);
+
+    expect(await page.evaluate(() => (window as any).__test_applyCalls as string[][])).toEqual([]);
+
+    await importedCard.getByRole('button', { name: 'Review setup' }).click();
+    await expect(page.getByText('Preview complete')).toBeVisible();
     await expect(page.getByText(/Setting up from capture-v2/)).toBeVisible();
 
     const applyCalls = await page.evaluate(() => (window as any).__test_applyCalls as string[][]);
-    expect(applyCalls).toHaveLength(1);
-    expect(applyCalls[0]).toContain(bundleFixture.manifestPath);
-    expect(applyCalls[0]).toContain('--dry-run');
+    expect(applyCalls).toEqual([[
+      '--profile', bundleFixture.manifestPath, '--dry-run',
+    ]]);
   });
 
-  test('does not report import success when setup preview rejects the bundle', async ({ page }) => {
+  test('keeps a completed import when explicit setup preview rejects the bundle', async ({ page }) => {
     await page.evaluate(() => { (window as any).__test_failPreview = true; });
     await page.getByTestId('intent-setup').click();
     await page.locator('[data-testid="drop-zone"] input[type="file"]').setInputFiles({
@@ -498,9 +512,16 @@ test.describe('capture artifact flow regression', () => {
       buffer: Buffer.from('mocked rejected capture bundle'),
     });
 
+    await expect(page.getByText(`Imported ${bundleFixture.fileName} — setup review ready`)).toBeVisible();
+    const importedCard = page.getByTestId(`profile-card-${bundleFixture.manifest.name}`);
+    await expect(importedCard.getByText('Imported', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Failed to import capture-v2\.zip/)).toHaveCount(0);
+
+    await importedCard.getByRole('button', { name: 'Review setup' }).click();
     await expect(page.getByText('Engine rejected capture provenance', { exact: true })).toBeVisible();
-    await expect(page.getByText(`Imported ${bundleFixture.fileName} — setup review ready`)).toHaveCount(0);
-    await expect(page.getByText(/Failed to import capture-v2\.zip/)).toBeVisible();
+    await page.getByTestId('setup-flow-back').click();
+    await expect(page.getByTestId(`profile-card-${bundleFixture.manifest.name}`)).toBeVisible();
+    await expect(page.getByText(/Failed to import capture-v2\.zip/)).toHaveCount(0);
   });
 
   test('stages browser manifest imports through the transactional command', async ({ page }) => {
@@ -512,8 +533,59 @@ test.describe('capture artifact flow regression', () => {
     });
 
     await expect(page.getByText('Imported portable-profile.jsonc — setup review ready')).toBeVisible();
+    const importedCard = page.getByTestId('profile-card-portable-profile');
+    await expect(importedCard.getByText('Imported', { exact: true })).toBeVisible();
+    await expect(importedCard.getByRole('button', { name: 'Review setup' })).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__test_applyCalls as string[][])).toEqual([]);
     const operations = await page.evaluate(() => (window as any).__test_operations as Array<{ type: string }>);
     expect(operations.filter((operation) => operation.type === 'import_profile_text')).toHaveLength(1);
     expect(operations.filter((operation) => operation.type === 'write_text_file')).toHaveLength(0);
+  });
+
+  test('shows browser drag acceptance and imports supported files once in supplied order', async ({ page }) => {
+    await page.getByTestId('intent-setup').click();
+    const dropZone = page.getByTestId('drop-zone');
+    const dataTransfer = await page.evaluateHandle(() => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(
+        ['{"version":1,"name":"first-profile","apps":[]}'],
+        'first-profile.jsonc',
+        { type: 'application/json' },
+      ));
+      transfer.items.add(new File(
+        ['{"version":1,"name":"second-profile","apps":[]}'],
+        'second-profile.jsonc',
+        { type: 'application/json' },
+      ));
+      return transfer;
+    });
+
+    await dropZone.dispatchEvent('dragenter', { dataTransfer });
+    await dropZone.dispatchEvent('dragover', { dataTransfer });
+    await expect(dropZone.getByText('Drop to import', { exact: true })).toBeVisible();
+
+    await dropZone.dispatchEvent('dragleave', { dataTransfer });
+    await expect(dropZone.getByText('Click to browse or drop a file', { exact: true })).toBeVisible();
+
+    await dropZone.dispatchEvent('dragenter', { dataTransfer });
+    await dropZone.dispatchEvent('dragover', { dataTransfer });
+    await dropZone.dispatchEvent('drop', { dataTransfer });
+
+    await expect(page.getByText('Imported second-profile.jsonc — setup review ready')).toBeVisible();
+    await expect(dropZone.getByText('Click to browse or drop a file', { exact: true })).toBeVisible();
+    const importedPaths = await page.evaluate(() => (
+      (window as any).__test_operations as Array<{ type: string; path?: string }>
+    )
+      .filter((operation) => operation.type === 'import_profile_text')
+      .map((operation) => operation.path));
+    expect(importedPaths).toEqual([
+      'C:\\test\\profiles\\first-profile.jsonc',
+      'C:\\test\\profiles\\second-profile.jsonc',
+    ]);
+    await expect(
+      page.getByTestId('profile-card-second-profile').getByText('Imported', { exact: true }),
+    ).toBeVisible();
+
+    await dataTransfer.dispose();
   });
 });

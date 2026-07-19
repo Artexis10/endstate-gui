@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Applications that are config-only (detected settings without an installable component) are visually distinct in the GUI. They appear in a separate "Settings detected for:" section, not interleaved with installable capabilities.
+Applications that are config-only (detected settings without an installable component) are visually distinct in the GUI and remain separated from installable capabilities.
 
 ## Requirements
 

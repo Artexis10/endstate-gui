@@ -22,6 +22,9 @@ export default defineConfig({
         'src/lib/tauri-bridge.ts',
         'src/lib/http-bridge.ts',
         'src/lib/clipboard.ts',
+        // App is exercised by integration tests and Playwright. It was never part
+        // of the unit baseline until the native-drop integration test imported it.
+        'src/App.tsx',
       ],
       thresholds: {
         lines: 78,

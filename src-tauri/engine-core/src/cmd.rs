@@ -1393,6 +1393,16 @@ pub fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
     };
     let version_num = match version.as_i64() {
         Some(v) => v,
+        None if version.is_number() => {
+            return ValidationResult {
+                valid: false,
+                errors: vec![ValidationError {
+                    code: "UNSUPPORTED_VERSION".to_string(),
+                    message: format!("Unsupported profile version: {} (supported: 1, 2)", version),
+                }],
+                summary: None,
+            };
+        }
         None => {
             return ValidationResult {
                 valid: false,
@@ -1452,7 +1462,6 @@ pub fn validate_profile_object(json: &serde_json::Value) -> ValidationResult {
     };
     let apps_array = match apps.as_array() {
         Some(a) => a,
-        None if apps.is_null() => &vec![],
         None => {
             return ValidationResult {
                 valid: false,
@@ -2138,17 +2147,39 @@ mod profile_validation_tests {
     }
 
     #[test]
-    fn rejects_fractional_and_string_profile_versions() {
-        for version in [json!(2.5), json!("2")] {
-            let result = validate_profile_object(&json!({
-                "version": version,
-                "name": "invalid",
-                "apps": []
-            }));
+    fn rejects_fractional_profile_version_as_unsupported() {
+        let result = validate_profile_object(&json!({
+            "version": 2.5,
+            "name": "invalid",
+            "apps": []
+        }));
 
-            assert!(!result.valid, "accepted version {version}");
-            assert_eq!(result.errors[0].code, "INVALID_VERSION_TYPE");
-        }
+        assert!(!result.valid);
+        assert_eq!(result.errors[0].code, "UNSUPPORTED_VERSION");
+    }
+
+    #[test]
+    fn rejects_non_numeric_profile_version_as_invalid_type() {
+        let result = validate_profile_object(&json!({
+            "version": "2",
+            "name": "invalid",
+            "apps": []
+        }));
+
+        assert!(!result.valid);
+        assert_eq!(result.errors[0].code, "INVALID_VERSION_TYPE");
+    }
+
+    #[test]
+    fn rejects_null_apps_as_invalid_type() {
+        let result = validate_profile_object(&json!({
+            "version": 1,
+            "name": "invalid",
+            "apps": null
+        }));
+
+        assert!(!result.valid);
+        assert_eq!(result.errors[0].code, "INVALID_APPS_TYPE");
     }
 
     #[test]

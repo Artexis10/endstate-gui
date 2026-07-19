@@ -14,7 +14,7 @@ import { FilterChip } from '@/components/ui/filter-chip';
 import { NavButton } from '@/components/ui/nav-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DetailsDisclosure } from '@/components/ui/details-disclosure';
-import { DropZone } from './drop-zone';
+import { DropZone, NativeProfileDropFeedback } from './drop-zone';
 import { prefersReducedMotion, DURATIONS, EASING } from '@/lib/motion';
 import type { DiscoveredProfile } from '@/file-discovery';
 import type {
@@ -81,6 +81,10 @@ interface PreviewResult {
   configResolutions?: ConfigResolution[];
   configResolutionSummary?: ConfigResolutionSummary;
   warnings?: CommandWarning[];
+}
+
+export interface SetupPreviewOptions {
+  restoreIntent: RestoreIntent;
 }
 
 /**
@@ -196,19 +200,19 @@ interface ApplyResult {
 
 export interface SetupFlowProps {
   profiles: DiscoveredProfile[];
-  /** Newly imported profile that should open directly in setup review. */
-  profileToOpen?: DiscoveredProfile | null;
-  /** Clears the one-shot imported profile handoff after it is consumed. */
-  onProfileToOpenConsumed?: () => void;
-  /** Fires after the imported profile preview is committed to the review UI. */
-  onProfileToOpenPreviewed?: (profile: DiscoveredProfile) => void;
-  /** Fires after an imported profile preview failure is committed to the UI. */
-  onProfileToOpenPreviewFailed?: (profile: DiscoveredProfile, error: Error) => void;
+  /** Exact newly imported profile shown in browse until Review setup is explicit. */
+  recentlyImportedProfile?: DiscoveredProfile | null;
+  /** Clears the one-shot imported treatment after review or lifecycle reset. */
+  onRecentlyImportedConsumed?: () => void;
   onBack: () => void;
   onProfileSelect: (profile: DiscoveredProfile) => void;
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
   onFileDrop: (files: File[]) => void;
+  /** Import is staging/validating and must remain on the visible profile list. */
+  profileImportActive?: boolean;
+  /** Native Tauri drag acceptance owned by App. */
+  nativeDragAccepted?: boolean;
   /** Native file browse (Tauri mode only) */
   onBrowse?: () => void;
   onDeleteProfile: (path: string, displayName: string) => void;
@@ -217,7 +221,7 @@ export interface SetupFlowProps {
   setupProgress: { message: string; detail?: string } | null;
   liveAppEvents: AppEvent[];
   liveConfigEvents?: ConfigProgressEvent[];
-  onPreview: (profile: DiscoveredProfile) => Promise<PreviewResult>;
+  onPreview: (profile: DiscoveredProfile, options: SetupPreviewOptions) => Promise<PreviewResult>;
   /**
    * `onlyAppIds` is present ONLY when the per-app picker is active and the
    * user selected a strict subset — the caller passes them as
@@ -275,15 +279,15 @@ export interface SetupFlowProps {
 
 export function SetupFlow({
   profiles,
-  profileToOpen,
-  onProfileToOpenConsumed,
-  onProfileToOpenPreviewed,
-  onProfileToOpenPreviewFailed,
+  recentlyImportedProfile,
+  onRecentlyImportedConsumed,
   onBack,
   onProfileSelect,
   onOpenProfilesFolder,
   onRefreshProfiles,
   onFileDrop,
+  profileImportActive = false,
+  nativeDragAccepted = false,
   onBrowse,
   onDeleteProfile,
   isRunning,
@@ -328,10 +332,14 @@ export function SetupFlow({
   const [undoDryRunData, setUndoDryRunData] = useState<EndstateRevertData | null>(null);
   const [undoExecuteData, setUndoExecuteData] = useState<EndstateRevertData | null>(null);
   const [undoError, setUndoError] = useState('');
-  const importedPreviewRef = useRef<{
-    profile: DiscoveredProfile;
-    error?: Error;
+  const previewGenerationRef = useRef(0);
+  const activePreviewRef = useRef<{
+    profilePath: string;
+    restoreIntent: RestoreIntent;
+    generation: number;
   } | null>(null);
+  const selectedAppIdsProfileRef = useRef<string | null>(null);
+  const recentlyImportedCardRef = useRef<HTMLDivElement | null>(null);
   const previewModuleDisplayNames = moduleDisplayNameMap(
     previewResult?.restoreModulesAvailable,
   );
@@ -340,10 +348,17 @@ export function SetupFlow({
       ? applyResult.restoreModulesAvailable
       : previewResult?.restoreModulesAvailable,
   );
+  const reduced = prefersReducedMotion();
+  const transition = reduced
+    ? { duration: 0.01 }
+    : { duration: DURATIONS.normal, ease: EASING.easeInOut };
+  const interactionBlocked = isRunning || profileImportActive;
 
   // Reset internal state when resetKey changes (parent signals a fresh start)
   useEffect(() => {
     if (resetKey !== undefined && resetKey > 0) {
+      previewGenerationRef.current += 1;
+      activePreviewRef.current = null;
       setPhase('browse');
       setSelectedProfile(null);
       setPreviewResult(null);
@@ -355,15 +370,18 @@ export function SetupFlow({
       setSelectedModules([]);
       setRestoreTargets([]);
       setSelectedAppIds(new Set());
+      selectedAppIdsProfileRef.current = null;
       setUndoDryRunData(null);
       setUndoExecuteData(null);
       setUndoError('');
     }
   }, [resetKey]);
-  const reduced = prefersReducedMotion();
-  const transition = reduced
-    ? { duration: 0.01 }
-    : { duration: DURATIONS.normal, ease: EASING.easeInOut };
+
+  useEffect(() => {
+    if (!recentlyImportedProfile || phase !== 'browse') return;
+    const card = recentlyImportedCardRef.current;
+    card?.scrollIntoView?.({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+  }, [phase, recentlyImportedProfile, reduced]);
 
   const toggleFilter = (key: string) => {
     setActiveFilters(prev => {
@@ -402,70 +420,71 @@ export function SetupFlow({
     }
   };
 
-  const handleSelectProfile = (profile: DiscoveredProfile, imported = false) => {
-    setSelectedProfile(profile);
-    onProfileSelect(profile);
-    if (imported) importedPreviewRef.current = { profile };
-    // Auto-start preview when a profile is selected
-    handlePreview(profile);
+  const previewIsActive = (
+    profile: DiscoveredProfile,
+    intent: RestoreIntent,
+    generation: number,
+  ) => {
+    const active = activePreviewRef.current;
+    return active?.profilePath === profile.path
+      && active.restoreIntent === intent
+      && active.generation === generation;
   };
 
-  const handlePreview = async (profile: DiscoveredProfile) => {
+  const handleSelectProfile = (profile: DiscoveredProfile) => {
+    setSelectedProfile(profile);
+    onProfileSelect(profile);
+    setRestoreIntent('apps-only');
+    setSelectedModules([]);
+    setRestoreTargets([]);
+    selectedAppIdsProfileRef.current = null;
+    setSelectedAppIds(new Set());
+    void handlePreview(profile, 'apps-only');
+  };
+
+  const handlePreview = async (profile: DiscoveredProfile, intent: RestoreIntent) => {
+    const generation = previewGenerationRef.current + 1;
+    previewGenerationRef.current = generation;
+    activePreviewRef.current = {
+      profilePath: profile.path,
+      restoreIntent: intent,
+      generation,
+    };
     setPhase('previewing');
     setPreviewResult(null);
     setApplyResult(null);
     setErrorMessage('');
     setErrorRemediation(null);
     setActiveFilters(new Set());
-    setRestoreIntent('apps-only');
     setSelectedModules([]);
     setRestoreTargets([]);
     try {
-      const result = await onPreview(profile);
+      const result = await onPreview(profile, { restoreIntent: intent });
+      if (!previewIsActive(profile, intent, generation)) return;
       setPreviewResult(result);
-      if (result.success === false && importedPreviewRef.current?.profile.path === profile.path) {
-        importedPreviewRef.current.error = new Error(
-          result.error?.message || 'Preview completed with errors',
-        );
-      }
-      // Picker default: everything checked (identical to an unfiltered apply).
-      setSelectedAppIds(new Set(selectablePickerIds(result.actions)));
+      const pickerIds = selectablePickerIds(result.actions);
+      const isSameProfile = selectedAppIdsProfileRef.current === profile.path;
+      setSelectedAppIds((current) => {
+        if (!isSameProfile) {
+          return new Set(pickerIds);
+        }
+        return new Set(pickerIds.filter((id) => current.has(id)));
+      });
+      selectedAppIdsProfileRef.current = profile.path;
       setPhase('preview-done');
     } catch (err) {
+      if (!previewIsActive(profile, intent, generation)) return;
       const previewError = err instanceof Error ? err : new Error('Preview failed');
-      if (importedPreviewRef.current?.profile.path === profile.path) {
-        importedPreviewRef.current.error = previewError;
-      }
       setErrorMessage(previewError.message);
       setErrorRemediation(err instanceof EngineEnvelopeError ? err.remediation ?? null : null);
       setPhase('error');
     }
   };
 
-  useEffect(() => {
-    const importedPreview = importedPreviewRef.current;
-    if (!importedPreview) return;
-
-    if (phase === 'preview-done' && previewResult && !importedPreview.error) {
-      importedPreviewRef.current = null;
-      onProfileToOpenPreviewed?.(importedPreview.profile);
-    } else if (
-      (phase === 'error' || phase === 'preview-done')
-      && importedPreview.error
-    ) {
-      importedPreviewRef.current = null;
-      onProfileToOpenPreviewFailed?.(importedPreview.profile, importedPreview.error);
-    }
-  }, [phase, previewResult, onProfileToOpenPreviewed, onProfileToOpenPreviewFailed]);
-
-  useEffect(() => {
-    if (!profileToOpen) return;
-    onProfileToOpenConsumed?.();
-    handleSelectProfile(profileToOpen, true);
-    // The profile object is a one-shot handoff. Re-running because callback
-    // identities changed would start the engine preview twice.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileToOpen]);
+  const handleReviewImportedProfile = (profile: DiscoveredProfile) => {
+    onRecentlyImportedConsumed?.();
+    handleSelectProfile(profile);
+  };
 
   const handleApply = async () => {
     if (!selectedProfile) return;
@@ -516,6 +535,8 @@ export function SetupFlow({
   };
 
   const handleBackToProfiles = () => {
+    previewGenerationRef.current += 1;
+    activePreviewRef.current = null;
     setPhase('browse');
     setSelectedProfile(null);
     setPreviewResult(null);
@@ -526,6 +547,7 @@ export function SetupFlow({
     setSelectedModules([]);
     setRestoreTargets([]);
     setSelectedAppIds(new Set());
+    selectedAppIdsProfileRef.current = null;
     setUndoDryRunData(null);
     setUndoExecuteData(null);
     setUndoError('');
@@ -620,7 +642,7 @@ export function SetupFlow({
         onClick={phase === 'browse' ? onBack : handleBackToProfiles}
         className="mb-6"
         data-testid="setup-flow-back"
-        disabled={phase === 'previewing' || phase === 'applying' || phase === 'undo-checking' || phase === 'undo-running'}
+        disabled={profileImportActive || phase === 'previewing' || phase === 'applying' || phase === 'undo-checking' || phase === 'undo-running'}
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         {phase === 'browse' ? 'Back' : 'Back to profiles'}
@@ -653,6 +675,8 @@ export function SetupFlow({
         )}
       </div>
 
+      <NativeProfileDropFeedback visible={nativeDragAccepted && phase !== 'browse'} />
+
       <AnimatePresence mode="wait">
         {/* Browse: Drop zone + Profile list */}
         {phase === 'browse' && (
@@ -674,14 +698,14 @@ export function SetupFlow({
               cloudBackupIndex.size > 0 && (
                 <Card
                   className="mb-4 cursor-pointer border-primary/30 bg-primary/5 hover:border-primary/60 hover:shadow-md transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  onClick={() => !isRunning && onRestoreFromCloud()}
+                  onClick={() => !interactionBlocked && onRestoreFromCloud()}
                   onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ' ') && !isRunning) {
+                    if ((e.key === 'Enter' || e.key === ' ') && !interactionBlocked) {
                       e.preventDefault();
                       onRestoreFromCloud();
                     }
                   }}
-                  tabIndex={isRunning ? -1 : 0}
+                  tabIndex={interactionBlocked ? -1 : 0}
                   role="button"
                   aria-label="Restore from your Hosted Backup"
                   data-testid="setup-restore-from-cloud-cta"
@@ -707,7 +731,24 @@ export function SetupFlow({
 
             {/* Drop zone for import */}
             <div className="mb-8">
-              <DropZone onFileDrop={onFileDrop} onBrowse={onBrowse} disabled={isRunning} />
+              {profileImportActive && (
+                <div
+                  className="mb-3 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3"
+                  role="status"
+                  data-testid="profile-import-progress"
+                >
+                  <p className="text-sm font-medium text-green-500">Importing profile…</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Validating and adding it to your setup list.
+                  </p>
+                </div>
+              )}
+              <DropZone
+                onFileDrop={onFileDrop}
+                onBrowse={onBrowse}
+                disabled={interactionBlocked}
+                nativeDragAccepted={nativeDragAccepted}
+              />
             </div>
 
             {/* Profile list */}
@@ -723,12 +764,12 @@ export function SetupFlow({
                     <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
                     Open folder
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
+                  <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing || interactionBlocked}>
                     <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
                     Refresh
                   </Button>
                   {onUndoDryRun && (
-                    <Button variant="ghost" size="sm" onClick={handleStartUndo}>
+                    <Button variant="ghost" size="sm" onClick={handleStartUndo} disabled={interactionBlocked}>
                       <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
                       Undo changes
                     </Button>
@@ -740,21 +781,26 @@ export function SetupFlow({
                 <div className="grid gap-3">
                   {profiles.map((profile) => {
                     const cloudEntry = cloudBackupIndex?.get(profileKeyFor(profile));
+                    const isRecentlyImported = recentlyImportedProfile?.path === profile.path;
                     const showSecondaryName =
                       !!profile.displayName && profile.displayName !== profile.name;
                     return (
                     <Card
                       key={profile.name}
-                      className="cursor-pointer hover:border-green-500/50 hover:shadow-md transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-green-500/50"
-                      onClick={() => handleSelectProfile(profile)}
+                      ref={isRecentlyImported ? recentlyImportedCardRef : undefined}
+                      className={`${isRecentlyImported ? 'border-green-500/50 shadow-sm' : 'cursor-pointer hover:border-green-500/50 hover:shadow-md'} transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-green-500/50`}
+                      onClick={() => {
+                        if (!isRecentlyImported && !interactionBlocked) handleSelectProfile(profile);
+                      }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
+                        if (!isRecentlyImported && !interactionBlocked && (e.key === 'Enter' || e.key === ' ')) {
                           e.preventDefault();
                           handleSelectProfile(profile);
                         }
                       }}
-                      tabIndex={0}
-                      role="button"
+                      tabIndex={isRecentlyImported || interactionBlocked ? undefined : 0}
+                      role={isRecentlyImported ? undefined : 'button'}
+                      aria-disabled={interactionBlocked || undefined}
                       data-testid={`profile-card-${profile.name}`}
                     >
                       <CardContent className="py-4 px-5">
@@ -764,6 +810,11 @@ export function SetupFlow({
                               <p className="text-sm font-medium truncate leading-5">
                                 {profile.displayName || profile.name}
                               </p>
+                              {isRecentlyImported && (
+                                <span className="rounded border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-500">
+                                  Imported
+                                </span>
+                              )}
                               <ProfileStorageChip
                                 cloudEntry={cloudEntry}
                                 testId={`profile-card-${profile.name}-storage-chip`}
@@ -801,6 +852,7 @@ export function SetupFlow({
                                       profile.displayName || profile.name,
                                     );
                                   }}
+                                  disabled={interactionBlocked}
                                   className="mt-1 gap-1 text-xs"
                                   data-testid={`profile-card-${profile.name}-push-to-cloud`}
                                 >
@@ -813,7 +865,9 @@ export function SetupFlow({
                             <Button
                               variant="ghost"
                               size="sm"
-                              tabIndex={-1}
+                              tabIndex={isRecentlyImported ? 0 : -1}
+                              aria-label={`Delete ${profile.displayName || profile.name}`}
+                              disabled={interactionBlocked}
                               className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 px-2"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -822,13 +876,28 @@ export function SetupFlow({
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              tabIndex={-1}
-                            >
-                              Select
-                            </Button>
+                            {isRecentlyImported ? (
+                              <Button
+                                size="sm"
+                                disabled={interactionBlocked}
+                                className="bg-green-600 text-white hover:bg-green-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleReviewImportedProfile(profile);
+                                }}
+                              >
+                                Review setup
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                tabIndex={-1}
+                                disabled={interactionBlocked}
+                              >
+                                Select
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -864,7 +933,11 @@ export function SetupFlow({
                 <div className="flex items-center gap-3 mb-4">
                   <Loader2 className="h-5 w-5 text-green-500 animate-spin" />
                   <div>
-                    <p className="text-sm font-medium">Previewing changes...</p>
+                    <p className="text-sm font-medium">
+                      {restoreIntent === 'apps-and-settings'
+                        ? 'Checking settings compatibility...'
+                        : 'Previewing changes...'}
+                    </p>
                     {setupProgress && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {setupProgress.message}
@@ -904,6 +977,16 @@ export function SetupFlow({
                       );
                     })}
                   </div>
+                )}
+                {selectedProfile && selectedAppIdsProfileRef.current === selectedProfile.path && (
+                  <Button
+                    data-testid="setup-flow-apply"
+                    disabled
+                    className="mt-4 bg-green-600 text-white"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Apply changes
+                  </Button>
                 )}
               </CardContent>
             </Card>
@@ -1128,7 +1211,12 @@ export function SetupFlow({
                       {showConfigOnlySection && (
                         <>
                           <div className="border-t mt-2 pt-2">
-                            <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings only</p>
+                            <p className="text-[10px] font-medium text-muted-foreground">
+                              Settings only — app installation not included
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 mb-1">
+                              Endstate can restore these settings, but this profile cannot install the accompanying app.
+                            </p>
                           </div>
                           {configOnlyEvents.map((event, i) => {
                             const cfgStatusKey: StatusKey = event.statusKey || 'present';
@@ -1154,14 +1242,22 @@ export function SetupFlow({
 
                 {settingsCount > 0 && (
                   <div className="mt-4 space-y-3">
+                    {restoreIntent === 'apps-only' && (
+                      <div
+                        className="rounded-lg border border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground"
+                        data-testid="settings-restore-off-summary"
+                      >
+                        {settingsCount} {settingsCount === 1 ? 'setting is' : 'settings are'} available but won&apos;t be restored
+                      </div>
+                    )}
                     <RestoreIntentToggle
                       restoreIntent={restoreIntent}
                       onRestoreIntentChange={(intent) => {
+                        if (intent === restoreIntent || !selectedProfile) return;
                         setRestoreIntent(intent);
-                        if (intent === 'apps-only') {
-                          setSelectedModules([]);
-                          setRestoreTargets([]);
-                        }
+                        setSelectedModules([]);
+                        setRestoreTargets([]);
+                        void handlePreview(selectedProfile, intent);
                       }}
                       configModuleCount={settingsCount}
                     />
@@ -1170,7 +1266,7 @@ export function SetupFlow({
                       if (!moduleRefs?.length) return null;
                       const modules: ConfigModuleInfo[] = moduleRefs.map(ref => ({
                         id: ref.id,
-                        displayName: ref.displayName || ref.id,
+                        displayName: ref.displayName,
                         entries: 0,
                         files: [],
                       }));
@@ -1194,7 +1290,7 @@ export function SetupFlow({
                   </div>
                 )}
 
-                {(previewResult.configResolutions?.length ?? 0) > 0 && (
+                {restoreIntent === 'apps-and-settings' && (previewResult.configResolutions?.length ?? 0) > 0 && (
                   <div className="mt-4">
                     <ConfigResolutionList
                       resolutions={previewResult.configResolutions ?? []}
@@ -1212,11 +1308,21 @@ export function SetupFlow({
                 )}
 
                 <div className="flex items-center gap-3 mt-4">
-                  {previewResult.installed > 0 && (
+                  {previewResult.success === false
+                    && selectedProfile
+                    && restoreIntent === 'apps-and-settings' && (
+                      <Button onClick={() => void handlePreview(selectedProfile, 'apps-and-settings')}>
+                        Retry settings preview
+                      </Button>
+                    )}
+                  {(previewResult.installed > 0 || activeSettingsCount > 0) && (
                     <Button
                       onClick={handleApply}
                       data-testid="setup-flow-apply"
-                      disabled={previewResult.success === false || (pickerEnabled && pickerSelectedCount === 0)}
+                      disabled={
+                        previewResult.success === false
+                        || (pickerEnabled && pickerSelectedCount === 0)
+                      }
                       className="bg-green-600 hover:bg-green-700 text-white ring-green-600/30 hover:ring-green-600/50"
                     >
                       <Play className="h-4 w-4 mr-2" />
@@ -1247,7 +1353,7 @@ export function SetupFlow({
                 <div className="flex items-center gap-3 mb-4">
                   <Loader2 className="h-5 w-5 text-green-500 animate-spin" />
                   <div>
-                    <p className="text-sm font-medium">Installing apps...</p>
+                    <p className="text-sm font-medium">Applying setup...</p>
                     {setupProgress && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {setupProgress.message}
@@ -1811,9 +1917,31 @@ export function SetupFlow({
                     )}
                   </div>
                 </div>
-                <Button variant="secondary" onClick={handleBackToProfiles} className="mt-2">
-                  Back to profiles
-                </Button>
+                <div className="mt-2 flex items-center gap-2">
+                  {selectedProfile && restoreIntent === 'apps-and-settings' && (
+                    <>
+                      {previewResult === null && (
+                        <Button onClick={() => void handlePreview(selectedProfile, 'apps-and-settings')}>
+                          Retry settings preview
+                        </Button>
+                      )}
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setRestoreIntent('apps-only');
+                          setSelectedModules([]);
+                          setRestoreTargets([]);
+                          void handlePreview(selectedProfile, 'apps-only');
+                        }}
+                      >
+                        Continue with apps only
+                      </Button>
+                    </>
+                  )}
+                  <Button variant="secondary" onClick={handleBackToProfiles}>
+                    Back to profiles
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </motion.div>

@@ -1,6 +1,7 @@
+import type { ComponentProps } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders, screen, fireEvent } from '../../../test/test-utils';
-import { DropZone } from './drop-zone';
+import { DropZone, NativeProfileDropFeedback } from './drop-zone';
 
 function createFile(name: string): File {
   return new File(['content'], name, { type: 'application/octet-stream' });
@@ -25,8 +26,51 @@ describe('DropZone', () => {
   it('shows drag-over text during drag', () => {
     renderWithProviders(<DropZone {...defaultProps} />);
     const zone = screen.getByTestId('drop-zone');
-    fireEvent.dragOver(zone);
+    fireEvent.dragOver(zone, {
+      dataTransfer: { files: [createFile('profile.zip')] },
+    });
     expect(screen.getByText(/drop to import/i)).toBeInTheDocument();
+  });
+
+  it('shows controlled native acceptance without a browser drag event', () => {
+    const props = {
+      ...defaultProps,
+      nativeDragAccepted: true,
+    } as ComponentProps<typeof DropZone> & { nativeDragAccepted: boolean };
+    const { rerender } = renderWithProviders(<DropZone {...props} />);
+
+    const zone = screen.getByTestId('drop-zone');
+    expect(screen.getByText(/drop to import/i)).toBeInTheDocument();
+    expect(zone.className).toContain('border-green-500');
+
+    const clearedProps = { ...props, nativeDragAccepted: false };
+    rerender(<DropZone {...clearedProps} />);
+    expect(screen.getByText(/click to browse or drop a file/i)).toBeInTheDocument();
+    expect(screen.getByTestId('drop-zone').className).not.toContain('border-green-500 bg-green-500/5');
+  });
+
+  it('accepts supported browser drag enter and clears acceptance on leave', () => {
+    renderWithProviders(<DropZone {...defaultProps} />);
+    const zone = screen.getByTestId('drop-zone');
+    const dataTransfer = { files: [createFile('profile.json5')] };
+
+    fireEvent.dragEnter(zone, { dataTransfer });
+    expect(screen.getByText(/drop to import/i)).toBeInTheDocument();
+
+    fireEvent.dragLeave(screen.getByTestId('drop-zone'), { dataTransfer });
+    expect(screen.getByText(/click to browse or drop a file/i)).toBeInTheDocument();
+  });
+
+  it('never shows acceptance for an unsupported browser drag', () => {
+    renderWithProviders(<DropZone {...defaultProps} />);
+    const zone = screen.getByTestId('drop-zone');
+    const dataTransfer = { files: [createFile('notes.txt')] };
+
+    fireEvent.dragEnter(zone, { dataTransfer });
+    fireEvent.dragOver(zone, { dataTransfer });
+
+    expect(screen.getByText(/click to browse or drop a file/i)).toBeInTheDocument();
+    expect(zone.className).not.toContain('border-green-500 bg-green-500/5');
   });
 
   it('applies drag-over styling during drag and has leave handler', () => {
@@ -52,7 +96,8 @@ describe('DropZone', () => {
 
     expect(onFileDrop).toHaveBeenCalledTimes(1);
     const droppedFiles = onFileDrop.mock.calls[0][0];
-    expect(droppedFiles).toHaveLength(2);
+    expect(droppedFiles).toEqual([zipFile, jsoncFile]);
+    expect(screen.getByText(/click to browse or drop a file/i)).toBeInTheDocument();
   });
 
   it('filters out non-accepted file types on drop', () => {
@@ -151,5 +196,24 @@ describe('DropZone', () => {
     expect(input).toBeTruthy();
     expect(input.accept).toBe('.zip,.json,.jsonc,.json5');
     expect(input.getAttribute('aria-hidden')).toBe('true');
+  });
+});
+
+describe('NativeProfileDropFeedback', () => {
+  it('shows App-level landing feedback and clears with controlled state', () => {
+    const { rerender } = renderWithProviders(<NativeProfileDropFeedback visible />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Drop to import');
+
+    rerender(<NativeProfileDropFeedback visible={false} />);
+    expect(screen.queryByTestId('native-profile-drop-feedback')).not.toBeInTheDocument();
+  });
+
+  it('leaves no native feedback behind after its owning surface unmounts', () => {
+    const { unmount } = renderWithProviders(<NativeProfileDropFeedback visible />);
+    expect(screen.getByTestId('native-profile-drop-feedback')).toBeVisible();
+
+    unmount();
+    expect(screen.queryByTestId('native-profile-drop-feedback')).not.toBeInTheDocument();
   });
 });
