@@ -1287,13 +1287,20 @@ export function SetupFlow({
                 )}
 
                 <div className="flex items-center gap-3 mt-4">
+                  {previewResult.success === false
+                    && selectedProfile
+                    && restoreIntent === 'apps-and-settings' && (
+                      <Button onClick={() => void handlePreview(selectedProfile, 'apps-and-settings')}>
+                        Retry settings preview
+                      </Button>
+                    )}
                   {(previewResult.installed > 0 || activeSettingsCount > 0) && (
                     <Button
                       onClick={handleApply}
                       data-testid="setup-flow-apply"
                       disabled={
                         previewResult.success === false
-                        || (pickerEnabled && pickerSelectedCount === 0 && activeSettingsCount === 0)
+                        || (pickerEnabled && pickerSelectedCount === 0)
                       }
                       className="bg-green-600 hover:bg-green-700 text-white ring-green-600/30 hover:ring-green-600/50"
                     >
@@ -1891,17 +1898,24 @@ export function SetupFlow({
                 </div>
                 <div className="mt-2 flex items-center gap-2">
                   {selectedProfile && restoreIntent === 'apps-and-settings' && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setRestoreIntent('apps-only');
-                        setSelectedModules([]);
-                        setRestoreTargets([]);
-                        void handlePreview(selectedProfile, 'apps-only');
-                      }}
-                    >
-                      Continue with apps only
-                    </Button>
+                    <>
+                      {previewResult === null && (
+                        <Button onClick={() => void handlePreview(selectedProfile, 'apps-and-settings')}>
+                          Retry settings preview
+                        </Button>
+                      )}
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setRestoreIntent('apps-only');
+                          setSelectedModules([]);
+                          setRestoreTargets([]);
+                          void handlePreview(selectedProfile, 'apps-only');
+                        }}
+                      >
+                        Continue with apps only
+                      </Button>
+                    </>
                   )}
                   <Button variant="secondary" onClick={handleBackToProfiles}>
                     Back to profiles

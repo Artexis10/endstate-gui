@@ -519,7 +519,7 @@ test.describe('capture artifact flow regression', () => {
 
     await importedCard.getByRole('button', { name: 'Review setup' }).click();
     await expect(page.getByText('Engine rejected capture provenance', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Back to profiles' }).click();
+    await page.getByTestId('setup-flow-back').click();
     await expect(page.getByTestId(`profile-card-${bundleFixture.manifest.name}`)).toBeVisible();
     await expect(page.getByText(/Failed to import capture-v2\.zip/)).toHaveCount(0);
   });

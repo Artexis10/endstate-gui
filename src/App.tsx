@@ -883,6 +883,8 @@ function AppContent() {
     isRunning: () => isRunningRef.current,
     coordinator: profileImportCoordinatorRef.current,
     openSetup: () => {
+      setSetupFlowResetKey((key) => key + 1);
+      setFlowHasWork((previous) => ({ ...previous, setup: false }));
       setCurrentPage('setup');
       setActiveFlowPage('setup');
     },

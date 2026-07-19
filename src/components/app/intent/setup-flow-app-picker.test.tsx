@@ -229,6 +229,22 @@ describe('SetupFlow — per-app picker', () => {
         onlyAppIds: ['git-git', '7zip-7zip'],
       });
     });
+
+    it('does not turn a zero-app selection into an unfiltered settings apply', async () => {
+      const preview = {
+        ...makePreviewWithActions(),
+        restoreModulesAvailable: [{ id: 'git', displayName: 'Git' }],
+        configModuleMap: { 'Git.Git': 'apps.git' } as Record<string, string>,
+      };
+      const onPreview = vi.fn().mockResolvedValue(preview);
+      await renderToPreviewDone({ onPreview, applyOnlySupported: true });
+
+      await userEvent.click(screen.getByRole('radio', { name: /settings/i }));
+      await userEvent.click(await screen.findByRole('checkbox', { name: /^Git$/ }));
+      await userEvent.click(screen.getByTestId('app-picker-select-none'));
+
+      expect(screen.getByTestId('setup-flow-apply')).toBeDisabled();
+    });
   });
 
   describe('PRESENT apps stay selectable', () => {

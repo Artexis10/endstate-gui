@@ -379,6 +379,9 @@ test.describe('configuration generations', () => {
     await expect(page.getByText('Preview completed with errors')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Engine preview terminal failure')).toBeVisible();
     await expect(page.getByText('Engine preview failure remediation')).toBeVisible();
+    await expect(page.getByText('Engine legacy consent warning')).toHaveCount(0);
+
+    await page.getByRole('radio', { name: 'Install apps and restore settings' }).click();
     await expect(page.getByText('Engine legacy consent warning')).toBeVisible();
     await expect(page.getByText('Engine warning retained on failure')).toBeVisible();
     await expect(page.locator('[data-testid="setup-flow-apply"]')).toBeDisabled();
