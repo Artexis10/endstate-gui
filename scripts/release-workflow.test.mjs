@@ -2,10 +2,51 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-test('release-please creates draft releases for pre-publish verification', async () => {
+function namedStepBlock(workflow, name) {
+  const lines = workflow.replaceAll('\r\n', '\n').split('\n');
+  const marker = `      - name: ${name}`;
+  const start = lines.indexOf(marker);
+  assert.notEqual(start, -1, `missing named step: ${name}`);
+  let end = start + 1;
+  while (end < lines.length && (lines[end].trim() === '' || /^ {8,}\S/.test(lines[end]))) {
+    end += 1;
+  }
+  return lines.slice(start, end).join('\n');
+}
+
+test('release-please creates tagged draft releases for pre-publish verification', async () => {
   const config = JSON.parse(await readFile('release-please-config.json', 'utf8'));
 
   assert.equal(config.draft, true);
+  assert.equal(config['force-tag-creation'], true);
+});
+
+test('release workflow runs release automation only for pushes', async () => {
+  const workflow = await readFile('.github/workflows/release-please.yml', 'utf8');
+  const tokenStep = namedStepBlock(workflow, 'Mint GitHub App installation token');
+  const releaseStep = namedStepBlock(workflow, 'Run release-please');
+
+  assert.equal(
+    (workflow.match(/uses: googleapis\/release-please-action@v4/g) ?? []).length,
+    1,
+    'release-please must have one combined invocation',
+  );
+  assert.match(tokenStep, /\n        if: github\.event_name == 'push'\n/);
+  assert.match(tokenStep, /\n        uses: actions\/create-github-app-token@v1\n/);
+  assert.match(releaseStep, /\n        if: github\.event_name == 'push'\n/);
+  assert.match(releaseStep, /\n        uses: googleapis\/release-please-action@v4\n/);
+  assert.match(releaseStep, /\n        id: release\n/);
+
+  assert.match(workflow, /release_created: \$\{\{ steps\.release\.outputs\.release_created \}\}/);
+  assert.match(workflow, /tag_name: \$\{\{ steps\.release\.outputs\.tag_name \}\}/);
+  assert.match(
+    workflow,
+    /if: \$\{\{ needs\.release-please\.outputs\.release_created == 'true' \|\| github\.event_name == 'workflow_dispatch' \}\}/,
+  );
+  assert.match(
+    workflow,
+    /TAG: \$\{\{ needs\.release-please\.outputs\.tag_name \|\| github\.event\.inputs\.tag_name \}\}/,
+  );
 });
 
 test('release-please keeps the Rust lockfile package version synchronized', async () => {
