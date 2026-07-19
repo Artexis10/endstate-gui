@@ -47,8 +47,17 @@ const connectedSettingsDisplayName = `${connectedAppName} preferences`;
 const connectedSettingsFileName = connectedCapture.payloadManifest[0].relativePath;
 const connectedJourneyTestName = 'keeps the captured bundle connected through settings restore and undo';
 
+async function seedConnectedJourneySettings(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('test:endstate-gui-settings', JSON.stringify({
+      dryRunEnabled: false,
+      showDetails: true,
+    }));
+  });
+}
+
 async function installConnectedJourneyFixture(page: Page) {
-  await page.addInitScript(({
+  await page.evaluate(({
     bundleBase64,
     manifestPath,
     appRef,
@@ -58,11 +67,6 @@ async function installConnectedJourneyFixture(page: Page) {
     settingsDisplayName,
     settingsFileName,
   }) => {
-    localStorage.setItem('test:endstate-gui-settings', JSON.stringify({
-      dryRunEnabled: false,
-      showDetails: true,
-    }));
-
     const state = {
       captureBase64: bundleBase64,
       importedBase64: null as string | null,
@@ -383,11 +387,15 @@ test.describe('capture artifact flow regression', () => {
     }, capturedEvents);
 
     if (testInfo.title === connectedJourneyTestName) {
-      await installConnectedJourneyFixture(page);
+      await seedConnectedJourneySettings(page);
     }
 
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
+
+    if (testInfo.title === connectedJourneyTestName) {
+      await installConnectedJourneyFixture(page);
+    }
   });
 
   test('shows captured apps and settings, then a clear save completion', async ({ page }) => {

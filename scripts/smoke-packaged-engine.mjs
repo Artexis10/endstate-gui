@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -129,6 +129,47 @@ async function main() {
       TEMP: isolatedTemp,
       TMP: isolatedTemp,
     };
+    const journalRoot = join(engineRoot, 'logs');
+    const restoreJournals = async () => existsSync(journalRoot)
+      ? (await readdir(journalRoot)).filter(name => name.startsWith('restore-journal-') && name.endsWith('.json')).sort()
+      : [];
+    const journalsBeforePreview = await restoreJournals();
+    if (journalsBeforePreview.length !== 0) {
+      throw new Error(`packaged engine unexpectedly contained restore journals: ${journalsBeforePreview.join(', ')}`);
+    }
+    const sourceBeforePreview = await readFile(capturedConfigPath);
+    const targetBeforePreview = await readFile(restoreTargetPath);
+    const previewResult = run(engineExecutable, [
+      'restore', '--manifest', restoreManifestPath, '--dry-run', '--enable-restore', '--json',
+    ], { env: isolatedEnv, cwd: temporaryRoot, timeout: 120_000 });
+    const previewEnvelope = parseSuccessfulEnvelope(previewResult, 'restore');
+    const previewItems = previewEnvelope.data?.results;
+    if (previewEnvelope.data?.dryRun !== true || !Array.isArray(previewItems) || previewItems.length !== 1) {
+      throw new Error(`restore dry-run returned ${previewItems?.length ?? 'no'} results; expected exactly one`);
+    }
+    const previewed = previewItems[0];
+    if (previewed.status !== 'restored' || previewed.targetExistedBefore !== true
+      || previewed.backupCreated === true || previewed.backupPath) {
+      throw new Error(`restore dry-run did not preview one non-mutating replacement: ${JSON.stringify(previewed)}`);
+    }
+    if (resolve(previewed.source) !== resolve(capturedConfigPath)
+      || resolve(previewed.target) !== resolve(restoreTargetPath)) {
+      throw new Error(`restore dry-run resolved unexpected paths: ${JSON.stringify(previewed)}`);
+    }
+    assertPathWithin('restore preview source', previewed.source, portableRoot);
+    assertPathWithin('restore preview target', previewed.target, userProfile);
+    if (previewEnvelope.data?.journalPath) {
+      throw new Error(`restore dry-run unexpectedly reported a journal: ${previewEnvelope.data.journalPath}`);
+    }
+    if (!sourceBeforePreview.equals(await readFile(capturedConfigPath))
+      || !targetBeforePreview.equals(await readFile(restoreTargetPath))) {
+      throw new Error('restore dry-run modified the captured source or seeded target');
+    }
+    const journalsAfterPreview = await restoreJournals();
+    if (JSON.stringify(journalsAfterPreview) !== JSON.stringify(journalsBeforePreview)) {
+      throw new Error(`restore dry-run mutated restore journals: ${journalsAfterPreview.join(', ')}`);
+    }
+
     const restoreResult = run(engineExecutable, [
       'restore', '--manifest', restoreManifestPath, '--enable-restore', '--json',
     ], { env: isolatedEnv, cwd: temporaryRoot, timeout: 120_000 });
@@ -205,7 +246,7 @@ async function main() {
       throw new Error('restore or revert modified the portable captured source');
     }
 
-    console.log(`PASS ${resolve(installer)}: extracted engine loaded apps.git from ${catalog.moduleCount} packaged modules in read-only dry-run; live restore + revert stayed inside the temporary root`);
+    console.log(`PASS ${resolve(installer)}: extracted engine loaded apps.git from ${catalog.moduleCount} packaged modules in read-only dry-run; restore preview + live restore + revert stayed inside the temporary root`);
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }
