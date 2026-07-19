@@ -217,9 +217,16 @@ function AppContent() {
   const [isRunning, setIsRunningState] = useState(false);
   const isRunningRef = useRef(isRunning);
   isRunningRef.current = isRunning;
+  const [isProfileImporting, setIsProfileImportingState] = useState(false);
+  const isProfileImportingRef = useRef(isProfileImporting);
+  isProfileImportingRef.current = isProfileImporting;
   const setIsRunning = (running: boolean) => {
     isRunningRef.current = running;
     setIsRunningState(running);
+  };
+  const setIsProfileImporting = (importing: boolean) => {
+    isProfileImportingRef.current = importing;
+    setIsProfileImportingState(importing);
   };
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_runLogs, setRunLogs] = useState<string>('');
@@ -770,9 +777,11 @@ function AppContent() {
       return;
     }
 
+    setIsProfileImporting(true);
     try {
       await operation();
     } finally {
+      setIsProfileImporting(false);
       lease.release();
     }
   };
@@ -880,7 +889,7 @@ function AppContent() {
   // Use refs to avoid stale closures and ensure proper async cleanup.
   const dragDropUnlistenRef = useRef<(() => void) | undefined>();
   const nativeProfileDropHandler = createNativeProfileDropHandler({
-    isRunning: () => isRunningRef.current,
+    isRunning: () => isRunningRef.current || isProfileImportingRef.current,
     coordinator: profileImportCoordinatorRef.current,
     openSetup: () => {
       setSetupFlowResetKey((key) => key + 1);
@@ -888,7 +897,14 @@ function AppContent() {
       setCurrentPage('setup');
       setActiveFlowPage('setup');
     },
-    importPaths: importFilePaths,
+    importPaths: async (paths) => {
+      setIsProfileImporting(true);
+      try {
+        await importFilePaths(paths);
+      } finally {
+        setIsProfileImporting(false);
+      }
+    },
     onBlocked: () => showToast(PROFILE_IMPORT_BUSY_MESSAGE, 'error'),
     setDragAccepted: setNativeDragAccepted,
   });
@@ -3040,6 +3056,7 @@ function AppContent() {
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
               onFileDrop={handleFileDrop}
+              profileImportActive={isProfileImporting}
               nativeDragAccepted={nativeDragAccepted}
               onBrowse={isTauriRuntime() ? handleBrowseFiles : undefined}
               onDeleteProfile={(path: string, displayName: string) => {
@@ -3082,7 +3099,7 @@ function AppContent() {
                 setLiveCounters({ installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 });
                 setOverviewRunningAction('setup');
                 setOverviewActionStatus('setup', 'running');
-                setOverviewActionProgress('setup', { message: 'Installing applications...' });
+                setOverviewActionProgress('setup', { message: 'Applying setup...' });
                 try {
                   const result = await handleApplyFromOverview(restoreOptions);
                   setOverviewActionStatus(

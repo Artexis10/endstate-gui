@@ -183,9 +183,7 @@ describe('SetupFlow — Restore module selection', () => {
       configModuleMap: { 'Microsoft.VisualStudioCode': 'apps.vscode' } as Record<string, string>,
     };
     const onPreview = vi.fn().mockResolvedValue(previewResult);
-    const onApply = vi.fn().mockResolvedValue({
-      installed: 0, alreadyPresent: 89, failed: 0, skipped: 0, appEvents: [],
-    });
+    const onApply = vi.fn().mockReturnValue(new Promise(() => {}));
 
     renderWithProviders(
       <SetupFlow {...baseProps} onPreview={onPreview} onApply={onApply} />
@@ -203,6 +201,8 @@ describe('SetupFlow — Restore module selection', () => {
     const applyButton = screen.getByTestId('setup-flow-apply');
     expect(applyButton).toBeEnabled();
     await userEvent.click(applyButton);
+
+    expect(screen.getByText('Applying setup...')).toBeVisible();
 
     expect(onApply).toHaveBeenCalledWith(
       mockProfile,

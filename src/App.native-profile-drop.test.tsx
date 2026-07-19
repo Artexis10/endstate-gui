@@ -52,6 +52,7 @@ vi.mock('./lib/engine-exec', async () => {
 import App from './App';
 
 let discoveredProfilePaths: string[];
+let nativeImportCompletion: Promise<string> | null;
 
 async function runSuccessfulPreview<T>(): Promise<RunResult<T>> {
   return {
@@ -82,6 +83,7 @@ describe('App native profile drag ownership', () => {
     nativeWindow.unlisten.mockReset();
     nativeWindow.onDragDropEvent.mockClear();
     discoveredProfilePaths = ['C:\\test\\profiles\\existing-profile.jsonc'];
+    nativeImportCompletion = null;
 
     Object.defineProperty(window, '__TAURI_INTERNALS__', {
       configurable: true,
@@ -100,7 +102,9 @@ describe('App native profile drag ownership', () => {
             if (command === 'check_file_exists') return false;
             if (command === 'create_directory') return null;
             if (command === 'import_profile') {
-              const importedPath = 'C:\\test\\profiles\\dropped-profile.jsonc';
+              const importedPath = nativeImportCompletion
+                ? await nativeImportCompletion
+                : 'C:\\test\\profiles\\dropped-profile.jsonc';
               discoveredProfilePaths = [...discoveredProfilePaths, importedPath];
               return importedPath;
             }
@@ -148,6 +152,10 @@ describe('App native profile drag ownership', () => {
 
   it('returns an idle Setup preview to the visible profile list before importing a native drop', async () => {
     const user = userEvent.setup();
+    let finishImport!: (path: string) => void;
+    nativeImportCompletion = new Promise((resolve) => {
+      finishImport = resolve;
+    });
     renderWithProviders(<App />);
 
     await user.click(await screen.findByTestId('intent-setup'));
@@ -162,9 +170,19 @@ describe('App native profile drag ownership', () => {
     });
 
     await screen.findByTestId('drop-zone');
+    expect(screen.getByTestId('profile-import-progress')).toHaveTextContent('Importing profile');
+    expect(screen.getByTestId('setup-flow-back')).toBeDisabled();
+    expect(screen.queryByTestId('profile-card-dropped-profile')).not.toBeInTheDocument();
+
+    act(() => {
+      finishImport('C:\\test\\profiles\\dropped-profile.jsonc');
+    });
+
     const importedCard = await screen.findByTestId('profile-card-dropped-profile');
     expect(importedCard).toHaveTextContent('Imported');
     expect(importedCard).toHaveTextContent('Review setup');
+    expect(screen.queryByTestId('profile-import-progress')).not.toBeInTheDocument();
+    expect(screen.getByTestId('setup-flow-back')).toBeEnabled();
     expect(screen.queryByText('Preview complete')).not.toBeInTheDocument();
   });
 });

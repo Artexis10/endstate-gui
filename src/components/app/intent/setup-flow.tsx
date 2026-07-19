@@ -209,6 +209,8 @@ export interface SetupFlowProps {
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
   onFileDrop: (files: File[]) => void;
+  /** Import is staging/validating and must remain on the visible profile list. */
+  profileImportActive?: boolean;
   /** Native Tauri drag acceptance owned by App. */
   nativeDragAccepted?: boolean;
   /** Native file browse (Tauri mode only) */
@@ -284,6 +286,7 @@ export function SetupFlow({
   onOpenProfilesFolder,
   onRefreshProfiles,
   onFileDrop,
+  profileImportActive = false,
   nativeDragAccepted = false,
   onBrowse,
   onDeleteProfile,
@@ -349,6 +352,7 @@ export function SetupFlow({
   const transition = reduced
     ? { duration: 0.01 }
     : { duration: DURATIONS.normal, ease: EASING.easeInOut };
+  const interactionBlocked = isRunning || profileImportActive;
 
   // Reset internal state when resetKey changes (parent signals a fresh start)
   useEffect(() => {
@@ -638,7 +642,7 @@ export function SetupFlow({
         onClick={phase === 'browse' ? onBack : handleBackToProfiles}
         className="mb-6"
         data-testid="setup-flow-back"
-        disabled={phase === 'previewing' || phase === 'applying' || phase === 'undo-checking' || phase === 'undo-running'}
+        disabled={profileImportActive || phase === 'previewing' || phase === 'applying' || phase === 'undo-checking' || phase === 'undo-running'}
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         {phase === 'browse' ? 'Back' : 'Back to profiles'}
@@ -694,14 +698,14 @@ export function SetupFlow({
               cloudBackupIndex.size > 0 && (
                 <Card
                   className="mb-4 cursor-pointer border-primary/30 bg-primary/5 hover:border-primary/60 hover:shadow-md transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  onClick={() => !isRunning && onRestoreFromCloud()}
+                  onClick={() => !interactionBlocked && onRestoreFromCloud()}
                   onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ' ') && !isRunning) {
+                    if ((e.key === 'Enter' || e.key === ' ') && !interactionBlocked) {
                       e.preventDefault();
                       onRestoreFromCloud();
                     }
                   }}
-                  tabIndex={isRunning ? -1 : 0}
+                  tabIndex={interactionBlocked ? -1 : 0}
                   role="button"
                   aria-label="Restore from your Hosted Backup"
                   data-testid="setup-restore-from-cloud-cta"
@@ -727,10 +731,22 @@ export function SetupFlow({
 
             {/* Drop zone for import */}
             <div className="mb-8">
+              {profileImportActive && (
+                <div
+                  className="mb-3 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3"
+                  role="status"
+                  data-testid="profile-import-progress"
+                >
+                  <p className="text-sm font-medium text-green-500">Importing profile…</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Validating and adding it to your setup list.
+                  </p>
+                </div>
+              )}
               <DropZone
                 onFileDrop={onFileDrop}
                 onBrowse={onBrowse}
-                disabled={isRunning}
+                disabled={interactionBlocked}
                 nativeDragAccepted={nativeDragAccepted}
               />
             </div>
@@ -748,12 +764,12 @@ export function SetupFlow({
                     <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
                     Open folder
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
+                  <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing || interactionBlocked}>
                     <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
                     Refresh
                   </Button>
                   {onUndoDryRun && (
-                    <Button variant="ghost" size="sm" onClick={handleStartUndo}>
+                    <Button variant="ghost" size="sm" onClick={handleStartUndo} disabled={interactionBlocked}>
                       <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
                       Undo changes
                     </Button>
@@ -774,16 +790,17 @@ export function SetupFlow({
                       ref={isRecentlyImported ? recentlyImportedCardRef : undefined}
                       className={`${isRecentlyImported ? 'border-green-500/50 shadow-sm' : 'cursor-pointer hover:border-green-500/50 hover:shadow-md'} transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-green-500/50`}
                       onClick={() => {
-                        if (!isRecentlyImported) handleSelectProfile(profile);
+                        if (!isRecentlyImported && !interactionBlocked) handleSelectProfile(profile);
                       }}
                       onKeyDown={(e) => {
-                        if (!isRecentlyImported && (e.key === 'Enter' || e.key === ' ')) {
+                        if (!isRecentlyImported && !interactionBlocked && (e.key === 'Enter' || e.key === ' ')) {
                           e.preventDefault();
                           handleSelectProfile(profile);
                         }
                       }}
-                      tabIndex={isRecentlyImported ? undefined : 0}
+                      tabIndex={isRecentlyImported || interactionBlocked ? undefined : 0}
                       role={isRecentlyImported ? undefined : 'button'}
+                      aria-disabled={interactionBlocked || undefined}
                       data-testid={`profile-card-${profile.name}`}
                     >
                       <CardContent className="py-4 px-5">
@@ -835,6 +852,7 @@ export function SetupFlow({
                                       profile.displayName || profile.name,
                                     );
                                   }}
+                                  disabled={interactionBlocked}
                                   className="mt-1 gap-1 text-xs"
                                   data-testid={`profile-card-${profile.name}-push-to-cloud`}
                                 >
@@ -849,6 +867,7 @@ export function SetupFlow({
                               size="sm"
                               tabIndex={isRecentlyImported ? 0 : -1}
                               aria-label={`Delete ${profile.displayName || profile.name}`}
+                              disabled={interactionBlocked}
                               className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 px-2"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -860,6 +879,7 @@ export function SetupFlow({
                             {isRecentlyImported ? (
                               <Button
                                 size="sm"
+                                disabled={interactionBlocked}
                                 className="bg-green-600 text-white hover:bg-green-700"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -873,6 +893,7 @@ export function SetupFlow({
                                 variant="secondary"
                                 size="sm"
                                 tabIndex={-1}
+                                disabled={interactionBlocked}
                               >
                                 Select
                               </Button>
@@ -1332,7 +1353,7 @@ export function SetupFlow({
                 <div className="flex items-center gap-3 mb-4">
                   <Loader2 className="h-5 w-5 text-green-500 animate-spin" />
                   <div>
-                    <p className="text-sm font-medium">Installing apps...</p>
+                    <p className="text-sm font-medium">Applying setup...</p>
                     {setupProgress && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {setupProgress.message}
