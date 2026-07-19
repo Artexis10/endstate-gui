@@ -178,7 +178,7 @@ test.describe('configuration generations', () => {
                 },
               ];
               for (const event of events) options?.onNdjsonEvent?.(event);
-              await new Promise((resolve) => setTimeout(resolve, 300));
+              await new Promise((resolve) => setTimeout(resolve, 1_000));
             }
 
             const finalResolutions = isPreview
@@ -307,8 +307,9 @@ test.describe('configuration generations', () => {
     await secondTarget.click();
     await page.getByRole('option', { name: 'photoshop-beta · 27.0-beta' }).click();
 
-    await page.locator('[data-testid="setup-flow-apply"]').click();
+    const applyPromise = page.locator('[data-testid="setup-flow-apply"]').click();
     await expect(page.getByText('Transient rollback completed')).toBeVisible();
+    await applyPromise;
     await expect(page.getByText('Engine final rollback result')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('rolled_back')).toBeVisible();
     await expect(page.getByText('Transient rollback completed')).not.toBeVisible();

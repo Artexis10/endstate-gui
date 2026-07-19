@@ -29,6 +29,7 @@ test.describe('Save Profile Modal - Blocking Behavior', () => {
     
     await page.goto(baseURL || '/');
     await page.waitForLoadState('networkidle');
+    await page.waitForFunction(() => typeof (window as any).__endstate_e2e_openSaveProfileModal === 'function', { timeout: 10000 });
   });
 
   test('Modal blocks backdrop click', async ({ page }) => {
