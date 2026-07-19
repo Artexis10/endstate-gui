@@ -10,6 +10,50 @@ const captureResult = {
   outputFormat: 'zip' as const,
 };
 
+const captureResultWithSettings = {
+  count: 1,
+  draftText: '{"version":2,"apps":[]}',
+  apps: [{ id: 'Microsoft.VisualStudioCode', name: 'Visual Studio Code' }],
+  outputPath: 'C:\\cache\\capture.zip',
+  outputFormat: 'zip' as const,
+  configsIncluded: ['apps.vscode', 'apps.cursor'],
+  configModules: [
+    {
+      id: 'apps.vscode',
+      appId: 'vscode',
+      displayName: 'Visual Studio Code',
+      status: 'captured' as const,
+      filesCaptured: 3,
+      wingetRefs: ['Microsoft.VisualStudioCode'],
+    },
+    {
+      id: 'apps.cursor',
+      appId: 'cursor',
+      displayName: 'Cursor',
+      status: 'captured' as const,
+      filesCaptured: 2,
+      wingetRefs: [],
+    },
+  ],
+};
+
+async function scanCapture() {
+  renderWithProviders(
+    <SaveFlow
+      onBack={vi.fn()}
+      engineConnected={true}
+      isRunning={false}
+      captureProgress={null}
+      liveAppEvents={[]}
+      onStartCapture={vi.fn().mockResolvedValue(captureResultWithSettings)}
+      onSaveToFile={vi.fn()}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: /start scan/i }));
+  await screen.findByText('Scan complete');
+}
+
 async function saveCapture(onSaveToFile: SaveFlowProps['onSaveToFile'], onBack = vi.fn()) {
   renderWithProviders(
     <SaveFlow
@@ -30,6 +74,37 @@ async function saveCapture(onSaveToFile: SaveFlowProps['onSaveToFile'], onBack =
 }
 
 describe('SaveFlow completion', () => {
+  it('labels installable inventory and explains that it is included for setup', async () => {
+    await scanCapture();
+
+    expect(screen.getByText('Apps found on this PC')).toBeInTheDocument();
+    expect(screen.getByText(/included for setup/i)).toBeInTheDocument();
+  });
+
+  it('labels captured settings without implying installer ownership', async () => {
+    await scanCapture();
+
+    expect(screen.getByText('Settings captured')).toBeInTheDocument();
+  });
+
+  it('gives an installable app settings icon accessible meaning', async () => {
+    await scanCapture();
+
+    expect(screen.getByLabelText('Settings captured for this app')).toBeInTheDocument();
+  });
+
+  it('separates settings-only entries with explicit installer ownership', async () => {
+    await scanCapture();
+
+    expect(screen.getByText('Settings only — app installation not included')).toBeInTheDocument();
+    expect(
+      screen.getByText((content) =>
+        /Endstate.*captured.*settings/i.test(content)
+        && /backup.*does not include.*app installer/i.test(content),
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('keeps a clear completion state with a primary path back home', async () => {
     const onBack = vi.fn();
     await saveCapture(
