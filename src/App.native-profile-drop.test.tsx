@@ -84,7 +84,7 @@ describe('App native profile drag ownership', () => {
   it('shows supported Tauri v2 drag feedback on landing and cleans up its owner on unmount', async () => {
     const view = renderWithProviders(<App />);
 
-    await screen.findByText('Save this computer');
+    await screen.findByTestId('intent-save');
     await waitFor(() => expect(nativeWindow.onDragDropEvent).toHaveBeenCalledTimes(1));
 
     act(() => {

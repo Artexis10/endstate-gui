@@ -459,8 +459,9 @@ export function SetupFlow({
       if (!previewIsActive(profile, intent, generation)) return;
       setPreviewResult(result);
       const pickerIds = selectablePickerIds(result.actions);
+      const isSameProfile = selectedAppIdsProfileRef.current === profile.path;
       setSelectedAppIds((current) => {
-        if (selectedAppIdsProfileRef.current !== profile.path) {
+        if (!isSameProfile) {
           return new Set(pickerIds);
         }
         return new Set(pickerIds.filter((id) => current.has(id)));
@@ -1286,11 +1287,14 @@ export function SetupFlow({
                 )}
 
                 <div className="flex items-center gap-3 mt-4">
-                  {previewResult.installed > 0 && (
+                  {(previewResult.installed > 0 || activeSettingsCount > 0) && (
                     <Button
                       onClick={handleApply}
                       data-testid="setup-flow-apply"
-                      disabled={previewResult.success === false || (pickerEnabled && pickerSelectedCount === 0)}
+                      disabled={
+                        previewResult.success === false
+                        || (pickerEnabled && pickerSelectedCount === 0 && activeSettingsCount === 0)
+                      }
                       className="bg-green-600 hover:bg-green-700 text-white ring-green-600/30 hover:ring-green-600/50"
                     >
                       <Play className="h-4 w-4 mr-2" />

@@ -456,7 +456,7 @@ describe('SetupFlow config generations', () => {
     await screen.findByRole('checkbox', { name: 'Alpha settings' });
     await user.click(screen.getByRole('checkbox', { name: 'Alpha settings' }));
 
-    await user.click(screen.getByRole('button', { name: 'Back to profiles' }));
+    await user.click(screen.getByTestId('setup-flow-back'));
     await user.click(screen.getByText('other-generation-profile'));
 
     await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(3, otherProfile, {

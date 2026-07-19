@@ -46,7 +46,7 @@ describe('DropZone', () => {
     const clearedProps = { ...props, nativeDragAccepted: false };
     rerender(<DropZone {...clearedProps} />);
     expect(screen.getByText(/click to browse or drop a file/i)).toBeInTheDocument();
-    expect(zone.className).not.toContain('border-green-500 bg-green-500/5');
+    expect(screen.getByTestId('drop-zone').className).not.toContain('border-green-500 bg-green-500/5');
   });
 
   it('accepts supported browser drag enter and clears acceptance on leave', () => {
@@ -57,7 +57,7 @@ describe('DropZone', () => {
     fireEvent.dragEnter(zone, { dataTransfer });
     expect(screen.getByText(/drop to import/i)).toBeInTheDocument();
 
-    fireEvent.dragLeave(zone, { dataTransfer });
+    fireEvent.dragLeave(screen.getByTestId('drop-zone'), { dataTransfer });
     expect(screen.getByText(/click to browse or drop a file/i)).toBeInTheDocument();
   });
 

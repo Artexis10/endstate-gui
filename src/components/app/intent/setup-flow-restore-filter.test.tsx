@@ -172,6 +172,47 @@ describe('SetupFlow — Restore module selection', () => {
     );
   });
 
+  it('can restore selected settings when every application is already present', async () => {
+    const previewResult = {
+      installed: 0,
+      alreadyPresent: 89,
+      appEvents: [
+        { app: 'Microsoft.VisualStudioCode', action: 'OK', name: 'Visual Studio Code', timestamp: 1 },
+      ],
+      restoreModulesAvailable: [{ id: 'vscode', displayName: 'Visual Studio Code' }],
+      configModuleMap: { 'Microsoft.VisualStudioCode': 'apps.vscode' } as Record<string, string>,
+    };
+    const onPreview = vi.fn().mockResolvedValue(previewResult);
+    const onApply = vi.fn().mockResolvedValue({
+      installed: 0, alreadyPresent: 89, failed: 0, skipped: 0, appEvents: [],
+    });
+
+    renderWithProviders(
+      <SetupFlow {...baseProps} onPreview={onPreview} onApply={onApply} />
+    );
+
+    await userEvent.click(screen.getByText('test-profile'));
+    await screen.findByText('Preview complete');
+    expect(screen.queryByTestId('setup-flow-apply')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: /settings/i }));
+    const vscodeCheckbox = await screen.findByRole('checkbox', { name: /visual studio code/i });
+    expect(screen.queryByTestId('setup-flow-apply')).not.toBeInTheDocument();
+
+    await userEvent.click(vscodeCheckbox);
+    const applyButton = screen.getByTestId('setup-flow-apply');
+    expect(applyButton).toBeEnabled();
+    await userEvent.click(applyButton);
+
+    expect(onApply).toHaveBeenCalledWith(
+      mockProfile,
+      expect.objectContaining({
+        restoreIntent: 'apps-and-settings',
+        selectedModules: ['vscode'],
+      }),
+    );
+  });
+
   it('passes empty selectedModules when no modules checked', async () => {
     const onPreview = vi.fn().mockResolvedValue(makePreviewWithModules());
     const onApply = vi.fn().mockResolvedValue({

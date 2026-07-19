@@ -86,7 +86,7 @@ describe('SetupFlow imported profile handoff', () => {
       ...props,
       recentlyImportedProfile: null,
     }));
-    await user.click(screen.getByRole('button', { name: 'Back to profiles' }));
+    await user.click(screen.getByTestId('setup-flow-back'));
     expect(screen.queryByText('Imported')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review setup' })).not.toBeInTheDocument();
   });
@@ -174,7 +174,7 @@ describe('SetupFlow imported profile handoff', () => {
       ...props,
       recentlyImportedProfile: null,
     }));
-    await user.click(screen.getByRole('button', { name: 'Back to profiles' }));
+    await user.click(screen.getByTestId('setup-flow-back'));
     expect(screen.getByTestId('profile-card-captured-bundle')).toBeVisible();
     expect(screen.queryByText('Imported')).not.toBeInTheDocument();
   });
