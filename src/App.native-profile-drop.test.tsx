@@ -1,4 +1,4 @@
-import { act } from '@testing-library/react';
+import { act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders, screen, waitFor } from './test/test-utils';
@@ -184,5 +184,50 @@ describe('App native profile drag ownership', () => {
     expect(screen.queryByTestId('profile-import-progress')).not.toBeInTheDocument();
     expect(screen.getByTestId('setup-flow-back')).toBeEnabled();
     expect(screen.queryByText('Preview complete')).not.toBeInTheDocument();
+  });
+
+  it('keeps a pending native import visible across every global navigation route', async () => {
+    const user = userEvent.setup();
+    let finishImport!: (path: string) => void;
+    nativeImportCompletion = new Promise((resolve) => {
+      finishImport = resolve;
+    });
+    renderWithProviders(<App />);
+
+    await user.click(await screen.findByTestId('intent-setup'));
+    await user.click(await screen.findByTestId('profile-card-existing-profile'));
+    await screen.findByText('Preview complete');
+
+    act(() => {
+      nativeWindow.listener?.({
+        payload: { type: 'drop', paths: ['C:\\Downloads\\dropped-profile.jsonc'] },
+      });
+    });
+
+    await screen.findByTestId('profile-import-progress');
+
+    await user.click(screen.getByTitle('Settings'));
+    expect(screen.getByTestId('profile-import-progress')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Settings', level: 1 })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: ',', ctrlKey: true });
+    expect(screen.getByTestId('profile-import-progress')).toBeVisible();
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    await user.click(await screen.findByRole('button', { name: /Go to Home/i }));
+    expect(screen.getByTestId('profile-import-progress')).toBeVisible();
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    await user.click(await screen.findByRole('button', { name: /Undo Settings Changes/i }));
+    expect(screen.getByTestId('profile-import-progress')).toBeVisible();
+
+    act(() => {
+      finishImport('C:\\test\\profiles\\dropped-profile.jsonc');
+    });
+
+    const importedCard = await screen.findByTestId('profile-card-dropped-profile');
+    expect(importedCard).toHaveTextContent('Imported');
+    expect(importedCard).toHaveTextContent('Review setup');
+    expect(screen.queryByText('Undo settings changes from your last setup')).not.toBeInTheDocument();
   });
 });

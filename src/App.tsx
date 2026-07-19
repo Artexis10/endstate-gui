@@ -124,6 +124,7 @@ type PageType = 'landing' | 'save' | 'setup' | 'report' | 'settings' | 'auth' | 
 
 const MAX_LIVE_CONFIG_EVENTS = 2000;
 const PROFILE_IMPORT_BUSY_MESSAGE = 'Finish the current operation or setup review before importing another profile.';
+const PROFILE_IMPORT_NAVIGATION_MESSAGE = 'Finish importing this profile before leaving Setup.';
 
 interface AppState {
   status: AppStatus;
@@ -167,8 +168,21 @@ function AppContent() {
   const [saveFlowCompleted, setSaveFlowCompleted] = useState(false);
   const [saveFlowResetKey, setSaveFlowResetKey] = useState(0);
   const [setupFlowResetKey, setSetupFlowResetKey] = useState(0);
+  const [isProfileImporting, setIsProfileImportingState] = useState(false);
+  const isProfileImportingRef = useRef(isProfileImporting);
+  isProfileImportingRef.current = isProfileImporting;
+  const setIsProfileImporting = (importing: boolean) => {
+    isProfileImportingRef.current = importing;
+    setIsProfileImportingState(importing);
+  };
+  const blockProfileImportNavigation = () => {
+    if (!isProfileImportingRef.current) return false;
+    showToast(PROFILE_IMPORT_NAVIGATION_MESSAGE, 'info');
+    return true;
+  };
   // Navigation handler
   const handleNavigate = async (page: PageType) => {
+    if (page !== 'setup' && blockProfileImportNavigation()) return;
     // Remember flow page for direct back-navigation from settings/reports
     if ((currentPage === 'save' || currentPage === 'setup') && page !== 'landing' && page !== 'save' && page !== 'setup') {
       setPreviousPage(currentPage);
@@ -217,16 +231,9 @@ function AppContent() {
   const [isRunning, setIsRunningState] = useState(false);
   const isRunningRef = useRef(isRunning);
   isRunningRef.current = isRunning;
-  const [isProfileImporting, setIsProfileImportingState] = useState(false);
-  const isProfileImportingRef = useRef(isProfileImporting);
-  isProfileImportingRef.current = isProfileImporting;
   const setIsRunning = (running: boolean) => {
     isRunningRef.current = running;
     setIsRunningState(running);
-  };
-  const setIsProfileImporting = (importing: boolean) => {
-    isProfileImportingRef.current = importing;
-    setIsProfileImportingState(importing);
   };
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_runLogs, setRunLogs] = useState<string>('');
@@ -644,6 +651,7 @@ function AppContent() {
   
   // Go back to previous page
   const handleBack = () => {
+    if (blockProfileImportNavigation()) return;
     if (previousPage) {
       setCurrentPage(previousPage);
       setPreviousPage(null);
@@ -2578,7 +2586,7 @@ function AppContent() {
       // Ctrl+, opens Settings (emergency shortcut)
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault();
-        setCurrentPage('settings');
+        void handleNavigate('settings');
       }
     };
 
@@ -4164,6 +4172,7 @@ function AppContent() {
         onNavigate={handleNavigate}
         showBackupNav={hostedBackupSupported}
         onUndoSettings={() => {
+          if (blockProfileImportNavigation()) return;
           setSetupPendingUndo(true);
           setCurrentPage('setup');
         }}
