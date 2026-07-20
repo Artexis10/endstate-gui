@@ -13,20 +13,23 @@ import {
  * `engine-real-apply` proves the engine's bytes are correct; nothing proves the
  * GUI reads them correctly. This spec drives a real dry-run apply preview
  * through the UI and asserts the rendered surface reflects the engine's own
- * `summary`/`actions`: the app count, the plan status, and the friendly name —
- * with the raw winget ref kept out of the distilled row unless the engine
- * itself reported it as the name.
+ * `summary`/`actions`: the app count, the plan status, and the per-app name.
  *
  * Command choice: a dry-run apply *preview*. It is the real command the
  * browser-bridge UI can drive end-to-end deterministically with no host side
- * effects (nothing is installed) and no host-state coupling in the assertions:
- * the app *count* (1) and the friendly *name* are host-independent, and the
- * plan *status* (present vs to_install) is cross-checked against a ground-truth
- * envelope pulled straight from the engine rather than hard-coded.
+ * effects (nothing is installed). Every assertion binds to a ground-truth
+ * envelope pulled straight from the engine over the bridge, never to a
+ * host-dependent literal — the whole point of the lane. The app *count* (1) is
+ * host-independent; the plan *status* (present vs to_install) and the row
+ * *name* are whatever the engine actually reported for this host.
  *
- * jq is used because the engine reports a friendly `name` ("jq") distinct from
- * its winget ref ("jqlang.jq"), which is what lets this spec prove the GUI
- * surfaces the friendly name and not the raw ref.
+ * On name semantics: the engine only resolves a friendly display name once a
+ * package is present/installed. A to_install dry-run row carries the winget ref
+ * as its name (jq present → name "jq"; jq absent → name "jqlang.jq"). So the
+ * assertion reads the engine's reported name and requires the UI to render
+ * exactly that. The #163-class invariant — a raw ref must never appear beside a
+ * row when the engine DID provide a distinct friendly name — is asserted only
+ * when the envelope actually carries one (name !== ref).
  */
 const JQ = [{ id: 'jq', refs: { windows: 'jqlang.jq' } }];
 
@@ -45,7 +48,7 @@ test.describe('real-engine setup preview envelope rendering', () => {
     if (seeded) await removeProfile(request, seeded.path);
   });
 
-  test('renders app count, plan status and friendly name from the real envelope', async ({ page, request }) => {
+  test('renders app count, plan status and the engine-reported name from the real envelope', async ({ page, request }) => {
     // Ground truth straight from the engine (idempotent, no side effects).
     const envelope = await dryRunApplyEnvelope(request, seeded.path);
     expect(envelope.success).toBe(true);
@@ -73,9 +76,17 @@ test.describe('real-engine setup preview envelope rendering', () => {
       await expect(flow.getByText('TO INSTALL', { exact: true })).toBeVisible();
     }
 
-    // Friendly name from the engine's `name` field is surfaced…
-    await expect(flow.getByText('jq', { exact: true })).toBeVisible();
-    // …and the raw winget ref is not leaked beside the distilled row.
-    await expect(flow.getByText('jqlang.jq')).toHaveCount(0);
+    // The row renders the engine's own reported name for this app, verbatim —
+    // "jq" on a host where it is present, "jqlang.jq" on a clean host where the
+    // engine has no friendly name yet. Assert exactly what the envelope carries.
+    await expect(flow.getByText(jqAction.name, { exact: true })).toBeVisible();
+
+    // #163-class invariant: when the engine DID resolve a distinct friendly name,
+    // the raw winget ref must not leak beside the distilled row. When name === ref
+    // (a to_install dry run), the engine itself reports the ref, so showing it is
+    // faithful rendering, not a leak — nothing to assert.
+    if (jqAction.name !== jqAction.ref) {
+      await expect(flow.getByText(jqAction.ref)).toHaveCount(0);
+    }
   });
 });
