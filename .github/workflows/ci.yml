@@ -207,6 +207,39 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Unhappy path. Everything above proves the engine succeeds; this proves it
+      # reports failure honestly, which is the half that lets a broken run render
+      # as a successful one.
+      - name: A package that cannot install is reported as failed
+        shell: bash
+        run: |
+          mkdir -p ci-fail-profile
+          cat > ci-fail-profile/manifest.jsonc <<'JSON'
+          {
+            "version": 1,
+            "name": "ci-failure-case",
+            "apps": [
+              { "id": "bogus", "refs": { "windows": "This.Package.Does.Not.Exist.Endstate.CI" } }
+            ]
+          }
+          JSON
+          ./endstate.exe apply --profile ci-fail-profile/manifest.jsonc --json > fail.json || true
+          node -e "
+            const e = JSON.parse(require('fs').readFileSync('fail.json', 'utf8'));
+            const d = e.data ?? {};
+            const a = (d.actions ?? []).find(x => x.id === 'bogus');
+            if (!a) throw new Error('no action reported for the unresolvable package');
+            if (a.status !== 'failed') throw new Error('expected status failed, got ' + a.status);
+            if (d.summary.failed !== 1) throw new Error('expected summary.failed=1, got ' + d.summary.failed);
+            if (d.summary.success !== 0) throw new Error('expected summary.success=0, got ' + d.summary.success);
+            // A per-item install failure is a partial failure: the command itself
+            // ran fine, so envelope.success stays true. A consumer that reads
+            // success as 'everything worked' would report a broken run as clean.
+            if (e.success !== true) throw new Error('expected envelope success=true for a partial failure, got ' + e.success);
+            if (!a.message) throw new Error('a failed action must carry a message explaining why');
+            console.log('failure path: ' + a.status + ' / ' + a.reason + ' — ' + a.message);
+          "
+
       # The module catalog ships in the engine repo (modules/apps/), not inside
       # the binary. A bare downloaded endstate.exe resolves no catalog, so
       # restoreModulesAvailable comes back empty and the scoping assertions have
