@@ -254,10 +254,23 @@ async function testApplyPayloadAndRegenerateGolden() {
     throw new Error('Expected restoreModulesAvailable for a profile carrying restore entries');
   }
   for (const mod of modules) {
-    for (const field of ['id', 'displayName', 'entryCount']) {
+    for (const field of ['id', 'displayName']) {
       if (!(field in mod)) {
         throw new Error(`restoreModulesAvailable entry is missing '${field}'`);
       }
+    }
+    if (!('entryCount' in mod)) {
+      // Ordering dependency, not a flake: entryCount ships with the engine-side
+      // scoping change. Until that is released and ENGINE_VERSION is bumped to
+      // pick it up, the pinned engine cannot emit this field. Fail loudly rather
+      // than skipping — a conditional assertion here would silently stop
+      // verifying the field forever once it did ship.
+      throw new Error(
+        `restoreModulesAvailable entry '${mod.id}' has no entryCount. ` +
+          `The pinned engine (v${(readFileSync(join(repoRoot, 'ENGINE_VERSION'), 'utf8') || '').trim()}) ` +
+          `predates the profile-scoping change. Bump ENGINE_VERSION to an engine ` +
+          `release that includes it, then re-run.`
+      );
     }
     if (!(mod.entryCount > 0)) {
       throw new Error(`${mod.id} listed with non-positive entryCount ${mod.entryCount}`);
