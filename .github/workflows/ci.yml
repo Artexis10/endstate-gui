@@ -298,6 +298,115 @@ jobs:
           fi
           echo "Golden restore envelope matches the pinned engine."
 
+  # The GUI rendering the real engine's output — the half engine-real-apply
+  # cannot see. engine-real-apply proves the engine's bytes; every browser test
+  # otherwise runs against __ENDSTATE_MOCK_ENGINE__, so nothing proves the React
+  # app reads a real envelope correctly. This job drives the real GUI in a
+  # browser tab against the pinned engine through the standalone dev bridge (no
+  # mock, no Tauri) and asserts the UI's own reading: that a dry-run apply is
+  # disclosed as a preview rather than a completed install (#163), and that app
+  # count / plan status / friendly name are rendered from summary + actions.
+  #
+  # Every apply this lane triggers is a dry run — nothing is installed, so it is
+  # safe to run per-PR on a real Windows host. It fails loudly if the engine or
+  # bridge is missing: the pre-flight step below runs the binary directly, and
+  # the specs themselves boot the app against the bridge and error if it is down.
+  gui-real-engine:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download pinned engine
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < ENGINE_VERSION)"
+          gh release download "v${version}" \
+            --repo Artexis10/endstate \
+            --pattern endstate.exe \
+            --pattern endstate.exe.sha256
+
+          expected="$(tr -d '[:space:]' < endstate.exe.sha256)"
+          actual="$(sha256sum endstate.exe | cut -d ' ' -f 1)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Pinned engine checksum mismatch for v${version}"
+            exit 1
+          fi
+
+      # The module catalog ships in the engine repo (modules/apps/), not the
+      # binary. The bridge points ENDSTATE_ROOT at this checkout so the engine
+      # resolves the same catalog the bundled app ships with.
+      - name: Resolve pinned engine ref
+        shell: bash
+        run: echo "ENGINE_REF=v$(tr -d '[:space:]' < ENGINE_VERSION)" >> "$GITHUB_ENV"
+
+      - name: Check out the pinned engine's module catalog
+        uses: actions/checkout@v4
+        with:
+          repository: Artexis10/endstate
+          ref: ${{ env.ENGINE_REF }}
+          path: engine-src
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Keeps the from-scratch dev-bridge compile (axum/tokio/tower) off the
+      # critical path on warm runs. actions/cache is the repo's caching idiom.
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: cargo-dev-bridge-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-dev-bridge-${{ runner.os }}-
+
+      - name: Build the standalone dev bridge
+        run: cargo build --locked --manifest-path src-tauri/Cargo.toml -p endstate-dev-bridge
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright install chromium
+
+      # Fail loudly and early if the pinned engine is missing or cannot run,
+      # before Playwright starts anything. No silent skip.
+      - name: Assert the pinned engine runs
+        shell: bash
+        env:
+          ENDSTATE_ROOT: ${{ github.workspace }}/engine-src
+        run: |
+          test -f endstate.exe || { echo '::error::pinned engine binary missing'; exit 1; }
+          ./endstate.exe capabilities --json > /dev/null \
+            || { echo '::error::pinned engine failed to run capabilities'; exit 1; }
+
+      # The config starts vite (VITE_BROWSER_BRIDGE=1) and the dev bridge; the
+      # bridge resolves the engine from these two env vars. If either is wrong
+      # the app's boot capabilities call fails and every spec fails.
+      - name: Run GUI real-engine specs
+        env:
+          ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate.exe
+          ENDSTATE_ROOT: ${{ github.workspace }}/engine-src
+        run: npx playwright test -c playwright.real-engine.config.ts
+
+      - name: Upload Playwright artifacts on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: gui-real-engine-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   # Regression guard for the standalone dev bridge (PR #87). The dev bridge was
   # extracted out of the Tauri process specifically so it links NONE of the
   # native GUI stack (tao / wry / webview2-com) — that layer was the source of
