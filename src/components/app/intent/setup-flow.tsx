@@ -1498,10 +1498,12 @@ export function SetupFlow({
                 )}
 
                 <CommandWarningList warnings={applyResult.warnings} />
-                <ConfigResolutionList
-                  resolutions={applyResult.configResolutions ?? []}
-                  moduleDisplayNames={applyModuleDisplayNames}
-                />
+                {restoreIntent === 'apps-and-settings' && (applyResult.configResolutions?.length ?? 0) > 0 && (
+                  <ConfigResolutionList
+                    resolutions={applyResult.configResolutions ?? []}
+                    moduleDisplayNames={applyModuleDisplayNames}
+                  />
+                )}
 
                 {/* Activity summary */}
                 {applyResult.appEvents.length > 0 && (() => {

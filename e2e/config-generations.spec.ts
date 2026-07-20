@@ -290,8 +290,15 @@ test.describe('configuration generations', () => {
     await page.getByRole('radio', { name: 'Install apps and restore settings' }).click();
     const legacyConsent = page.getByRole('checkbox', { name: 'Adobe Photoshop' });
     await expect(legacyConsent).not.toBeChecked();
+    // The legacy warning stays at the top level of its group card, visible
+    // without opening any disclosure.
+    const legacyGroup = page.locator('[data-testid="config-resolution-group-legacy_unverified"]');
+    await expect(legacyGroup).toBeVisible();
+    await expect(legacyGroup.getByText('Engine legacy consent warning')).toBeVisible();
     await expect(page.getByText('Engine legacy consent warning')).toBeVisible();
 
+    // Ambiguous target rows stay individual decision cards; their provenance is
+    // on the card itself, not behind a group disclosure.
     const firstResolution = page.locator('[data-testid="config-resolution-ambiguous-1"]');
     await firstResolution.getByRole('button', { name: 'Configuration details' }).click();
     await expect(firstResolution.getByText('photoshop-gen-25')).toBeVisible();
@@ -313,6 +320,18 @@ test.describe('configuration generations', () => {
     await expect(page.getByText('Engine final rollback result')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('rolled_back')).toBeVisible();
     await expect(page.getByText('Transient rollback completed')).not.toBeVisible();
+
+    // The completed migrate resolution collapses into a group card; its per-set
+    // provenance stays addressable by the preserved member testid, behind the
+    // one group disclosure.
+    const migrateGroup = page.locator('[data-testid="config-resolution-group-migrate"]');
+    await expect(migrateGroup).toBeVisible();
+    await migrateGroup.getByRole('button', { name: 'Configuration details' }).click();
+    await expect(
+      migrateGroup
+        .locator('[data-testid="config-resolution-ambiguous-1"]')
+        .getByText('photoshop-gen-26', { exact: true }),
+    ).toBeVisible();
 
     const applyArgs = await page.evaluate(() => (window as any).__CONFIG_GENERATION_APPLY_ARGS__);
     expect(applyArgs).toEqual([
