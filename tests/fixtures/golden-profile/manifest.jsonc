@@ -1,0 +1,43 @@
+{
+  // Fixture profile for the live engine contract test.
+  //
+  // Carries restore entries so restoreModulesAvailable has something to scope
+  // to — a manifest with apps but no restore payload legitimately offers no
+  // settings, which would make the scoping assertions vacuous.
+  //
+  // Sources use the ./configs/<module-id>/ layout with no fromModule, matching
+  // profiles captured before that field existed. That exercises the engine's
+  // path-derivation tier, which is the one real profiles actually depend on.
+  //
+  // notepad-plus-plus carries two entries and vlc one, so entryCount is
+  // distinguishable rather than uniformly 1.
+  "version": 1,
+  "name": "golden-fixture",
+  "apps": [
+    { "id": "vlc", "refs": { "windows": "VideoLAN.VLC" } },
+    { "id": "notepad-plus-plus", "refs": { "windows": "Notepad++.Notepad++" } }
+  ],
+  "restore": [
+    {
+      "type": "copy",
+      "source": "./configs/vlc/vlcrc",
+      "target": "%APPDATA%\\vlc\\vlcrc",
+      "backup": true,
+      "optional": true
+    },
+    {
+      "type": "copy",
+      "source": "./configs/notepad-plus-plus/config.xml",
+      "target": "%APPDATA%\\Notepad++\\config.xml",
+      "backup": true,
+      "optional": true
+    },
+    {
+      "type": "copy",
+      "source": "./configs/notepad-plus-plus/shortcuts.xml",
+      "target": "%APPDATA%\\Notepad++\\shortcuts.xml",
+      "backup": true,
+      "optional": true
+    }
+  ]
+}

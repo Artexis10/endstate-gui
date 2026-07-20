@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -186,6 +186,111 @@ async function testApplyMissing() {
   }
 }
 
+/**
+ * Asserts the payload of a SUCCESSFUL apply, and regenerates the golden fixture
+ * the E2E mock is held against.
+ *
+ * `testApplyMissing` above covers the error path: it runs against a profile
+ * named `Missing` and asserts only the envelope wrapper. That is why this suite
+ * ran green while the GUI read `data.counts` and `data.items` — fields that
+ * belong to `capture` and `generations` and have never existed on an apply
+ * envelope. Reading an absent optional field disables the behavior depending on
+ * it instead of erroring, so the GUI's final-state reconciliation was inert in
+ * production while every test passed.
+ *
+ * Shape is asserted, not values: statuses depend on what the host already has
+ * installed (a dev machine reports `present`, a clean runner `to_install`), and
+ * a value-pinned fixture would end up silenced rather than fixed.
+ */
+async function testApplyPayloadAndRegenerateGolden() {
+  const profile = join(testDir, 'fixtures', 'golden-profile', 'manifest.jsonc');
+  console.log('\n📋 Testing: endstate apply --profile <golden-fixture> --dry-run --json');
+
+  const result = await runEndstate('apply', ['--profile', profile, '--dry-run']);
+  const envelope = parseEnvelope(result.stdout);
+
+  if (!envelope.success) {
+    throw new Error(
+      'Expected a successful apply against the golden fixture profile, got: ' +
+        JSON.stringify(envelope.error)
+    );
+  }
+
+  const data = envelope.data || {};
+
+  // Results live in actions[], aggregates in summary.
+  for (const field of ['dryRun', 'summary', 'actions']) {
+    if (!(field in data)) {
+      throw new Error(`apply envelope data is missing '${field}'`);
+    }
+  }
+
+  // These belong to other commands. A consumer reading them fails silently.
+  for (const forbidden of ['counts', 'items']) {
+    if (forbidden in data) {
+      throw new Error(
+        `apply envelope unexpectedly contains data.${forbidden} — ` +
+          `'counts' belongs to capture and 'items' to generations`
+      );
+    }
+  }
+
+  if (data.dryRun !== true) {
+    throw new Error(`Expected dryRun=true for a --dry-run apply, got ${data.dryRun}`);
+  }
+  if (data.summary.success !== 0) {
+    throw new Error(`A dry run must install nothing; summary.success=${data.summary.success}`);
+  }
+  if (!Array.isArray(data.actions) || data.actions.length === 0) {
+    throw new Error('Expected a non-empty actions[] for the fixture profile');
+  }
+
+  // restoreModulesAvailable is scoped to what the profile carries. The fixture
+  // declares restore payload for two modules, and its sources carry no
+  // fromModule — so this also covers the path-derivation tier that real
+  // captured profiles depend on.
+  const modules = data.restoreModulesAvailable;
+  if (!Array.isArray(modules) || modules.length === 0) {
+    throw new Error('Expected restoreModulesAvailable for a profile carrying restore entries');
+  }
+  for (const mod of modules) {
+    for (const field of ['id', 'displayName', 'entryCount']) {
+      if (!(field in mod)) {
+        throw new Error(`restoreModulesAvailable entry is missing '${field}'`);
+      }
+    }
+    if (!(mod.entryCount > 0)) {
+      throw new Error(`${mod.id} listed with non-positive entryCount ${mod.entryCount}`);
+    }
+  }
+
+  console.log('   ✓ summary + actions present; no items/counts');
+  console.log('   ✓ dryRun honored (installed nothing)');
+  console.log(`   ✓ restoreModulesAvailable scoped to ${modules.length} module(s) with entryCount`);
+
+  // Regenerate the fixture the mock is asserted against. It is committed, so a
+  // diff here means the engine's envelope changed and the mock must follow.
+  const golden = {
+    _generatedBy: 'tests/contract.test.js against the real pinned engine — do not hand-edit',
+    cliVersion: envelope.cliVersion,
+    envelopeKeys: Object.keys(envelope).sort(),
+    dataKeys: Object.keys(data).sort(),
+    actionKeys: Object.keys(data.actions[0]).sort(),
+    restoreModuleKeys: Object.keys(modules[0]).sort(),
+    summaryKeys: Object.keys(data.summary).sort(),
+    forbiddenDataKeys: ['counts', 'items'],
+  };
+  const goldenPath = join(testDir, 'fixtures', 'apply-envelope.golden.json');
+  const previous = existsSync(goldenPath) ? readFileSync(goldenPath, 'utf8') : '';
+  const next = JSON.stringify(golden, null, 2) + '\n';
+  if (previous !== next) {
+    writeFileSync(goldenPath, next);
+    console.log('   ⚠ golden fixture regenerated — commit the diff and update the mock');
+  } else {
+    console.log('   ✓ golden fixture unchanged');
+  }
+}
+
 async function runTests() {
   console.log('🧪 Contract Integration Tests');
   console.log('================================');
@@ -199,6 +304,7 @@ async function runTests() {
     await testReport();
     await testVerifyMissing();
     await testApplyMissing();
+    await testApplyPayloadAndRegenerateGolden();
     
     console.log('\n✅ All contract tests passed!');
     process.exit(0);

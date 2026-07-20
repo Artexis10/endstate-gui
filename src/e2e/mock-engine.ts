@@ -27,7 +27,80 @@ export type E2EScenario =
 // Deterministic timestamps for stable tests
 const BASE_TIMESTAMP = '2025-01-01T00:00:00.000Z';
 
+/**
+ * Engine version the mock claims. Deterministic rather than read from
+ * ENGINE_VERSION: the mock stands in for a specific envelope shape, and tying
+ * it to the pinned version would make E2E output change on every engine bump
+ * without any shape change. The conformance test is what keeps it honest.
+ */
+const MOCK_ENGINE_VERSION = '2.24.2';
+
 // Scenario definitions with deterministic outputs
+/**
+ * Builders that mirror the real apply envelope.
+ *
+ * The mock previously emitted `{ installed, alreadyPresent, failed, items }`
+ * with no envelope wrapper — a shape the engine has never produced. Because
+ * most E2E specs see only this mock, they confirmed the GUI's reading rather
+ * than testing it, and three defects shipped behind green CI. The shape here is
+ * pinned against a fixture captured from the real engine by
+ * `tests/contract.test.js`; see `mock-engine.conformance.test.ts`.
+ *
+ * Field names and status vocabulary come from
+ * `docs/contracts/cli-json-contract.md` in the engine repo: results live in
+ * `actions[]`, aggregates in `summary`, and there is no `items` or `counts` on
+ * an apply envelope.
+ */
+function action(overrides: {
+  id: string;
+  ref: string;
+  name: string;
+  status: 'to_install' | 'installed' | 'present' | 'failed';
+  reason: string;
+  message: string;
+  version?: string;
+}): Record<string, unknown> {
+  return {
+    id: overrides.id,
+    ref: overrides.ref,
+    driver: 'winget',
+    name: overrides.name,
+    status: overrides.status,
+    reason: overrides.reason,
+    message: overrides.message,
+    version: overrides.version ?? '',
+    manual: null,
+  };
+}
+
+function applyEnvelope(input: {
+  dryRun: boolean;
+  summary: { total: number; success: number; skipped: number; failed: number };
+  actions: Array<Record<string, unknown>>;
+}): Record<string, unknown> {
+  return {
+    schemaVersion: '1.0',
+    cliVersion: MOCK_ENGINE_VERSION,
+    command: 'apply',
+    runId: 'apply-e2e-mock',
+    timestampUtc: BASE_TIMESTAMP,
+    success: true,
+    data: {
+      dryRun: input.dryRun,
+      manifest: { path: 'C:\\mock\\manifest.jsonc', name: 'mock-profile', hash: '' },
+      summary: input.summary,
+      actions: input.actions,
+      configModuleMap: { 'Vendor.TestApp1': 'apps.test-app-1' },
+      packageModuleMap: { 'winget:Vendor.TestApp1': ['apps.test-app-1'] },
+      // Scoped to what a profile actually carries, with per-module entry counts.
+      restoreModulesAvailable: [
+        { id: 'apps.test-app-1', displayName: 'Test App 1', entryCount: 2 },
+      ],
+    },
+    error: null,
+  };
+}
+
 const SCENARIOS: Record<E2EScenario, {
   events: Array<{ type: 'item' | 'phase' | 'artifact'; data: any }>;
   envelope: any;
@@ -40,18 +113,14 @@ const SCENARIOS: Record<E2EScenario, {
       { type: 'item', data: { id: 'app-2', driver: 'winget', status: 'ok', reason: 'already_installed', name: 'Test App 2' } },
       { type: 'phase', data: { phase: 'end', command: 'apply', timestamp: BASE_TIMESTAMP } },
     ],
-    envelope: {
-      success: true,
-      data: {
-        installed: 1,
-        alreadyPresent: 1,
-        failed: 0,
-        items: [
-          { id: 'app-1', driver: 'winget', status: 'ok', reason: 'would_install', name: 'Test App 1' },
-          { id: 'app-2', driver: 'winget', status: 'ok', reason: 'already_installed', name: 'Test App 2' },
-        ],
-      },
-    },
+    envelope: applyEnvelope({
+      dryRun: true,
+      summary: { total: 2, success: 0, skipped: 1, failed: 0 },
+      actions: [
+        action({ id: 'app-1', ref: 'Vendor.TestApp1', name: 'Test App 1', status: 'to_install', reason: 'missing', message: 'Will be installed' }),
+        action({ id: 'app-2', ref: 'Vendor.TestApp2', name: 'Test App 2', status: 'present', reason: 'already_installed', message: 'Already installed' }),
+      ],
+    }),
     exitCode: 0,
   },
 
@@ -62,18 +131,14 @@ const SCENARIOS: Record<E2EScenario, {
       { type: 'item', data: { id: 'app-2', driver: 'winget', status: 'ok', reason: 'already_installed', name: 'Test App 2' } },
       { type: 'phase', data: { phase: 'end', command: 'apply', timestamp: BASE_TIMESTAMP } },
     ],
-    envelope: {
-      success: true,
-      data: {
-        installed: 1,
-        alreadyPresent: 1,
-        failed: 0,
-        items: [
-          { id: 'app-1', driver: 'winget', status: 'ok', reason: 'installed', name: 'Test App 1' },
-          { id: 'app-2', driver: 'winget', status: 'ok', reason: 'already_installed', name: 'Test App 2' },
-        ],
-      },
-    },
+    envelope: applyEnvelope({
+      dryRun: false,
+      summary: { total: 2, success: 1, skipped: 1, failed: 0 },
+      actions: [
+        action({ id: 'app-1', ref: 'Vendor.TestApp1', name: 'Test App 1', status: 'installed', reason: '', message: 'Installed successfully', version: '1.0.0' }),
+        action({ id: 'app-2', ref: 'Vendor.TestApp2', name: 'Test App 2', status: 'present', reason: 'already_installed', message: 'Already installed' }),
+      ],
+    }),
     exitCode: 0,
   },
 
@@ -84,18 +149,14 @@ const SCENARIOS: Record<E2EScenario, {
       { type: 'item', data: { id: 'app-2', driver: 'winget', status: 'error', reason: 'install_failed', name: 'Failed App', error: 'Package not found' } },
       { type: 'phase', data: { phase: 'end', command: 'apply', timestamp: BASE_TIMESTAMP } },
     ],
-    envelope: {
-      success: true,
-      data: {
-        installed: 1,
-        alreadyPresent: 0,
-        failed: 1,
-        items: [
-          { id: 'app-1', driver: 'winget', status: 'ok', reason: 'installed', name: 'Test App 1' },
-          { id: 'app-2', driver: 'winget', status: 'error', reason: 'install_failed', name: 'Failed App', error: 'Package not found' },
-        ],
-      },
-    },
+    envelope: applyEnvelope({
+      dryRun: false,
+      summary: { total: 2, success: 1, skipped: 0, failed: 1 },
+      actions: [
+        action({ id: 'app-1', ref: 'Vendor.TestApp1', name: 'Test App 1', status: 'installed', reason: '', message: 'Installed successfully', version: '1.0.0' }),
+        action({ id: 'app-2', ref: 'Vendor.FailedApp', name: 'Failed App', status: 'failed', reason: 'install_failed', message: 'Package not found' }),
+      ],
+    }),
     exitCode: 0,
   },
 
@@ -359,6 +420,16 @@ export function installMockEngine(): void {
   };
 
   console.log('[E2E] Deterministic mock engine installed');
+}
+
+/**
+ * The envelope a scenario returns. Exported so the conformance test can assert
+ * the mock's apply envelope against one captured from the real engine — the
+ * mock is the only engine most E2E specs ever see, so nothing else stops it
+ * drifting from the producer it stands in for.
+ */
+export function scenarioEnvelope(scenario: E2EScenario): any {
+  return SCENARIOS[scenario].envelope;
 }
 
 /**

@@ -95,6 +95,123 @@ jobs:
           ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate-linux-amd64
         run: npm run test:contract
 
+      # The contract test rewrites tests/fixtures/apply-envelope.golden.json from
+      # the real engine's envelope. A diff means the engine changed shape and the
+      # E2E mock (asserted against this fixture by
+      # src/e2e/mock-engine.conformance.test.ts) no longer stands in for it.
+      # Failing here is the point: it is the only signal that the mock and the
+      # producer have diverged.
+      - name: Assert golden apply envelope is current
+        shell: bash
+        run: |
+          if ! git diff --quiet -- tests/fixtures/apply-envelope.golden.json; then
+            echo "::error file=tests/fixtures/apply-envelope.golden.json::The real engine's apply envelope no longer matches the committed golden fixture."
+            git --no-pager diff -- tests/fixtures/apply-envelope.golden.json
+            echo "Regenerate locally with: npm run test:contract"
+            echo "Then update src/e2e/mock-engine.ts so the mock emits the new shape."
+            exit 1
+          fi
+          echo "Golden apply envelope matches the pinned engine."
+
+  # A genuine install against a real package manager. Every other job either
+  # mocks the engine or only exercises its error paths, so nothing else proves
+  # that apply actually installs, that a dry run installs nothing, or that a
+  # second run converges. Windows is the primary platform and the only one where
+  # a real install is cheap enough to run per-PR.
+  engine-real-apply:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download pinned engine
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < ENGINE_VERSION)"
+          gh release download "v${version}" \
+            --repo Artexis10/endstate \
+            --pattern endstate.exe \
+            --pattern endstate.exe.sha256
+
+          expected="$(tr -d '[:space:]' < endstate.exe.sha256)"
+          actual="$(sha256sum endstate.exe | cut -d ' ' -f 1)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Pinned engine checksum mismatch for v${version}"
+            exit 1
+          fi
+
+      # jq: small, fast, no reboot, no installer UI, and absent from the runner
+      # image. A heavier package would make this job the slowest in CI without
+      # testing anything more.
+      - name: Write a single-app profile
+        shell: bash
+        run: |
+          mkdir -p ci-profile
+          cat > ci-profile/manifest.jsonc <<'JSON'
+          {
+            "version": 1,
+            "name": "ci-real-apply",
+            "apps": [
+              { "id": "jq", "refs": { "windows": "jqlang.jq" } }
+            ]
+          }
+          JSON
+
+      - name: Dry run installs nothing
+        shell: bash
+        run: |
+          ./endstate.exe apply --profile ci-profile/manifest.jsonc --dry-run --json > dry.json
+          node -e "
+            const e = JSON.parse(require('fs').readFileSync('dry.json', 'utf8'));
+            const d = e.data ?? {};
+            if (!e.success) throw new Error('dry run failed: ' + JSON.stringify(e.error));
+            if (d.dryRun !== true) throw new Error('expected dryRun=true, got ' + d.dryRun);
+            if (d.summary.success !== 0) throw new Error('a dry run must install nothing, got success=' + d.summary.success);
+            const a = d.actions.find(x => x.id === 'jq');
+            if (a.status !== 'to_install') throw new Error('expected to_install, got ' + a.status);
+            console.log('dry run: ' + a.status + ' / ' + a.reason);
+          "
+
+      - name: Real apply installs the package
+        shell: bash
+        run: |
+          ./endstate.exe apply --profile ci-profile/manifest.jsonc --json > apply.json
+          node -e "
+            const e = JSON.parse(require('fs').readFileSync('apply.json', 'utf8'));
+            const d = e.data ?? {};
+            if (!e.success) throw new Error('apply failed: ' + JSON.stringify(e.error));
+            if (d.dryRun !== false) throw new Error('expected dryRun=false, got ' + d.dryRun);
+            if (d.summary.success !== 1) throw new Error('expected 1 install, got ' + d.summary.success);
+            const a = d.actions.find(x => x.id === 'jq');
+            if (a.status !== 'installed') throw new Error('expected installed, got ' + a.status);
+            // to_install is dry-run-only; seeing it here means the run reported a
+            // plan as if it were a result.
+            if (d.actions.some(x => x.status === 'to_install')) throw new Error('to_install survived a real apply');
+            console.log('apply: ' + a.status + ' v' + (a.version || '?'));
+          "
+
+      - name: Package is actually present on the host
+        shell: bash
+        run: |
+          winget list --id jqlang.jq --exact | grep -q 'jqlang.jq' \
+            || { echo '::error::engine reported installed but winget does not see the package'; exit 1; }
+
+      - name: Re-apply converges instead of reinstalling
+        shell: bash
+        run: |
+          ./endstate.exe apply --profile ci-profile/manifest.jsonc --json > again.json
+          node -e "
+            const e = JSON.parse(require('fs').readFileSync('again.json', 'utf8'));
+            const d = e.data ?? {};
+            if (d.summary.success !== 0) throw new Error('idempotent re-run must install nothing, got ' + d.summary.success);
+            if (d.summary.skipped !== 1) throw new Error('expected 1 skipped, got ' + d.summary.skipped);
+            const a = d.actions.find(x => x.id === 'jq');
+            if (a.status !== 'present') throw new Error('expected present, got ' + a.status);
+            console.log('re-apply: ' + a.status + ' / ' + a.reason);
+          "
+
   # Regression guard for the standalone dev bridge (PR #87). The dev bridge was
   # extracted out of the Tauri process specifically so it links NONE of the
   # native GUI stack (tao / wry / webview2-com) — that layer was the source of

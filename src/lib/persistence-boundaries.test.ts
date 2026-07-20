@@ -34,7 +34,7 @@ describe('Persistence Boundaries', () => {
       expect(settings.engineMode).toBe('bundled');
       expect(settings.customProfilesDirectory).toBe('');
       expect(settings.selectedProfileName).toBeNull();
-      expect(settings.dryRunEnabled).toBe(true);
+      expect(settings.dryRunEnabled).toBe(false);
     });
 
     it('restores settings from localStorage when seeded', () => {
@@ -58,7 +58,9 @@ describe('Persistence Boundaries', () => {
       });
 
       const loaded = loadSettings();
-      expect(loaded).toEqual(customSettings);
+      // Stored settings that predate the dry-run default correction get the
+      // marker stamped on load, so the restored object carries it too.
+      expect(loaded).toEqual({ ...customSettings, dryRunDefaultCorrected: true });
     });
 
     it('persists settings to localStorage when saved', () => {

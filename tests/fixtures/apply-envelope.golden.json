@@ -1,0 +1,49 @@
+{
+  "_generatedBy": "tests/contract.test.js against the real pinned engine — do not hand-edit",
+  "cliVersion": "2.24.2",
+  "envelopeKeys": [
+    "cliVersion",
+    "command",
+    "data",
+    "error",
+    "runId",
+    "schemaVersion",
+    "success",
+    "timestampUtc"
+  ],
+  "dataKeys": [
+    "actions",
+    "configModuleMap",
+    "dryRun",
+    "manifest",
+    "packageModuleMap",
+    "restoreModulesAvailable",
+    "summary"
+  ],
+  "actionKeys": [
+    "driver",
+    "id",
+    "manual",
+    "message",
+    "name",
+    "reason",
+    "ref",
+    "status",
+    "version"
+  ],
+  "restoreModuleKeys": [
+    "displayName",
+    "entryCount",
+    "id"
+  ],
+  "summaryKeys": [
+    "failed",
+    "skipped",
+    "success",
+    "total"
+  ],
+  "forbiddenDataKeys": [
+    "counts",
+    "items"
+  ]
+}

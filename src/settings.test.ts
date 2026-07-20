@@ -21,6 +21,9 @@ const AUTO_BACKUP_DEFAULTS = {
   scheduleTime: '09:00',
   scheduleAutoPush: false,
   scheduleManifestPath: null as string | null,
+  // loadSettings stamps this on any stored settings that predate the dry-run
+  // default correction, so round-trip assertions must expect it.
+  dryRunDefaultCorrected: true as boolean | undefined,
 };
 
 describe('settings', () => {
@@ -36,7 +39,56 @@ describe('settings', () => {
       expect(settings.engineMode).toBe('bundled');
       expect(settings.customProfilesDirectory).toBe('');
       expect(settings.selectedProfileName).toBeNull();
-      expect(settings.dryRunEnabled).toBe(true);
+      expect(settings.dryRunEnabled).toBe(false);
+    });
+
+    // dryRunEnabled used to default to true, and saveSettings persists the whole
+    // object — so existing installs have it stored whether or not the user ever
+    // chose it. Changing the default alone would leave every existing user
+    // running --dry-run: installing nothing while the results screen reports
+    // "Setup complete". These cases pin the correction's semantics.
+    describe('dry-run default correction', () => {
+      it('clears a stored dry-run flag that predates the correction', () => {
+        localStorage.setItem(
+          NAMESPACED_KEY,
+          JSON.stringify({ engineMode: 'bundled', dryRunEnabled: true })
+        );
+
+        const settings = loadSettings();
+
+        expect(settings.dryRunEnabled).toBe(false);
+        expect(settings.dryRunDefaultCorrected).toBe(true);
+      });
+
+      it('does not re-clear dry run once the correction has run', () => {
+        localStorage.setItem(
+          NAMESPACED_KEY,
+          JSON.stringify({
+            engineMode: 'bundled',
+            dryRunEnabled: true,
+            dryRunDefaultCorrected: true,
+          })
+        );
+
+        const settings = loadSettings();
+
+        // The user turned dry run back on after the correction ran; that is a
+        // real preference and must survive every subsequent load.
+        expect(settings.dryRunEnabled).toBe(true);
+      });
+
+      it('persists the correction marker so it runs at most once', () => {
+        localStorage.setItem(
+          NAMESPACED_KEY,
+          JSON.stringify({ engineMode: 'bundled', dryRunEnabled: true })
+        );
+
+        saveSettings(loadSettings());
+        const reloaded = loadSettings();
+
+        expect(reloaded.dryRunDefaultCorrected).toBe(true);
+        expect(reloaded.dryRunEnabled).toBe(false);
+      });
     });
 
     it('loads settings from localStorage when present (namespaced)', () => {
@@ -86,7 +138,7 @@ describe('settings', () => {
 
       expect(settings.engineMode).toBe('path');
       expect(settings.customProfilesDirectory).toBe('/custom');
-      expect(settings.dryRunEnabled).toBe(true);
+      expect(settings.dryRunEnabled).toBe(false);
     });
 
     it('returns defaults when localStorage contains invalid JSON', () => {
@@ -95,7 +147,7 @@ describe('settings', () => {
       const settings = loadSettings();
 
       expect(settings.engineMode).toBe('bundled');
-      expect(settings.dryRunEnabled).toBe(true);
+      expect(settings.dryRunEnabled).toBe(false);
     });
 
     it('migrates stored script mode to bundled', () => {
