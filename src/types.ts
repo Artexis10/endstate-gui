@@ -514,24 +514,25 @@ export interface EndstateApplyData {
     name: string;
     hash: string;
   };
-  /** Legacy aggregate summary — use `counts` instead when available. */
+  /**
+   * Aggregate result counts — the apply envelope's aggregate field, not a
+   * legacy one. It was previously annotated as superseded by `counts`, a field
+   * the apply envelope has never carried (`counts` belongs to `capture`), which
+   * is how the GUI came to read a field that is always absent.
+   */
   summary?: {
     total?: number;
     success?: number;
     skipped?: number;
     failed?: number;
   };
-  /** Structured app-only counts from the engine envelope. */
-  counts?: ApplyCounts;
-  /** Per-app result items for final-state reconciliation. */
-  items?: ApplyItem[];
-  actions?: Array<{
-    type: string;
-    id?: string;
-    ref?: string | null;
-    status: string;
-    message: string;
-  }>;
+  /**
+   * Per-app results, and the authoritative final state for reconciliation.
+   * There is no `items` field on an apply envelope — that belongs to
+   * `generations`. See docs/contracts/cli-json-contract.md, "Apply result
+   * fields: summary and actions".
+   */
+  actions?: ApplyAction[];
   runId?: string;
   stateFile?: string;
   logFile?: string;
@@ -554,6 +555,16 @@ export interface EndstateApplyData {
 export interface RestoreModuleRef {
   id: string;
   displayName: string;
+  /**
+   * How many of the profile's restore entries resolve to this module. Always
+   * > 0 — the engine omits modules it would restore nothing for.
+   *
+   * Optional because engines predating the profile-scoping change do not emit
+   * it. Those engines also do not scope the list, so a consumer seeing entries
+   * without `entryCount` is looking at every catalog module matching the app
+   * list rather than what the profile carries.
+   */
+  entryCount?: number;
 }
 
 export interface CapturedApp {
@@ -610,6 +621,27 @@ export interface ApplyItem {
   manual?: ManualAppInfo | null;
   /** Display name from engine (e.g., "Visual Studio Code"). */
   name?: string;
+}
+
+/**
+ * One per-app result from the apply envelope's `actions[]`.
+ *
+ * Shape mirrors the engine's ApplyAction (see the engine repo's
+ * docs/contracts/cli-json-contract.md). `status` is the terminal state:
+ * `to_install` appears only on a dry run and is never final on a real apply.
+ */
+export interface ApplyAction {
+  id: string;
+  ref?: string | null;
+  driver?: string;
+  source?: string;
+  /** Engine-supplied display name. Absent until the engine resolves the package. */
+  name?: string;
+  status: 'to_install' | 'installed' | 'present' | 'failed' | string;
+  reason?: string;
+  message?: string;
+  version?: string;
+  manual?: ManualAppInfo | null;
 }
 
 export interface ApplyCounts {

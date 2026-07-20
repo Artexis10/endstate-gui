@@ -1,4 +1,4 @@
-import type { ApplyItem } from '../types';
+import type { ApplyAction, ApplyItem } from '../types';
 import type { EngineItemStatus, ItemEvent, EnginePhase } from './streaming-events';
 
 /**
@@ -930,13 +930,33 @@ export class StreamingLineBuffer {
  * Map engine item reason to a user-friendly action string and statusKey for live activity.
  * This is the source of truth for how items appear in the live activity list.
  */
-export function reasonToAction(item: ApplyItem): { action: string; statusKey: StatusKey } {
+export function reasonToAction(
+  // Accepts both shapes that carry a status/reason pair: streamed ApplyItems and
+  // the envelope's ApplyActions. Only these two fields are read, so a structural
+  // parameter keeps one mapping authoritative for both instead of forking it.
+  item: { status?: string; reason?: string | null }
+): { action: string; statusKey: StatusKey } {
   const reason = item.reason?.toLowerCase() || '';
   const status = item.status?.toLowerCase() || '';
 
   // Failed states
   if (status === 'failed' || reason === 'install_failed' || reason === 'failed') {
     return { action: 'Failed', statusKey: 'failed' };
+  }
+
+  // Terminal statuses from the envelope's actions[]. The streamed item events
+  // handled below use a different vocabulary (status ok/skipped plus a reason),
+  // while the engine's authoritative results carry the state in `status`
+  // itself. Checked first so an envelope result is never reinterpreted through
+  // a streamed event's reason.
+  if (status === 'installed') {
+    return { action: 'Installed', statusKey: 'installed' };
+  }
+  if (status === 'present') {
+    return { action: 'OK', statusKey: 'present' };
+  }
+  if (status === 'to_install') {
+    return { action: 'To install', statusKey: 'to_install' };
   }
 
   // User denied/cancelled
@@ -996,22 +1016,19 @@ export function reasonToActionString(item: ApplyItem): string {
  * - Items with null message get a fallback message
  * 
  * @param liveEvents - Current live activity events from streaming
- * @param envelopeItems - Final items from the JSON envelope (source of truth)
+ * @param envelopeActions - Final per-app results from the JSON envelope's
+ *   `actions[]` (source of truth). Note this is `actions`, not `items`: the
+ *   apply envelope has never carried an `items` field, and reconciling against
+ *   it meant this function silently never ran.
  * @returns Reconciled app events with correct final statuses
  */
 export function reconcileLiveActivity(
   liveEvents: AppEvent[],
-  envelopeItems: ApplyItem[]
+  envelopeActions: ApplyAction[]
 ): AppEvent[] {
-  // Build a map of envelope items by id for O(1) lookup
-  const envelopeMap = new Map<string, ApplyItem>();
-  for (const item of envelopeItems) {
-    envelopeMap.set(item.id, item);
-  }
-
   // Build result: start with live events, update from envelope
   const resultMap = new Map<string, AppEvent>();
-  
+
   // First, add all live events
   for (const event of liveEvents) {
     resultMap.set(event.app, event);
@@ -1019,11 +1036,14 @@ export function reconcileLiveActivity(
 
   // Then, reconcile with envelope (envelope is source of truth for status)
   // but preserve phase/reason from existing events to avoid phase-leak
-  for (const item of envelopeItems) {
+  for (const item of envelopeActions) {
     const { action, statusKey } = reasonToAction(item);
     const existing = resultMap.get(item.id);
-    
-    // Update to final status from envelope, but preserve phase/reason context
+
+    // Update to final status from envelope, but preserve phase/reason context.
+    // `name` and `driver` are carried forward — dropping them made a reconciled
+    // row fall back to the raw package ref, which is how a never-installed app
+    // rendered as "Warp.Warp" beside friendly-named rows.
     resultMap.set(item.id, {
       app: item.id,
       action,
@@ -1031,6 +1051,8 @@ export function reconcileLiveActivity(
       timestamp: existing?.timestamp ?? Date.now(),
       phase: existing?.phase,
       reason: item.reason ?? existing?.reason,
+      name: item.name ?? existing?.name,
+      driver: item.driver ?? existing?.driver,
     });
   }
 
@@ -1048,8 +1070,8 @@ export function reconcileLiveActivity(
     }
   }
   
-  // Then, add any envelope items not in live events
-  for (const item of envelopeItems) {
+  // Then, add any envelope results not in live events
+  for (const item of envelopeActions) {
     if (!seen.has(item.id)) {
       const reconciled = resultMap.get(item.id);
       if (reconciled) {
