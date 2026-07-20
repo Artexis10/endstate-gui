@@ -343,7 +343,7 @@ describe('SetupFlow config generations', () => {
     }));
     expect(await screen.findByText('Engine legacy warning')).toBeInTheDocument();
     expect(
-      within(screen.getByTestId('config-resolution-legacy-capture')).getByText('Adobe Photoshop'),
+      within(screen.getByTestId('config-resolution-group-legacy_unverified')).getByText('Adobe Photoshop'),
     ).toBeVisible();
 
     const legacyConsent = screen.getByRole('checkbox', { name: 'Adobe Photoshop' });
@@ -668,6 +668,7 @@ describe('SetupFlow config generations', () => {
       installed: 1,
       alreadyPresent: 0,
       appEvents: [],
+      restoreModulesAvailable: [{ id: 'photoshop', displayName: 'Adobe Photoshop' }],
     });
     let resolveApply!: (result: {
       installed: number;
@@ -705,6 +706,13 @@ describe('SetupFlow config generations', () => {
 
     await user.click(screen.getByText('generation-profile'));
     await screen.findByText('Preview complete');
+    // Completed config resolutions render only under the settings intent, matching
+    // the preview path gate, so opt into settings before applying.
+    await user.click(screen.getByRole('radio', { name: /settings/i }));
+    await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(2, profile, {
+      restoreIntent: 'apps-and-settings',
+    }));
+    await screen.findByText('Preview complete');
     await user.click(screen.getByTestId('setup-flow-apply'));
     expect(await screen.findByText('Transient migration completed')).toBeInTheDocument();
 
@@ -729,6 +737,51 @@ describe('SetupFlow config generations', () => {
     expect(await screen.findByText('Engine final rollback')).toBeInTheDocument();
     expect(screen.getByText('rolled_back')).toBeInTheDocument();
     expect(screen.queryByText('Transient migration completed')).not.toBeInTheDocument();
+  });
+
+  it('renders no configuration cards for an install-only apply that carries resolution data', async () => {
+    const onPreview = vi.fn().mockResolvedValue({
+      installed: 1,
+      alreadyPresent: 0,
+      appEvents: [{ app: 'Vendor.Alpha', action: 'To install', name: 'Alpha package', timestamp: 1 }],
+    });
+    const onApply = vi.fn().mockResolvedValue({
+      installed: 1,
+      alreadyPresent: 0,
+      failed: 0,
+      skipped: 0,
+      appEvents: [{ app: 'Vendor.Alpha', action: 'Installed', name: 'Alpha package', timestamp: 1 }],
+      configResolutions: [
+        configResolution({
+          captureId: 'install-only-legacy',
+          resolution: 'legacy_unverified',
+          label: 'Compatibility unknown',
+          message: 'Engine install-only leftover warning',
+        }),
+        configResolution({
+          captureId: 'install-only-migrate',
+          resolution: 'migrate',
+          label: 'Will be upgraded',
+          status: 'restored',
+          message: 'Engine install-only migrate result',
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+
+    renderWithProviders(<SetupFlow {...baseProps} onPreview={onPreview} onApply={onApply} />);
+
+    await user.click(screen.getByText('generation-profile'));
+    await screen.findByText('Preview complete');
+    // Apply directly in the default apps-only intent.
+    await user.click(screen.getByTestId('setup-flow-apply'));
+
+    expect(await screen.findByText('Setup complete')).toBeInTheDocument();
+    expect(onApply).toHaveBeenCalledWith(profile, undefined);
+    expect(screen.queryByTestId('config-resolution-group-legacy_unverified')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-group-migrate')).not.toBeInTheDocument();
+    expect(screen.queryByText('Engine install-only leftover warning')).not.toBeInTheDocument();
+    expect(screen.queryByText('Engine install-only migrate result')).not.toBeInTheDocument();
   });
 
   it('renders structured engine error copy and remediation without rewriting either', async () => {

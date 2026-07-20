@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders, screen, userEvent, within } from '@/test/test-utils';
-import type { ConfigResolution } from '@/types';
+import type { ConfigResolution, ConfigTargetCandidate } from '@/types';
 import { useShowDetails } from '@/lib/use-show-details';
 import { ConfigResolutionList } from './config-resolution-list';
 
@@ -22,6 +22,18 @@ function resolution(
     message: `Message for ${overrides.captureId}`,
     remediation: null,
     ...overrides,
+  };
+}
+
+function candidate(id: string, rawVersion: string): ConfigTargetCandidate {
+  return {
+    id,
+    moduleId: 'apps.photoshop',
+    detectorId: 'photoshop-install',
+    rawVersion,
+    normalizedVersion: `${rawVersion}.0`,
+    evidence: { type: 'registry', appId: 'Adobe.Photoshop' },
+    restoreModuleRevision: 'revision-restore',
   };
 }
 
@@ -59,7 +71,146 @@ describe('ConfigResolutionList', () => {
     expect(screen.getByText('rollback_failed')).toBeInTheDocument();
   });
 
-  it('keeps the raw module id out of the distilled legacy warning row', () => {
+  it('collapses same-verdict legacy sets into a single group card', () => {
+    const resolutions = Array.from({ length: 10 }, (_, index) => resolution({
+      captureId: `legacy-${index}`,
+      moduleId: `apps.module${index}`,
+      resolution: 'legacy_unverified',
+      label: 'Compatibility unknown',
+      message: 'Review these legacy settings before restoring them.',
+      remediation: 'Engine legacy remediation',
+    }));
+
+    renderWithProviders(<ConfigResolutionList resolutions={resolutions} />);
+
+    expect(screen.getAllByTestId('config-resolution-group-legacy_unverified')).toHaveLength(1);
+    expect(screen.getByText('10 settings')).toBeInTheDocument();
+    expect(screen.getAllByText('Compatibility unknown')).toHaveLength(1);
+    expect(screen.getAllByText('Review these legacy settings before restoring them.')).toHaveLength(1);
+    expect(screen.getAllByText('Engine legacy remediation')).toHaveLength(1);
+  });
+
+  it('keeps groups with distinct engine messages separate', () => {
+    renderWithProviders(
+      <ConfigResolutionList
+        resolutions={[
+          resolution({
+            captureId: 'legacy-a',
+            moduleId: 'apps.a',
+            resolution: 'legacy_unverified',
+            label: 'Compatibility unknown',
+            message: 'First legacy reason',
+          }),
+          resolution({
+            captureId: 'legacy-b',
+            moduleId: 'apps.b',
+            resolution: 'legacy_unverified',
+            label: 'Compatibility unknown',
+            message: 'Second legacy reason',
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByTestId('config-resolution-group-legacy_unverified')).toHaveLength(2);
+    expect(screen.getByText('First legacy reason')).toBeInTheDocument();
+    expect(screen.getByText('Second legacy reason')).toBeInTheDocument();
+  });
+
+  it('renders ambiguous-target rows as individual decision cards, never grouped', () => {
+    renderWithProviders(
+      <ConfigResolutionList
+        resolutions={[
+          resolution({
+            captureId: 'amb-1',
+            resolution: 'unknown',
+            label: 'Choose a target',
+            message: 'Same ambiguity message',
+            reason: 'ambiguous_target_instance',
+            targetCandidates: [candidate('t-1', '1.0'), candidate('t-2', '2.0')],
+          }),
+          resolution({
+            captureId: 'amb-2',
+            resolution: 'unknown',
+            label: 'Choose a target',
+            message: 'Same ambiguity message',
+            reason: 'ambiguous_target_instance',
+            targetCandidates: [candidate('t-3', '3.0')],
+          }),
+        ]}
+        restoreTargetSupported
+        onTargetMappingChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('config-resolution-amb-1')).toBeInTheDocument();
+    expect(screen.getByTestId('config-resolution-amb-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-group-unknown')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('combobox')).toHaveLength(2);
+  });
+
+  it('renders the direct resolution as a quiet line with no card chrome or status tag', () => {
+    vi.mocked(useShowDetails).mockReturnValue(true);
+    renderWithProviders(
+      <ConfigResolutionList
+        resolutions={[
+          resolution({
+            captureId: 'direct-1',
+            resolution: 'direct',
+            label: 'Compatible',
+            message: 'Compatible with your setup',
+            status: 'restored',
+          }),
+          resolution({
+            captureId: 'direct-2',
+            moduleId: 'apps.vscode',
+            resolution: 'direct',
+            label: 'Compatible',
+            message: 'Compatible with your setup',
+            status: 'restored',
+          }),
+        ]}
+      />,
+    );
+
+    const quietLine = screen.getByTestId('config-resolution-group-direct');
+    expect(quietLine.tagName).toBe('P');
+    expect(screen.getAllByText('Compatible')).toHaveLength(1);
+    expect(screen.queryByText('restored')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Configuration details' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the legacy warning at the top level, visible without opening a disclosure', async () => {
+    vi.mocked(useShowDetails).mockReturnValue(true);
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ConfigResolutionList
+        resolutions={[
+          resolution({
+            captureId: 'legacy-1',
+            moduleId: 'apps.photoshop',
+            resolution: 'legacy_unverified',
+            label: 'Compatibility unknown',
+            message: 'Engine legacy consent warning',
+            remediation: 'Engine legacy remediation',
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('Engine legacy consent warning')).toBeVisible();
+    expect(screen.getByText('Engine legacy remediation')).toBeVisible();
+    expect(screen.getByText('Compatibility unknown')).toBeVisible();
+    // Technical provenance (including the raw module id) stays behind the disclosure.
+    expect(screen.queryByTestId('config-resolution-legacy-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('apps.photoshop')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Configuration details' }));
+    expect(screen.getByTestId('config-resolution-legacy-1')).toBeInTheDocument();
+    expect(screen.getByText('apps.photoshop')).toBeInTheDocument();
+  });
+
+  it('keeps the raw module id out of the distilled group card', () => {
     renderWithProviders(
       <ConfigResolutionList
         resolutions={[
@@ -74,12 +225,12 @@ describe('ConfigResolutionList', () => {
       />,
     );
 
-    const row = screen.getByTestId('config-resolution-legacy-capture');
-    expect(within(row).queryByText('apps.photoshop')).not.toBeInTheDocument();
-    expect(within(row).getByText('Review these legacy settings before restoring them.')).toBeVisible();
+    const card = screen.getByTestId('config-resolution-group-legacy_unverified');
+    expect(within(card).queryByText('apps.photoshop')).not.toBeInTheDocument();
+    expect(within(card).getByText('Review these legacy settings before restoring them.')).toBeVisible();
   });
 
-  it('associates identical legacy warnings with their human module names', () => {
+  it('lists grouped member display names inside a single card', () => {
     renderWithProviders(
       <ConfigResolutionList
         resolutions={[
@@ -105,12 +256,12 @@ describe('ConfigResolutionList', () => {
       />,
     );
 
-    const photoshopRow = screen.getByTestId('config-resolution-photoshop-legacy');
-    const vscodeRow = screen.getByTestId('config-resolution-vscode-legacy');
-    expect(within(photoshopRow).getByText('Adobe Photoshop')).toBeVisible();
-    expect(within(photoshopRow).queryByText('Visual Studio Code')).not.toBeInTheDocument();
-    expect(within(vscodeRow).getByText('Visual Studio Code')).toBeVisible();
-    expect(within(vscodeRow).queryByText('Adobe Photoshop')).not.toBeInTheDocument();
+    const cards = screen.getAllByTestId('config-resolution-group-legacy_unverified');
+    expect(cards).toHaveLength(1);
+    const card = cards[0];
+    expect(within(card).getByText('Adobe Photoshop')).toBeVisible();
+    expect(within(card).getByText('Visual Studio Code')).toBeVisible();
+    expect(within(card).getByText('2 settings')).toBeVisible();
     expect(screen.queryByText('apps.photoshop')).not.toBeInTheDocument();
     expect(screen.queryByText('apps.vscode')).not.toBeInTheDocument();
   });
@@ -170,7 +321,7 @@ describe('ConfigResolutionList', () => {
     });
   });
 
-  it('keeps portable provenance collapsed until details are requested', async () => {
+  it('keeps grouped provenance collapsed until details are requested', async () => {
     vi.mocked(useShowDetails).mockReturnValue(true);
     const user = userEvent.setup();
     renderWithProviders(
@@ -213,6 +364,7 @@ describe('ConfigResolutionList', () => {
     expect(screen.queryByText('apps.photoshop')).not.toBeInTheDocument();
     expect(screen.queryByText(/source-25\.0/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Configuration details' }));
+    expect(screen.getByTestId('config-resolution-provenance')).toBeInTheDocument();
     expect(screen.getByText('apps.photoshop')).toBeInTheDocument();
     expect(screen.getByText(/source-25\.0/)).toBeInTheDocument();
     expect(screen.getByText(/target-26\.0/)).toBeInTheDocument();
@@ -220,7 +372,6 @@ describe('ConfigResolutionList', () => {
     expect(screen.getByText(/fingerprint-target/)).toBeInTheDocument();
     expect(screen.getByText('["g1","g2"]')).toBeInTheDocument();
     expect(screen.getByText('revision-capture')).toBeInTheDocument();
-    expect(screen.getByText('revision-restore')).toBeInTheDocument();
     expect(screen.getByText('engine_reason')).toBeInTheDocument();
   });
 
