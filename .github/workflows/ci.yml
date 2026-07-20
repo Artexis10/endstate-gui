@@ -95,24 +95,6 @@ jobs:
           ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate-linux-amd64
         run: npm run test:contract
 
-      # The contract test rewrites tests/fixtures/apply-envelope.golden.json from
-      # the real engine's envelope. A diff means the engine changed shape and the
-      # E2E mock (asserted against this fixture by
-      # src/e2e/mock-engine.conformance.test.ts) no longer stands in for it.
-      # Failing here is the point: it is the only signal that the mock and the
-      # producer have diverged.
-      - name: Assert golden apply envelope is current
-        shell: bash
-        run: |
-          if ! git diff --quiet -- tests/fixtures/apply-envelope.golden.json; then
-            echo "::error file=tests/fixtures/apply-envelope.golden.json::The real engine's apply envelope no longer matches the committed golden fixture."
-            git --no-pager diff -- tests/fixtures/apply-envelope.golden.json
-            echo "Regenerate locally with: npm run test:contract"
-            echo "Then update src/e2e/mock-engine.ts so the mock emits the new shape."
-            exit 1
-          fi
-          echo "Golden apply envelope matches the pinned engine."
-
   # A genuine install against a real package manager. Every other job either
   # mocks the engine or only exercises its error paths, so nothing else proves
   # that apply actually installs, that a dry run installs nothing, or that a
@@ -211,6 +193,42 @@ jobs:
             if (a.status !== 'present') throw new Error('expected present, got ' + a.status);
             console.log('re-apply: ' + a.status + ' / ' + a.reason);
           "
+
+      # The apply payload assertions and golden-fixture regeneration live here
+      # rather than in engine-contract: the fixture profile declares Windows
+      # package refs, so only a Windows engine plans a populated actions[] for
+      # it. On Linux the same run legitimately plans nothing.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Assert apply payload and regenerate golden envelope
+        shell: bash
+        env:
+          ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate.exe
+          ENDSTATE_CONTRACT_PAYLOAD: '1'
+        run: npm run test:contract
+
+      # A diff means the engine's envelope changed and the E2E mock (asserted
+      # against this fixture by src/e2e/mock-engine.conformance.test.ts) no
+      # longer stands in for it. Failing here is the point — it is the only
+      # signal that the mock and the producer have diverged.
+      - name: Assert golden apply envelope is committed
+        shell: bash
+        run: |
+          if ! git diff --quiet -- tests/fixtures/apply-envelope.golden.json; then
+            echo "::error file=tests/fixtures/apply-envelope.golden.json::The real engine's apply envelope no longer matches the committed golden fixture."
+            git --no-pager diff -- tests/fixtures/apply-envelope.golden.json
+            echo "Regenerate locally with: ENDSTATE_CONTRACT_PAYLOAD=1 npm run test:contract"
+            echo "Then update src/e2e/mock-engine.ts so the mock emits the new shape."
+            exit 1
+          fi
+          echo "Golden apply envelope matches the pinned engine."
 
   # Regression guard for the standalone dev bridge (PR #87). The dev bridge was
   # extracted out of the Tauri process specifically so it links NONE of the

@@ -203,6 +203,19 @@ async function testApplyMissing() {
  * a value-pinned fixture would end up silenced rather than fixed.
  */
 async function testApplyPayloadAndRegenerateGolden() {
+  // The fixture profile declares Windows package refs, so only a Windows engine
+  // produces a populated actions[] for it. On Linux the same run legitimately
+  // plans nothing and the payload assertions would fail on an empty list rather
+  // than on any real defect. Gated by an explicit opt-in the Windows job sets,
+  // not by sniffing the platform — and it announces the skip, because a quiet
+  // skip is how an assertion stops running without anyone noticing.
+  if (process.env.ENDSTATE_CONTRACT_PAYLOAD !== '1') {
+    console.log('\n📋 Skipping apply payload + golden fixture assertions');
+    console.log('   These require a Windows engine (the fixture profile uses Windows refs).');
+    console.log('   They run in the engine-real-apply job; set ENDSTATE_CONTRACT_PAYLOAD=1 to run locally.');
+    return;
+  }
+
   const profile = join(testDir, 'fixtures', 'golden-profile', 'manifest.jsonc');
   console.log('\n📋 Testing: endstate apply --profile <golden-fixture> --dry-run --json');
 
