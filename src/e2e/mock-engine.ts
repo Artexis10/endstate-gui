@@ -73,6 +73,26 @@ function action(overrides: {
   };
 }
 
+/**
+ * Restore modules the mock apply envelope carries, defined as (module → the
+ * entries resolved to it). entryCount is DERIVED from `entries.length` rather
+ * than written separately, mirroring the engine invariant that membership and
+ * count cannot disagree (a module with no resolved entries is omitted, never
+ * reported empty). Deriving it from one source is why the count can never drift
+ * from the entry list it claims to summarize.
+ */
+const MOCK_RESTORE_MODULES: Array<{ id: string; displayName: string; entries: string[] }> = [
+  { id: 'apps.test-app-1', displayName: 'Test App 1', entries: ['settings.json', 'keybindings.json'] },
+];
+
+function restoreModulesAvailable(): Array<Record<string, unknown>> {
+  return MOCK_RESTORE_MODULES.map((module) => ({
+    id: module.id,
+    displayName: module.displayName,
+    entryCount: module.entries.length,
+  }));
+}
+
 function applyEnvelope(input: {
   dryRun: boolean;
   summary: { total: number; success: number; skipped: number; failed: number };
@@ -92,10 +112,9 @@ function applyEnvelope(input: {
       actions: input.actions,
       configModuleMap: { 'Vendor.TestApp1': 'apps.test-app-1' },
       packageModuleMap: { 'winget:Vendor.TestApp1': ['apps.test-app-1'] },
-      // Scoped to what a profile actually carries, with per-module entry counts.
-      restoreModulesAvailable: [
-        { id: 'apps.test-app-1', displayName: 'Test App 1', entryCount: 2 },
-      ],
+      // Scoped to what a profile actually carries, with per-module entry counts
+      // derived from a single source (see MOCK_RESTORE_MODULES).
+      restoreModulesAvailable: restoreModulesAvailable(),
     },
     error: null,
   };

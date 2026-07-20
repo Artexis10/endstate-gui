@@ -256,7 +256,9 @@ jobs:
           ref: ${{ env.ENGINE_REF }}
           path: engine-src
 
-      - name: Assert apply payload and regenerate golden envelope
+      # Regenerates BOTH golden envelopes (apply and restore) and runs the
+      # mixed partial-failure assertions, all against the real pinned engine.
+      - name: Assert apply + restore payloads and regenerate golden envelopes
         shell: bash
         env:
           ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate.exe
@@ -279,6 +281,22 @@ jobs:
             exit 1
           fi
           echo "Golden apply envelope matches the pinned engine."
+
+      # Same gate for the restore envelope. A diff means the real engine's
+      # restore-enabled apply shape changed and the mock's restore-bearing
+      # scenario (asserted against this fixture by
+      # src/e2e/mock-engine.conformance.test.ts) no longer stands in for it.
+      - name: Assert golden restore envelope is committed
+        shell: bash
+        run: |
+          if ! git diff --quiet -- tests/fixtures/restore-envelope.golden.json; then
+            echo "::error file=tests/fixtures/restore-envelope.golden.json::The real engine's restore envelope no longer matches the committed golden fixture."
+            git --no-pager diff -- tests/fixtures/restore-envelope.golden.json
+            echo "Regenerate locally with: ENDSTATE_CONTRACT_PAYLOAD=1 npm run test:contract"
+            echo "Then update src/e2e/mock-engine.ts so the mock emits the new shape."
+            exit 1
+          fi
+          echo "Golden restore envelope matches the pinned engine."
 
   # Regression guard for the standalone dev bridge (PR #87). The dev bridge was
   # extracted out of the Tauri process specifically so it links NONE of the
