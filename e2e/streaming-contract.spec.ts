@@ -70,23 +70,37 @@ test.describe('Streaming Contract', () => {
     await expect(page.locator('[data-testid="intent-setup"]')).toBeVisible();
   });
 
-  test('Streaming invoke throws - error banner appears', async ({ page, baseURL }) => {
+  test('Boot engine invoke throws - error state disables intents', async ({ page, baseURL }) => {
     await forceAdvancedMode(page);
 
-    await installTauriMock(page, {
-      enableEventListeners: true,
-      invoke: {
-        run_endstate_streaming: () => {
-          throw new Error('IPC channel closed unexpectedly');
-        },
-      }
+    // Base __TAURI__ mock (plugin-store etc.) and force web/mock mode.
+    await installTauriMock(page, { enableEventListeners: true });
+
+    // Simulate the engine being unreachable at boot: the capabilities/report
+    // one-shot invoke throws (e.g. "IPC channel closed unexpectedly").
+    //
+    // The landing intents are gated on ENGINE CONNECTION, which App.loadInitialData
+    // probes with the non-streaming `capabilities` command (runEndstateOnce). When
+    // that fails the app enters `status: 'error'` and the intents are disabled.
+    //
+    // This is deliberately NOT driven through `run_endstate_streaming`: a *runtime*
+    // streaming failure (during apply/capture) is surfaced as a per-flow error
+    // banner and correctly leaves the landing intents ENABLED — the engine is still
+    // connected. Only a boot-time connection failure disables the intents. (The
+    // previous version of this test threw from `run_endstate_streaming`, which the
+    // boot path never invokes; it passed only because a mock-shape bug made
+    // capabilities read as failed. See PR #170.)
+    await page.addInitScript(() => {
+      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+        runEndstateStreaming: async () => { throw new Error('IPC channel closed unexpectedly'); },
+        runEndstateOnce: async () => { throw new Error('IPC channel closed unexpectedly'); },
+      };
     });
-    
+
     await page.goto(baseURL || '/');
-    
-    // Wait for the error state to propagate to the UI.
-    // The error banner renders inside persistent flow containers (display:none) AND the landing page.
-    // The most reliable signal is that the intent cards become disabled.
+
+    // Wait for the error state to propagate to the UI. The most reliable signal
+    // is that the intent cards become disabled.
     const intentSave = page.locator('[data-testid="intent-save"]');
     await expect(intentSave).toBeVisible({ timeout: 15000 });
     await expect(intentSave).toBeDisabled({ timeout: 15000 });
