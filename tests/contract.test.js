@@ -294,6 +294,15 @@ async function testApplyPayloadAndRegenerateGolden() {
   console.log('   ✓ dryRun honored (installed nothing)');
   console.log(`   ✓ restoreModulesAvailable scoped to ${modules.length} module(s) with entryCount`);
 
+  // Keys whose presence depends on the run outcome, not the contract: these
+  // are the `omitempty` fields on the engine's ApplyAction struct. A dev
+  // machine reports `present` with a `version` where a clean CI runner reports
+  // `to_install` without one, so an inventory that includes them can never
+  // regenerate identically on both. Excluding them keeps regeneration
+  // deterministic across hosts — a genuinely new engine field still lands in
+  // actionKeys and diffs the committed fixture.
+  const OPTIONAL_ACTION_KEYS = ['message', 'name', 'reason', 'rebootRequired', 'version'];
+
   // Regenerate the fixture the mock is asserted against. It is committed, so a
   // diff here means the engine's envelope changed and the mock must follow.
   const golden = {
@@ -301,7 +310,10 @@ async function testApplyPayloadAndRegenerateGolden() {
     cliVersion: envelope.cliVersion,
     envelopeKeys: Object.keys(envelope).sort(),
     dataKeys: Object.keys(data).sort(),
-    actionKeys: Object.keys(data.actions[0]).sort(),
+    actionKeys: [...new Set(data.actions.flatMap((action) => Object.keys(action)))]
+      .filter((key) => !OPTIONAL_ACTION_KEYS.includes(key))
+      .sort(),
+    optionalActionKeys: OPTIONAL_ACTION_KEYS,
     restoreModuleKeys: Object.keys(modules[0]).sort(),
     summaryKeys: Object.keys(data.summary).sort(),
     forbiddenDataKeys: ['counts', 'items'],

@@ -24,11 +24,14 @@
     "driver",
     "id",
     "manual",
+    "ref",
+    "status"
+  ],
+  "optionalActionKeys": [
     "message",
     "name",
     "reason",
-    "ref",
-    "status",
+    "rebootRequired",
     "version"
   ],
   "restoreModuleKeys": [
