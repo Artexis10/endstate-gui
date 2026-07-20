@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -329,6 +330,256 @@ async function testApplyPayloadAndRegenerateGolden() {
   }
 }
 
+/**
+ * Asserts a SUCCESSFUL restore-enabled apply, and regenerates the restore
+ * golden fixture the E2E mock's restore-bearing scenario is held against.
+ *
+ * Distinct from testApplyPayloadAndRegenerateGolden: that one runs a --dry-run
+ * and asserts only that restore modules are *planned*. This one runs a REAL
+ * restore (--enable-restore, no --dry-run) so the copy actually executes, and
+ * proves it lands only inside a throwaway temp workspace — never a real user
+ * config location. Shape is asserted, not values, for the same reason as the
+ * apply golden: a value-pinned fixture would be silenced rather than fixed.
+ */
+async function testRestorePayloadAndRegenerateGolden() {
+  // Same opt-in gate as the apply payload test: the fixture resolves its
+  // restore modules through the engine's module catalog, which the
+  // engine-real-apply job checks out and points ENDSTATE_ROOT at. A quiet skip
+  // is how an assertion stops running unnoticed, so announce it.
+  if (process.env.ENDSTATE_CONTRACT_PAYLOAD !== '1') {
+    console.log('\n📋 Skipping restore payload + golden fixture assertions');
+    console.log('   These execute a real restore against temp targets (Windows engine + module catalog).');
+    console.log('   They run in the engine-real-apply job; set ENDSTATE_CONTRACT_PAYLOAD=1 to run locally.');
+    return;
+  }
+
+  console.log('\n📋 Testing: endstate apply --enable-restore (real restore to temp targets)');
+
+  // Materialize the committed fixture into a throwaway temp workspace so every
+  // restore target resolves inside it — never a real user config location.
+  const fixtureDir = join(testDir, 'fixtures', 'restore-profile');
+  const workspace = mkdtempSync(join(tmpdir(), 'endstate-restore-contract-'));
+  try {
+    const restoredDir = join(workspace, 'restored');
+    // Copy the source configs so ./configs/<id>/ resolves relative to the temp manifest.
+    cpSync(join(fixtureDir, 'configs'), join(workspace, 'configs'), { recursive: true });
+
+    // Rewrite the target-dir token to the temp workspace. Forward slashes are
+    // JSON-safe and accepted by the engine on Windows.
+    const template = readFileSync(join(fixtureDir, 'manifest.jsonc'), 'utf8');
+    const manifestText = template
+      .split('__RESTORE_TARGET_DIR__')
+      .join(restoredDir.replace(/\\/g, '/'));
+    const manifestPath = join(workspace, 'manifest.jsonc');
+    writeFileSync(manifestPath, manifestText);
+
+    const result = await runEndstate('apply', ['--profile', manifestPath, '--enable-restore']);
+    const envelope = parseEnvelope(result.stdout);
+
+    if (!envelope.success) {
+      throw new Error(
+        'Expected a successful restore-enabled apply, got: ' + JSON.stringify(envelope.error)
+      );
+    }
+    const data = envelope.data || {};
+
+    // Same forbidden-field discipline as the apply payload test: these belong to
+    // other commands and a consumer reading them fails silently.
+    for (const forbidden of ['counts', 'items']) {
+      if (forbidden in data) {
+        throw new Error(
+          `restore apply envelope unexpectedly contains data.${forbidden} — ` +
+            `'counts' belongs to capture and 'items' to generations`
+        );
+      }
+    }
+
+    const modules = data.restoreModulesAvailable;
+    if (!Array.isArray(modules) || modules.length === 0) {
+      throw new Error('Expected restoreModulesAvailable for a profile carrying restore entries');
+    }
+    for (const mod of modules) {
+      for (const field of ['id', 'displayName', 'entryCount']) {
+        if (!(field in mod)) {
+          throw new Error(`restoreModulesAvailable entry is missing '${field}'`);
+        }
+      }
+      // Membership and count cannot disagree: the engine omits a module with no
+      // resolved entries rather than reporting it empty.
+      if (!(mod.entryCount > 0)) {
+        throw new Error(`${mod.id} listed with non-positive entryCount ${mod.entryCount}`);
+      }
+    }
+
+    // configResolutions are generation-aware config-payload rows. The legacy
+    // copy-restore format this fixture uses does not carry them, so they are
+    // absent here. Assert their SHAPE only if the engine ever starts emitting
+    // them for this input, so a future contract shift is caught rather than
+    // silently accepted.
+    const configResolutions = data.configResolutions;
+    const configResolutionsCarried =
+      Array.isArray(configResolutions) && configResolutions.length > 0;
+    if (configResolutionsCarried) {
+      for (const row of configResolutions) {
+        for (const field of ['captureId', 'moduleId', 'resolution', 'status']) {
+          if (!(field in row)) {
+            throw new Error(`configResolutions row is missing engine-authored field '${field}'`);
+          }
+        }
+      }
+    }
+
+    // Prove the restore actually executed and wrote only inside the temp
+    // workspace. optional:true means a missing source would be skipped, so a
+    // present target file is positive evidence the copy ran.
+    const expectedTargets = [
+      join(restoredDir, 'vlc', 'vlcrc'),
+      join(restoredDir, 'notepad-plus-plus', 'config.xml'),
+      join(restoredDir, 'notepad-plus-plus', 'shortcuts.xml'),
+    ];
+    for (const target of expectedTargets) {
+      if (!existsSync(target)) {
+        throw new Error(`restore did not create the expected temp target ${target}`);
+      }
+    }
+
+    console.log(`   ✓ restoreModulesAvailable scoped to ${modules.length} module(s) with entryCount`);
+    console.log('   ✓ no items/counts on the restore envelope');
+    console.log(`   ✓ restore executed to temp targets (${expectedTargets.length} files)`);
+    console.log(`   ✓ configResolutions carried by this profile: ${configResolutionsCarried}`);
+
+    // Same optional-key discipline as the apply golden: declare the engine's
+    // omitempty keys rather than observing them, so regeneration is
+    // host-independent. RestoreModuleRef (engine ApplyResult) marks none of
+    // id/displayName/entryCount omitempty on the pinned engine, so the set is
+    // empty — but the mechanism is replicated so a newly-omitempty field would
+    // be excluded on purpose rather than by accident.
+    const OPTIONAL_RESTORE_MODULE_KEYS = [];
+    const golden = {
+      _generatedBy: 'tests/contract.test.js against the real pinned engine — do not hand-edit',
+      cliVersion: envelope.cliVersion,
+      envelopeKeys: Object.keys(envelope).sort(),
+      dataKeys: Object.keys(data).sort(),
+      restoreModuleKeys: [...new Set(modules.flatMap((mod) => Object.keys(mod)))]
+        .filter((key) => !OPTIONAL_RESTORE_MODULE_KEYS.includes(key))
+        .sort(),
+      optionalRestoreModuleKeys: OPTIONAL_RESTORE_MODULE_KEYS,
+      summaryKeys: Object.keys(data.summary).sort(),
+      configResolutionsCarried,
+      forbiddenDataKeys: ['counts', 'items'],
+    };
+    const goldenPath = join(testDir, 'fixtures', 'restore-envelope.golden.json');
+    const previous = existsSync(goldenPath) ? readFileSync(goldenPath, 'utf8') : '';
+    const next = JSON.stringify(golden, null, 2) + '\n';
+    if (previous !== next) {
+      writeFileSync(goldenPath, next);
+      console.log('   ⚠ restore golden fixture regenerated — commit the diff and update the mock');
+    } else {
+      console.log('   ✓ restore golden fixture unchanged');
+    }
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Asserts a REAL apply that mixes one resolvable app with one unresolvable
+ * package ref reports the failure honestly.
+ *
+ * The half every other job skips: a per-item install failure is a PARTIAL
+ * failure — the command ran, so envelope.success stays true while summary.failed
+ * is non-zero. A consumer that reads envelope.success as "everything worked"
+ * would render a broken run as clean. This asserts the mix at the envelope
+ * level, in the same Node contract harness the mock is bound to.
+ */
+async function testMixedPartialFailure() {
+  if (process.env.ENDSTATE_CONTRACT_PAYLOAD !== '1') {
+    console.log('\n📋 Skipping mixed partial-failure payload assertions');
+    console.log('   This runs a REAL apply (Windows engine); set ENDSTATE_CONTRACT_PAYLOAD=1 to run locally.');
+    return;
+  }
+
+  console.log('\n📋 Testing: endstate apply (real) — one resolvable app + one unresolvable ref');
+
+  const workspace = mkdtempSync(join(tmpdir(), 'endstate-partial-contract-'));
+  try {
+    // jq is small, fast, and resolvable; the bogus ref can never resolve. Two
+    // apps keeps the run cheap. On this dev machine jq is already installed so
+    // the run converges without mutation; on a clean CI runner an earlier step
+    // installs it — either way jq converges and only the bogus ref fails.
+    const manifest = {
+      version: 1,
+      name: 'partial-failure-case',
+      apps: [
+        { id: 'jq', refs: { windows: 'jqlang.jq' } },
+        { id: 'bogus', refs: { windows: 'This.Package.Does.Not.Exist.Endstate.CI' } },
+      ],
+    };
+    const manifestPath = join(workspace, 'manifest.jsonc');
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+    // A REAL apply, not a dry run.
+    const result = await runEndstate('apply', ['--profile', manifestPath]);
+    const envelope = parseEnvelope(result.stdout);
+    const data = envelope.data || {};
+
+    if (envelope.success !== true) {
+      throw new Error(
+        `Expected envelope.success=true for a partial failure, got ${envelope.success}: ` +
+          JSON.stringify(envelope.error)
+      );
+    }
+    if (data.dryRun !== false) {
+      throw new Error(`Expected a real apply (dryRun=false), got ${data.dryRun}`);
+    }
+
+    // The summary must show the mix honestly: at least one failure, and a
+    // non-negative success count (jq converges to present/skipped on a machine
+    // where it is already installed, or installed on a clean runner).
+    if (!(data.summary.failed >= 1)) {
+      throw new Error(`Expected summary.failed>=1, got ${data.summary.failed}`);
+    }
+    if (!(data.summary.success >= 0)) {
+      throw new Error(`Expected summary.success>=0, got ${data.summary.success}`);
+    }
+
+    const failed = (data.actions || []).find((action) => action.id === 'bogus');
+    if (!failed) {
+      throw new Error('no action reported for the unresolvable package');
+    }
+    if (failed.status !== 'failed') {
+      throw new Error(`expected the unresolvable package status 'failed', got '${failed.status}'`);
+    }
+    if (!failed.message) {
+      throw new Error('a failed action must carry a message explaining why');
+    }
+
+    const converged = (data.actions || []).find((action) => action.id === 'jq');
+    if (!converged) {
+      throw new Error('no action reported for the resolvable package');
+    }
+    const CONVERGED_STATUSES = ['installed', 'present', 'already_installed'];
+    if (!CONVERGED_STATUSES.includes(converged.status)) {
+      throw new Error(
+        `expected the resolvable package to converge (${CONVERGED_STATUSES.join('/')}), ` +
+          `got '${converged.status}'`
+      );
+    }
+    // to_install is dry-run-only; seeing it after a real apply means a plan was
+    // reported as a result.
+    if ((data.actions || []).some((action) => action.status === 'to_install')) {
+      throw new Error('to_install survived a real apply');
+    }
+
+    console.log('   ✓ envelope.success=true despite a failed action (honest partial failure)');
+    console.log(`   ✓ summary: success=${data.summary.success} failed=${data.summary.failed}`);
+    console.log(`   ✓ unresolvable ref → ${failed.status}: ${failed.message}`);
+    console.log(`   ✓ resolvable app converged → ${converged.status}`);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
 async function runTests() {
   console.log('🧪 Contract Integration Tests');
   console.log('================================');
@@ -343,7 +594,9 @@ async function runTests() {
     await testVerifyMissing();
     await testApplyMissing();
     await testApplyPayloadAndRegenerateGolden();
-    
+    await testRestorePayloadAndRegenerateGolden();
+    await testMixedPartialFailure();
+
     console.log('\n✅ All contract tests passed!');
     process.exit(0);
   } catch (err) {

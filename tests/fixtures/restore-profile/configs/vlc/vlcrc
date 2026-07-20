@@ -1,0 +1,6 @@
+[qt]
+qt-notification=0
+metadata-network-access=0
+
+[core]
+metadata-network-access=0

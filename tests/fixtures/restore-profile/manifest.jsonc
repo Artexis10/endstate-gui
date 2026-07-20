@@ -1,0 +1,50 @@
+{
+  // Fixture profile for the live-engine RESTORE contract test
+  // (tests/contract.test.js → testRestorePayloadAndRegenerateGolden).
+  //
+  // This is a TEMPLATE, not a directly-runnable manifest. The test copies this
+  // whole directory into a fresh temp workspace and rewrites every
+  // __RESTORE_TARGET_DIR__ token to a path inside that temp workspace before
+  // running the engine. No restore target ever resolves to a real user config
+  // location, and the temp workspace is removed afterwards.
+  //
+  // apps is intentionally empty: restoreModulesAvailable is derived from the
+  // restore entry source paths (the ./configs/<module-id>/ layout), not from the
+  // app list, so an empty app list still scopes the restore modules while
+  // guaranteeing the run installs nothing on any host — the copies are the only
+  // side effect, and they land in the temp workspace. This keeps the test free
+  // of package mutation on both a developer machine and a clean CI runner.
+  //
+  // Sources use ./configs/<module-id>/ with no fromModule, matching profiles
+  // captured before that field existed. That exercises the engine's
+  // path-derivation tier, which real captured profiles depend on.
+  //
+  // notepad-plus-plus carries two entries and vlc one, so entryCount is
+  // distinguishable rather than uniformly 1.
+  "version": 1,
+  "name": "restore-fixture",
+  "apps": [],
+  "restore": [
+    {
+      "type": "copy",
+      "source": "./configs/vlc/vlcrc",
+      "target": "__RESTORE_TARGET_DIR__/vlc/vlcrc",
+      "backup": true,
+      "optional": true
+    },
+    {
+      "type": "copy",
+      "source": "./configs/notepad-plus-plus/config.xml",
+      "target": "__RESTORE_TARGET_DIR__/notepad-plus-plus/config.xml",
+      "backup": true,
+      "optional": true
+    },
+    {
+      "type": "copy",
+      "source": "./configs/notepad-plus-plus/shortcuts.xml",
+      "target": "__RESTORE_TARGET_DIR__/notepad-plus-plus/shortcuts.xml",
+      "backup": true,
+      "optional": true
+    }
+  ]
+}
