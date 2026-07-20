@@ -624,6 +624,89 @@ describe('apply-utils', () => {
       expect(result).toHaveLength(1);
       expect(result[0].reason).toBe('existing_reason');
     });
+
+    // These use the engine's real apply envelope shape. Reconciliation was
+    // previously fed `envelopeData.items`, a field the apply envelope has never
+    // carried, so it silently never ran — every test above passed against a
+    // hand-built array that production never produced.
+    describe('against the real envelope actions[]', () => {
+      it('replaces a non-terminal streamed status with the envelope result', () => {
+        const liveEvents: AppEvent[] = [
+          { app: 'Warp.Warp', action: 'To install', statusKey: 'to_install', timestamp: 1000 },
+        ];
+        const actions = [
+          { id: 'Warp.Warp', ref: 'Warp.Warp', driver: 'winget', name: 'Warp', status: 'installed', reason: '', message: 'Installed successfully' },
+        ];
+
+        const result = reconcileLiveActivity(liveEvents, actions);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].statusKey).toBe('installed');
+        // to_install is dry-run-only; surviving a real apply is the defect that
+        // rendered a never-installed app as if it were still pending.
+        expect(result[0].statusKey).not.toBe('to_install');
+      });
+
+      it('carries the engine-supplied display name through reconciliation', () => {
+        const liveEvents: AppEvent[] = [
+          { app: 'Warp.Warp', action: 'Processing', timestamp: 1000 },
+        ];
+        const actions = [
+          { id: 'Warp.Warp', ref: 'Warp.Warp', driver: 'winget', name: 'Warp', status: 'installed', reason: '', message: 'ok' },
+        ];
+
+        const result = reconcileLiveActivity(liveEvents, actions);
+
+        // Dropping `name` is what made a reconciled row fall back to the raw
+        // package ref and render as "Warp.Warp" beside friendly-named rows.
+        expect(result[0].name).toBe('Warp');
+        expect(result[0].driver).toBe('winget');
+      });
+
+      it('preserves a streamed name when the envelope omits one', () => {
+        const liveEvents: AppEvent[] = [
+          { app: 'app-1', action: 'Processing', name: 'Streamed Name', timestamp: 1000 },
+        ];
+        const actions = [
+          { id: 'app-1', status: 'present', reason: 'already_installed' },
+        ];
+
+        const result = reconcileLiveActivity(liveEvents, actions);
+
+        expect(result[0].name).toBe('Streamed Name');
+      });
+
+      it('maps each engine terminal status to its display status', () => {
+        const actions = [
+          { id: 'a', status: 'installed', reason: '' },
+          { id: 'b', status: 'present', reason: 'already_installed' },
+          { id: 'c', status: 'to_install', reason: 'missing' },
+          { id: 'd', status: 'failed', reason: 'install_failed' },
+        ];
+
+        const result = reconcileLiveActivity([], actions);
+        const byId = Object.fromEntries(result.map(e => [e.app, e.statusKey]));
+
+        expect(byId).toEqual({
+          a: 'installed',
+          b: 'present',
+          c: 'to_install',
+          d: 'failed',
+        });
+      });
+
+      it('adds envelope results that never appeared in the stream', () => {
+        const actions = [
+          { id: 'never-streamed', status: 'installed', reason: '', name: 'Ghost' },
+        ];
+
+        const result = reconcileLiveActivity([], actions);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].app).toBe('never-streamed');
+        expect(result[0].name).toBe('Ghost');
+      });
+    });
   });
 
   describe('normalizeApplyStatus - user_denied', () => {

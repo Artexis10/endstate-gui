@@ -2086,14 +2086,11 @@ function AppContent() {
     const hasConfigTerminalData = (envelopeData?.configResolutions?.length ?? 0) > 0;
     const previewActions = envelopeData?.actions ?? [];
     let installed: number, alreadyPresent: number;
-    if (envelopeData?.counts) {
-      installed = envelopeData.counts.installed;
-      alreadyPresent = envelopeData.counts.alreadyInstalled;
-    } else if (previewActions.length > 0) {
+    if (previewActions.length > 0) {
       installed = previewActions.filter(a => a.status === 'to_install' || a.status === 'installed').length;
       alreadyPresent = previewActions.filter(a => a.status === 'present').length;
     } else {
-      console.error('[PREVIEW] Envelope missing both counts and actions — cannot derive reliable totals. Raw envelope:', applyResult.envelope);
+      console.error('[PREVIEW] Envelope carried no actions[] — cannot derive reliable totals. Raw envelope:', applyResult.envelope);
       installed = 0;
       alreadyPresent = 0;
     }
@@ -2432,30 +2429,29 @@ function AppContent() {
 
     // Process result - envelope is source of truth
     const envelopeData = applyResult.envelope?.data;
-    const envelopeItems = envelopeData?.items ?? [];
+    // actions[] is the apply envelope's per-app result array and its
+    // authoritative final state. It was previously reconciled against
+    // `envelopeData.items`, a field the apply envelope has never carried
+    // (`items` belongs to `generations`), so reconciliation silently never ran
+    // and stale plan-phase statuses survived into the results screen.
+    const envelopeActions = envelopeData?.actions ?? [];
 
     // CRITICAL: Reconcile live activity with final envelope
     // This ensures "Working..." entries are updated to their final status (Failed, Installed, etc.)
-    const reconciledEvents = reconcileLiveActivity(appEventList, envelopeItems);
+    const reconciledEvents = reconcileLiveActivity(appEventList, envelopeActions);
     // Bounded buffer: keep up to 2000 events for scrollback
     setLiveAppEvents(reconciledEvents.length > 2000 ? reconciledEvents.slice(-2000) : reconciledEvents);
 
-    // Envelope counts are source of truth; fall back to actions array.
+    // Derived from actions[]; `summary` corroborates but is app-agnostic.
     // No streaming counter fallback — those are unreliable (inflated by plan/verify phases).
-    const envelopeActions = envelopeData?.actions ?? [];
     let installed: number, alreadyPresent: number, failed: number, skipped: number;
-    if (envelopeData?.counts) {
-      installed = envelopeData.counts.installed;
-      alreadyPresent = envelopeData.counts.alreadyInstalled;
-      failed = envelopeData.counts.failed;
-      skipped = envelopeData.counts.skippedFiltered;
-    } else if (envelopeActions.length > 0) {
+    if (envelopeActions.length > 0) {
       installed = envelopeActions.filter(a => a.status === 'installed').length;
       alreadyPresent = envelopeActions.filter(a => a.status === 'present').length;
       failed = envelopeActions.filter(a => a.status === 'failed').length;
       skipped = envelopeActions.filter(a => a.status === 'skipped').length;
     } else {
-      console.error('[APPLY] Envelope missing both counts and actions — cannot derive reliable totals. Raw envelope:', applyResult.envelope);
+      console.error('[APPLY] Envelope carried no actions[] — cannot derive reliable totals. Raw envelope:', applyResult.envelope);
       installed = 0;
       alreadyPresent = 0;
       failed = 0;
@@ -2562,6 +2558,10 @@ function AppContent() {
 
     return {
       success: isSuccess,
+      // Carried through so the results surface can distinguish a preview from a
+      // real apply. The engine has always reported this; nothing read it, which
+      // is how a dry run rendered as "Setup complete".
+      dryRun: envelopeData?.dryRun ?? false,
       installed, alreadyPresent, failed, skipped,
       profile: profileName,
       appEvents: reconciledEvents,

@@ -181,6 +181,12 @@ function buildOnlyAppIds(actions: EndstateApplyData['actions'], selected: Set<st
 
 interface ApplyResult {
   success?: boolean;
+  /**
+   * True when the run was a preview that changed nothing. The results surface
+   * must not report installs or completed setup for such a run — see
+   * gui-integration-contract.md, "Dry-Run Disclosure".
+   */
+  dryRun?: boolean;
   installed: number;
   alreadyPresent: number;
   failed: number;
@@ -1267,7 +1273,13 @@ export function SetupFlow({
                       const modules: ConfigModuleInfo[] = moduleRefs.map(ref => ({
                         id: ref.id,
                         displayName: ref.displayName,
-                        entries: 0,
+                        // How many restore entries the profile carries for this
+                        // module. Was hardcoded to 0, which made the per-module
+                        // count in ConfigModuleSelector dead code — and hid that
+                        // most offered modules carried nothing at all.
+                        // Older engines omit it; 0 keeps the hint hidden rather
+                        // than asserting a count we do not have.
+                        entries: ref.entryCount ?? 0,
                         files: [],
                       }));
                       return (
@@ -1286,6 +1298,20 @@ export function SetupFlow({
                           }}
                         />
                       );
+                    })()}
+                    {/* Choosing "apps and settings" but checking nothing sends
+                        no --enable-restore at all, so the run silently becomes
+                        apps-only. Say so rather than letting the label imply
+                        settings will transfer. */}
+                    {restoreIntent === 'apps-and-settings'
+                      && (previewResult.restoreModulesAvailable?.length ?? 0) > 0
+                      && selectedModules.length === 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-500" data-testid="no-settings-selected-notice">
+                        No settings selected — this will set up apps only.
+                      </p>
+                    )}
+                    {(() => {
+                      return null;
                     })()}
                   </div>
                 )}
@@ -1423,7 +1449,11 @@ export function SetupFlow({
                   )}
                   <div>
                     <p className="text-sm font-medium">
-                      {applyResult.success === false || applyResult.failed > 0 || applyResult.error ? 'Setup completed with errors' : 'Setup complete'}
+                      {applyResult.success === false || applyResult.failed > 0 || applyResult.error
+                        ? 'Setup completed with errors'
+                        : applyResult.dryRun
+                          ? 'Preview complete — nothing was installed'
+                          : 'Setup complete'}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {(() => {
@@ -1431,7 +1461,12 @@ export function SetupFlow({
                         const cfgOnlyPresent = applyResult.appEvents.filter(e => isConfigOnlyApp(e) && (e.statusKey === 'present' || !e.statusKey)).length;
                         const adjInstalled = applyResult.installed;
                         const adjPresent = applyResult.alreadyPresent - cfgOnlyPresent;
-                        return `${adjInstalled} installed, ${adjPresent} already present`;
+                        // A dry run installs nothing, so reporting an install
+                        // count would be a claim about work that never happened.
+                        // Report what *would* change instead.
+                        return applyResult.dryRun
+                          ? `${adjInstalled} would be installed, ${adjPresent} already present`
+                          : `${adjInstalled} installed, ${adjPresent} already present`;
                       })()}
                       {applyResult.failed > 0 ? `, ${applyResult.failed} failed` : ''}
                       {(() => {

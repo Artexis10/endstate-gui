@@ -95,6 +95,191 @@ jobs:
           ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate-linux-amd64
         run: npm run test:contract
 
+  # A genuine install against a real package manager. Every other job either
+  # mocks the engine or only exercises its error paths, so nothing else proves
+  # that apply actually installs, that a dry run installs nothing, or that a
+  # second run converges. Windows is the primary platform and the only one where
+  # a real install is cheap enough to run per-PR.
+  engine-real-apply:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download pinned engine
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < ENGINE_VERSION)"
+          gh release download "v${version}" \
+            --repo Artexis10/endstate \
+            --pattern endstate.exe \
+            --pattern endstate.exe.sha256
+
+          expected="$(tr -d '[:space:]' < endstate.exe.sha256)"
+          actual="$(sha256sum endstate.exe | cut -d ' ' -f 1)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Pinned engine checksum mismatch for v${version}"
+            exit 1
+          fi
+
+      # jq: small, fast, no reboot, no installer UI, and absent from the runner
+      # image. A heavier package would make this job the slowest in CI without
+      # testing anything more.
+      - name: Write a single-app profile
+        shell: bash
+        run: |
+          mkdir -p ci-profile
+          cat > ci-profile/manifest.jsonc <<'JSON'
+          {
+            "version": 1,
+            "name": "ci-real-apply",
+            "apps": [
+              { "id": "jq", "refs": { "windows": "jqlang.jq" } }
+            ]
+          }
+          JSON
+
+      - name: Dry run installs nothing
+        shell: bash
+        run: |
+          ./endstate.exe apply --profile ci-profile/manifest.jsonc --dry-run --json > dry.json
+          node -e "
+            const e = JSON.parse(require('fs').readFileSync('dry.json', 'utf8'));
+            const d = e.data ?? {};
+            if (!e.success) throw new Error('dry run failed: ' + JSON.stringify(e.error));
+            if (d.dryRun !== true) throw new Error('expected dryRun=true, got ' + d.dryRun);
+            if (d.summary.success !== 0) throw new Error('a dry run must install nothing, got success=' + d.summary.success);
+            const a = d.actions.find(x => x.id === 'jq');
+            if (a.status !== 'to_install') throw new Error('expected to_install, got ' + a.status);
+            console.log('dry run: ' + a.status + ' / ' + a.reason);
+          "
+
+      - name: Real apply installs the package
+        shell: bash
+        run: |
+          ./endstate.exe apply --profile ci-profile/manifest.jsonc --json > apply.json
+          node -e "
+            const e = JSON.parse(require('fs').readFileSync('apply.json', 'utf8'));
+            const d = e.data ?? {};
+            if (!e.success) throw new Error('apply failed: ' + JSON.stringify(e.error));
+            if (d.dryRun !== false) throw new Error('expected dryRun=false, got ' + d.dryRun);
+            if (d.summary.success !== 1) throw new Error('expected 1 install, got ' + d.summary.success);
+            const a = d.actions.find(x => x.id === 'jq');
+            if (a.status !== 'installed') throw new Error('expected installed, got ' + a.status);
+            // to_install is dry-run-only; seeing it here means the run reported a
+            // plan as if it were a result.
+            if (d.actions.some(x => x.status === 'to_install')) throw new Error('to_install survived a real apply');
+            console.log('apply: ' + a.status + ' v' + (a.version || '?'));
+          "
+
+      - name: Package is actually present on the host
+        shell: bash
+        run: |
+          winget list --id jqlang.jq --exact | grep -q 'jqlang.jq' \
+            || { echo '::error::engine reported installed but winget does not see the package'; exit 1; }
+
+      - name: Re-apply converges instead of reinstalling
+        shell: bash
+        run: |
+          ./endstate.exe apply --profile ci-profile/manifest.jsonc --json > again.json
+          node -e "
+            const e = JSON.parse(require('fs').readFileSync('again.json', 'utf8'));
+            const d = e.data ?? {};
+            if (d.summary.success !== 0) throw new Error('idempotent re-run must install nothing, got ' + d.summary.success);
+            if (d.summary.skipped !== 1) throw new Error('expected 1 skipped, got ' + d.summary.skipped);
+            const a = d.actions.find(x => x.id === 'jq');
+            if (a.status !== 'present') throw new Error('expected present, got ' + a.status);
+            console.log('re-apply: ' + a.status + ' / ' + a.reason);
+          "
+
+      # The apply payload assertions and golden-fixture regeneration live here
+      # rather than in engine-contract: the fixture profile declares Windows
+      # package refs, so only a Windows engine plans a populated actions[] for
+      # it. On Linux the same run legitimately plans nothing.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Unhappy path. Everything above proves the engine succeeds; this proves it
+      # reports failure honestly, which is the half that lets a broken run render
+      # as a successful one.
+      - name: A package that cannot install is reported as failed
+        shell: bash
+        run: |
+          mkdir -p ci-fail-profile
+          cat > ci-fail-profile/manifest.jsonc <<'JSON'
+          {
+            "version": 1,
+            "name": "ci-failure-case",
+            "apps": [
+              { "id": "bogus", "refs": { "windows": "This.Package.Does.Not.Exist.Endstate.CI" } }
+            ]
+          }
+          JSON
+          ./endstate.exe apply --profile ci-fail-profile/manifest.jsonc --json > fail.json || true
+          node -e "
+            const e = JSON.parse(require('fs').readFileSync('fail.json', 'utf8'));
+            const d = e.data ?? {};
+            const a = (d.actions ?? []).find(x => x.id === 'bogus');
+            if (!a) throw new Error('no action reported for the unresolvable package');
+            if (a.status !== 'failed') throw new Error('expected status failed, got ' + a.status);
+            if (d.summary.failed !== 1) throw new Error('expected summary.failed=1, got ' + d.summary.failed);
+            if (d.summary.success !== 0) throw new Error('expected summary.success=0, got ' + d.summary.success);
+            // A per-item install failure is a partial failure: the command itself
+            // ran fine, so envelope.success stays true. A consumer that reads
+            // success as 'everything worked' would report a broken run as clean.
+            if (e.success !== true) throw new Error('expected envelope success=true for a partial failure, got ' + e.success);
+            if (!a.message) throw new Error('a failed action must carry a message explaining why');
+            console.log('failure path: ' + a.status + ' / ' + a.reason + ' — ' + a.message);
+          "
+
+      # The module catalog ships in the engine repo (modules/apps/), not inside
+      # the binary. A bare downloaded endstate.exe resolves no catalog, so
+      # restoreModulesAvailable comes back empty and the scoping assertions have
+      # nothing to check. Check the engine out at the pinned version and point
+      # ENDSTATE_ROOT at it.
+      - name: Resolve pinned engine ref
+        shell: bash
+        run: echo "ENGINE_REF=v$(tr -d '[:space:]' < ENGINE_VERSION)" >> "$GITHUB_ENV"
+
+      - name: Check out the pinned engine's module catalog
+        uses: actions/checkout@v4
+        with:
+          repository: Artexis10/endstate
+          ref: ${{ env.ENGINE_REF }}
+          path: engine-src
+
+      - name: Assert apply payload and regenerate golden envelope
+        shell: bash
+        env:
+          ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate.exe
+          ENDSTATE_ROOT: ${{ github.workspace }}/engine-src
+          ENDSTATE_CONTRACT_PAYLOAD: '1'
+        run: npm run test:contract
+
+      # A diff means the engine's envelope changed and the E2E mock (asserted
+      # against this fixture by src/e2e/mock-engine.conformance.test.ts) no
+      # longer stands in for it. Failing here is the point — it is the only
+      # signal that the mock and the producer have diverged.
+      - name: Assert golden apply envelope is committed
+        shell: bash
+        run: |
+          if ! git diff --quiet -- tests/fixtures/apply-envelope.golden.json; then
+            echo "::error file=tests/fixtures/apply-envelope.golden.json::The real engine's apply envelope no longer matches the committed golden fixture."
+            git --no-pager diff -- tests/fixtures/apply-envelope.golden.json
+            echo "Regenerate locally with: ENDSTATE_CONTRACT_PAYLOAD=1 npm run test:contract"
+            echo "Then update src/e2e/mock-engine.ts so the mock emits the new shape."
+            exit 1
+          fi
+          echo "Golden apply envelope matches the pinned engine."
+
   # Regression guard for the standalone dev bridge (PR #87). The dev bridge was
   # extracted out of the Tauri process specifically so it links NONE of the
   # native GUI stack (tao / wry / webview2-com) — that layer was the source of

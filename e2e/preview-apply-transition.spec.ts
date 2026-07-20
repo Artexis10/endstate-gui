@@ -43,8 +43,18 @@ test.describe('Preview to Apply Transition', () => {
               envelope: {
                 success: true,
                 data: {
-                  counts: { installed: 1, alreadyInstalled: 0, failed: 0 },
-                  items: ndjsonItems,
+                  dryRun: typeof isDryRun !== 'undefined' ? isDryRun : false,
+                  summary: {
+                    total: ndjsonItems.length,
+                    success: (typeof isDryRun !== 'undefined' && isDryRun) ? 0 : ndjsonItems.filter((i) => i.status === 'installed').length,
+                    skipped: ndjsonItems.filter((i) => i.status === 'present').length,
+                    failed: ndjsonItems.filter((i) => i.status === 'failed').length,
+                  },
+                  actions: ndjsonItems.map((i) => ({
+                    id: i.id, ref: i.id, driver: i.driver, name: i.name,
+                    status: i.status, reason: i.reason ?? '', message: '',
+                    version: '', manual: null,
+                  })),
                 }
               },
               ndjsonEvents: ndjsonItems,

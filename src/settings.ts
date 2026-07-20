@@ -25,6 +25,18 @@ export interface AppSettings {
    * has been saved ("Save this computer first").
    */
   scheduleManifestPath: string | null;
+  /**
+   * Marks that the one-time dry-run default correction has been applied.
+   *
+   * `dryRunEnabled` used to default to true, and `saveSettings` persists the
+   * whole object — so every existing install has `dryRunEnabled: true` written
+   * to storage whether or not the user ever chose it. Changing the default
+   * alone would therefore fix only fresh installs and leave every existing user
+   * unable to install anything, which is the defect this change exists to fix.
+   *
+   * Absent or false means the correction has not run yet.
+   */
+  dryRunDefaultCorrected?: boolean;
 }
 
 /** Legacy settings shape for one-time migration only */
@@ -39,7 +51,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   engineMode: 'bundled',
   customProfilesDirectory: '',
   selectedProfileName: null,
-  dryRunEnabled: true,
+  // False so the primary action actually provisions the machine. While this
+  // defaulted to true, "Set up" appended --dry-run, installed nothing, and the
+  // results screen still reported "Setup complete". Dry run remains an explicit
+  // opt-in, and a run made under it is disclosed in the results (see
+  // gui-integration-contract.md, "Dry-Run Disclosure"). Settings load preserves
+  // an explicit user-set value — only this default changes.
+  dryRunEnabled: false,
   showDetails: false,
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
@@ -48,7 +66,33 @@ const DEFAULT_SETTINGS: AppSettings = {
   scheduleTime: '09:00',
   scheduleAutoPush: false,
   scheduleManifestPath: null,
+  dryRunDefaultCorrected: true,
 };
+
+/**
+ * One-time correction of the dry-run default on existing installs.
+ *
+ * `dryRunEnabled` defaulted to true and `saveSettings` writes the whole
+ * settings object, so the value is persisted on every install regardless of
+ * whether the user ever chose it. Changing the default alone would leave every
+ * existing user running `--dry-run` — installing nothing while the results
+ * screen reports "Setup complete".
+ *
+ * The stored value cannot distinguish "user deliberately chose dry run" from
+ * "the old default was written to disk", and dry-run-by-default was a defect
+ * rather than a plausible preference — nobody opts into never installing
+ * anything. So the correction clears it once and records that it ran, leaving
+ * the toggle free to be set again and never overriding a later choice.
+ *
+ * Mutates `parsed` in place; callers merge it over the defaults.
+ */
+function applyDryRunDefaultCorrection(parsed: Record<string, unknown>): void {
+  if (parsed.dryRunDefaultCorrected === true) {
+    return;
+  }
+  parsed.dryRunEnabled = false;
+  parsed.dryRunDefaultCorrected = true;
+}
 
 export function loadSettings(): AppSettings {
   try {
@@ -61,6 +105,7 @@ export function loadSettings(): AppSettings {
       }
       // Migration: strip removed engineScriptPath field
       delete parsed.engineScriptPath;
+      applyDryRunDefaultCorrection(parsed);
       return { ...DEFAULT_SETTINGS, ...parsed };
     }
   } catch (err) {
@@ -98,6 +143,7 @@ export async function loadSettingsWithProfileMigration(
   }
   // Migration: strip removed engineScriptPath field
   delete parsed.engineScriptPath;
+  applyDryRunDefaultCorrection(parsed);
   const rawSettings: AppSettings & LegacySettings = { ...DEFAULT_SETTINGS, ...parsed };
 
   // If we already have selectedProfileName, return clean settings (no legacy fields)
@@ -122,6 +168,7 @@ export async function loadSettingsWithProfileMigration(
         customProfilesDirectory: rawSettings.customProfilesDirectory,
         selectedProfileName: migratedName,
         dryRunEnabled: rawSettings.dryRunEnabled,
+        dryRunDefaultCorrected: rawSettings.dryRunDefaultCorrected,
         showDetails: rawSettings.showDetails,
         autoBackupEnabled: rawSettings.autoBackupEnabled,
         autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
@@ -141,6 +188,7 @@ export async function loadSettingsWithProfileMigration(
         customProfilesDirectory: rawSettings.customProfilesDirectory,
         selectedProfileName: null,
         dryRunEnabled: rawSettings.dryRunEnabled,
+        dryRunDefaultCorrected: rawSettings.dryRunDefaultCorrected,
         showDetails: rawSettings.showDetails,
         autoBackupEnabled: rawSettings.autoBackupEnabled,
         autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
@@ -163,6 +211,7 @@ export async function loadSettingsWithProfileMigration(
       customProfilesDirectory: rawSettings.customProfilesDirectory,
       selectedProfileName: rawSettings.lastSelectedProfile,
       dryRunEnabled: rawSettings.dryRunEnabled,
+      dryRunDefaultCorrected: rawSettings.dryRunDefaultCorrected,
       showDetails: rawSettings.showDetails,
       autoBackupEnabled: rawSettings.autoBackupEnabled,
       autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
