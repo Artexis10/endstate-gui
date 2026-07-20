@@ -2,6 +2,10 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  // The real-engine lane (e2e/real-engine/**) runs against a live engine via the
+  // dev bridge under playwright.real-engine.config.ts. It installs no mock and
+  // would fail in this mocked suite (no bridge, no engine), so keep it out.
+  testIgnore: '**/real-engine/**',
   timeout: 30000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
