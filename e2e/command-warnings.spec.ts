@@ -49,13 +49,24 @@ async function openSetup(page: Page, includeLiveWarning: boolean) {
         onEvent({ type: 'stdout', data: `${JSON.stringify(item)}\n` });
 
         const data = {
-          counts: {
-            installed: 1,
-            alreadyInstalled: 0,
+          dryRun: isPreview,
+          summary: {
+            total: 1,
+            success: isPreview ? 0 : 1,
+            skipped: 0,
             failed: 0,
-            skippedFiltered: 0,
           },
-          items: [item],
+          actions: [{
+            id: item.id,
+            ref: item.id,
+            driver: item.driver,
+            name: item.name,
+            status: item.status,
+            reason: item.reason,
+            message: '',
+            version: '',
+            manual: null,
+          }],
           ...(isPreview
             ? {
                 warnings: [
