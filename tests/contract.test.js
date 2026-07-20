@@ -74,6 +74,42 @@ function parseEnvelope(stdout) {
   return JSON.parse(trimmed);
 }
 
+/**
+ * Extracts a capture bundle (.zip) into destDir. A captured manifest carries
+ * config-restore blocks whose relative payloadRoots (configs/…) must resolve on
+ * disk, so the whole bundle — manifest + configs tree — has to be materialized
+ * together before apply will even validate a dry run.
+ *
+ * Node 20 ships no zip reader, and the GNU tar on the CI bash shell mis-parses a
+ * `C:` path as a remote host. Windows PowerShell's System.IO.Compression is the
+ * one extractor guaranteed present on the windows-latest runner that handles the
+ * path natively — and this assertion only runs under ENDSTATE_CONTRACT_PAYLOAD=1,
+ * which is set solely by the Windows engine-real-apply job.
+ */
+function extractBundle(bundlePath, destDir) {
+  return new Promise((resolve, reject) => {
+    const script =
+      'Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
+      `[System.IO.Compression.ZipFile]::ExtractToDirectory('${bundlePath}', '${destDir}')`;
+    const proc = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let stderr = '';
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`bundle extraction failed (exit ${code}): ${stderr.trim()}`));
+      } else {
+        resolve();
+      }
+    });
+    proc.on('error', reject);
+  });
+}
+
 async function testCapabilities() {
   console.log('\n📋 Testing: endstate capabilities --json');
   
@@ -580,6 +616,208 @@ async function testMixedPartialFailure() {
   }
 }
 
+/**
+ * Asserts a REAL capture → re-import → dry-run → apply(--only) round trip against
+ * the pinned engine. Every other job hand-writes the manifest it applies, so
+ * nothing else proved that a manifest the engine itself CAPTURED re-imports and
+ * applies — the exact gap the July regression wave slipped through. This closes
+ * two of its holes:
+ *   1. capture → apply with the real engine: the manifest under apply is the one
+ *      capture emitted, not one authored by the test.
+ *   2. --only scoping: the flag must filter BEFORE planning, so an unselected
+ *      captured app is never planned and therefore never installed.
+ *
+ * Restore-on-disk is deliberately NOT re-proven here — testRestorePayloadAndRegenerateGolden
+ * already lands real files from a captured-shape profile into a temp workspace.
+ * This apply runs WITHOUT --enable-restore, so the captured config payload is
+ * validated but never written; the loop under test is the package path.
+ *
+ * Membership-in-a-set is asserted, not pinned values: statuses depend on host
+ * state (jq is installed by an earlier engine-real-apply step, so it converges to
+ * present), and a value-pinned assertion would silence a regression rather than
+ * catch it — the same discipline as the golden payload tests above.
+ */
+async function testCaptureApplyRoundtrip() {
+  if (process.env.ENDSTATE_CONTRACT_PAYLOAD !== '1') {
+    console.log('\n📋 Skipping capture → apply round-trip assertions');
+    console.log('   These run a REAL winget capture + apply (Windows engine).');
+    console.log('   They run in the engine-real-apply job; set ENDSTATE_CONTRACT_PAYLOAD=1 to run locally.');
+    return;
+  }
+
+  console.log('\n📋 Testing: capture → re-import → dry-run → apply(--only) round trip');
+
+  // jq is the round-trip anchor: small, fast, already installed by an earlier
+  // engine-real-apply step, and captured from the live winget inventory rather
+  // than hand-declared. Its winget ref is stable; its manifest id is engine-
+  // derived (jqlang.jq → jqlang-jq), so it is resolved by ref, never guessed.
+  const JQ_WINGET_REF = 'jqlang.jq';
+  // A --dry-run reflects host presence: an installed app plans `present`, an
+  // absent one plans `to_install`. Both are honest, so the row is asserted
+  // against the set rather than pinned.
+  const PRESENCE_STATUSES = ['present', 'to_install', 'skipped', 'installed', 'already_installed'];
+  // A REAL apply must converge, never leave a plan-only `to_install` behind.
+  const CONVERGED_STATUSES = ['installed', 'present', 'already_installed', 'skipped'];
+  const norm = (p) => p.replace(/\\/g, '/').toLowerCase();
+
+  const workspace = mkdtempSync(join(tmpdir(), 'endstate-roundtrip-contract-'));
+  try {
+    // 1) REAL capture, scoped to the winget driver — the narrowest scope v2.25.0
+    //    offers (capture has no per-app filter). --out lands the artifact inside
+    //    the throwaway workspace; the engine rewrites the extension to .zip when
+    //    it bundles config payload, so the real path comes from data.outputPath.
+    const requestedOut = join(workspace, 'capture.jsonc');
+    const capture = parseEnvelope(
+      (await runEndstate('capture', ['--driver', 'winget', '--discover', '--out', requestedOut])).stdout
+    );
+
+    if (!capture.success) {
+      throw new Error('Expected a successful capture, got: ' + JSON.stringify(capture.error));
+    }
+    if (capture.command !== 'capture') {
+      throw new Error(`Expected command 'capture', got '${capture.command}'`);
+    }
+
+    // 2) Capture envelope: a real bundle artifact landed inside the workspace,
+    //    and the counts + appsIncluded reflect a non-empty scope carrying jq.
+    const cdata = capture.data || {};
+    const bundlePath = cdata.outputPath;
+    if (!bundlePath || !existsSync(bundlePath)) {
+      throw new Error(`capture did not write a bundle artifact (outputPath=${bundlePath})`);
+    }
+    if (!norm(bundlePath).startsWith(norm(workspace))) {
+      throw new Error(`capture wrote outside the temp workspace: ${bundlePath}`);
+    }
+    if (!(cdata.counts && cdata.counts.included >= 1)) {
+      throw new Error(`Expected counts.included>=1, got ${JSON.stringify(cdata.counts)}`);
+    }
+    if (cdata.counts.included > cdata.counts.totalFound) {
+      throw new Error(
+        `counts inconsistent: included ${cdata.counts.included} > totalFound ${cdata.counts.totalFound}`
+      );
+    }
+    const includedApps = cdata.appsIncluded;
+    if (!Array.isArray(includedApps) || includedApps.length === 0) {
+      throw new Error('Expected a non-empty appsIncluded from a --discover capture');
+    }
+    if (!includedApps.some((app) => app.id === JQ_WINGET_REF)) {
+      throw new Error(`capture did not include ${JQ_WINGET_REF} (is it installed on the host?)`);
+    }
+
+    console.log(
+      `   ✓ capture: ${cdata.counts.included}/${cdata.counts.totalFound} apps, bundle inside workspace`
+    );
+
+    // Materialize the whole bundle so the manifest's relative config payloadRoots
+    // resolve — apply validates them even for a dry run. Extraction stays inside
+    // the workspace.
+    const capturedDir = join(workspace, 'captured');
+    await extractBundle(bundlePath, capturedDir);
+    const manifestPath = join(capturedDir, 'manifest.jsonc');
+    if (!existsSync(manifestPath)) {
+      throw new Error('capture bundle did not contain manifest.jsonc');
+    }
+
+    // The manifest the engine itself wrote — parsed only to resolve the engine-
+    // derived jq id and a second real app id to prove --only excludes it. The
+    // apps applied below are the engine's, not the test's.
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const manifestApps = manifest.apps || [];
+    if (manifestApps.length < 2) {
+      throw new Error(
+        `Expected the captured manifest to carry jq plus at least one other app, got ${manifestApps.length}`
+      );
+    }
+    const jqApp = manifestApps.find((app) => app.refs && app.refs.windows === JQ_WINGET_REF);
+    if (!jqApp) {
+      throw new Error(`captured manifest has no app with a ${JQ_WINGET_REF} windows ref`);
+    }
+    const jqId = jqApp.id;
+    const otherId = manifestApps.find((app) => app.id !== jqId).id;
+
+    // 3) Re-import: dry-run the FULL captured manifest. A dry run mutates nothing
+    //    (summary.success===0), and the jq row reflects the host. counts/items
+    //    belong to capture/generations — an apply consumer reading them fails
+    //    silently, so their absence is asserted here too.
+    const dry = parseEnvelope(
+      (await runEndstate('apply', ['--manifest', manifestPath, '--dry-run'])).stdout
+    );
+    const ddata = dry.data || {};
+    if (!dry.success) {
+      throw new Error(
+        'Expected a successful dry-run of the captured manifest, got: ' + JSON.stringify(dry.error)
+      );
+    }
+    if (ddata.dryRun !== true) {
+      throw new Error(`Expected dryRun=true, got ${ddata.dryRun}`);
+    }
+    if (ddata.summary.success !== 0) {
+      throw new Error(`A dry run must install nothing; summary.success=${ddata.summary.success}`);
+    }
+    for (const forbidden of ['counts', 'items']) {
+      if (forbidden in ddata) {
+        throw new Error(`apply dry-run envelope unexpectedly contains data.${forbidden}`);
+      }
+    }
+    const jqDry = (ddata.actions || []).find((action) => action.id === jqId);
+    if (!jqDry) {
+      throw new Error(`dry run planned no action for the captured jq app '${jqId}'`);
+    }
+    if (!PRESENCE_STATUSES.includes(jqDry.status)) {
+      throw new Error(`jq dry-run status '${jqDry.status}' is not a presence-reflecting status`);
+    }
+    console.log(`   ✓ dry-run re-import: dryRun honored, installed nothing, jq → ${jqDry.status}`);
+
+    // 4 + 5) REAL apply scoped to jq with --only, from a single run.
+    //   Convergence (step 4): jq is already installed, so it converges without
+    //   mutation; to_install is dry-run-only and must never survive a real apply.
+    //   Scoping (step 5): --only filters before planning, so the run acts on jq
+    //   alone and the other captured app is never planned — therefore never
+    //   installed.
+    const real = parseEnvelope(
+      (await runEndstate('apply', ['--manifest', manifestPath, '--only', jqId])).stdout
+    );
+    const rdata = real.data || {};
+    if (!real.success) {
+      throw new Error('Expected a successful scoped apply, got: ' + JSON.stringify(real.error));
+    }
+    if (rdata.dryRun !== false) {
+      throw new Error(`Expected a real apply (dryRun=false), got ${rdata.dryRun}`);
+    }
+    for (const forbidden of ['counts', 'items']) {
+      if (forbidden in rdata) {
+        throw new Error(`apply envelope unexpectedly contains data.${forbidden}`);
+      }
+    }
+    const jqReal = (rdata.actions || []).find((action) => action.id === jqId);
+    if (!jqReal) {
+      throw new Error(`real apply reported no action for jq '${jqId}'`);
+    }
+    if (!CONVERGED_STATUSES.includes(jqReal.status)) {
+      throw new Error(
+        `expected jq to converge (${CONVERGED_STATUSES.join('/')}), got '${jqReal.status}'`
+      );
+    }
+    if ((rdata.actions || []).some((action) => action.status === 'to_install')) {
+      throw new Error('to_install survived a real apply');
+    }
+    // --only scoping: exactly jq acted upon; the other captured app is absent.
+    const actedIds = (rdata.actions || []).map((action) => action.id);
+    if (!(actedIds.length === 1 && actedIds[0] === jqId)) {
+      throw new Error(
+        `--only ${jqId} did not scope the run to jq alone; acted on ${JSON.stringify(actedIds)}`
+      );
+    }
+    if (actedIds.includes(otherId)) {
+      throw new Error(`--only leaked: the unselected captured app '${otherId}' was acted upon`);
+    }
+    console.log(`   ✓ real apply --only ${jqId}: converged → ${jqReal.status}, no to_install`);
+    console.log(`   ✓ --only scoped to jq alone; '${otherId}' never acted upon (never installed)`);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
 async function runTests() {
   console.log('🧪 Contract Integration Tests');
   console.log('================================');
@@ -596,6 +834,7 @@ async function runTests() {
     await testApplyPayloadAndRegenerateGolden();
     await testRestorePayloadAndRegenerateGolden();
     await testMixedPartialFailure();
+    await testCaptureApplyRoundtrip();
 
     console.log('\n✅ All contract tests passed!');
     process.exit(0);
