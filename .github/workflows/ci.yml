@@ -207,10 +207,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The module catalog ships in the engine repo (modules/apps/), not inside
+      # the binary. A bare downloaded endstate.exe resolves no catalog, so
+      # restoreModulesAvailable comes back empty and the scoping assertions have
+      # nothing to check. Check the engine out at the pinned version and point
+      # ENDSTATE_ROOT at it.
+      - name: Resolve pinned engine ref
+        shell: bash
+        run: echo "ENGINE_REF=v$(tr -d '[:space:]' < ENGINE_VERSION)" >> "$GITHUB_ENV"
+
+      - name: Check out the pinned engine's module catalog
+        uses: actions/checkout@v4
+        with:
+          repository: Artexis10/endstate
+          ref: ${{ env.ENGINE_REF }}
+          path: engine-src
+
       - name: Assert apply payload and regenerate golden envelope
         shell: bash
         env:
           ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate.exe
+          ENDSTATE_ROOT: ${{ github.workspace }}/engine-src
           ENDSTATE_CONTRACT_PAYLOAD: '1'
         run: npm run test:contract
 
