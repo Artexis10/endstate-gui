@@ -382,6 +382,12 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
     if (parsed.event === 'config-migration' && !isConfigMigrationEvent(parsed)) {
       return null;
     }
+    // The summary event is the parse layer's only "phase completed" signal, so a
+    // corrupted-but-JSON-valid summary (missing/garbage counts) must be rejected
+    // rather than surfaced as a completed result the UI would read as success.
+    if (parsed.event === 'summary' && !isValidSummaryShape(parsed)) {
+      return null;
+    }
 
     return parsed as StreamingEvent;
   } catch {
@@ -414,6 +420,15 @@ const CONFIG_MIGRATION_STATUSES = new Set<ConfigMigrationStatus>([
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Every count must be present and numeric for a summary to count as terminal. */
+function isValidSummaryShape(event: Record<string, unknown>): boolean {
+  return typeof event.phase === 'string'
+    && typeof event.total === 'number'
+    && typeof event.success === 'number'
+    && typeof event.skipped === 'number'
+    && typeof event.failed === 'number';
 }
 
 function hasConfigEventBase(

@@ -922,4 +922,94 @@ describe('streaming-events', () => {
       expect(state.items.get('custom-tool')?.reason).toBe('manual_required');
     });
   });
+
+  /**
+   * Fault injection (unhappy paths).
+   *
+   * Launch-readiness invariant: a crashed engine, corrupted NDJSON, or a stream
+   * that never reaches a terminal summary must surface as an error/incomplete
+   * state — the parse layer must NEVER fabricate a completed/successful result
+   * from garbage. The `summary` event is the parse layer's only "phase
+   * completed" signal, so the strictest cases below guard it directly.
+   */
+  describe('fault injection (unhappy paths)', () => {
+    it('drops a malformed NDJSON line mid-stream without fabricating a summary', () => {
+      const data = [
+        '{"version":1,"event":"phase","phase":"apply","timestamp":"2025-01-01T00:00:00.000Z"}',
+        '{"version":1,"event":"item","id":"App1","driver":"winget","status":"installing","reason":null,"timestamp":"2025-01-01T00:00:01.000Z"}',
+        '{"version":1,"event":"item","id":"App1","driver":"wing',  // corrupted mid-stream
+        '{"version":1,"event":"item","id":"App2","driver":"winget","status":"installed","reason":null,"timestamp":"2025-01-01T00:00:02.000Z"}',
+      ].join('\n');
+
+      const events = parseStreamingEvents(data);
+
+      // The two well-formed items survive; the corrupted line is dropped.
+      expect(events).toHaveLength(3);
+      expect(events.every((e) => e.event === 'phase' || e.event === 'item')).toBe(true);
+      // No summary was invented from the corrupted stream: the run is incomplete.
+      expect(events.some(isSummaryEvent)).toBe(false);
+    });
+
+    it('does not surface a truncated final line as a completed summary', () => {
+      const buffer = new StreamingEventBuffer();
+
+      // A complete item arrives, then the terminal summary line is cut off
+      // mid-token (process killed before flushing the newline).
+      const events = buffer.append(
+        '{"version":1,"event":"item","id":"App1","driver":"winget","status":"installed","reason":null,"timestamp":"2025-01-01T00:00:00.000Z"}\n' +
+        '{"version":1,"event":"summary","phase":"apply","total":2,"success":2,"skipped":0,"fai',
+      );
+
+      // Only the complete item is yielded; the truncated summary stays buffered.
+      expect(events).toHaveLength(1);
+      expect(isItemEvent(events[0])).toBe(true);
+
+      // Flushing the truncated remainder must NOT produce a (success) summary.
+      const flushed = buffer.flush();
+      expect(flushed).toBeNull();
+    });
+
+    it('reports an incomplete run when the stream ends with no terminal summary', () => {
+      const data = [
+        '{"version":1,"event":"phase","phase":"apply","timestamp":"2025-01-01T00:00:00.000Z"}',
+        '{"version":1,"event":"item","id":"App1","driver":"winget","status":"installing","reason":null,"timestamp":"2025-01-01T00:00:01.000Z"}',
+        '{"version":1,"event":"item","id":"App2","driver":"winget","status":"installing","reason":null,"timestamp":"2025-01-01T00:00:02.000Z"}',
+      ].join('\n');
+
+      const events = parseStreamingEvents(data);
+
+      expect(events.length).toBeGreaterThan(0);
+      // Crash-before-summary: no phase-completion signal exists to read as success.
+      expect(events.some(isSummaryEvent)).toBe(false);
+    });
+
+    it('rejects binary garbage rather than parsing it as an event', () => {
+      const garbageLine = ' �{not json';
+      expect(parseStreamingEvent(garbageLine)).toBeNull();
+
+      const garbageStream = [' ', '￾\uDEAD', '{ '].join('\n');
+      expect(parseStreamingEvents(garbageStream)).toEqual([]);
+    });
+
+    // A corrupted-but-JSON-valid summary is the dangerous case: it slips past a
+    // shallow "is it JSON with an event field" check and would be read by the UI
+    // as "phase complete" with whatever (missing/garbage) counts it carries.
+    it.each([
+      ['missing failed count', '{"version":1,"event":"summary","phase":"apply","total":2,"success":2,"skipped":0}'],
+      ['non-numeric failed count', '{"version":1,"event":"summary","phase":"apply","total":2,"success":2,"skipped":0,"failed":"lots"}'],
+      ['non-numeric total', '{"version":1,"event":"summary","phase":"apply","total":"2","success":2,"skipped":0,"failed":0}'],
+      ['missing phase', '{"version":1,"event":"summary","total":2,"success":2,"skipped":0,"failed":0}'],
+    ])('never surfaces a malformed summary as a completed result: %s', (_name, line) => {
+      expect(parseStreamingEvent(line)).toBeNull();
+    });
+
+    it('still accepts a well-formed terminal summary (regression guard for the fix)', () => {
+      const line = '{"version":1,"event":"summary","phase":"apply","total":2,"success":2,"skipped":0,"failed":0,"timestamp":"2025-01-01T00:00:00.000Z"}';
+      const event = parseStreamingEvent(line);
+
+      expect(event).not.toBeNull();
+      expect(isSummaryEvent(event!)).toBe(true);
+      expect((event as SummaryEvent).failed).toBe(0);
+    });
+  });
 });

@@ -10,11 +10,12 @@
 
 import type { AppSettings } from '../settings';
 import type { StreamEvent, RunResult } from '../streaming-runner';
+import type { EngineExecResult } from '../lib/engine-exec';
 import { parseEventsFile, replayEvents } from '../lib/event-replay';
 import fixtureContent from '../../e2e/fixtures/capture_ok_realistic.events.jsonl?raw';
 
 // Scenario types
-export type E2EScenario = 
+export type E2EScenario =
   | 'preview_ok_minimal'
   | 'apply_ok_minimal'
   | 'apply_partial_fail'
@@ -22,7 +23,13 @@ export type E2EScenario =
   | 'report_empty'
   | 'capture_ok_minimal'
   | 'capture_ok_replay'
-  | 'capabilities_ok';
+  | 'capabilities_ok'
+  // Fault-injection scenarios (unhappy paths). These fire only on the real
+  // (non-dry-run) apply invocation — init and preview stay healthy so the app
+  // can boot and reach the Apply button. See getScenarioForCommand.
+  | 'crash_mid_run'          // engine dies mid-run: no terminal envelope, nonzero exit
+  | 'malformed_line_then_ok' // one corrupted line mid-stream, then normal completion
+  | 'cancel_mid_run';        // honors the app's cancel invoke, ends the run canceled
 
 // Deterministic timestamps for stable tests
 const BASE_TIMESTAMP = '2025-01-01T00:00:00.000Z';
@@ -120,10 +127,35 @@ function applyEnvelope(input: {
   };
 }
 
+/**
+ * Derive the apply summary from the action list so the reported counts can
+ * never drift from the actions they claim to summarize (same single-source-of-
+ * truth rule the restore module entryCount follows above).
+ */
+function summaryFromActions(
+  actions: Array<Record<string, unknown>>,
+): { total: number; success: number; skipped: number; failed: number } {
+  return {
+    total: actions.length,
+    success: actions.filter((a) => a.status === 'installed').length,
+    skipped: actions.filter((a) => a.status === 'present' || a.status === 'skipped').length,
+    failed: actions.filter((a) => a.status === 'failed').length,
+  };
+}
+
+// Actions the recovered (malformed-line) apply reports. A corrupted line
+// arrives mid-stream, but the terminal envelope still lands intact and green.
+const RECOVER_ACTIONS: Array<Record<string, unknown>> = [
+  action({ id: 'App.One', ref: 'Vendor.AppOne', name: 'App One', status: 'installed', reason: '', message: 'Installed successfully', version: '1.0.0' }),
+  action({ id: 'App.Two', ref: 'Vendor.AppTwo', name: 'App Two', status: 'installed', reason: '', message: 'Installed successfully', version: '2.0.0' }),
+];
+
 const SCENARIOS: Record<E2EScenario, {
   events: Array<{ type: 'item' | 'phase' | 'artifact'; data: any }>;
   envelope: any;
   exitCode: number;
+  /** Marks an unhappy-path scenario handled by runFaultScenario. */
+  fault?: 'crash' | 'malformed' | 'cancel';
 }> = {
   preview_ok_minimal: {
     events: [
@@ -265,6 +297,61 @@ const SCENARIOS: Record<E2EScenario, {
     envelope: {},
     exitCode: 0,
   },
+
+  // --- Fault injection (unhappy paths) ---
+
+  // Engine dies mid-run: a little progress streams, then the process exits
+  // nonzero with NO terminal envelope. The GUI must render a failure, never a
+  // stale "Setup complete".
+  crash_mid_run: {
+    events: [
+      { type: 'phase', data: { phase: 'start', command: 'apply', timestamp: BASE_TIMESTAMP } },
+      { type: 'item', data: { id: 'App.One', driver: 'winget', status: 'ok', reason: 'installed', name: 'App One' } },
+      { type: 'item', data: { id: 'App.Two', driver: 'winget', status: 'ok', reason: 'installing', name: 'App Two' } },
+    ],
+    envelope: null, // engine crashed before emitting a terminal envelope
+    exitCode: 1,
+    fault: 'crash',
+  },
+
+  // A single corrupted NDJSON line arrives mid-stream; the parser drops it and
+  // the run still completes normally. Summary derived from RECOVER_ACTIONS.
+  malformed_line_then_ok: {
+    events: [
+      { type: 'phase', data: { phase: 'start', command: 'apply', timestamp: BASE_TIMESTAMP } },
+      { type: 'item', data: { id: 'App.One', driver: 'winget', status: 'ok', reason: 'installed', name: 'App One' } },
+      { type: 'item', data: { id: 'App.Two', driver: 'winget', status: 'ok', reason: 'installed', name: 'App Two' } },
+      { type: 'phase', data: { phase: 'end', command: 'apply', timestamp: BASE_TIMESTAMP } },
+    ],
+    envelope: applyEnvelope({
+      dryRun: false,
+      summary: summaryFromActions(RECOVER_ACTIONS),
+      actions: RECOVER_ACTIONS,
+    }),
+    exitCode: 0,
+    fault: 'malformed',
+  },
+
+  // Honors the app's cancel invoke: streams a little progress, waits for the
+  // cancel signal, then ends the run canceled (never success).
+  cancel_mid_run: {
+    events: [
+      { type: 'phase', data: { phase: 'start', command: 'apply', timestamp: BASE_TIMESTAMP } },
+      { type: 'item', data: { id: 'App.One', driver: 'winget', status: 'ok', reason: 'installing', name: 'App One' } },
+    ],
+    envelope: {
+      schemaVersion: '1.0',
+      cliVersion: MOCK_ENGINE_VERSION,
+      command: 'apply',
+      runId: 'apply-e2e-mock',
+      timestampUtc: BASE_TIMESTAMP,
+      success: false,
+      data: null,
+      error: { code: 'CANCELLED', message: 'Setup was canceled before it finished.', remediation: null },
+    },
+    exitCode: 130,
+    fault: 'cancel',
+  },
 };
 
 // Get current scenario from window
@@ -275,10 +362,29 @@ function getCurrentScenario(): E2EScenario {
   return 'preview_ok_minimal'; // Default scenario
 }
 
+// Fault scenarios inject failures on the real run only.
+const FAULT_SCENARIOS = new Set<E2EScenario>([
+  'crash_mid_run',
+  'malformed_line_then_ok',
+  'cancel_mid_run',
+]);
+
 // Get scenario for a specific command
 function getScenarioForCommand(command: string, args: string[]): E2EScenario {
   // Check if a specific scenario is set
   const explicitScenario = getCurrentScenario();
+
+  // Fault scenarios must not hijack app init or the preview: capabilities and
+  // report always stay healthy so the app boots into the flow, and the dry-run
+  // preview stays healthy so the Apply button appears. The fault fires solely
+  // on the real (non-dry-run) apply invocation.
+  if (FAULT_SCENARIOS.has(explicitScenario)) {
+    if (command === 'capabilities') return 'capabilities_ok';
+    if (command === 'report') return 'report_empty';
+    if (command === 'apply' && args.includes('--dry-run')) return 'preview_ok_minimal';
+    return explicitScenario;
+  }
+
   if (explicitScenario !== 'preview_ok_minimal') {
     return explicitScenario;
   }
@@ -382,18 +488,24 @@ export async function runEndstateStreaming<T>(
     };
   }
 
+  // Unhappy-path scenarios have their own streaming shape (crash without a
+  // terminal envelope, corrupted line, cancel handshake).
+  if (scenarioData.fault) {
+    return runFaultScenario<T>(scenarioData, onEvent, _options);
+  }
+
   // Emit events with minimal delay for UI to process
   for (const event of scenarioData.events) {
     // Emit as NDJSON event if handler provided
     if (_options?.onNdjsonEvent) {
       _options.onNdjsonEvent(event.data);
     }
-    
+
     // Also emit as stdout for compatibility
     if (onEvent) {
       onEvent({ type: 'stdout', data: JSON.stringify(event.data) + '\n' });
     }
-    
+
     // Minimal delay to allow UI to process (keeps tests fast but deterministic)
     await new Promise(resolve => setTimeout(resolve, 10));
   }
@@ -411,14 +523,126 @@ export async function runEndstateStreaming<T>(
 }
 
 /**
- * Mock for runEndstateOnce (non-streaming version)
+ * Wait until the app requests cancellation, or a bounded budget elapses.
+ *
+ * The E2E Tauri mock sets `__ENDSTATE_E2E_CANCEL_REQUESTED__` from its
+ * `engine_cancel` handler. Resolving on timeout too (not just on the flag)
+ * guarantees the cancel scenario always resolves to its non-success envelope —
+ * a timing miss can never leave the run hanging or flip it to success.
+ */
+function waitForCancel(budgetMs = 8000): Promise<void> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      const requested = typeof window !== 'undefined'
+        && (window as any).__ENDSTATE_E2E_CANCEL_REQUESTED__ === true;
+      if (requested || Date.now() - start >= budgetMs) {
+        resolve();
+        return;
+      }
+      setTimeout(tick, 25);
+    };
+    tick();
+  });
+}
+
+/**
+ * Stream an unhappy-path scenario. Each fault keeps the same envelope-first
+ * contract as the happy path so the GUI's own success/failure logic is what's
+ * under test — the mock only controls whether a terminal envelope arrives.
+ */
+async function runFaultScenario<T>(
+  scenarioData: {
+    events: Array<{ type: 'item' | 'phase' | 'artifact'; data: any }>;
+    envelope: any;
+    exitCode: number;
+    fault?: 'crash' | 'malformed' | 'cancel';
+  },
+  onEvent?: (event: StreamEvent) => void,
+  options?: { onNdjsonEvent?: (event: any) => void },
+): Promise<RunResult<T>> {
+  const ndjsonEvents = scenarioData.events.map((e) => e.data);
+  const emit = async (data: any) => {
+    options?.onNdjsonEvent?.(data);
+    onEvent?.({ type: 'stdout', data: JSON.stringify(data) + '\n' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  };
+
+  if (scenarioData.fault === 'malformed') {
+    for (let i = 0; i < scenarioData.events.length; i++) {
+      await emit(scenarioData.events[i].data);
+      if (i === 0) {
+        // One corrupted/truncated NDJSON line mid-stream, delivered only on the
+        // raw channel (never as a parsed event) — exactly what the parser drops.
+        onEvent?.({ type: 'stderr', data: '{"version":1,"event":"item","id":"App.Two","dri\n' });
+      }
+    }
+    const stdout = JSON.stringify(scenarioData.envelope);
+    return { exitCode: scenarioData.exitCode, stdout, stderr: '', envelope: scenarioData.envelope, ndjsonEvents };
+  }
+
+  if (scenarioData.fault === 'crash') {
+    for (const event of scenarioData.events) {
+      await emit(event.data);
+    }
+    // Engine dies: noise on stderr, nonzero exit, and NO terminal envelope.
+    const stderr = 'panic: runtime error (engine crashed mid-run)\n';
+    onEvent?.({ type: 'stderr', data: stderr });
+    return { exitCode: scenarioData.exitCode, stdout: '', stderr, envelope: null, ndjsonEvents };
+  }
+
+  // cancel: stream a little progress, then honor the app's cancel invoke.
+  for (const event of scenarioData.events) {
+    await emit(event.data);
+  }
+  await waitForCancel();
+  const stdout = JSON.stringify(scenarioData.envelope);
+  return { exitCode: scenarioData.exitCode, stdout, stderr: '', envelope: scenarioData.envelope, ndjsonEvents };
+}
+
+/**
+ * Mock for runEndstateOnce (non-streaming version).
+ *
+ * engine-exec.runEndstateOnce returns this result verbatim as an
+ * EngineExecResult, so we adapt the streaming RunResult into that shape (a
+ * `success` flag + typed error) instead of leaking the raw streaming result.
+ * Without this, one-shot commands like `capabilities` are read as
+ * `success: undefined` and the app treats a healthy engine as disconnected.
  */
 export async function runEndstateOnce<T>(
   settings: AppSettings,
   command: string,
   args: string[]
-): Promise<RunResult<T>> {
-  return runEndstateStreaming<T>(settings, command, args);
+): Promise<EngineExecResult<T>> {
+  const result = await runEndstateStreaming<T>(settings, command, args);
+  const envelope = result.envelope as unknown as
+    { success?: boolean; error?: { message?: string } } | null;
+  const success = envelope?.success ?? (result.exitCode === 0);
+
+  if (!success) {
+    return {
+      success: false,
+      error: {
+        kind: 'command_failed',
+        message: envelope?.error?.message ?? `Command failed with exit code ${result.exitCode}`,
+        command,
+        exitCode: result.exitCode,
+        stderr: result.stderr,
+      },
+      envelope: result.envelope as unknown as T,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+    };
+  }
+
+  return {
+    success: true,
+    envelope: result.envelope as unknown as T,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+  };
 }
 
 /**
