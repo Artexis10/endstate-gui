@@ -174,6 +174,21 @@ jobs:
             console.log('apply: ' + a.status + ' v' + (a.version || '?'));
           "
 
+      # TEMP DIAGNOSTIC (remove before merge): 2.27.0's source-scoped install
+      # reports installed but the verification below can't see the package on
+      # this runner, while the identical sequence verifies clean on a dev host.
+      # Dump the ground truth so the divergence is attributable.
+      - name: TEMP diagnose winget visibility
+        if: always()
+        shell: bash
+        run: |
+          echo "=== raw apply envelope ==="; cat apply.json || true
+          echo "=== winget list --id jqlang.jq (no --exact) ==="; winget list --id jqlang.jq || true
+          echo "=== winget list full (jq grep, wide) ==="; COLUMNS=512 winget list 2>/dev/null | grep -i jq || true
+          echo "=== where jq ==="; where jq || true
+          echo "=== jq on PATH? ==="; jq --version || true
+          echo "=== winget source list ==="; winget source list || true
+
       - name: Package is actually present on the host
         shell: bash
         run: |
