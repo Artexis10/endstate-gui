@@ -55,10 +55,71 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # tauri.conf.json, Cargo.toml, and Cargo.lock are updated as part of the
-      # Release PR itself via release-please-config.json's `extra-files`. No
-      # post-merge sync step required — this avoids a direct push to main that
-      # would otherwise need to bypass the verify-engine-pin required check.
+      # release-please bumps the version STRING in tauri.conf.json, Cargo.toml,
+      # package.json, ENGINE_VERSION, and (via a generic TOML updater in
+      # release-please-config.json) the endstate-gui entry in Cargo.lock. That
+      # string-substitution updater is fragile: it cannot regenerate the lock
+      # and silently no-ops if the Cargo.lock layout shifts, which is how the
+      # lock drifted behind Cargo.toml before (issue #72). The steps below run
+      # REAL cargo against the freshly-bumped manifest on the Release PR branch
+      # and push the corrected lockfile back, guaranteeing Cargo.lock's
+      # endstate-gui version tracks Cargo.toml on every release. No post-merge
+      # push to main is required.
+      #
+      # The push MUST use the App installation token, never GITHUB_TOKEN: a
+      # GITHUB_TOKEN push to the PR branch is swallowed by the recursion-
+      # protection rule and would NOT re-fire the Release PR's required checks,
+      # leaving the PR stuck with stale/zero CI. Same token propagation the rest
+      # of this repo relies on.
+      - name: Check out Release PR branch to sync Cargo.lock
+        if: github.event_name == 'push' && steps.release.outputs.pr
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName }}
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: Set up Rust toolchain
+        if: github.event_name == 'push' && steps.release.outputs.pr
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Regenerate and push Cargo.lock
+        if: github.event_name == 'push' && steps.release.outputs.pr
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName }}
+        run: |
+          set -euo pipefail
+
+          # Loop guard. This workflow only triggers on push to `main`; a push
+          # to the Release PR branch does NOT retrigger it, so runaway recursion
+          # is structurally impossible. This is a second belt: if the tip of the
+          # branch is already our lockfile sync (e.g. a manual re-run before
+          # release-please force-pushes the branch afresh), do nothing.
+          if git log -1 --pretty=%s | grep -qF 'ci(release): sync Cargo.lock'; then
+            echo "Cargo.lock already synced on ${HEAD_BRANCH} — skipping." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # --workspace updates ONLY the workspace members (endstate-gui and
+          # endstate-engine-core); the transitive registry deps are left
+          # untouched, so the diff is just the bumped version string(s).
+          cargo update --workspace --manifest-path src-tauri/Cargo.toml
+
+          if git diff --quiet -- src-tauri/Cargo.lock; then
+            echo "Cargo.lock already matches the bumped version — nothing to push." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git config user.name  'endstate-release-bot[bot]'
+          git config user.email 'endstate-release-bot[bot]@users.noreply.github.com'
+          git add src-tauri/Cargo.lock
+          git commit -m 'ci(release): sync Cargo.lock endstate-gui version'
+          git push origin "HEAD:${HEAD_BRANCH}"
+          echo "Synced src-tauri/Cargo.lock and pushed to ${HEAD_BRANCH}." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: release-please
