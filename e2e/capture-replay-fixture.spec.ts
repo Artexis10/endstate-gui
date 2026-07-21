@@ -17,11 +17,11 @@ import { installTauriMock } from './helpers/tauri-mock';
  */
 test.describe('Capture Golden Replay Fixture', () => {
   const FIXTURE_APPS = [
-    { id: 'Mozilla.Firefox', driver: 'winget' },
-    { id: 'Google.Chrome', driver: 'winget' },
-    { id: 'Microsoft.VisualStudioCode', driver: 'winget' },
-    { id: 'Notepad++.Notepad++', driver: 'winget' },
-    { id: '7zip.7zip', driver: 'winget' },
+    { id: 'Mozilla.Firefox', driver: 'winget', source: 'winget' },
+    { id: 'Google.Chrome', driver: 'winget', source: 'winget' },
+    { id: 'Microsoft.VisualStudioCode', driver: 'winget', source: 'winget' },
+    { id: 'Notepad++.Notepad++', driver: 'winget', source: 'winget' },
+    { id: '9WZDNCRFJ3PZ', driver: 'winget', source: 'msstore' },
   ];
 
   test.beforeEach(async ({ page, baseURL }) => {
@@ -43,15 +43,39 @@ test.describe('Capture Golden Replay Fixture', () => {
             return { exitCode: 0, envelope: { success: true, data: { hasState: false } }, ndjsonEvents: [] };
           }
           if (command === 'capture') {
-            // Emit item events
+            const emit = (event: Record<string, unknown>) => {
+              options?.onNdjsonEvent?.({
+                version: 1,
+                runId: 'capture-delayed-store',
+                timestamp: new Date().toISOString(),
+                ...event,
+              });
+            };
+
+            emit({ event: 'phase', phase: 'capture' });
+            emit({ event: 'progress', phase: 'capture', stage: 'inventory' });
+
+            // Hold the inventory stage through the deliberately delayed first
+            // item so the stage-only progress copy is reliably observable
+            // before any item arrives. A real package-manager run can spend
+            // many seconds enumerating installed apps, so a visible inventory
+            // window is contract-faithful, not artificial.
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            emit({ event: 'progress', phase: 'capture', stage: 'settings' });
             for (const app of apps) {
-              if (options?.onNdjsonEvent) {
-                options.onNdjsonEvent({ event: 'item', id: app.id, driver: app.driver });
-              }
+              emit({
+                event: 'item',
+                id: app.id,
+                driver: app.driver,
+                status: 'present',
+                reason: 'detected',
+              });
               if (onEvent) {
-                onEvent({ type: 'stdout', data: JSON.stringify({ event: 'item', id: app.id, driver: app.driver }) + '\n' });
+                onEvent({ type: 'stderr', data: JSON.stringify({ event: 'item', id: app.id, driver: app.driver }) + '\n' });
               }
             }
+            emit({ event: 'progress', phase: 'capture', stage: 'packaging' });
 
             // Return envelope with captured apps
             const envelope = {
@@ -59,7 +83,13 @@ test.describe('Capture Golden Replay Fixture', () => {
               data: {
                 outputPath: 'C:\\test\\profiles\\captured.jsonc',
                 counts: { totalFound: 5, included: 5, skipped: 0 },
-                appsIncluded: apps.map(a => ({ id: a.id, source: a.driver })),
+                appsIncluded: apps.map(a => ({ id: a.id, source: a.source })),
+                warnings: [{
+                  code: 'store_version_unpinned',
+                  message: '1 Store app captured without a version pin',
+                  driver: 'winget',
+                  source: 'msstore',
+                }],
               },
             };
 
@@ -84,6 +114,9 @@ test.describe('Capture Golden Replay Fixture', () => {
     // Start scan to trigger replay scenario
     await page.click('[data-testid="save-flow-start-scan"]');
 
+    // Progress is visible before the deliberately delayed first item.
+    await expect(page.getByText('Checking installed apps…')).toBeVisible();
+
     // Wait for scan to complete - "Scan complete" text appears
     await expect(page.locator('text=Scan complete')).toBeVisible({ timeout: 15000 });
 
@@ -92,6 +125,7 @@ test.describe('Capture Golden Replay Fixture', () => {
 
     // Verify at least one fixture app ID is visible in the list
     await expect(page.locator('text=Mozilla.Firefox')).toBeVisible();
+    await expect(page.getByLabel('Source: Microsoft Store')).toBeVisible();
 
     // Verify the Save file button is available (scan succeeded)
     await expect(page.locator('[data-testid="save-flow-save-file"]')).toBeVisible();

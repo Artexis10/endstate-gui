@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2, Cloud, FolderOpen } from 'lucide-react';
+import { ArrowLeft, HardDrive, Loader2, CheckCircle2, XCircle, Save, Settings2, Cloud, FolderOpen, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FilterChip } from '@/components/ui/filter-chip';
 import { NavButton } from '@/components/ui/nav-button';
@@ -20,8 +20,10 @@ import {
   getPhaseAwareStatusForEvent,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
-import type { CaptureConfigModule, SubscriptionStatus } from '@/types';
+import type { CaptureConfigModule, CaptureWarning, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
+import { CaptureProgress } from './capture-progress';
+import type { CaptureStage } from '@/lib/streaming-events';
 
 type CapturePhase = 'idle' | 'scanning' | 'done' | 'error' | 'saving' | 'saved';
 type ErrorOrigin = 'scan' | 'save' | null;
@@ -29,6 +31,7 @@ type ErrorOrigin = 'scan' | 'save' | null;
 interface CaptureAppEntry {
   id: string;
   name?: string;
+  source?: string;
 }
 
 interface CaptureResult {
@@ -43,6 +46,21 @@ interface CaptureResult {
   configsIncluded?: string[];
   /** Structured config module metadata */
   configModules?: CaptureConfigModule[];
+  /** Engine-authored non-fatal warnings; success remains authoritative. */
+  warnings?: CaptureWarning[];
+}
+
+function captureWarningText(warning: CaptureWarning): string {
+  switch (warning.code) {
+    case 'store_source_unavailable':
+      return 'Microsoft Store apps could not be included in this capture.';
+    case 'winget_source_unavailable':
+      return 'Community-repository apps could not be included in this capture.';
+    case 'store_version_unpinned':
+      return 'Affected Microsoft Store apps will restore to the latest available version rather than the exact captured version.';
+    default:
+      return warning.message;
+  }
 }
 
 export interface SaveOutcome {
@@ -54,7 +72,7 @@ export interface SaveFlowProps {
   onBack: () => void;
   engineConnected: boolean;
   isRunning: boolean;
-  captureProgress: { message: string; detail?: string } | null;
+  captureStage: CaptureStage | null;
   liveAppEvents: AppEvent[];
   onStartCapture: () => Promise<CaptureResult>;
   onSaveToFile: (result: CaptureResult) => Promise<SaveOutcome>;
@@ -92,7 +110,7 @@ export function SaveFlow({
   onBack,
   engineConnected,
   isRunning,
-  captureProgress,
+  captureStage,
   liveAppEvents,
   onStartCapture,
   onSaveToFile,
@@ -267,6 +285,9 @@ export function SaveFlow({
     if (refs.length === 0) return true;
     return !refs.some(ref => appIds.has(ref.toLowerCase()));
   });
+  const visibleWarnings = (result?.warnings ?? []).filter(
+    warning => warning.code !== 'optional_driver_unavailable',
+  );
 
   return (
     <motion.div
@@ -354,21 +375,8 @@ export function SaveFlow({
           >
             <Card className="border-l-2 border-l-blue-500/50">
               <CardContent className="py-6 px-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
-                  <div>
-                    <p className="text-sm font-medium">Scanning...</p>
-                    {captureProgress && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {captureProgress.message}
-                      </p>
-                    )}
-                    {captureProgress?.detail && (
-                      <p className="text-xs text-muted-foreground">
-                        {captureProgress.detail}
-                      </p>
-                    )}
-                  </div>
+                <div className="mb-4">
+                  <CaptureProgress stage={captureStage} />
                 </div>
 
                 {/* Live activity tail */}
@@ -446,6 +454,22 @@ export function SaveFlow({
                   )}
                 </div>
 
+                {visibleWarnings.length > 0 && (
+                  <div className="mt-3 border-t pt-3" aria-label="Capture warnings">
+                    <ul className="space-y-2">
+                      {visibleWarnings.map((warning, index) => (
+                        <li
+                          key={`${warning.code}-${warning.source}-${index}`}
+                          className="flex items-start gap-2 text-xs text-warning"
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                          <span>{captureWarningText(warning)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {/* Unified app + settings list */}
                 {result.apps.length > 0 && (
                   <div className="mt-3 border-t pt-3">
@@ -487,7 +511,7 @@ export function SaveFlow({
                         const hasSettings = settingsByApp.has(app.id);
                         const displayLabel = app.name || nameByAppId.get(app.id) || formatAppIdentity(app.id);
                         return (
-                          <div key={app.id} className="flex items-center gap-2 text-xs pt-0.5">
+                          <div key={app.id} className="flex items-center gap-2 text-xs pt-0.5" data-capture-app>
                             <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>DETECTED</span>
                             <span className="w-4 flex-shrink-0 flex justify-center">
                               {hasSettings && (
@@ -500,6 +524,14 @@ export function SaveFlow({
                             <span className="truncate">
                               <span>{displayLabel}</span>
                             </span>
+                            {app.source === 'msstore' && (
+                              <span
+                                aria-label="Source: Microsoft Store"
+                                className="ml-auto flex-shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                              >
+                                Microsoft Store
+                              </span>
+                            )}
                           </div>
                         );
                       })}

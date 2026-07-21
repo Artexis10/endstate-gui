@@ -44,6 +44,8 @@ export type EngineItemStatus =
   | 'skipped'      // Skipped by filter/policy
   | 'failed';      // Failed
 
+export type CaptureStage = 'inventory' | 'settings' | 'packaging';
+
 /**
  * Item reason values from the engine
  */
@@ -74,6 +76,13 @@ export interface BaseStreamingEvent {
 export interface PhaseEvent extends BaseStreamingEvent {
   event: 'phase';
   phase: EnginePhase;
+}
+
+/** Capture-only, stage-level progress without fabricated percentages or copy. */
+export interface ProgressEvent extends BaseStreamingEvent {
+  event: 'progress';
+  phase: 'capture';
+  stage: CaptureStage;
 }
 
 /**
@@ -250,6 +259,7 @@ export type ConfigProgressEvent = ConfigResolutionEvent | ConfigMigrationEvent;
  */
 export type StreamingEvent =
   | PhaseEvent
+  | ProgressEvent
   | ItemEvent
   | SummaryEvent
   | ErrorEvent
@@ -264,6 +274,10 @@ export type StreamingEvent =
  */
 export function isPhaseEvent(event: StreamingEvent): event is PhaseEvent {
   return event.event === 'phase';
+}
+
+export function isProgressEvent(event: StreamingEvent): event is ProgressEvent {
+  return event.event === 'progress';
 }
 
 export function isItemEvent(event: StreamingEvent): event is ItemEvent {
@@ -360,6 +374,7 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
     // Validate event type
     const validEventTypes = [
       'phase',
+      'progress',
       'item',
       'summary',
       'error',
@@ -387,6 +402,33 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
     // rather than surfaced as a completed result the UI would read as success.
     if (parsed.event === 'summary' && !isValidSummaryShape(parsed)) {
       return null;
+    }
+
+    // Capture emits additive stage-only progress events; reject an unknown
+    // stage or a non-capture phase rather than surfacing an unrecognized stage.
+    if (parsed.event === 'progress') {
+      const validStages: CaptureStage[] = ['inventory', 'settings', 'packaging'];
+      if (parsed.phase !== 'capture' || !validStages.includes(parsed.stage)) {
+        return null;
+      }
+    }
+
+    // Reject item statuses outside the canonical set plus the deprecated
+    // `captured` compatibility value so malformed statuses never render as
+    // deliberate exclusions.
+    if (parsed.event === 'item') {
+      const validStatuses: EngineItemStatus[] = [
+        'to_install',
+        'installing',
+        'installed',
+        'present',
+        'skipped',
+        'failed',
+        'captured',
+      ];
+      if (!validStatuses.includes(parsed.status)) {
+        return null;
+      }
     }
 
     return parsed as StreamingEvent;

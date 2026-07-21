@@ -32,7 +32,9 @@ import {
   isItemEvent,
   isArtifactEvent,
   isPhaseEvent,
+  isProgressEvent,
   isRestoreItemEvent,
+  type CaptureStage,
   type ConfigProgressEvent,
   type EnginePhase,
 } from './lib/streaming-events';
@@ -490,6 +492,7 @@ function AppContent() {
     setup: null,
     check: null,
   });
+  const [captureStage, setCaptureStage] = useState<CaptureStage | null>(null);
   const [actionResultByAction, setActionResultByAction] = useState<Record<string, OverviewActionResult | null>>({
     capture: null,
     setup: null,
@@ -1789,19 +1792,12 @@ function AppContent() {
         onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
           if (isPhaseEvent(ndjsonEvent)) {
             overviewCapturePhase = ndjsonEvent.phase;
+          } else if (isProgressEvent(ndjsonEvent)) {
+            setCaptureStage(ndjsonEvent.stage);
           } else if (isItemEvent(ndjsonEvent)) {
             const appEvent = itemEventToAppEvent(ndjsonEvent, overviewCapturePhase);
             overviewCaptureEvents.push(appEvent);
             throttledSetLiveAppEvents([...overviewCaptureEvents]);
-            const uiStatus = getPhaseAwareStatusForEvent({ 
-              statusKey: appEvent.statusKey || 'skipped', 
-              phase: 'capture', 
-              reason: appEvent.reason 
-            });
-            throttledSetProgress('capture', {
-              message: 'Scanning applications...',
-              detail: `${uiStatus.longLabel}: ${ndjsonEvent.name || ndjsonEvent.id}`
-            });
           } else if (isArtifactEvent(ndjsonEvent)) {
             const artifactEvent: AppEvent = {
               app: 'Manifest',
@@ -2758,13 +2754,13 @@ function AppContent() {
           <div className="space-y-6">
             {errorBanner}
             <SaveFlow
-              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowCompleted(false); setSaveFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
+              onBack={() => { setCaptureStage(null); setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowCompleted(false); setSaveFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={saveFlowResetKey}
-              onFlowReset={() => { setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowCompleted(false); }}
+              onFlowReset={() => { setCaptureStage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowCompleted(false); }}
               onSaved={() => setSaveFlowCompleted(true)}
               engineConnected={state.status !== 'error'}
               isRunning={isRunning}
-              captureProgress={actionProgressByAction['capture'] ?? null}
+              captureStage={captureStage}
               liveAppEvents={liveAppEvents}
               hostedBackupSupported={hostedBackupSupported}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
@@ -2827,6 +2823,7 @@ function AppContent() {
               onStartCapture={async () => {
                 setSaveFlowCompleted(false);
                 setIsRunning(true);
+                setCaptureStage(null);
                 setLiveAppEvents([]);
                 setAutoBackupChip('idle');
                 setOverviewRunningAction('capture');
@@ -2867,11 +2864,12 @@ function AppContent() {
                   return {
                     count: result.count,
                     draftText: result.draftText,
-                    apps: (result.appsIncluded ?? []).map(a => ({ id: a.id, name: a.name })),
+                    apps: (result.appsIncluded ?? []).map(a => ({ id: a.id, name: a.name, source: a.source })),
                     outputPath: result.envelopeData?.outputPath,
                     outputFormat: result.envelopeData?.outputFormat,
                     configsIncluded: result.envelopeData?.configsIncluded,
                     configModules: result.envelopeData?.configModules,
+                    warnings: result.envelopeData?.warnings,
                   };
                 } finally {
                   setIsRunning(false);
