@@ -10,9 +10,11 @@ Endstate is governed by a set of public principles documented in the engine repo
 
 ## Status
 
+[![CI](https://github.com/Artexis10/endstate-gui/actions/workflows/ci.yml/badge.svg)](https://github.com/Artexis10/endstate-gui/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Artexis10/endstate-gui?display_name=tag&label=release)](https://github.com/Artexis10/endstate-gui/releases/latest)
 ![engine pin](https://img.shields.io/badge/engine-v2.25.0-blue)
 
-Endstate GUI is in active development approaching v1.0 release.
+Endstate GUI is released and actively maintained. Download the latest signed installer from [Releases](https://github.com/Artexis10/endstate-gui/releases/latest).
 
 ## Development Prerequisites
 
