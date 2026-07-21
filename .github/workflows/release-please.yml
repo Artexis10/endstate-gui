@@ -68,6 +68,17 @@ jobs:
       contents: write
 
     steps:
+      # The publish step below must NOT use GITHUB_TOKEN: GitHub suppresses
+      # events triggered by it, so `release: released` never fires and
+      # winget.yml goes silently dead (observed: no winget runs for
+      # gui-v3.0.0 through gui-v3.2.1). The App token makes the cascade fire.
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+
       # release-please creates automated releases as drafts. Re-runs and manual
       # dispatches enforce the same hold before touching assets, so failure can
       # never expose a partially rebuilt release or change /releases/latest.
@@ -230,7 +241,9 @@ jobs:
       - name: Publish verified release
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # App token, not GITHUB_TOKEN: this edit fires `release: released`,
+          # which winget.yml consumes — GITHUB_TOKEN would suppress it.
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
         run: |
           EXPECTED_TAG="gui-v$(node -p "require('./package.json').version")"
