@@ -524,10 +524,17 @@ export function SaveFlow({
                             <span className="truncate">
                               <span>{displayLabel}</span>
                             </span>
+                            <span
+                              className={`ml-auto flex-shrink-0 text-[10px] ${
+                                hasSettings ? getColorClasses('success').text : 'text-muted-foreground'
+                              }`}
+                            >
+                              {hasSettings ? 'Settings included' : 'App install only'}
+                            </span>
                             {app.source === 'msstore' && (
                               <span
                                 aria-label="Source: Microsoft Store"
-                                className="ml-auto flex-shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                                className="flex-shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
                               >
                                 Microsoft Store
                               </span>
