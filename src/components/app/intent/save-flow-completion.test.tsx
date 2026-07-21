@@ -37,7 +37,29 @@ const captureResultWithSettings = {
   ],
 };
 
-async function scanCapture() {
+const captureResultMixedCoverage = {
+  count: 2,
+  draftText: '{"version":2,"apps":[]}',
+  apps: [
+    { id: 'Microsoft.VisualStudioCode', name: 'Visual Studio Code' },
+    { id: 'VideoLAN.VLC', name: 'VLC media player' },
+  ],
+  outputPath: 'C:\\cache\\capture.zip',
+  outputFormat: 'zip' as const,
+  configsIncluded: ['apps.vscode'],
+  configModules: [
+    {
+      id: 'apps.vscode',
+      appId: 'vscode',
+      displayName: 'Visual Studio Code',
+      status: 'captured' as const,
+      filesCaptured: 3,
+      wingetRefs: ['Microsoft.VisualStudioCode'],
+    },
+  ],
+};
+
+async function scanCapture(result: unknown = captureResultWithSettings) {
   renderWithProviders(
     <SaveFlow
       onBack={vi.fn()}
@@ -45,7 +67,7 @@ async function scanCapture() {
       isRunning={false}
       captureStage={null}
       liveAppEvents={[]}
-      onStartCapture={vi.fn().mockResolvedValue(captureResultWithSettings)}
+      onStartCapture={vi.fn().mockResolvedValue(result)}
       onSaveToFile={vi.fn()}
     />,
   );
@@ -91,6 +113,15 @@ describe('SaveFlow completion', () => {
     await scanCapture();
 
     expect(screen.getByLabelText('Settings captured for this app')).toBeInTheDocument();
+  });
+
+  it('marks each app row as settings-included or app-install-only', async () => {
+    await scanCapture(captureResultMixedCoverage);
+
+    // App with a captured settings module → settings included
+    expect(screen.getByText('Settings included')).toBeInTheDocument();
+    // App with no settings module → app install only (no fabricated coverage)
+    expect(screen.getByText('App install only')).toBeInTheDocument();
   });
 
   it('separates settings-only entries with explicit installer ownership', async () => {
