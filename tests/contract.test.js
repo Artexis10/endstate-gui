@@ -338,7 +338,7 @@ async function testApplyPayloadAndRegenerateGolden() {
   // regenerate identically on both. Excluding them keeps regeneration
   // deterministic across hosts — a genuinely new engine field still lands in
   // actionKeys and diffs the committed fixture.
-  const OPTIONAL_ACTION_KEYS = ['message', 'name', 'reason', 'rebootRequired', 'version'];
+  const OPTIONAL_ACTION_KEYS = ['message', 'name', 'reason', 'rebootRequired', 'source', 'version'];
 
   // Regenerate the fixture the mock is asserted against. It is committed, so a
   // diff here means the engine's envelope changed and the mock must follow.
