@@ -1,6 +1,6 @@
 {
   "_generatedBy": "tests/contract.test.js against the real pinned engine — do not hand-edit",
-  "cliVersion": "2.25.0",
+  "cliVersion": "2.26.0",
   "envelopeKeys": [
     "cliVersion",
     "command",
