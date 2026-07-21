@@ -54,12 +54,15 @@ test.describe('Capture Golden Replay Fixture', () => {
 
             emit({ event: 'phase', phase: 'capture' });
             emit({ event: 'progress', phase: 'capture', stage: 'inventory' });
-            await new Promise(resolve => setTimeout(resolve, 100));
-            emit({ event: 'progress', phase: 'capture', stage: 'settings' });
 
-            // Deliberately keep the first item quiet long enough for stage-only
-            // progress to be observable, matching a real package-manager run.
-            await new Promise(resolve => setTimeout(resolve, 200));
+            // Hold the inventory stage through the deliberately delayed first
+            // item so the stage-only progress copy is reliably observable
+            // before any item arrives. A real package-manager run can spend
+            // many seconds enumerating installed apps, so a visible inventory
+            // window is contract-faithful, not artificial.
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            emit({ event: 'progress', phase: 'capture', stage: 'settings' });
             for (const app of apps) {
               emit({
                 event: 'item',

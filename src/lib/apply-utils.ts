@@ -362,8 +362,6 @@ export function engineStatusToStatusKey(engineStatus: EngineItemStatus, phase?: 
       return 'installing';
     case 'installed':
       return 'installed';
-    case 'captured':
-      return 'detected';
     case 'skipped':
       return 'skipped';
     case 'failed':

@@ -14,7 +14,7 @@ const baseProps = {
   onBack: vi.fn(),
   engineConnected: true,
   isRunning: false,
-  captureProgress: null,
+  captureStage: null,
   liveAppEvents: [],
 };
 
