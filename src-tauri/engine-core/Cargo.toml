@@ -27,3 +27,9 @@ tokio-stream = { version = "0.1", features = ["sync"], optional = true }
 default = []
 # Compiles the axum HTTP bridge module. Enabled only by endstate-dev-bridge.
 bridge = ["axum", "tower-http", "tokio-stream"]
+
+# Test-only: exercise the bridge router (body-limit regression). Only used when
+# tests run with `--features bridge`; harmless otherwise.
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

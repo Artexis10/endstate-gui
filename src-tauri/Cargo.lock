@@ -1014,11 +1014,13 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "dirs 5.0.1",
+ "http-body-util",
  "parking_lot",
  "serde",
  "serde_json",
  "tokio",
  "tokio-stream",
+ "tower",
  "tower-http",
  "zip 2.4.2",
 ]

@@ -21,6 +21,7 @@ import { resolveProfilePath } from './lib/profile-selection-migration';
 import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-discovery';
 import { findImportedProfile } from './lib/profile-import';
 import { createNativeProfileDropHandler, createProfileImportCoordinator } from './lib/native-profile-drop';
+import { friendlyImportError } from './lib/import-errors';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
@@ -775,8 +776,7 @@ function AppContent() {
           await finishProfileImport(dir, importedManifestPath, file.name);
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        showToast(`Failed to import ${file.name}: ${msg}`, 'error');
+        showToast(friendlyImportError(file.name, err), 'error');
       }
     }
 
@@ -828,8 +828,7 @@ function AppContent() {
           await finishProfileImport(dir, importedManifestPath, fileName);
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        showToast(`Failed to import ${fileName}: ${msg}`, 'error');
+        showToast(friendlyImportError(fileName, err), 'error');
       }
     }
   };
