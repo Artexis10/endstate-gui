@@ -2,8 +2,10 @@
 //!
 //! Pure business-logic functions with no Tauri dependencies. The app crate's
 //! command wrappers and the standalone dev bridge both delegate here.
-//! `build_engine_command` carries the Windows `cmd /C` PATH-shim landmine —
-//! all engine spawn sites must use it.
+//! `build_engine_command` spawns the engine binary directly (no `cmd /C` shell
+//! wrapper — that was the legacy PowerShell-engine era); it sets
+//! `CREATE_NO_WINDOW` on Windows and passes through `ENDSTATE_ROOT`. All engine
+//! spawn sites must use it so that behaviour stays consistent.
 
 use std::fs;
 use std::path::Path;

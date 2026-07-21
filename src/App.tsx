@@ -22,7 +22,7 @@ import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, buildOnlyFlagValue, type AppEvent, type UiPhase } from './lib/apply-utils';
 import { engineSupportsApplyOnly } from './lib/apply-capabilities';
-import { isItemEvent, isArtifactEvent, isPhaseEvent, isRestoreItemEvent, type EnginePhase } from './lib/streaming-events';
+import { isItemEvent, isArtifactEvent, isPhaseEvent, isProgressEvent, isRestoreItemEvent, type CaptureStage, type EnginePhase } from './lib/streaming-events';
 import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from './lib/last-run';
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
@@ -52,7 +52,26 @@ import { InlineFeedbackPopover } from './components/ui/inline-feedback-popover';
 import { copyText } from './lib/clipboard';
 import { UpdatePrompt, runUpdateCheck } from './components/UpdatePrompt';
 import { AuthPane } from './components/app/auth/auth-pane';
+import {
+  INITIAL_AUTH_SESSION_TRUTH,
+  authRequired,
+  authSucceeded,
+  claimSessionSignedIn,
+  hostedBackupSessionView,
+  markBackupStatusSignedOut,
+  reconcileAuthStatus,
+  sessionSignedOut,
+  shouldShowSessionCheckModal,
+} from './components/app/auth/auth-session-truth';
+import { useClaimOnboarding } from './components/app/auth/use-claim-onboarding';
+import { ClaimSessionCheckDialog } from './components/app/auth/claim-session-check-dialog';
+import { HostedBackupSessionCheck } from './components/app/auth/hosted-backup-session-check';
+import {
+  BackupStatusSequencer,
+  type BackupStatusRequestRole,
+} from './components/app/auth/backup-status-sequencer';
 import { BackupPane } from './components/app/backup/backup-pane';
+import { HostedBackupSignedOut } from './components/app/backup/hosted-backup-signed-out';
 import { usePrePushGuard } from './components/app/backup/use-pre-push-guard';
 import { ProfileMissingModal } from './components/app/profile-missing-modal';
 import { RestoreWizard } from './components/app/backup/restore-wizard';
@@ -74,14 +93,13 @@ import {
   ScheduleCommandError,
 } from './lib/schedule-bridge';
 import { AccountSection } from './components/app/account/account-section';
-import { backupStatus, backupList, backupPush, BackupCommandError } from './lib/backup-bridge';
+import { backupStatus, backupList, backupPush, backupLogout, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
 import { profileKeyFor } from './lib/profile-key';
 import { resolveCloudEntriesByKey, buildProfilePushArgs, pruneProfileBackupIds } from './lib/cloud-hosting';
 import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
 import { isBackupChunkEvent } from './lib/streaming-events';
 import { hasSeenFirstPushFor, markFirstPushFor } from './lib/first-push-flag';
-import { open as openExternal } from '@tauri-apps/plugin-shell';
 import type { BackupListItem, BackupStatusData, ScheduleStatusData } from './types';
 
 type AppStatus = 'loading' | 'ready' | 'error';
@@ -198,6 +216,35 @@ function AppContent() {
   //   local profiles directory is empty (Phase 6 wizard).
   const [hostedBackupSupported, setHostedBackupSupported] = useState<boolean>(false);
   const [backupStatusData, setBackupStatusData] = useState<BackupStatusData | null>(null);
+  const [authSessionTruth, setAuthSessionTruth] = useState(INITIAL_AUTH_SESSION_TRUTH);
+  const [claimSessionCheckFailed, setClaimSessionCheckFailed] = useState(false);
+  const [claimSessionCheckBusy, setClaimSessionCheckBusy] = useState(false);
+  const backupStatusSequencerRef = useRef(new BackupStatusSequencer());
+  const applyBackupStatus = (status: BackupStatusData) => {
+    setBackupStatusData(status);
+    setAuthSessionTruth((current) => reconcileAuthStatus(current, status.signedIn));
+    setClaimSessionCheckFailed(false);
+  };
+  const invalidateBackupStatusRequests = () => {
+    backupStatusSequencerRef.current.invalidate();
+  };
+  const readAndApplyBackupStatus = async (
+    role: BackupStatusRequestRole = 'session',
+  ): Promise<BackupStatusData | null> => {
+    const request = backupStatusSequencerRef.current.begin(role);
+    try {
+      const status = await backupStatus(settings);
+      if (!backupStatusSequencerRef.current.isCurrent(request)) return null;
+      applyBackupStatus(status);
+      return status;
+    } catch (error) {
+      if (!backupStatusSequencerRef.current.isCurrent(request)) return null;
+      throw error;
+    } finally {
+      backupStatusSequencerRef.current.finish(request);
+    }
+  };
+  const backupSessionView = hostedBackupSessionView(authSessionTruth, backupStatusData);
   // Soft pre-push quota guard for the MANUAL push surfaces below (the silent
   // auto-backup via runAutoBackup is intentionally not gated).
   const { guardPush: guardManualPush, dialog: prePushGuardDialog } = usePrePushGuard(
@@ -225,6 +272,45 @@ function AppContent() {
   // Reset to 'sign-in' on most nav transitions; "Create account" sets it to
   // 'sign-up' just before routing.
   const [authInitialTab, setAuthInitialTab] = useState<'sign-in' | 'sign-up' | 'recover'>('sign-in');
+  const [authRecoveryPending, setAuthRecoveryPending] = useState(false);
+  const retryClaimSessionCheck = async () => {
+    setClaimSessionCheckBusy(true);
+    try {
+      await readAndApplyBackupStatus();
+    } catch (err) {
+      if (err instanceof BackupCommandError && err.code === 'AUTH_REQUIRED') {
+        invalidateBackupStatusRequests();
+        setBackupStatusData(null);
+        setAuthSessionTruth(authRequired);
+        setClaimSessionCheckFailed(false);
+      } else {
+        setClaimSessionCheckFailed(true);
+      }
+    } finally {
+      setClaimSessionCheckBusy(false);
+    }
+  };
+  const claimOnboarding = useClaimOnboarding({
+    signedIn: claimSessionSignedIn(authSessionTruth),
+    recoveryPending: authRecoveryPending,
+    onOpenClaim: () => {
+      setAuthInitialTab('sign-up');
+      setCurrentPage('auth');
+    },
+    onSignOut: async () => {
+      await backupLogout(settings);
+      invalidateBackupStatusRequests();
+      setAuthSessionTruth(sessionSignedOut);
+      setBackupStatusData(markBackupStatusSignedOut);
+      setBackupListData(null);
+      try {
+        const status = await readAndApplyBackupStatus();
+        if (!status) return;
+      } catch {
+        setBackupStatusData(null);
+      }
+    },
+  });
 
   // Automatic hosted backup (capability-gated; stays dark until the engine
   // advertises `backup push --if-changed`). Trigger is capture-only.
@@ -358,6 +444,7 @@ function AppContent() {
     setup: null,
     check: null,
   });
+  const [captureStage, setCaptureStage] = useState<CaptureStage | null>(null);
   const [actionResultByAction, setActionResultByAction] = useState<Record<string, OverviewActionResult | null>>({
     capture: null,
     setup: null,
@@ -1286,7 +1373,7 @@ function AppContent() {
         updateSettings({
           profileBackupIds: { ...settings.profileBackupIds, [profileKey]: outcome.backupId },
         });
-        backupStatus(settings).then(setBackupStatusData).catch(() => {});
+        void readAndApplyBackupStatus('background').catch(() => {});
         break;
       case 'skipped':
         setAutoBackupAuthPaused(false);
@@ -1298,6 +1385,8 @@ function AppContent() {
         }
         break;
       case 'auth-required':
+        invalidateBackupStatusRequests();
+        setAuthSessionTruth(authRequired);
         setAutoBackupAuthPaused(true);
         setAutoBackupChip('paused');
         if (!autoBackupAuthToastShownRef.current) {
@@ -1309,7 +1398,7 @@ function AppContent() {
         // Persistent surface is the quota notice in the Backup pane; refresh
         // status so it reflects the full quota.
         setAutoBackupChip('idle');
-        backupStatus(settings).then(setBackupStatusData).catch(() => {});
+        void readAndApplyBackupStatus('background').catch(() => {});
         break;
       case 'error':
         // Transient / unreachable — silent; retried on the next capture.
@@ -1330,6 +1419,9 @@ function AppContent() {
   };
 
   const loadInitialData = async () => {
+    invalidateBackupStatusRequests();
+    setAuthSessionTruth(INITIAL_AUTH_SESSION_TRUTH);
+    setClaimSessionCheckFailed(false);
     setState({
       status: 'loading',
       errorMessage: null,
@@ -1429,14 +1521,13 @@ function AppContent() {
       setApplyOnlySupported(engineSupportsApplyOnly(capResult.envelope.data));
       if (supported) {
         try {
-          const status = await backupStatus(settings);
-          setBackupStatusData(status);
+          const status = await readAndApplyBackupStatus();
           // Fire `backup list` in the background once we know we're signed in
           // with a paid subscription. The Backup pane reads this cached list
           // on first render so navigation feels instant. `none` is skipped
           // because the engine returns SUBSCRIPTION_REQUIRED for list in that
           // state (contract §10 — read is blocked).
-          if (status.signedIn && status.subscriptionStatus !== 'none') {
+          if (status?.signedIn && status.subscriptionStatus !== 'none') {
             void backupList(settings)
               .then((data) => setBackupListData(data.backups))
               .catch((err) => {
@@ -1453,15 +1544,22 @@ function AppContent() {
             // Tombstoned keychain from pre-F4 builds (or any other expired
             // session) — gently nudge the user back into the sign-in flow.
             if (err.code === 'AUTH_REQUIRED') {
+              invalidateBackupStatusRequests();
+              setBackupStatusData(null);
+              setAuthSessionTruth(authRequired);
               showToast('Session expired. Please sign in again.', 'info');
+            } else {
+              setClaimSessionCheckFailed(true);
             }
           } else {
             console.warn('backup status failed:', err);
+            setClaimSessionCheckFailed(true);
           }
         }
       } else {
         setBackupStatusData(null);
         setBackupListData(null);
+        setAuthSessionTruth(sessionSignedOut);
       }
 
       // Continuous protection handshake: dark unless the engine advertises
@@ -1579,19 +1677,12 @@ function AppContent() {
         onNdjsonEvent: (ndjsonEvent: import('./lib/streaming-events').StreamingEvent) => {
           if (isPhaseEvent(ndjsonEvent)) {
             overviewCapturePhase = ndjsonEvent.phase;
+          } else if (isProgressEvent(ndjsonEvent)) {
+            setCaptureStage(ndjsonEvent.stage);
           } else if (isItemEvent(ndjsonEvent)) {
             const appEvent = itemEventToAppEvent(ndjsonEvent, overviewCapturePhase);
             overviewCaptureEvents.push(appEvent);
             throttledSetLiveAppEvents([...overviewCaptureEvents]);
-            const uiStatus = getPhaseAwareStatusForEvent({ 
-              statusKey: appEvent.statusKey || 'skipped', 
-              phase: 'capture', 
-              reason: appEvent.reason 
-            });
-            throttledSetProgress('capture', {
-              message: 'Scanning applications...',
-              detail: `${uiStatus.longLabel}: ${ndjsonEvent.name || ndjsonEvent.id}`
-            });
           } else if (isArtifactEvent(ndjsonEvent)) {
             const artifactEvent: AppEvent = {
               app: 'Manifest',
@@ -2507,12 +2598,12 @@ function AppContent() {
           <div className="space-y-6">
             {errorBanner}
             <SaveFlow
-              onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
+              onBack={() => { setCaptureStage(null); setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, save: false })); setSaveFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={saveFlowResetKey}
-              onFlowReset={() => setFlowHasWork(prev => ({ ...prev, save: false }))}
+              onFlowReset={() => { setCaptureStage(null); setFlowHasWork(prev => ({ ...prev, save: false })); }}
               engineConnected={state.status !== 'error'}
               isRunning={isRunning}
-              captureProgress={actionProgressByAction['capture'] ?? null}
+              captureStage={captureStage}
               liveAppEvents={liveAppEvents}
               hostedBackupSupported={hostedBackupSupported}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
@@ -2574,6 +2665,7 @@ function AppContent() {
               }
               onStartCapture={async () => {
                 setIsRunning(true);
+                setCaptureStage(null);
                 setLiveAppEvents([]);
                 setAutoBackupChip('idle');
                 setOverviewRunningAction('capture');
@@ -2614,11 +2706,12 @@ function AppContent() {
                   return {
                     count: result.count,
                     draftText: result.draftText,
-                    apps: (result.appsIncluded ?? []).map(a => ({ id: a.id, name: a.name })),
+                    apps: (result.appsIncluded ?? []).map(a => ({ id: a.id, name: a.name, source: a.source })),
                     outputPath: result.envelopeData?.outputPath,
                     outputFormat: result.envelopeData?.outputFormat,
                     configsIncluded: result.envelopeData?.configsIncluded,
                     configModules: result.envelopeData?.configModules,
+                    warnings: result.envelopeData?.warnings,
                   };
                 } finally {
                   setIsRunning(false);
@@ -2911,22 +3004,45 @@ function AppContent() {
             </div>
           );
         }
+        if (backupSessionView === 'checking') {
+          return (
+            <HostedBackupSessionCheck
+              failed={claimSessionCheckFailed && !claimOnboarding.sessionCheckPending}
+              busy={claimSessionCheckBusy}
+              onRetry={() => void retryClaimSessionCheck()}
+            />
+          );
+        }
         return (
           <>
             {errorBanner}
             <AuthPane
+              key={claimOnboarding.claimSetup?.requestId ?? 'regular-auth'}
               settings={settings}
               initialTab={authInitialTab}
+              initialClaimMode={claimOnboarding.claimSetup !== null}
+              initialClaimToken={claimOnboarding.claimSetup?.token ?? ''}
+              onRecoveryPendingChange={setAuthRecoveryPending}
               onAuthenticated={async (result) => {
                 // Refresh hosted-backup status; on success, route to the
                 // backup pane. The signed-up flow has already passed through
                 // the recovery-key dialog by the time the AuthPane fires
                 // `kind === 'signed-up'`, so we just continue.
+                invalidateBackupStatusRequests();
+                setAuthSessionTruth(authSucceeded);
+                setBackupStatusData((current) => current ? {
+                  ...current,
+                  signedIn: true,
+                  email: result.data.email,
+                  userId: result.data.userId,
+                  subscriptionStatus: 'subscriptionStatus' in result.data
+                    ? result.data.subscriptionStatus
+                    : current.subscriptionStatus,
+                } : current);
                 try {
-                  const status = await backupStatus(settings);
-                  setBackupStatusData(status);
+                  const status = await readAndApplyBackupStatus();
                   // Warm the list cache so the Backup pane lands instantly.
-                  if (status.signedIn && status.subscriptionStatus !== 'none') {
+                  if (status?.signedIn && status.subscriptionStatus !== 'none') {
                     void backupList(settings)
                       .then((data) => setBackupListData(data.backups))
                       .catch((err) => {
@@ -2943,7 +3059,7 @@ function AppContent() {
                   // dropdown they have to discover. See contract §6 / Phase 6.
                   if (
                     result.kind !== 'signed-up' &&
-                    status.signedIn &&
+                    status?.signedIn &&
                     status.lastBackupAt &&
                     profiles.length === 0
                   ) {
@@ -2954,7 +3070,8 @@ function AppContent() {
                   // surface the error.
                   console.warn('post-auth status refresh failed:', err);
                 }
-                handleNavigate('backup');
+                claimOnboarding.clearClaimSetup();
+                await handleNavigate('backup');
               }}
             />
           </>
@@ -2969,59 +3086,32 @@ function AppContent() {
             </div>
           );
         }
-        // Signed-out → show the disclosure card with two CTAs. Sign-in is
-        // primary (existing users); Create account is secondary (new users
-        // who need to know it's a paid subscription before committing).
-        if (!backupStatusData?.signedIn) {
+        // Signed-out → show the disclosure card with direct sign-in, account
+        // creation, and purchase-code entry points.
+        if (backupSessionView === 'checking') {
           return (
-            <div className="m-6 max-w-xl" data-testid="backup-pane-signed-out">
-              <div className="rounded-lg border border-border bg-card p-6">
-                <h2 className="text-lg font-semibold">Hosted Backup</h2>
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Save your machine setup to encrypted cloud storage. Restore it on any machine.
-                </p>
-                <p className="mt-4 text-sm">
-                  <span className="font-medium">€4/month</span>
-                  <span className="text-muted-foreground"> — billed monthly, cancel anytime.</span>
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="inline"
-                    onClick={() => {
-                      void openExternal('https://substratesystems.io/endstate');
-                    }}
-                  >
-                    Learn more → substratesystems.io/endstate
-                  </Button>
-                </p>
-                <div className="mt-6 flex gap-3">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={() => {
-                      setAuthInitialTab('sign-in');
-                      handleNavigate('auth');
-                    }}
-                    data-testid="backup-pane-signin"
-                  >
-                    Sign in
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setAuthInitialTab('sign-up');
-                      handleNavigate('auth');
-                    }}
-                    data-testid="backup-pane-create-account"
-                  >
-                    Create account
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <HostedBackupSessionCheck
+              failed={claimSessionCheckFailed && !claimOnboarding.sessionCheckPending}
+              busy={claimSessionCheckBusy}
+              onRetry={() => void retryClaimSessionCheck()}
+            />
+          );
+        }
+        if (backupSessionView === 'signed-out') {
+          return (
+            <HostedBackupSignedOut
+              onSignIn={() => {
+                claimOnboarding.clearClaimSetup();
+                setAuthInitialTab('sign-in');
+                handleNavigate('auth');
+              }}
+              onCreateAccount={() => {
+                claimOnboarding.clearClaimSetup();
+                setAuthInitialTab('sign-up');
+                handleNavigate('auth');
+              }}
+              onUsePurchaseCode={claimOnboarding.startManualClaim}
+            />
           );
         }
         return (
@@ -3044,6 +3134,8 @@ function AppContent() {
               }}
               isReauthOpen={() => reauthOpenRef.current}
               onAuthLost={() => {
+                invalidateBackupStatusRequests();
+                setAuthSessionTruth(authRequired);
                 // Recursion guard: a focus-triggered status refresh can fire
                 // AUTH_REQUIRED while the dialog is already open. Don't queue
                 // a second dialog instance.
@@ -3097,13 +3189,14 @@ function AppContent() {
               onDismiss={() => setReauthDialogOpen(false)}
               onReauthenticated={async () => {
                 setReauthDialogOpen(false);
+                invalidateBackupStatusRequests();
+                setAuthSessionTruth(authSucceeded);
                 // Engine has a fresh session — refresh status (and list).
                 // If anything errors here, the pane keeps its prior state
                 // and the user can retry manually from the pane's CTA.
                 try {
-                  const next = await backupStatus(settings);
-                  setBackupStatusData(next);
-                  if (next.signedIn && next.subscriptionStatus !== 'none') {
+                  const next = await readAndApplyBackupStatus();
+                  if (next?.signedIn && next.subscriptionStatus !== 'none') {
                     const list = await backupList(settings);
                     setBackupListData(list.backups);
                   }
@@ -3736,9 +3829,11 @@ function AppContent() {
                   // Refresh status + route to auth pane. Drop the prefetched
                   // list — it's per-user data and would leak across accounts.
                   setBackupListData(null);
+                  invalidateBackupStatusRequests();
+                  setAuthSessionTruth(sessionSignedOut);
+                  setBackupStatusData(markBackupStatusSignedOut);
                   try {
-                    const next = await backupStatus(settings);
-                    setBackupStatusData(next);
+                    await readAndApplyBackupStatus();
                   } catch (err) {
                     console.warn('post-logout status refresh failed:', err);
                   }
@@ -3748,15 +3843,19 @@ function AppContent() {
                   // After delete the engine clears its session; refresh and
                   // route to auth pane (signed-out state).
                   setBackupListData(null);
+                  invalidateBackupStatusRequests();
+                  setAuthSessionTruth(sessionSignedOut);
+                  setBackupStatusData(markBackupStatusSignedOut);
                   try {
-                    const next = await backupStatus(settings);
-                    setBackupStatusData(next);
+                    await readAndApplyBackupStatus();
                   } catch {
                     setBackupStatusData(null);
                   }
                   handleNavigate('auth');
                 }}
                 onAuthLost={() => {
+                  invalidateBackupStatusRequests();
+                  setAuthSessionTruth(authRequired);
                   if (reauthOpenRef.current) return;
                   setReauthExpectedEmail(backupStatusData?.email);
                   setReauthDialogOpen(true);
@@ -4173,6 +4272,65 @@ function AppContent() {
         onContinueWithoutProfile={() => {
           setProfileMissingState(null);
         }}
+      />
+
+      <Dialog
+        open={claimOnboarding.collisionPending !== null}
+        onOpenChange={(open) => {
+          if (!open && !claimOnboarding.logoutBusy) claimOnboarding.cancelCollision();
+        }}
+      >
+        <DialogContent role="alertdialog">
+          <DialogHeader>
+            <DialogTitle>Set up another account?</DialogTitle>
+            <DialogDescription>
+              This purchase link sets up another Endstate account. Sign out of your current
+              account to continue, or cancel to keep working in this account.
+            </DialogDescription>
+          </DialogHeader>
+          {claimOnboarding.logoutError && (
+            <div
+              role="alert"
+              className="rounded-md border border-danger/30 bg-danger/10 p-3 text-sm text-danger-foreground"
+            >
+              {claimOnboarding.logoutError}
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={claimOnboarding.logoutBusy}
+              onClick={claimOnboarding.cancelCollision}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={claimOnboarding.logoutBusy}
+              onClick={() => void claimOnboarding.signOutAndContinue()}
+            >
+              {claimOnboarding.logoutBusy ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing out
+                </>
+              ) : (
+                'Sign out and continue'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ClaimSessionCheckDialog
+        open={shouldShowSessionCheckModal(
+          authSessionTruth,
+          claimSessionCheckFailed,
+          claimOnboarding.sessionCheckPending,
+        )}
+        busy={claimSessionCheckBusy}
+        onRetry={() => void retryClaimSessionCheck()}
       />
 
     </>

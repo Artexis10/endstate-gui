@@ -19,13 +19,37 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
-/// Candidate sidecar filenames in priority order.
-/// Tauri's externalBin installs with target-triple suffix in production; the
-/// predev rebuild script copies as plain endstate.exe for dev.
+/// Candidate sidecar filenames in priority order, per host OS.
+///
+/// Tauri's `externalBin` installs the binary with its Rust target-triple suffix
+/// in production (e.g. `endstate-x86_64-pc-windows-msvc.exe`,
+/// `endstate-aarch64-apple-darwin`); the dev rebuild script copies a plain
+/// `endstate.exe` (Windows) / `endstate` (Unix) next to the executable. We try
+/// the production triple name(s) first, then the plain dev name.
+#[cfg(target_os = "windows")]
 pub const SIDECAR_CANDIDATES: &[&str] = &[
     "endstate-x86_64-pc-windows-msvc.exe",
     "endstate.exe",
 ];
+
+#[cfg(target_os = "macos")]
+pub const SIDECAR_CANDIDATES: &[&str] = &[
+    "endstate-aarch64-apple-darwin",
+    "endstate-x86_64-apple-darwin",
+    "endstate",
+];
+
+#[cfg(target_os = "linux")]
+pub const SIDECAR_CANDIDATES: &[&str] = &[
+    "endstate-x86_64-unknown-linux-gnu",
+    "endstate-aarch64-unknown-linux-gnu",
+    "endstate",
+];
+
+/// Fallback for any other host: the plain dev name keeps the const defined so
+/// the crate always compiles.
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+pub const SIDECAR_CANDIDATES: &[&str] = &["endstate"];
 
 /// Event channel name for all engine events
 pub const EVENT_CHANNEL: &str = "endstate://event";
@@ -368,5 +392,15 @@ mod tests {
             let _ = is_run_active(&rs);
         }
         h.join().unwrap();
+    }
+
+    #[test]
+    fn sidecar_candidates_nonempty_and_host_appropriate() {
+        assert!(!SIDECAR_CANDIDATES.is_empty());
+        assert!(SIDECAR_CANDIDATES.iter().all(|c| !c.is_empty()));
+        #[cfg(target_os = "windows")]
+        assert!(SIDECAR_CANDIDATES.contains(&"endstate.exe"));
+        #[cfg(not(target_os = "windows"))]
+        assert!(SIDECAR_CANDIDATES.contains(&"endstate"));
     }
 }

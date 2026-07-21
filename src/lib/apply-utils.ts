@@ -351,7 +351,7 @@ export function getPhaseColor(phase?: UiPhase): SemanticColor {
  * - skipped     -> skipped (yellow)
  * - failed      -> failed (red)
  */
-export function engineStatusToStatusKey(engineStatus: EngineItemStatus): StatusKey {
+export function engineStatusToStatusKey(engineStatus: EngineItemStatus, phase?: EnginePhase): StatusKey {
   switch (engineStatus) {
     case 'present':
       return 'present';
@@ -365,8 +365,11 @@ export function engineStatusToStatusKey(engineStatus: EngineItemStatus): StatusK
       return 'skipped';
     case 'failed':
       return 'failed';
+    case 'captured':
+      if (phase === 'capture') return 'detected';
+      throw new Error('Deprecated captured status is only valid during capture');
     default:
-      return 'skipped';
+      throw new Error(`Unsupported engine item status: ${String(engineStatus)}`);
   }
 }
 
@@ -386,7 +389,7 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     undefined;
   
   // Determine action text with fallback for failed items with no message
-  const statusKey = engineStatusToStatusKey(event.status);
+  const statusKey = engineStatusToStatusKey(event.status, phase);
   let action = event.message || event.status;
   if (statusKey === 'failed' && (!event.message || !event.message.trim())) {
     action = 'Install failed (no details provided)';

@@ -448,6 +448,14 @@ export interface CapturedApp {
   name?: string;
 }
 
+export interface CaptureWarning {
+  code: string;
+  message: string;
+  driver?: string;
+  source?: string;
+  ref?: string;
+}
+
 export interface CaptureCounts {
   totalFound: number;
   included: number;
@@ -465,6 +473,8 @@ export interface EndstateCaptureData {
   appsIncluded?: CapturedApp[];
   /** Warning codes from capture (e.g., WINGET_EXPORT_FAILED_FALLBACK_USED) */
   captureWarnings?: string[];
+  /** Structured non-fatal source and portability warnings from the engine. */
+  warnings?: CaptureWarning[];
   /** Output format: 'jsonc' (manifest only) or 'zip' (bundle with configs) */
   outputFormat?: 'jsonc' | 'zip';
   /** Config module IDs successfully captured into the bundle */
@@ -578,6 +588,14 @@ export interface CaptureConfigModule {
   filesCaptured: number;
   /** Winget package IDs for exact matching against app events (e.g., ["Microsoft.VisualStudioCode"]) */
   wingetRefs?: string[];
+  /** Chocolatey package IDs for exact matching against app events. */
+  chocolateyRefs?: string[];
+  /** Collected config paths reported by the engine. */
+  paths?: string[];
+  /** Non-fatal module-level capture warnings authored by the engine. */
+  warnings?: string[];
+  /** Module-level capture errors authored by the engine. */
+  errors?: string[];
 }
 
 /** Restore intent — controls --EnableRestore flag */

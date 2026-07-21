@@ -11,6 +11,7 @@ import {
   isErrorEvent,
   isArtifactEvent,
   isRestoreItemEvent,
+  isProgressEvent,
   STREAMING_EVENT_VERSION,
   type StreamingEvent,
   type PhaseEvent,
@@ -19,6 +20,7 @@ import {
   type ErrorEvent,
   type ArtifactEvent,
   type RestoreItemEvent,
+  type ProgressEvent,
 } from './streaming-events';
 
 describe('streaming-events', () => {
@@ -110,6 +112,45 @@ describe('streaming-events', () => {
       const itemEvent = event as ItemEvent;
       expect(itemEvent.message).toBe('Connection timeout');
       expect(itemEvent.reason).toBe('install_failed');
+    });
+
+    it.each(['inventory', 'settings', 'packaging'] as const)(
+      'parses the supported capture progress stage %s',
+      (stage) => {
+        const event = parseStreamingEvent(JSON.stringify({
+          version: 1,
+          runId: 'capture-1',
+          timestamp: '2026-07-17T00:00:00Z',
+          event: 'progress',
+          phase: 'capture',
+          stage,
+        }));
+
+        expect(event).not.toBeNull();
+        expect(isProgressEvent(event!)).toBe(true);
+        expect((event as ProgressEvent).stage).toBe(stage);
+      },
+    );
+
+    it('ignores an unknown future capture progress stage', () => {
+      expect(parseStreamingEvent(JSON.stringify({
+        version: 1,
+        runId: 'capture-1',
+        timestamp: '2026-07-17T00:00:00Z',
+        event: 'progress',
+        phase: 'capture',
+        stage: 'uploading',
+      }))).toBeNull();
+    });
+
+    it('accepts the one deprecated captured item status', () => {
+      const event = parseStreamingEvent('{"version":1,"event":"item","id":"Store.App","driver":"winget","status":"captured","reason":"detected","timestamp":"2026-07-17T00:00:00Z"}');
+      expect(event).not.toBeNull();
+      expect((event as ItemEvent).status).toBe('captured');
+    });
+
+    it('rejects malformed item statuses instead of treating them as exclusions', () => {
+      expect(parseStreamingEvent('{"version":1,"event":"item","id":"Bad.App","driver":"winget","status":"mystery","reason":null,"timestamp":"2026-07-17T00:00:00Z"}')).toBeNull();
     });
   });
 

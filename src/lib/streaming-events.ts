@@ -35,7 +35,10 @@ export type EngineItemStatus =
   | 'installed'    // Successfully installed
   | 'present'      // Already on system
   | 'skipped'      // Skipped by filter/policy
-  | 'failed';      // Failed
+  | 'failed'       // Failed
+  | 'captured';    // Deprecated: capture compatibility only
+
+export type CaptureStage = 'inventory' | 'settings' | 'packaging';
 
 /**
  * Item reason values from the engine
@@ -67,6 +70,13 @@ export interface BaseStreamingEvent {
 export interface PhaseEvent extends BaseStreamingEvent {
   event: 'phase';
   phase: EnginePhase;
+}
+
+/** Capture-only, stage-level progress without fabricated percentages or copy. */
+export interface ProgressEvent extends BaseStreamingEvent {
+  event: 'progress';
+  phase: 'capture';
+  stage: CaptureStage;
 }
 
 /**
@@ -195,6 +205,7 @@ export interface RestoreItemEvent extends BaseStreamingEvent {
  */
 export type StreamingEvent =
   | PhaseEvent
+  | ProgressEvent
   | ItemEvent
   | SummaryEvent
   | ErrorEvent
@@ -207,6 +218,10 @@ export type StreamingEvent =
  */
 export function isPhaseEvent(event: StreamingEvent): event is PhaseEvent {
   return event.event === 'phase';
+}
+
+export function isProgressEvent(event: StreamingEvent): event is ProgressEvent {
+  return event.event === 'progress';
 }
 
 export function isItemEvent(event: StreamingEvent): event is ItemEvent {
@@ -265,6 +280,7 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
     // Validate event type
     const validEventTypes = [
       'phase',
+      'progress',
       'item',
       'summary',
       'error',
@@ -274,6 +290,28 @@ export function parseStreamingEvent(line: string): StreamingEvent | null {
     ];
     if (!validEventTypes.includes(parsed.event)) {
       return null;
+    }
+
+    if (parsed.event === 'progress') {
+      const validStages: CaptureStage[] = ['inventory', 'settings', 'packaging'];
+      if (parsed.phase !== 'capture' || !validStages.includes(parsed.stage)) {
+        return null;
+      }
+    }
+
+    if (parsed.event === 'item') {
+      const validStatuses: EngineItemStatus[] = [
+        'to_install',
+        'installing',
+        'installed',
+        'present',
+        'skipped',
+        'failed',
+        'captured',
+      ];
+      if (!validStatuses.includes(parsed.status)) {
+        return null;
+      }
     }
 
     return parsed as StreamingEvent;

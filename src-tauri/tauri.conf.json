@@ -42,6 +42,13 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "endstate"
+        ]
+      }
+    },
     "updater": {
       "active": true,
       "endpoints": [

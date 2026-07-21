@@ -88,3 +88,6 @@ tmp.json
 
 # Nested engine repo clone (sibling work, not part of GUI tree)
 /endstate/
+
+# Demo recordings (scripts/record-demo.mjs)
+demo-out/
