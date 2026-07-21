@@ -10,7 +10,7 @@
 //! old in-process bridge, so the frontend (`src/lib/http-bridge.ts`) is unchanged.
 
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     response::sse::{self, Sse},
     routing::{get, post},
     Json, Router,
@@ -830,19 +830,37 @@ async fn handle_events(
     Sse::new(stream)
 }
 
-/// Start the bridge HTTP server on 127.0.0.1:9876, serving until the process
-/// exits. Tauri-free — the caller (standalone binary) owns the runtime.
-pub async fn start(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
+/// Maximum accepted request-body size for the bridge, in bytes.
+///
+/// Profile imports arrive as base64-encoded zip bytes inside the JSON body
+/// (`import_zip_from_base64`). A ~2.7 MB capture bundle base64-encodes to
+/// ~3.6 MB, which blows past axum's 2 MB `DefaultBodyLimit` and gets rejected
+/// with a 413 *before* `handle_invoke` runs — the frontend then surfaces a raw
+/// "Payload Too Large" (or, in the pure-web fallback, silently no-ops), so a
+/// real bundle import fails while a tiny one succeeds. 64 MB comfortably covers
+/// realistic bundles. (Dev/automation bridge only; loopback-bound.)
+const MAX_BODY_BYTES: usize = 64 * 1024 * 1024;
+
+/// Build the bridge router with routes, CORS, and the raised body limit.
+/// Extracted from [`start`] so the body-limit behaviour is unit-testable.
+fn build_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(tower_http::cors::Any)
         .allow_methods(tower_http::cors::Any)
         .allow_headers(tower_http::cors::Any);
 
-    let app = Router::new()
+    Router::new()
         .route("/api/invoke", post(handle_invoke))
         .route("/events", get(handle_events))
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(cors)
-        .with_state(state);
+        .with_state(state)
+}
+
+/// Start the bridge HTTP server on 127.0.0.1:9876, serving until the process
+/// exits. Tauri-free — the caller (standalone binary) owns the runtime.
+pub async fn start(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
+    let app = build_router(state);
 
     let listener = match tokio::net::TcpListener::bind("127.0.0.1:9876").await {
         Ok(l) => l,
@@ -857,4 +875,57 @@ pub async fn start(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Browser bridge listening on http://127.0.0.1:9876");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt; // for `oneshot`
+
+    fn test_state() -> AppState {
+        AppState::new(
+            crate::engine::create_run_state(),
+            crate::broadcast::EventBroadcaster::new(),
+        )
+    }
+
+    /// Regression: a JSON body larger than axum's 2 MB `DefaultBodyLimit` must
+    /// be accepted (not rejected with 413). This is the mechanism behind the
+    /// silent large-bundle import failure — a ~2.7 MB capture zip base64-encodes
+    /// past 2 MB and was dropped before the handler ran.
+    #[tokio::test]
+    async fn accepts_body_larger_than_axum_default_limit() {
+        let app = build_router(test_state());
+
+        // 3 MB of padding — over the 2 MB default, well under our 64 MB cap.
+        let padding = "a".repeat(3 * 1024 * 1024);
+        let body = format!(
+            r#"{{"cmd":"engine_is_running","args":{{"pad":"{}"}}}}"#,
+            padding
+        );
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/invoke")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+
+        // Before the fix this returned 413 PAYLOAD_TOO_LARGE.
+        assert_ne!(
+            resp.status(),
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "large body should not be rejected by the body limit"
+        );
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["ok"], serde_json::json!(true));
+    }
 }
