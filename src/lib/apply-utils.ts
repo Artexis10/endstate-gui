@@ -555,6 +555,20 @@ export interface AppEvent {
   name?: string;
   /** Engine driver (e.g., "winget", "manual"). Manual entries are synthesized config-only apps. */
   driver?: string;
+  /**
+   * Row kind. Undefined/'app' is an installable app row (default). 'restore' is
+   * a config-restore row (RESTORING/RESTORED verbs, engine-named); 'artifact' is
+   * a produced-artifact completion line (e.g. the saved profile bundle). These
+   * rows carry their friendly display via `name`/`secondary` and never surface
+   * raw engine copy-spec text.
+   */
+  kind?: 'app' | 'restore' | 'artifact';
+  /** Terminal/transitional restore status, when kind === 'restore'. */
+  restoreStatus?: RestoreStatusKey;
+  /** Friendly muted secondary line (skip reason, artifact name). */
+  secondary?: string;
+  /** Full raw detail for a hover title / disclosure only (never inline text). */
+  title?: string;
 }
 
 /**
@@ -1027,57 +1041,76 @@ export function reconcileLiveActivity(
   liveEvents: AppEvent[],
   envelopeActions: ApplyAction[]
 ): AppEvent[] {
-  // Build result: start with live events, update from envelope
-  const resultMap = new Map<string, AppEvent>();
-
-  // First, add all live events
-  for (const event of liveEvents) {
-    resultMap.set(event.app, event);
+  // Streaming-only runs (cancel/crash with no terminal envelope) keep their live
+  // rows untouched — there is no authoritative list to reconcile against.
+  if (!envelopeActions || envelopeActions.length === 0) {
+    return [...liveEvents];
   }
 
-  // Then, reconcile with envelope (envelope is source of truth for status)
-  // but preserve phase/reason from existing events to avoid phase-leak
-  for (const item of envelopeActions) {
-    const { action, statusKey } = reasonToAction(item);
-    const existing = resultMap.get(item.id);
+  // Alias map: the engine keys streamed item events by the winget `ref`, but the
+  // envelope's authoritative actions are keyed by the manifest `id`
+  // (`ApplyAction{ID: app.ID, Ref: route.ref}`). When ref != id, matching only
+  // by id left the ref-keyed live row AND the id-keyed envelope row both
+  // standing — the app rendered twice (once per identifier, and again per
+  // apply/verify phase in a single spawn). Canonicalising every alias to its
+  // action id collapses them into ONE envelope-authoritative row.
+  const idByAlias = new Map<string, string>();
+  for (const action of envelopeActions) {
+    idByAlias.set(action.id, action.id);
+    if (action.ref) idByAlias.set(action.ref, action.id);
+  }
+  const canonicalKey = (event: AppEvent): string => idByAlias.get(event.app) ?? event.app;
 
-    // Update to final status from envelope, but preserve phase/reason context.
-    // `name` and `driver` are carried forward — dropping them made a reconciled
-    // row fall back to the raw package ref, which is how a never-installed app
-    // rendered as "Warp.Warp" beside friendly-named rows.
-    resultMap.set(item.id, {
-      app: item.id,
-      action,
+  // Build the envelope-authoritative row for an action, preserving phase/context
+  // from the matching live row. `name`/`driver` are carried forward — dropping
+  // them made a reconciled row fall back to the raw package ref, which is how a
+  // never-installed app rendered as "Warp.Warp" beside friendly-named rows.
+  const buildRow = (action: ApplyAction, existing: AppEvent | undefined): AppEvent => {
+    const { action: actionLabel, statusKey } = reasonToAction(action);
+    return {
+      app: action.id,
+      action: actionLabel,
       statusKey,
       timestamp: existing?.timestamp ?? Date.now(),
       phase: existing?.phase,
-      reason: item.reason ?? existing?.reason,
-      name: item.name ?? existing?.name,
-      driver: item.driver ?? existing?.driver,
-    });
+      reason: action.reason ?? existing?.reason,
+      name: action.name ?? existing?.name,
+      driver: action.driver ?? existing?.driver,
+    };
+  };
+
+  const resultMap = new Map<string, AppEvent>();
+  // Live rows first, keyed by their canonical (action) identity. Restore /
+  // artifact / phase-header rows are not envelope actions, so their alias is
+  // absent and they pass through under their own key unchanged.
+  for (const event of liveEvents) {
+    resultMap.set(canonicalKey(event), event);
+  }
+  // Envelope is source of truth for app-row status — overwrite matched rows.
+  for (const action of envelopeActions) {
+    resultMap.set(action.id, buildRow(action, resultMap.get(action.id)));
   }
 
-  // Convert back to array, preserving insertion order from live events
-  // then adding any envelope items that weren't in live events
   const result: AppEvent[] = [];
   const seen = new Set<string>();
-  
-  // First, add items in live event order (with updated actions)
+  // Preserve the order the user watched stream in, each canonical row once.
   for (const event of liveEvents) {
-    const reconciled = resultMap.get(event.app);
-    if (reconciled && !seen.has(event.app)) {
-      result.push(reconciled);
-      seen.add(event.app);
+    const key = canonicalKey(event);
+    if (!seen.has(key)) {
+      const row = resultMap.get(key);
+      if (row) {
+        result.push(row);
+        seen.add(key);
+      }
     }
   }
-  
-  // Then, add any envelope results not in live events
-  for (const item of envelopeActions) {
-    if (!seen.has(item.id)) {
-      const reconciled = resultMap.get(item.id);
-      if (reconciled) {
-        result.push(reconciled);
-        seen.add(item.id);
+  // Then any envelope action that never appeared live (fast-resolved items).
+  for (const action of envelopeActions) {
+    if (!seen.has(action.id)) {
+      const row = resultMap.get(action.id);
+      if (row) {
+        result.push(row);
+        seen.add(action.id);
       }
     }
   }
@@ -1144,6 +1177,53 @@ export function getRestoreUiStatus(status: RestoreStatusKey): UiStatusConfig {
 }
 
 /**
+ * Resolve an AppEvent's statusKey, applying the legacy action-string fallback
+ * used by live activity render sites when `statusKey` is absent.
+ */
+function deriveStatusKey(event: AppEvent): StatusKey {
+  if (event.statusKey) return event.statusKey;
+  switch (event.action) {
+    case 'OK': return 'present';
+    case 'Installed': return 'installed';
+    case 'Failed': return 'failed';
+    case 'Skipped': return 'skipped';
+    case 'Cancelled': return 'cancelled';
+    case 'Processing': return 'installing';
+    case 'To install': return 'to_install';
+    default: return 'skipped';
+  }
+}
+
+/**
+ * Single source of truth for an activity row's short status label + color.
+ *
+ * Restore rows use the RESTORING/RESTORED/UP TO DATE/MISSING/FAILED vocabulary
+ * (never the app "INSTALLING" verb); artifact rows render a muted SAVED
+ * completion marker; app rows fall through to the phase-aware app mapping. The
+ * optional `phaseOverride` lets a render site pin the phase for app rows (e.g. a
+ * results list that always reads as "apply") while restore/artifact rows ignore
+ * it.
+ */
+export function getActivityRowLabel(
+  event: AppEvent,
+  phaseOverride?: UiPhase,
+): { shortLabel: string; color: SemanticColor } {
+  if (event.kind === 'restore') {
+    const cfg = getRestoreUiStatus(event.restoreStatus ?? 'failed');
+    return { shortLabel: cfg.shortLabel, color: cfg.color };
+  }
+  if (event.kind === 'artifact') {
+    return { shortLabel: 'SAVED', color: 'muted' };
+  }
+  const cfg = getPhaseAwareStatusForEvent({
+    statusKey: deriveStatusKey(event),
+    phase: phaseOverride ?? event.phase,
+    reason: event.reason,
+  });
+  return { shortLabel: cfg.shortLabel, color: cfg.color };
+}
+
+/**
  * Derive LiveCounters from a slice of visible AppEvents.
  * Used by the visual event buffer to keep counter badges in sync with
  * the revealed (visible) events rather than the full event list.
@@ -1163,7 +1243,10 @@ export function deriveCountersFromEvents(events: AppEvent[]): import('../compone
     // Skip phase header events
     if (event.app === '── APPLY ──' || event.app === '── VERIFY ──') continue;
 
-    const isRestore = event.app.startsWith('\u2699');
+    // Artifact completion lines carry no installable/restore count.
+    if (event.kind === 'artifact') continue;
+
+    const isRestore = event.kind === 'restore' || event.app.startsWith('\u2699');
     const sk = event.statusKey;
 
     if (isRestore) {

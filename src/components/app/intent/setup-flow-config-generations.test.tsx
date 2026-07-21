@@ -357,14 +357,16 @@ describe('SetupFlow config generations', () => {
 
     await user.click(screen.getByTestId('setup-flow-apply'));
     await waitFor(() => expect(onApply).toHaveBeenCalled());
-    expect(onApply).toHaveBeenCalledWith(profile, {
+    // objectContaining: options also carry the threaded display-name context
+    // (restoreModulesAvailable / configModuleMap) from the preview envelope.
+    expect(onApply).toHaveBeenCalledWith(profile, expect.objectContaining({
       restoreIntent: 'apps-and-settings',
       selectedModules: ['photoshop'],
       restoreTargets: [{
         captureId: 'ambiguous-capture',
         targetInstanceId: 'photoshop-2025',
       }],
-    });
+    }));
   });
 
   it('refreshes both restore intents, blocks Apply while pending, and preserves stable app choices', async () => {
@@ -653,14 +655,14 @@ describe('SetupFlow config generations', () => {
     await user.click(screen.getByRole('checkbox', { name: 'Adobe Photoshop' }));
     await user.click(screen.getByTestId('setup-flow-apply'));
 
-    await waitFor(() => expect(onApply).toHaveBeenCalledWith(profile, {
+    await waitFor(() => expect(onApply).toHaveBeenCalledWith(profile, expect.objectContaining({
       restoreIntent: 'apps-and-settings',
       selectedModules: ['apps.vscode'],
       restoreTargets: [{
         captureId: 'vscode-capture',
         targetInstanceId: 'vscode-stable',
       }],
-    }));
+    })));
   });
 
   it('uses progress only while applying and renders final resolution state from the envelope', async () => {

@@ -204,6 +204,16 @@ export interface RestoreItemEvent extends BaseStreamingEvent {
   backupPath: string | null;
   targetExisted: boolean;
   message?: string;
+  /** Owning generation-aware config capture (engine additive field). */
+  captureId?: string;
+  /** Owning config set; `legacy` for the anonymous legacy lane. */
+  configSetId?: string;
+  /** Selected target instance. */
+  targetInstanceId?: string;
+  /** Captured source generation. */
+  sourceGeneration?: string;
+  /** Resolved target generation. */
+  targetGeneration?: string;
 }
 
 /** Final compatibility/target decision emitted before config mutation. */

@@ -190,6 +190,48 @@ new engine-contract status.
 | `to_install` | * | NOT FOUND | muted (gray) | Not on system |
 | `failed` | * | ERROR | error (red) | Detection failed |
 
+#### RESTORE rows (config settings restored during apply)
+
+Config-restore progress arrives as engine `restore-item` events (see
+`../endstate/docs/event-contract.md`, "Restore-Item Event"). These are **settings
+rows**, not app rows: they use restore verbs, never the app "INSTALLING" verb.
+
+| Engine restore status | UI Label | Color | Meaning |
+|-----------------------|----------|-------|----------|
+| `restoring` | RESTORING | info (blue) | In progress (transitional) |
+| `restored` | RESTORED | success (green) | Setting file restored |
+| `skipped_up_to_date` | UP TO DATE | muted (gray) | Target already matches the saved copy |
+| `skipped_missing_source` | MISSING | warn (yellow) | Saved copy not found; nothing changed |
+| `failed` | FAILED | error (red) | Restore failed |
+
+**Row presentation (never surface the raw engine copy-spec):**
+- **Primary text** = `<module display name> · <target file basename>`, e.g.
+  `Notepad++ · contextMenu.xml`. The module display name is the engine-provided
+  name resolved from the restore item's module context (`module` field /
+  `configSetId` / `captureId` → `restoreModulesAvailable`), or the module id
+  derived from the source path `./configs/<module-id>/…` when no display name
+  resolves — falling back to `<module-id> · <basename>`. The raw
+  `/copy:<source>-><target>` spec is **never** shown inline.
+- **Secondary text** (muted) surfaces a friendly, jargon-free reason. The
+  engine-authored `message` is used when present and clean; otherwise the
+  canonical strings are:
+  - `skipped_up_to_date` → “Already matches your saved settings”
+  - `skipped_missing_source` → “The saved copy wasn’t found, so nothing changed”
+  - `failed` → “Couldn’t restore this file”
+- **Full raw source→target detail** may appear only in a hover title /
+  disclosure, never as inline row text.
+- **One row per item across its lifecycle:** the transitional (`restoring`) and
+  terminal (`restored`/`skipped_*`/`failed`) events share a stable identity
+  (target path) and **update one row in place** — they never append a duplicate.
+
+#### Produced-artifact completion line
+
+The capture `artifact` event (the saved profile bundle) renders as a distinct,
+muted completion line — **SAVED** · “Saved profile bundle”, with the engine
+artifact filename as secondary text and the full path in a hover title. It is
+**not** an app-style status row and must never read as “DETECTED Manifest”.
+Artifact visibility is required (the produced artifact is always surfaced).
+
 ---
 
 ## Critical Semantic Distinctions

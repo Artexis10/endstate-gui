@@ -707,6 +707,88 @@ describe('apply-utils', () => {
         expect(result[0].name).toBe('Ghost');
       });
     });
+
+    // Screenshot defect (unhappy-path results list): the same app rendered twice
+    // — once from the streamed live row (keyed by the winget ref the engine
+    // emits item events under) and once from the envelope action (keyed by the
+    // manifest id). The engine builds `ApplyAction{ID: app.ID, Ref: route.ref}`
+    // but streams item events under `route.ref`, so ref != id apps duplicated.
+    describe('cross-phase ref-vs-id reconciliation', () => {
+      it('collapses a ref-keyed live row into its id-keyed envelope action', () => {
+        const liveEvents: AppEvent[] = [
+          { app: 'voidtools.Everything', action: 'Failed', name: 'Everything', statusKey: 'failed', phase: 'apply', timestamp: 1000 },
+        ];
+        const actions = [
+          { id: 'everything', ref: 'voidtools.Everything', name: 'Everything', status: 'failed', reason: 'install_failed' },
+        ];
+
+        const result = reconcileLiveActivity(liveEvents, actions);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].statusKey).toBe('failed');
+      });
+
+      it('yields one row per app across apply+verify in a single spawn', () => {
+        // apply row then verify row for the same app, both keyed by winget ref;
+        // envelope arrives keyed by the manifest id.
+        const liveEvents: AppEvent[] = [
+          { app: 'WinDirStat.WinDirStat', action: 'Installed', name: 'WinDirStat', statusKey: 'installed', phase: 'apply', timestamp: 1 },
+          { app: 'WinDirStat.WinDirStat', action: 'OK', name: 'WinDirStat', statusKey: 'present', phase: 'verify', timestamp: 2 },
+        ];
+        const actions = [
+          { id: 'windirstat', ref: 'WinDirStat.WinDirStat', name: 'WinDirStat', status: 'installed', reason: '', version: '2.7.0' },
+        ];
+
+        const result = reconcileLiveActivity(liveEvents, actions);
+        const appRows = result.filter(
+          (e) => e.kind !== 'restore' && e.app !== '── APPLY ──' && e.app !== '── VERIFY ──',
+        );
+
+        expect(appRows).toHaveLength(1);
+        expect(appRows.map((a) => a.statusKey)).toEqual(['installed']);
+      });
+
+      it('final app rows equal the envelope actions, with no residual live duplicates', () => {
+        const liveEvents: AppEvent[] = [
+          { app: 'voidtools.Everything', action: 'Failed', name: 'Everything', statusKey: 'failed', phase: 'apply', timestamp: 1 },
+          { app: 'WinDirStat.WinDirStat', action: 'OK', name: 'WinDirStat', statusKey: 'present', phase: 'verify', timestamp: 2 },
+        ];
+        const actions = [
+          { id: 'everything', ref: 'voidtools.Everything', name: 'Everything', status: 'failed', reason: 'install_failed' },
+          { id: 'windirstat', ref: 'WinDirStat.WinDirStat', name: 'WinDirStat', status: 'installed', reason: '', version: '2.7.0' },
+        ];
+
+        const result = reconcileLiveActivity(liveEvents, actions);
+        const appRows = result.filter(
+          (e) => e.kind !== 'restore' && e.app !== '── APPLY ──' && e.app !== '── VERIFY ──',
+        );
+
+        expect(appRows.map((a) => a.app)).toEqual(['everything', 'windirstat']);
+      });
+
+      it('preserves restore rows (absent from envelope actions) through reconciliation', () => {
+        const liveEvents: AppEvent[] = [
+          {
+            app: '⚙ restore:%APPDATA%/Notepad++/contextMenu.xml',
+            action: 'RESTORED',
+            kind: 'restore',
+            restoreStatus: 'restored',
+            name: 'Notepad++ · contextMenu.xml',
+            statusKey: 'installed',
+            timestamp: 1,
+          },
+          { app: 'app-1', action: 'Installed', name: 'App One', statusKey: 'installed', phase: 'apply', timestamp: 2 },
+        ];
+        const actions = [
+          { id: 'app-1', ref: 'app-1', name: 'App One', status: 'installed', reason: '' },
+        ];
+
+        const result = reconcileLiveActivity(liveEvents, actions);
+
+        expect(result.some((e) => e.kind === 'restore')).toBe(true);
+        expect(result.filter((e) => e.kind !== 'restore')).toHaveLength(1);
+      });
+    });
   });
 
   describe('normalizeApplyStatus - user_denied', () => {
