@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.6.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.5.1...gui-v3.6.0) (2026-07-21)
+
+
+### Features
+
+* **capture:** label per-app settings coverage in scan results ([#190](https://github.com/Artexis10/endstate-gui/issues/190)) ([bf413f7](https://github.com/Artexis10/endstate-gui/commit/bf413f7b0cc0ebc720112d7ff38d820a78c14827))
+
+
+### Bug Fixes
+
+* import Tauri profile drops via native file path, not base64/IPC ([#192](https://github.com/Artexis10/endstate-gui/issues/192)) ([ed35103](https://github.com/Artexis10/endstate-gui/commit/ed35103d951c6fc34807d6ee34dca852903b433a)), closes [#187](https://github.com/Artexis10/endstate-gui/issues/187)
+
 ## [3.5.1](https://github.com/Artexis10/endstate-gui/compare/gui-v3.5.0...gui-v3.5.1) (2026-07-21)
 
 
