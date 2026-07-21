@@ -117,6 +117,13 @@ export interface ApplyRestoreOptions {
   selectedModules?: string[];
   onlyAppIds?: string[];
   restoreTargets?: RestoreTargetMapping[];
+  /**
+   * Engine display-name context from the preview envelope, threaded so live
+   * restore rows resolve `<module> · <file>` (e.g. "Notepad++ · contextMenu.xml")
+   * during streaming rather than only after the terminal envelope lands.
+   */
+  configModuleMap?: Record<string, string>;
+  restoreModulesAvailable?: RestoreModuleRef[];
 }
 
 /** Engine-authored advisory attached to a completed command result. */

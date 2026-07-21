@@ -25,6 +25,7 @@ import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
 import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, buildOnlyFlagValue, type AppEvent, type UiPhase } from './lib/apply-utils';
+import { restoreEventToAppEvent, artifactEventToAppEvent, type RestoreRowContext } from './lib/restore-activity';
 import { engineSupportsApplyOnly, engineSupportsApplyRestoreTarget } from './lib/apply-capabilities';
 import {
   isConfigMigrationEvent,
@@ -1799,14 +1800,9 @@ function AppContent() {
             overviewCaptureEvents.push(appEvent);
             throttledSetLiveAppEvents([...overviewCaptureEvents]);
           } else if (isArtifactEvent(ndjsonEvent)) {
-            const artifactEvent: AppEvent = {
-              app: 'Manifest',
-              action: `Saved to ${ndjsonEvent.path}`,
-              timestamp: Date.now(),
-              statusKey: 'installed',
-              phase: 'capture',
-            };
-            overviewCaptureEvents.push(artifactEvent);
+            // Render as a distinct muted completion line ("Saved profile
+            // bundle"), not an app-style DETECTED status row.
+            overviewCaptureEvents.push(artifactEventToAppEvent(ndjsonEvent));
             throttledSetLiveAppEvents([...overviewCaptureEvents]);
           }
         },
@@ -2209,6 +2205,13 @@ function AppContent() {
     const appEventList: AppEvent[] = [];
     const configProgressEvents: ConfigProgressEvent[] = [];
     const appEventIndex = new Map<string, number>();
+    // Engine display-name context for restore rows. Sourced from the preview
+    // envelope (threaded via restore options); absent context degrades to
+    // `<module-id> · <basename>` — never the raw copy-spec.
+    const restoreRowContext: RestoreRowContext = {
+      configModuleMap: restoreOptions?.configModuleMap,
+      restoreModulesAvailable: restoreOptions?.restoreModulesAvailable,
+    };
     const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 };
     const verifyCounters = { confirmed: 0, missing: 0, total: 0 };
     let currentPhase: EnginePhase = 'apply';
@@ -2373,30 +2376,25 @@ function AppContent() {
             pushBounded(configProgressEvents, ndjsonEvent, MAX_LIVE_CONFIG_EVENTS);
             setLiveConfigEvents([...configProgressEvents]);
           }
-          // Handle restore-item events
+          // Handle restore-item events. The transitional (`restoring`) and
+          // terminal (`restored`/`skipped`/`failed`) events share a stable
+          // identity, so they UPDATE one row in place (mirroring how app items
+          // reconcile via appEventIndex) instead of appending a duplicate. The
+          // row carries the engine-provided module display name + file basename,
+          // never the raw copy-spec.
           else if (isRestoreItemEvent(ndjsonEvent)) {
-            // Map restore status to a display-friendly AppEvent
-            const statusLabel = ndjsonEvent.status === 'restored' ? 'RESTORED'
-              : ndjsonEvent.status === 'restoring' ? 'RESTORING'
-              : ndjsonEvent.status === 'skipped_up_to_date' ? 'UP TO DATE'
-              : ndjsonEvent.status === 'skipped_missing_source' ? 'MISSING'
-              : 'FAILED';
-            const restoreAppEvent: AppEvent = {
-              app: `\u2699 ${ndjsonEvent.module}/${ndjsonEvent.id}`,
-              action: statusLabel,
-              timestamp: Date.now(),
-              statusKey: ndjsonEvent.status === 'restored' ? 'installed'
-                : ndjsonEvent.status === 'restoring' ? 'installing'
-                : ndjsonEvent.status === 'failed' ? 'failed'
-                : 'skipped',
-              phase: 'apply',
-              reason: ndjsonEvent.reason,
-            };
+            const restoreAppEvent = restoreEventToAppEvent(ndjsonEvent, restoreRowContext);
+            const restoreKey = restoreAppEvent.app;
+            const existingIndex = appEventIndex.get(restoreKey);
+            if (existingIndex !== undefined) {
+              appEventList[existingIndex] = restoreAppEvent;
+            } else {
+              appEventIndex.set(restoreKey, appEventList.length);
+              appEventList.push(restoreAppEvent);
+            }
 
-            // Always append (don't deduplicate restore items by id)
-            appEventList.push(restoreAppEvent);
-
-            // Update restore counters
+            // Terminal statuses each arrive once per item (contract guarantee),
+            // so counting them here stays accurate under in-place reconciliation.
             if (ndjsonEvent.status === 'restored') counters.configsRestored++;
             else if (ndjsonEvent.status === 'skipped_up_to_date' || ndjsonEvent.status === 'skipped_missing_source') counters.configsSkipped++;
             else if (ndjsonEvent.status === 'failed') counters.configsFailed++;
@@ -2407,7 +2405,7 @@ function AppContent() {
 
             // Update progress message
             throttledSetProgress('setup', {
-              message: `Restoring: ${ndjsonEvent.module}`,
+              message: 'Restoring your settings\u2026',
               detail: `${counters.configsRestored} restored`,
               phase: 'apply',
             });

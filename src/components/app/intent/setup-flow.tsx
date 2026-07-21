@@ -43,6 +43,7 @@ import {
   type StatusKey,
   getColorClasses,
   getPhaseAwareStatusForEvent,
+  getActivityRowLabel,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { ConfigModuleInfo, SubscriptionStatus } from '@/types';
@@ -519,6 +520,11 @@ export function SetupFlow({
           restoreIntent,
           selectedModules,
           ...(explicitRestoreTargets ? { restoreTargets: explicitRestoreTargets } : {}),
+          // Thread engine display-name context so live restore rows read
+          // "Notepad++ · contextMenu.xml" during streaming, not just after the
+          // terminal envelope lands.
+          ...(previewResult?.restoreModulesAvailable ? { restoreModulesAvailable: previewResult.restoreModulesAvailable } : {}),
+          ...(previewResult?.configModuleMap ? { configModuleMap: previewResult.configModuleMap } : {}),
         }
       : undefined;
     const options = subsetActive
@@ -1396,26 +1402,24 @@ export function SetupFlow({
                 {recentEvents.length > 0 && (
                   <div className="mt-3 space-y-1 border-t pt-3">
                     {recentEvents.map((event, i) => {
-                      const statusKey: StatusKey = event.statusKey || (
-                        event.action === 'OK' ? 'present' :
-                        event.action === 'Installed' ? 'installed' :
-                        event.action === 'Failed' ? 'failed' :
-                        event.action === 'Processing' ? 'installing' :
-                        event.action === 'Skipped' ? 'skipped' :
-                        'installing'
-                      );
-                      const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'apply', reason: event.reason });
-                      const colors = getColorClasses(uiStatus.color);
+                      // Restore rows read RESTORING/RESTORED (never "INSTALLING")
+                      // and carry the engine display name; app rows stay phase-aware.
+                      const { shortLabel, color } = getActivityRowLabel(event, 'apply');
+                      const colors = getColorClasses(color);
                       return (
                         <div
                           key={`${event.app}-${event.timestamp}-${i}`}
                           className="flex items-center gap-2 text-xs pt-0.5"
+                          title={event.title}
                         >
                           <span className={`w-16 text-right font-medium ${colors.text}`}>
-                            {uiStatus.shortLabel}
+                            {shortLabel}
                           </span>
                           <span className="truncate flex-1">
                             {event.name || formatAppIdentity(event.app)}
+                            {event.secondary && (
+                              <span className="text-muted-foreground"> · {event.secondary}</span>
+                            )}
                           </span>
                         </div>
                       );
@@ -1611,20 +1615,15 @@ export function SetupFlow({
                     </div>
                     <div className="space-y-1 max-h-64 overflow-y-auto">
                       {applyWingetEvents.map((event, i) => {
-                        const statusKey: StatusKey = event.statusKey || (
-                          event.action === 'OK' ? 'present' :
-                          event.action === 'Installed' ? 'installed' :
-                          event.action === 'Failed' ? 'failed' :
-                          event.action === 'Skipped' ? 'skipped' :
-                          'installed'
-                        );
-                        const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'apply', reason: event.reason });
-                        const colors = getColorClasses(uiStatus.color);
-                        const hasSettings = (restoreIntent === 'apps-and-settings' && event.app in applyConfigMap) || event.app.startsWith('\u2699');
-                        const settingsOk = statusKey !== 'failed';
+                        // Restore rows read RESTORING/RESTORED and carry the
+                        // engine display name; app rows stay phase-aware ("apply").
+                        const { shortLabel, color } = getActivityRowLabel(event, 'apply');
+                        const colors = getColorClasses(color);
+                        const hasSettings = (restoreIntent === 'apps-and-settings' && event.app in applyConfigMap) || event.kind === 'restore' || event.app.startsWith('\u2699');
+                        const settingsOk = color !== 'error';
                         return (
-                          <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                            <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
+                          <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5" title={event.title}>
+                            <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{shortLabel}</span>
                             <span className="w-4 flex-shrink-0 flex justify-center">
                               {hasSettings && (
                                 <Settings2 className={`h-3 w-3 ${settingsOk ? getColorClasses('success').text : getColorClasses('error').text} ${!settingsOk ? 'opacity-50' : ''}`} />
@@ -1632,6 +1631,9 @@ export function SetupFlow({
                             </span>
                             <span className="truncate">
                               {event.name || formatAppIdentity(event.app)}
+                              {event.secondary && (
+                                <span className="text-muted-foreground"> \u00b7 {event.secondary}</span>
+                              )}
                             </span>
                           </div>
                         );

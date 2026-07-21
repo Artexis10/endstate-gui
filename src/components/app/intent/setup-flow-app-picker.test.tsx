@@ -223,11 +223,14 @@ describe('SetupFlow — per-app picker', () => {
       await userEvent.click(screen.getByTestId('app-picker-checkbox-firefox'));
       await userEvent.click(screen.getByTestId('setup-flow-apply'));
 
-      expect(onApply).toHaveBeenCalledWith(mockProfile, {
+      // objectContaining: the apply options also carry the engine display-name
+      // context threaded from the preview envelope (restoreModulesAvailable /
+      // configModuleMap); this test asserts the restore-intent + subset args.
+      expect(onApply).toHaveBeenCalledWith(mockProfile, expect.objectContaining({
         restoreIntent: 'apps-and-settings',
         selectedModules: ['git'],
         onlyAppIds: ['git-git', '7zip-7zip'],
-      });
+      }));
     });
 
     it('does not turn a zero-app selection into an unfiltered settings apply', async () => {

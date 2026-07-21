@@ -5,11 +5,10 @@
 import { ChevronUp, ChevronDown, ArrowDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getFadeVariants } from '@/lib/motion';
-import { 
-  type AppEvent, 
-  type StatusKey,
+import {
+  type AppEvent,
   getColorClasses,
-  getPhaseAwareStatusForEvent,
+  getActivityRowLabel,
   getPhaseColor,
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
@@ -124,34 +123,29 @@ export function LiveActivityPanel({
                 if (event.app === '── APPLY ──' || event.app === '── VERIFY ──') {
                   return null;
                 }
-                
-                // Use statusKey if available, otherwise derive from action
-                const statusKey: StatusKey = event.statusKey || (
-                  event.action === 'OK' ? 'present' :
-                  event.action === 'Installed' ? 'installed' :
-                  event.action === 'Failed' ? 'failed' :
-                  event.action === 'Skipped' ? 'skipped' :
-                  event.action === 'Cancelled' ? 'cancelled' :
-                  event.action === 'Processing' ? 'installing' :
-                  event.action === 'To install' ? 'to_install' :
-                  'skipped'
-                );
-                // Use phase-aware status with reason for correct labels per phase
-                const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: event.phase, reason: event.reason });
-                const colors = getColorClasses(uiStatus.color);
-                
+
+                // Single source of truth for the row label: restore rows read
+                // RESTORING/RESTORED (not the app "INSTALLING" verb), artifact
+                // rows read a muted SAVED, app rows stay phase-aware.
+                const { shortLabel, color } = getActivityRowLabel(event);
+                const colors = getColorClasses(color);
+
                 return (
-                  <div 
-                    key={`${event.app}-${event.timestamp}-${idx}`} 
+                  <div
+                    key={`${event.app}-${event.timestamp}-${idx}`}
                     className="flex items-center gap-2 text-xs pt-1.5"
                     data-phase={event.phase}
                     data-event-index={idx}
+                    title={event.title}
                   >
                     <span className={`w-16 text-right font-medium ${colors.text}`}>
-                      {uiStatus.shortLabel}
+                      {shortLabel}
                     </span>
                     <span className="truncate flex-1">
                       {event.name || formatAppIdentity(event.app)}
+                      {event.secondary && (
+                        <span className="text-muted-foreground"> · {event.secondary}</span>
+                      )}
                     </span>
                   </div>
                 );

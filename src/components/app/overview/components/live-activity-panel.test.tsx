@@ -292,6 +292,75 @@ describe('LiveActivityPanel', () => {
     });
   });
 
+  describe('restore rows (config settings)', () => {
+    const makeRestore = (overrides: Partial<AppEvent> = {}): AppEvent => ({
+      app: '⚙ restore:%APPDATA%/Notepad++/contextMenu.xml',
+      action: 'RESTORING',
+      kind: 'restore',
+      restoreStatus: 'restoring',
+      name: 'Notepad++ · contextMenu.xml',
+      title: './configs/notepad-plus-plus/contextMenu.xml → %APPDATA%/Notepad++/contextMenu.xml',
+      statusKey: 'installing',
+      timestamp: Date.now(),
+      ...overrides,
+    });
+
+    it('labels a transitional restore row RESTORING, never INSTALLING', () => {
+      renderPanel({ liveAppEvents: [makeRestore()] });
+      expect(screen.getByText('RESTORING')).toBeInTheDocument();
+      expect(screen.queryByText('INSTALLING')).not.toBeInTheDocument();
+    });
+
+    it('labels a terminal restore row RESTORED', () => {
+      renderPanel({
+        liveAppEvents: [makeRestore({ action: 'RESTORED', restoreStatus: 'restored', statusKey: 'installed', secondary: undefined })],
+      });
+      expect(screen.getByText('RESTORED')).toBeInTheDocument();
+    });
+
+    it('shows the engine display name, never the raw copy-spec', () => {
+      const { container } = renderPanel({ liveAppEvents: [makeRestore()] });
+      expect(screen.getByText(/Notepad\+\+ · contextMenu\.xml/)).toBeInTheDocument();
+      expect(container.textContent).not.toContain('/copy:');
+      // The raw source→target detail lives in a hover title, not inline text.
+      const row = container.querySelector('[title]') as HTMLElement | null;
+      expect(row?.getAttribute('title')).toContain('%APPDATA%/Notepad++/contextMenu.xml');
+    });
+
+    it('surfaces a friendly skip reason as muted secondary text', () => {
+      renderPanel({
+        liveAppEvents: [makeRestore({
+          action: 'UP TO DATE',
+          restoreStatus: 'skipped_up_to_date',
+          statusKey: 'skipped',
+          secondary: 'Already matches your saved settings',
+        })],
+      });
+      expect(screen.getByText('UP TO DATE')).toBeInTheDocument();
+      expect(screen.getByText(/Already matches your saved settings/)).toBeInTheDocument();
+    });
+  });
+
+  describe('artifact completion line', () => {
+    it('renders a distinct SAVED line, not a DETECTED app row', () => {
+      const artifact: AppEvent = {
+        app: 'artifact:C:\\profiles\\captured.jsonc',
+        action: 'Saved',
+        kind: 'artifact',
+        name: 'Saved profile bundle',
+        secondary: 'captured.jsonc',
+        title: 'C:\\profiles\\captured.jsonc',
+        statusKey: 'installed',
+        phase: 'capture',
+        timestamp: Date.now(),
+      };
+      renderPanel({ liveAppEvents: [artifact] });
+      expect(screen.getByText('SAVED')).toBeInTheDocument();
+      expect(screen.getByText('Saved profile bundle')).toBeInTheDocument();
+      expect(screen.queryByText('DETECTED')).not.toBeInTheDocument();
+    });
+  });
+
   describe('jump-to-latest button', () => {
     it('shows Latest button when not at bottom', () => {
       renderPanel({ isAtBottom: false });
