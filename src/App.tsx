@@ -22,6 +22,7 @@ import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-dis
 import { findImportedProfile } from './lib/profile-import';
 import { createNativeProfileDropHandler, createProfileImportCoordinator } from './lib/native-profile-drop';
 import { friendlyImportError } from './lib/import-errors';
+import { importProfileFromFile, importProfileFromPath } from './lib/dropped-profile-import';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
@@ -747,32 +748,14 @@ function AppContent() {
     await ensureDirectory(dir);
 
     for (const file of files) {
-      const fileName = file.name.toLowerCase();
       try {
-        if (fileName.endsWith('.zip')) {
-          // Zip files: encode as base64, send to Rust for extraction
-          const arrayBuf = await file.arrayBuffer();
-          const bytes = new Uint8Array(arrayBuf);
-          // Convert to base64
-          let binary = '';
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          const base64Data = btoa(binary);
-          const importedManifestPath = await invoke<string>('import_zip_from_base64', {
-            data: base64Data,
-            fileName: file.name,
-            profilesDir: dir,
-          });
-          await finishProfileImport(dir, importedManifestPath, file.name);
-        } else if (fileName.endsWith('.jsonc') || fileName.endsWith('.json') || fileName.endsWith('.json5')) {
-          // Manifest files: Rust stages and validates before committing.
-          const text = await file.text();
-          const importedManifestPath = await invoke<string>('import_profile_text', {
-            content: text,
-            fileName: file.name,
-            profilesDir: dir,
-          });
+        // Browser / dev-bridge fallback: a DOM File carries no native path, so
+        // zip bytes go base64 → import_zip_from_base64. In the Tauri desktop
+        // runtime, drops arrive as real file paths via the native drag-drop
+        // event (importFilePaths → extract_zip_profile) and never reach here as
+        // a base64/IPC blob — see #187 and lib/dropped-profile-import.
+        const importedManifestPath = await importProfileFromFile(file, dir, invoke);
+        if (importedManifestPath !== null) {
           await finishProfileImport(dir, importedManifestPath, file.name);
         }
       } catch (err) {
@@ -820,13 +803,11 @@ function AppContent() {
     for (const filePath of paths) {
       const fileName = filePath.split(/[/\\]/).pop() || '';
       try {
-        if (fileName.toLowerCase().endsWith('.zip')) {
-          const importedManifestPath = await invoke<string>('extract_zip_profile', { zipPath: filePath, profilesDir: dir });
-          await finishProfileImport(dir, importedManifestPath, fileName);
-        } else {
-          const importedManifestPath = await invoke<string>('import_profile', { sourcePath: filePath, profilesDir: dir });
-          await finishProfileImport(dir, importedManifestPath, fileName);
-        }
+        // Native file path (Tauri drag-drop event / native browse dialog):
+        // extract directly from disk (extract_zip_profile / import_profile), so
+        // a multi-MB bundle is never base64-encoded over IPC — see #187.
+        const importedManifestPath = await importProfileFromPath(filePath, dir, invoke);
+        await finishProfileImport(dir, importedManifestPath, fileName);
       } catch (err) {
         showToast(friendlyImportError(fileName, err), 'error');
       }

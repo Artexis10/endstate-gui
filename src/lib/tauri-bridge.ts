@@ -30,8 +30,16 @@ const WEB_FALLBACK_COMMANDS: Record<string, () => any> = {
   'copy_file': () => null,
   'read_file_base64': () => '',
   'cleanup_capture_cache': () => null,
-  'extract_zip_profile': () => '',
-  'import_zip_from_base64': () => '',
+  // NOTE: profile-import commands intentionally have NO silent web fallback.
+  // Returning '' here reads downstream as a successful import (a silent no-op)
+  // when no engine backend is present. Fail loudly instead so the UI surfaces a
+  // friendly error (see #187). Real imports run in Tauri or via the dev bridge.
+  'extract_zip_profile': () => {
+    throw new Error('Profile import requires the Endstate desktop app.');
+  },
+  'import_zip_from_base64': () => {
+    throw new Error('Profile import requires the Endstate desktop app.');
+  },
 };
 
 /**
