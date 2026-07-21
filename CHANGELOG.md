@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.5.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.4.0...gui-v3.5.0) (2026-07-21)
+
+
+### Features
+
+* bump engine to v2.27.1 ([#183](https://github.com/Artexis10/endstate-gui/issues/183)) ([5d6b468](https://github.com/Artexis10/endstate-gui/commit/5d6b4687a2b881d9fbf3130e3beadcb60990ecec))
+* **capture:** release the capture progress and Microsoft Store visibility UI ([#181](https://github.com/Artexis10/endstate-gui/issues/181)) ([b026e2b](https://github.com/Artexis10/endstate-gui/commit/b026e2b31cbb8ec0b0ba041da2dfc571fce8b56d))
+
+
+### Bug Fixes
+
+* friendly, single-row config-restore & app activity rows ([#184](https://github.com/Artexis10/endstate-gui/issues/184)) ([467afe6](https://github.com/Artexis10/endstate-gui/commit/467afe658fe01377dec5e28cbcf711b272679334))
+
 ## [3.4.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.3.0...gui-v3.4.0) (2026-07-21)
 
 
