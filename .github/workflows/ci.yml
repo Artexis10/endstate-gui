@@ -174,10 +174,15 @@ jobs:
             console.log('apply: ' + a.status + ' v' + (a.version || '?'));
           "
 
+      # winget must never prompt here: since engine 2.27.0 enumerates the
+      # msstore source by default, a bare `winget list` on a fresh runner asks
+      # for the msstore source agreement, dies on the non-interactive stdin
+      # (0x8a150042), and reads as "package missing" — a verification-tool
+      # failure masquerading as a dishonest install.
       - name: Package is actually present on the host
         shell: bash
         run: |
-          winget list --id jqlang.jq --exact | grep -q 'jqlang.jq' \
+          winget list --id jqlang.jq --exact --accept-source-agreements --disable-interactivity | grep -q 'jqlang.jq' \
             || { echo '::error::engine reported installed but winget does not see the package'; exit 1; }
 
       - name: Re-apply converges instead of reinstalling
