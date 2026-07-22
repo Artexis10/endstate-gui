@@ -140,7 +140,30 @@ async function testCapabilities() {
   
   console.log('   ✓ Envelope structure valid');
   console.log('   ✓ Config generation target mapping supported');
-  console.log(`   ✓ CLI version: ${envelope.cliVersion}`);
+
+  // The pinned engine must report the version we pinned. Nothing else asserts
+  // this: verify-engine-pin.yml proves only that the release exists and carries
+  // its assets, and the golden fixtures pin shape rather than values by design.
+  // The gap is not theoretical — the engine once reported cliVersion 2.0.0
+  // against a 2.5.0 pin because its VERSION file was never bumped on release
+  // (Artexis10/endstate#54), which silently ships a GUI verified against a
+  // binary it does not run. Enforced in CI, where engine-real-apply checks the
+  // engine out at ENGINE_REF; a dev machine legitimately runs a locally built
+  // engine ahead of the pin, so there it warns rather than blocking the loop.
+  const pinnedVersion = readFileSync(join(repoRoot, 'ENGINE_VERSION'), 'utf8').trim();
+  const enforceVersionPin = process.env.CI != null && process.env.CI !== 'false';
+  if (envelope.cliVersion !== pinnedVersion) {
+    const drift =
+      `Engine reports cliVersion ${envelope.cliVersion} but ENGINE_VERSION pins ${pinnedVersion}. `
+      + 'Either the engine\'s VERSION file was not bumped for its release, or this run is not '
+      + 'using the pinned binary.';
+    if (enforceVersionPin) {
+      throw new Error(drift);
+    }
+    console.log(`   ⚠ ${drift}`);
+  } else {
+    console.log(`   ✓ CLI version ${envelope.cliVersion} matches the ENGINE_VERSION pin`);
+  }
   console.log(`   ✓ Schema version: ${envelope.schemaVersion}`);
   console.log(`   ✓ Success: ${envelope.success}`);
 }
@@ -342,9 +365,17 @@ async function testApplyPayloadAndRegenerateGolden() {
 
   // Regenerate the fixture the mock is asserted against. It is committed, so a
   // diff here means the engine's envelope changed and the mock must follow.
+  //
+  // cliVersion is deliberately absent. It is a value, not a shape, and it
+  // changes on every engine bump — so recording it made this guard fail on
+  // every drift-bot PR for a reason that was never a contract change, training
+  // reviewers to wave through the one check built to be believed. Its presence
+  // is still covered (it appears in envelopeKeys) and its correctness is
+  // asserted against the ENGINE_VERSION pin in testCapabilities(). Do not add
+  // it back: any field that changes for reasons unrelated to the contract
+  // belongs outside the diffed payload.
   const golden = {
     _generatedBy: 'tests/contract.test.js against the real pinned engine — do not hand-edit',
-    cliVersion: envelope.cliVersion,
     envelopeKeys: Object.keys(envelope).sort(),
     dataKeys: Object.keys(data).sort(),
     actionKeys: [...new Set(data.actions.flatMap((action) => Object.keys(action)))]
@@ -491,9 +522,9 @@ async function testRestorePayloadAndRegenerateGolden() {
     // empty — but the mechanism is replicated so a newly-omitempty field would
     // be excluded on purpose rather than by accident.
     const OPTIONAL_RESTORE_MODULE_KEYS = [];
+    // cliVersion is deliberately absent here too — see the apply golden above.
     const golden = {
       _generatedBy: 'tests/contract.test.js against the real pinned engine — do not hand-edit',
-      cliVersion: envelope.cliVersion,
       envelopeKeys: Object.keys(envelope).sort(),
       dataKeys: Object.keys(data).sort(),
       restoreModuleKeys: [...new Set(modules.flatMap((mod) => Object.keys(mod)))]
