@@ -628,6 +628,17 @@ Section Install
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"
 
+  ; Replace the engine module catalog wholesale instead of merging into it.
+  ; NSIS overwrites files in place but never removes ones that disappeared
+  ; between versions, so a module deleted upstream survived every in-place
+  ; upgrade. That resurrected a restore-target collision the catalog had already
+  ; partitioned away and hard-failed capture (Artexis10/endstate#191): a stale
+  ; apps/wsl-config kept claiming %USERPROFILE%\.wslconfig alongside apps.wsl.
+  ; The catalog is installer-owned and fully re-extracted below, so clearing it
+  ; first is safe. Scoped deliberately to engine\modules — engine\state holds
+  ; user data (apply backups, generations, schedule) and must never be touched.
+  RMDir /r "$INSTDIR\engine\modules"
+
   ; Copy resources
   {{#each resources_dirs}}
     CreateDirectory "$INSTDIR\\{{this}}"
