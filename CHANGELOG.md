@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.7.1](https://github.com/Artexis10/endstate-gui/compare/gui-v3.7.0...gui-v3.7.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* bump engine to v2.27.6 so capture survives stale duplicate modules ([#196](https://github.com/Artexis10/endstate-gui/issues/196)) ([186011b](https://github.com/Artexis10/endstate-gui/commit/186011b18d29b30ef11d8f878cdb2a6f46d953b8))
+
 ## [3.7.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.6.0...gui-v3.7.0) (2026-07-22)
 
 
