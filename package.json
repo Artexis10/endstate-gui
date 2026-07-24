@@ -36,7 +36,7 @@
     "version:check": "node scripts/check-version-sync.mjs",
     "lint": "eslint src",
     "engine:stage": "node scripts/engine-resources.mjs",
-    "engine:test-resources": "node --test scripts/ci-bundle-policy.test.mjs scripts/engine-resources.test.mjs scripts/release-workflow.test.mjs",
+    "engine:test-resources": "node --test scripts/ci-bundle-policy.test.mjs scripts/engine-resources.test.mjs scripts/installer-template.test.mjs scripts/release-workflow.test.mjs",
     "engine:audit-installer": "node scripts/audit-windows-installer.mjs",
     "engine:smoke-installer": "node scripts/smoke-packaged-engine.mjs",
     "engine:refresh": "node scripts/refresh-engine.mjs"
