@@ -2897,17 +2897,12 @@ function AppContent() {
                   // Record the saved capture as the continuous-protection
                   // baseline. The transient capture cache is wiped at app
                   // start, so only this durable user-saved copy is a valid
-                  // manifest for the scheduled task. Zip saves cannot be the
-                  // baseline directly — the scheduled run's verify parses raw
-                  // JSONC only — so the bundle's embedded manifest.jsonc is
-                  // side-written next to the zip and recorded instead. On a
-                  // failed side-write the baseline is left unchanged (never
-                  // record a .zip path). If protection is already on,
+                  // manifest for the scheduled task. Engine 2.28.0 reads the
+                  // manifest straight out of a bundle, so a saved .zip is now a
+                  // baseline on its own — no sidecar to write, and nothing to
+                  // keep paired with the bundle. If protection is already on,
                   // re-point the task at the fresh snapshot (idempotent).
-                  const baselinePath = await resolveScheduleBaselinePath(
-                    savePath,
-                    (zipPath, destPath) => invoke('extract_zip_manifest', { zipPath, destPath }),
-                  );
+                  const baselinePath = resolveScheduleBaselinePath(savePath);
                   if (baselinePath) {
                     updateSettings({ scheduleManifestPath: baselinePath });
                     if (scheduleSupported && settings.scheduleEnabled) {
