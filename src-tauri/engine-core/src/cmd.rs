@@ -893,6 +893,31 @@ fn portable_manifest_path(value: &str) -> bool {
             .all(|component| !component.is_empty() && !matches!(component, "." | ".."))
 }
 
+/// Mirror of the engine's `validateConfigPayloadRoot`
+/// (go-engine/internal/manifest/manifest_v2.go).
+///
+/// The on-disk payload directory is deliberately NOT the capture identity.
+/// Engine v2.27.5 (Artexis10/endstate#188) renamed payload folders to a readable
+/// module label plus a short hash — `configs/powertoys-135f78ef/` instead of an
+/// opaque `configs/legacy-<64hex>/` — so a bundle zip can be hand-edited, and
+/// relaxed its own validations to require only a single safe directory under
+/// `configs/`. Identity still travels in `captureId` / `legacyCaptureId`.
+///
+/// Pinning `payloadRoot` to `configs/<captureId>` here rejected every bundle
+/// captured by engine >= 2.27.5, so importing a freshly captured profile failed.
+fn validate_config_payload_root(payload_root: &str) -> Result<(), String> {
+    if !portable_manifest_path(payload_root) {
+        return Err("must be a portable path".to_string());
+    }
+    let Some(segment) = payload_root.strip_prefix("configs/") else {
+        return Err("must be a directory under configs/".to_string());
+    };
+    if segment.is_empty() || segment.contains('/') {
+        return Err("must be a single directory under configs/".to_string());
+    }
+    Ok(())
+}
+
 fn validate_v2_config_captures(
     manifest: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), String> {
@@ -902,6 +927,7 @@ fn validate_v2_config_captures(
     }
 
     let mut capture_ids = std::collections::HashSet::new();
+    let mut payload_roots = std::collections::HashSet::new();
     for (capture_index, capture_value) in captures.iter().enumerate() {
         let capture = capture_value
             .as_object()
@@ -1007,11 +1033,15 @@ fn validate_v2_config_captures(
         }
 
         let payload_root = required_string(capture, "payloadRoot")?;
-        let expected_root = format!("configs/{capture_id}");
-        if !portable_manifest_path(payload_root) || payload_root != expected_root {
+        if let Err(reason) = validate_config_payload_root(payload_root) {
             return Err(format!(
-                "configCaptures[{capture_index}].payloadRoot must be {expected_root:?}"
+                "configCaptures[{capture_index}].payloadRoot {payload_root:?} {reason}"
             ));
+        }
+        // Identity no longer implies the directory, so uniqueness has to be
+        // asserted directly (the engine grew the same guard in #188).
+        if !payload_roots.insert(payload_root) {
+            return Err(format!("duplicate payloadRoot {payload_root:?}"));
         }
 
         let payload_manifest = required_array(capture, "payloadManifest")?;
@@ -1250,10 +1280,9 @@ fn validate_v2_legacy_isolation(
                 "legacyConfigLanes[{index}].moduleSchemaVersion must be the integer 1"
             ));
         }
-        let expected_root = format!("configs/{capture_id}");
-        if !portable_manifest_path(payload_root) || payload_root != expected_root {
+        if let Err(reason) = validate_config_payload_root(payload_root) {
             return Err(format!(
-                "legacyConfigLanes[{index}].payloadRoot must be {expected_root:?}"
+                "legacyConfigLanes[{index}].payloadRoot {payload_root:?} {reason}"
             ));
         }
         if !all_capture_ids.insert(capture_id) {
@@ -1836,8 +1865,15 @@ mod profile_validation_tests {
                 first_config_capture_mut(value)["captureModule"]["snapshotPath"] =
                     json!(r"provenance\modules\apps.fixture-stable.json");
             }),
-            ("wrong payload root", |value| {
-                first_config_capture_mut(value)["payloadRoot"] = json!("configs/other");
+            // NOT "any root other than configs/<captureId>" — the directory name
+            // is decoupled from the identity since engine #188. What stays
+            // enforced is the shape: exactly one directory under configs/.
+            ("payload root outside configs", |value| {
+                first_config_capture_mut(value)["payloadRoot"] = json!("payloads/fixture-stable");
+            }),
+            ("nested payload root", |value| {
+                first_config_capture_mut(value)["payloadRoot"] =
+                    json!("configs/fixture-stable/nested");
             }),
             ("traversing payload root", |value| {
                 first_config_capture_mut(value)["payloadRoot"] =
@@ -2004,9 +2040,15 @@ mod profile_validation_tests {
             ("wrong legacy module schema", |value| {
                 first_legacy_lane_mut(value).insert("moduleSchemaVersion".to_string(), json!(2));
             }),
-            ("wrong legacy payload root", |value| {
+            ("nested legacy payload root", |value| {
+                first_legacy_lane_mut(value).insert(
+                    "payloadRoot".to_string(),
+                    json!("configs/legacy-capture/nested"),
+                );
+            }),
+            ("legacy payload root outside configs", |value| {
                 first_legacy_lane_mut(value)
-                    .insert("payloadRoot".to_string(), json!("configs/other"));
+                    .insert("payloadRoot".to_string(), json!("payloads/legacy-capture"));
             }),
             ("nonportable legacy payload root", |value| {
                 first_legacy_lane_mut(value).insert(
@@ -2665,5 +2707,83 @@ mod profile_validation_tests {
             .expect("dangling target metadata")
             .file_type()
             .is_symlink());
+    }
+
+    #[test]
+    fn payload_root_shape_is_enforced_without_pinning_it_to_the_capture_id() {
+        for readable in [
+            "configs/powertoys-135f78ef",
+            "configs/windows-terminal-11bb6551",
+            "configs/a",
+        ] {
+            assert!(
+                validate_config_payload_root(readable).is_ok(),
+                "readable payload root {readable:?} must be accepted"
+            );
+        }
+        for rejected in [
+            "payloads/powertoys",         // not under configs/
+            "configs",                    // no directory at all
+            "configs/",                   // empty segment
+            "configs/powertoys/settings", // more than one directory deep
+            "configs/powertoys/../other", // traversal
+            r"configs\powertoys",         // not portable
+        ] {
+            assert!(
+                validate_config_payload_root(rejected).is_err(),
+                "payload root {rejected:?} must be rejected"
+            );
+        }
+    }
+
+    /// Regression: engine v2.27.5 (Artexis10/endstate#188) renamed bundle payload
+    /// folders to a readable label plus a short hash, decoupling `payloadRoot`
+    /// from `captureId`. This validator still demanded `configs/<captureId>`, so
+    /// importing any freshly captured profile failed — the GUI surfaced only
+    /// "We couldn't import <file>. Please try again."
+    #[test]
+    fn generation_capture_accepts_a_readable_payload_root() {
+        let mut value = valid_v2_value();
+        first_config_capture_mut(&mut value)["payloadRoot"] =
+            json!("configs/fixture-stable-135f78ef");
+
+        let result = validate_profile_object(&value);
+        assert!(
+            result.valid,
+            "readable generation payload root rejected: {:?}",
+            result.errors
+        );
+    }
+
+    #[test]
+    fn legacy_lane_accepts_a_readable_payload_root() {
+        let mut value = valid_v2_with_legacy_lane();
+        value["legacyConfigLanes"][0]["payloadRoot"] = json!("configs/example-0d7a3cc2");
+        value["restore"][0]["source"] = json!("configs/example-0d7a3cc2/settings.json");
+
+        let result = validate_profile_object(&value);
+        assert!(
+            result.valid,
+            "readable legacy payload root rejected: {:?}",
+            result.errors
+        );
+    }
+
+    /// Identity no longer implies the directory, so uniqueness needs its own guard.
+    #[test]
+    fn generation_captures_may_not_share_a_payload_root() {
+        let mut value = valid_v2_value();
+        let mut duplicate = value["configCaptures"][0].clone();
+        duplicate["captureId"] = json!("fixture-stable-preferences-second");
+        value["configCaptures"]
+            .as_array_mut()
+            .expect("configCaptures array")
+            .push(duplicate);
+
+        let result = validate_profile_object(&value);
+        assert!(
+            !result.valid,
+            "two captures sharing one payloadRoot must be rejected"
+        );
     }
 }
