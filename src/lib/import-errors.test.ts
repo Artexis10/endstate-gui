@@ -53,6 +53,55 @@ describe('friendlyImportError', () => {
     expect(msg).toMatch(/damaged|unexpected format/i);
   });
 
+  it('surfaces the real reason hidden behind the Tauri invoke wrapper', () => {
+    // Regression: the bridge wraps every backend error, and treating the whole
+    // string as jargon threw the reason away with the wrapper. A stale
+    // payloadRoot rule rejected every bundle captured by engine 2.27.5 and all
+    // the user ever saw was "Please try again".
+    const err = new Error(
+      "Tauri invoke failed for 'extract_zip_profile': legacyConfigLanes[0].payloadRoot " +
+        '"configs/inkscape-03d562e8" must be a single directory under configs/',
+    );
+    const msg = friendlyImportError('endstate-capture.zip', err);
+
+    expect(msg).toContain('endstate-capture.zip');
+    expect(msg).toContain('payloadRoot');
+    expect(msg).toContain('configs/inkscape-03d562e8');
+    // The wrapper itself still never leaks.
+    expect(msg).not.toMatch(/tauri invoke failed/i);
+    expect(msg).not.toMatch(/extract_zip_profile/i);
+    expect(msg).not.toContain('\n');
+  });
+
+  it('stays generic when the wrapper hides nothing useful', () => {
+    const err = new Error("Tauri invoke failed for 'extract_zip_profile': ");
+    const msg = friendlyImportError('setup.zip', err);
+
+    expect(msg).toMatch(/please try again/i);
+    expect(msg).not.toMatch(/tauri invoke failed/i);
+  });
+
+  it('stays generic when the unwrapped message is itself transport plumbing', () => {
+    const err = new Error(
+      "Tauri invoke failed for 'extract_zip_profile': Tauri listen failed for 'endstate://event'",
+    );
+    const msg = friendlyImportError('setup.zip', err);
+
+    expect(msg).toMatch(/please try again/i);
+    expect(msg).not.toMatch(/tauri listen failed/i);
+  });
+
+  it('still reports oversize when the 413 arrives wrapped', () => {
+    const err = new Error(
+      "Tauri invoke failed for 'import_zip_from_base64': HTTP bridge error: 413 Payload Too Large",
+    );
+    const msg = friendlyImportError('big.zip', err);
+
+    expect(msg).toMatch(/too large/i);
+    expect(msg).not.toMatch(/413/);
+    expect(msg).not.toMatch(/tauri invoke failed/i);
+  });
+
   it('handles non-Error throwables (string / unknown)', () => {
     expect(friendlyImportError('a.zip', 'boom')).toContain('a.zip');
     expect(friendlyImportError('b.zip', undefined)).toContain('b.zip');

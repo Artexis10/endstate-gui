@@ -29,10 +29,41 @@ const JARGON_PATTERNS: readonly RegExp[] = [
   /failed to buffer the request body/i,
 ];
 
+/**
+ * Transport wrappers the bridge adds around a backend error.
+ *
+ * `tauri-bridge.ts` rethrows every failed command as
+ * `Tauri invoke failed for '<cmd>': <backend message>`. Treating that whole
+ * string as jargon discarded the backend's own message along with it — and that
+ * message is usually the precise reason, naming the offending field. When a
+ * stale payloadRoot rule rejected every bundle captured by engine 2.27.5, all
+ * the user ever saw was "Please try again". Peel the wrapper off and judge what
+ * it wrapped on its own merits.
+ */
+const TRANSPORT_WRAPPERS: readonly RegExp[] = [
+  /^\s*tauri invoke failed for '[^']*':\s*/i,
+  /^\s*http bridge error(?:\s*\(\d+\))?:\s*/i,
+];
+
 function messageOf(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
   return String(err ?? '');
+}
+
+/** Strip any stacked transport prefixes, leaving the backend's own message. */
+function unwrapTransport(raw: string): string {
+  let message = raw.trim();
+  // Bounded on purpose: a bridge error is wrapped at most a couple of layers
+  // deep, and an unbounded loop over adversarial input earns nothing.
+  for (let depth = 0; depth < 4; depth += 1) {
+    const before = message;
+    for (const wrapper of TRANSPORT_WRAPPERS) {
+      message = message.replace(wrapper, '').trim();
+    }
+    if (message === before) break;
+  }
+  return message;
 }
 
 /**
@@ -49,15 +80,19 @@ export function friendlyImportError(fileName: string, err: unknown): string {
     return `${fileName} is too large to import. Try a smaller bundle, or open the folder and add it directly.`;
   }
 
-  // Any recognizable transport jargon → generic, safe copy (never echo it).
-  if (JARGON_PATTERNS.some((re) => re.test(raw))) {
+  // The transport prefix is noise; what it wraps may be the actual reason.
+  const clean = unwrapTransport(raw);
+
+  // Nothing survived the unwrap, or what did is still transport plumbing →
+  // generic, safe copy (never echo it).
+  if (!clean || JARGON_PATTERNS.some((re) => re.test(clean))) {
     return `We couldn't import ${fileName}. Please try again.`;
   }
 
-  // A short, clean engine/CLI message can be shown; otherwise stay generic.
-  // Guard against multi-line or oversized blobs that read as raw output.
-  const clean = raw.trim();
-  if (clean && clean.length <= 120 && !clean.includes('\n')) {
+  // A single-line engine/CLI message can be shown. The cap admits a full
+  // validation sentence (which names a field and a path) while still rejecting
+  // multi-line blobs and stack traces that read as raw output.
+  if (clean.length <= 200 && !clean.includes('\n')) {
     return `We couldn't import ${fileName}: ${clean}`;
   }
 
