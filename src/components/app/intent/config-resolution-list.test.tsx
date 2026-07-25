@@ -43,6 +43,43 @@ describe('ConfigResolutionList', () => {
     vi.mocked(useShowDetails).mockReturnValue(false);
   });
 
+  it('leads each group card with its own reason, not the shared label', () => {
+    // Groups are keyed on (resolution, label, message), so several groups
+    // routinely share one label. Heading them by label made every card read
+    // "Compatibility unknown", with the only text telling them apart buried at
+    // the bottom in muted copy.
+    renderWithProviders(
+      <ConfigResolutionList
+        resolutions={[
+          resolution({
+            captureId: 'legacy-a',
+            resolution: 'unknown',
+            label: 'Compatibility unknown',
+            message: 'These settings predate compatibility checks.',
+          }),
+          resolution({
+            captureId: 'collision-a',
+            resolution: 'unknown',
+            label: 'Compatibility unknown',
+            message: 'This config set overlaps another selected restore target.',
+          }),
+        ]}
+      />,
+    );
+
+    const headings = screen.getAllByText(
+      /predate compatibility checks|overlaps another selected restore target/,
+    );
+    expect(headings).toHaveLength(2);
+    // Each reason is the card headline, not a muted footnote.
+    for (const heading of headings) {
+      expect(heading.className).toContain('font-medium');
+      expect(heading.className).not.toContain('text-muted-foreground');
+    }
+    // The shared label still appears once per card, as supporting context.
+    expect(screen.getAllByText('Compatibility unknown')).toHaveLength(2);
+  });
+
   it('renders engine labels, messages, remediation, and statuses verbatim', () => {
     renderWithProviders(
       <ConfigResolutionList
