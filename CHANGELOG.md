@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.8.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.7.3...gui-v3.8.0) (2026-07-25)
+
+
+### Features
+
+* drop the manifest sidecar — engine 2.28.0 reads baselines from the bundle ([#206](https://github.com/Artexis10/endstate-gui/issues/206)) ([005b00e](https://github.com/Artexis10/endstate-gui/commit/005b00ea7e252085f3e08d7f31516e3d73dec493))
+
+
+### Bug Fixes
+
+* **setup:** one consistent app count on the results screen, and an apps-only filter ([#204](https://github.com/Artexis10/endstate-gui/issues/204)) ([de92fa9](https://github.com/Artexis10/endstate-gui/commit/de92fa941a565228653fc95cd2d11ecb42e68115))
+
 ## [3.7.3](https://github.com/Artexis10/endstate-gui/compare/gui-v3.7.2...gui-v3.7.3) (2026-07-25)
 
 
