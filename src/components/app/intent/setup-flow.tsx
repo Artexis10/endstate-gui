@@ -402,16 +402,32 @@ export function SetupFlow({
   const clearFilters = () => setActiveFilters(new Set());
 
   /** Filter events based on active filter set (OR logic). */
+  /**
+   * Phase separator headers and raw config copy operations are internal engine
+   * detail, never shown. Shared with the chip counts so a chip can never
+   * advertise a number the list below it will not render.
+   */
+  const isDisplayableEvent = (e: AppEvent) =>
+    e.app !== '── APPLY ──' && e.app !== '── VERIFY ──' && !e.app.startsWith('copy:');
+
+  /** Winget apps carrying no settings — the complement of the `settings` filter. */
+  const appsOnlyCount = (events: AppEvent[], configMap: Record<string, string>) =>
+    events.filter(
+      (e) => isDisplayableEvent(e) && !isConfigOnlyApp(e) && !(e.app in configMap),
+    ).length;
+
   const filterEvents = (events: AppEvent[], configMap: Record<string, string>) => {
-    // Exclude phase separator headers and raw config copy operations (internal engine detail)
-    const filtered = events.filter(e =>
-      e.app !== '── APPLY ──' && e.app !== '── VERIFY ──' && !e.app.startsWith('copy:')
-    );
+    const filtered = events.filter(isDisplayableEvent);
     if (activeFilters.size === 0) return filtered;
     return filtered.filter(event => {
       const statusKey: StatusKey = event.statusKey || 'skipped';
       for (const f of activeFilters) {
         if (f === 'settings' && (event.app in configMap || isConfigOnlyApp(event))) return true;
+        // Complement of `settings`. The filter set had a positive "has settings"
+        // filter but no way to ask the opposite question — "which of these are
+        // just app installs?" — which is the more common one when reviewing a
+        // plan.
+        if (f === 'apps_only' && !(event.app in configMap || isConfigOnlyApp(event))) return true;
         if (f === statusKey) return true;
       }
       return false;
@@ -1042,6 +1058,7 @@ export function SetupFlow({
           const displayPresent = pickerEnabled ? selectedPresent : adjustedPresent;
           const displayTotal = pickerEnabled ? displayInstalled + displayPresent : totalApps;
           // Partition filtered events
+          const previewAppsOnlyCount = appsOnlyCount(previewResult.appEvents, configMap);
           const allFilteredEvents = filterEvents(previewResult.appEvents, configMap);
           const wingetEvents = allFilteredEvents.filter(e => !isConfigOnlyApp(e));
           const configOnlyEvents = allFilteredEvents.filter(e => isConfigOnlyApp(e));
@@ -1141,6 +1158,16 @@ export function SetupFlow({
                             {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'}`}
                           </span>
                         )
+                      )}
+                      {previewAppsOnlyCount > 0 && settingsCount > 0 && (
+                        <FilterChip
+                          onClick={() => toggleFilter('apps_only')}
+                          pressed={activeFilters.has('apps_only')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('apps_only')}
+                          className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
+                        >
+                          {previewAppsOnlyCount} without settings
+                        </FilterChip>
                       )}
                     </div>
                     {pickerEnabled && (
@@ -1463,7 +1490,8 @@ export function SetupFlow({
                       {(() => {
                         // Exclude config-only synthesized apps from install/present counts
                         const cfgOnlyPresent = applyResult.appEvents.filter(e => isConfigOnlyApp(e) && (e.statusKey === 'present' || !e.statusKey)).length;
-                        const adjInstalled = applyResult.installed;
+                        const cfgOnlyInstalled = applyResult.appEvents.filter(e => isConfigOnlyApp(e) && e.statusKey === 'installed').length;
+                        const adjInstalled = applyResult.installed - cfgOnlyInstalled;
                         const adjPresent = applyResult.alreadyPresent - cfgOnlyPresent;
                         // A dry run installs nothing, so reporting an install
                         // count would be a claim about work that never happened.
@@ -1525,10 +1553,31 @@ export function SetupFlow({
                   // Fall back to selected modules count when restore counters are empty (only when restore was requested)
                   const configMapSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
                   const applySettingsTotal = applySettingsProcessed > 0 ? applySettingsProcessed : configMapSettingsCount;
-                  // Separate config-only synthesized apps from winget apps
-                  const configOnlyCount = applyResult.appEvents.filter(e => isConfigOnlyApp(e)).length;
-                  const totalApplyApps = applyResult.installed + applyResult.alreadyPresent + applyResult.failed - configOnlyCount;
+                  // Config-only synthesized apps get their own "Settings only"
+                  // section, so every app counter here excludes them — and must
+                  // exclude them the SAME way. Three different adjustments used to
+                  // coexist on this one screen: the headline subtracted config-only
+                  // *present*, this total subtracted *all* config-only (including
+                  // skipped ones that were never in the sum, so they were removed
+                  // from a total that never held them), and the status chips
+                  // subtracted nothing. One real run showed "94 apps", "102 present"
+                  // and "95 already present" side by side. Adjust per status, the
+                  // way the preview screen above already does.
+                  const applyConfigOnlyWithStatus = (status: StatusKey) =>
+                    applyResult.appEvents.filter(
+                      (e) =>
+                        isConfigOnlyApp(e) &&
+                        (e.statusKey === status || (status === 'present' && !e.statusKey)),
+                    ).length;
+                  const adjApplyInstalled =
+                    applyResult.installed - applyConfigOnlyWithStatus('installed');
+                  const adjApplyPresent =
+                    applyResult.alreadyPresent - applyConfigOnlyWithStatus('present');
+                  const adjApplyFailed =
+                    applyResult.failed - applyConfigOnlyWithStatus('failed');
+                  const totalApplyApps = adjApplyInstalled + adjApplyPresent + adjApplyFailed;
                   // Partition filtered events
+                  const applyAppsOnlyCount = appsOnlyCount(applyResult.appEvents, applyConfigMap);
                   const allApplyEvents = filterEvents(applyResult.appEvents, applyConfigMap);
                   const applyWingetEvents = allApplyEvents.filter(e => !isConfigOnlyApp(e));
                   const applyConfigOnlyEvents = allApplyEvents.filter(e => isConfigOnlyApp(e));
@@ -1546,24 +1595,24 @@ export function SetupFlow({
                           {totalApplyApps} {totalApplyApps === 1 ? 'app' : 'apps'}
                         </FilterChip>
                       )}
-                      {applyResult.installed > 0 && (
+                      {adjApplyInstalled > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('installed')}
                           pressed={activeFilters.has('installed')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('installed')}
                           className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                         >
-                          {applyResult.installed} installed
+                          {adjApplyInstalled} installed
                         </FilterChip>
                       )}
-                      {applyResult.alreadyPresent > 0 && (
+                      {adjApplyPresent > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('present')}
                           pressed={activeFilters.has('present')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('present')}
                           className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                         >
-                          {applyResult.alreadyPresent} present
+                          {adjApplyPresent} present
                         </FilterChip>
                       )}
                       {applyResult.skipped > 0 && (
@@ -1576,14 +1625,14 @@ export function SetupFlow({
                           {applyResult.skipped} skipped
                         </FilterChip>
                       )}
-                      {applyResult.failed > 0 && (
+                      {adjApplyFailed > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('failed')}
                           pressed={activeFilters.has('failed')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('failed')}
                           className={`${getColorClasses('error').bg} ${getColorClasses('error').text}`}
                         >
-                          {applyResult.failed} failed
+                          {adjApplyFailed} failed
                         </FilterChip>
                       )}
                       {applySettingsTotal > 0 && (
@@ -1611,6 +1660,16 @@ export function SetupFlow({
                             {applySettingsTotal} {applySettingsTotal === 1 ? 'setting' : 'settings'}
                           </FilterChip>
                         )
+                      )}
+                      {applyAppsOnlyCount > 0 && applySettingsTotal > 0 && (
+                        <FilterChip
+                          onClick={() => toggleFilter('apps_only')}
+                          pressed={activeFilters.has('apps_only')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('apps_only')}
+                          className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
+                        >
+                          {applyAppsOnlyCount} without settings
+                        </FilterChip>
                       )}
                     </div>
                     <div className="space-y-1 max-h-64 overflow-y-auto">
