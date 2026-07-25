@@ -14,10 +14,9 @@ import {
   type ApplyRestoreOptions,
   type RestoreIntent,
 } from './types';
-import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration, clearSelectedProfile } from './settings';
+import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration } from './settings';
 import { loadDraft, clearDraft } from './lib/draft-store';
 import { resolveDraftContent } from './lib/draft-content-resolver';
-import { resolveProfilePath } from './lib/profile-selection-migration';
 import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-discovery';
 import { findImportedProfile } from './lib/profile-import';
 import { createNativeProfileDropHandler, createProfileImportCoordinator } from './lib/native-profile-drop';
@@ -1032,7 +1031,6 @@ function AppContent() {
             savedProfileForAnimation = savedProfile;
             setSelectedProfile(savedProfile.name);
             setSelectedProfilePath(savedProfile.path);
-            updateSettings({ selectedProfileName: savedProfile.name });
           }
         }
         // 3. Clear draft from store and memory
@@ -1154,7 +1152,6 @@ function AppContent() {
             const accept = () => {
               setSelectedProfile(firstProfile.name);
               setSelectedProfilePath(firstProfile.path);
-              updateSettings({ selectedProfileName: firstProfile.name });
             };
             // The user just deleted this profile from the profile list, so the
             // "why did my selection change?" explanation the modal exists for is
@@ -1186,7 +1183,6 @@ function AppContent() {
             // the user has no actionable choice beyond capturing.
             setSelectedProfile('');
             setSelectedProfilePath('');
-            updateSettings({ selectedProfileName: null });
             showToast('No profiles available. Create a profile by capturing your computer setup.', 'info');
           }
         }
@@ -1249,7 +1245,6 @@ function AppContent() {
         const newName = newFilename.replace(/\.(jsonc?|json5)$/i, '');
         setSelectedProfile(newName);
         setSelectedProfilePath(newPath);
-        updateSettings({ selectedProfileName: newName });
       }
       
       await refreshProfiles();
@@ -1276,54 +1271,17 @@ function AppContent() {
         const migratedSettings = await loadSettingsWithProfileMigration(dir);
         setSettings(migratedSettings);
         
-        // Resolve selected profile name to path
-        if (migratedSettings.selectedProfileName) {
-          const resolvedPath = await resolveProfilePath(migratedSettings.selectedProfileName, dir);
-          if (resolvedPath) {
-            setSelectedProfile(migratedSettings.selectedProfileName);
-            setSelectedProfilePath(resolvedPath);
-          } else {
-            // Profile name exists in settings but file not found — surface the
-            // actionable ProfileMissingModal once discovery completes. We can't
-            // know firstAvailable yet; defer that decision until discovered
-            // profiles arrive (see init-time follow-up below).
-            console.warn('[init] Selected profile not found, clearing selection:', migratedSettings.selectedProfileName);
-            const previousLabel = migratedSettings.selectedProfileName;
-            clearSelectedProfile();
-            setSelectedProfile('');
-            setSelectedProfilePath('');
-            // Best-effort: enumerate profiles right now so we can populate
-            // firstAvailableLabel for the modal. discoverProfiles is async but
-            // cheap and we already need it for the profile list.
-            try {
-              const discovered = await discoverProfiles(dir);
-              const firstProfile = discovered[0];
-              setProfileMissingState({
-                previousName: previousLabel,
-                reason: 'not-found',
-                firstAvailableLabel: firstProfile
-                  ? firstProfile.displayName || firstProfile.name
-                  : null,
-                onAccept: firstProfile
-                  ? () => {
-                      setSelectedProfile(firstProfile.name);
-                      setSelectedProfilePath(firstProfile.path);
-                      updateSettings({ selectedProfileName: firstProfile.name });
-                    }
-                  : () => {},
-              });
-            } catch {
-              // If discovery fails, fall back to the calm toast — the modal
-              // can't help if we can't even list profiles.
-              showToast('Previously selected profile not found. Please select a profile.', 'info');
-            }
-          }
-        } else {
-          // No profile selected
-          setSelectedProfile('');
-          setSelectedProfilePath('');
-        }
-        
+        // Profile selection is per-session on purpose, so nothing is restored
+        // here. Choosing a profile in the Set up flow runs it immediately —
+        // there is no "selected but not yet applied" state worth persisting.
+        // The stored selection was left over from an earlier design, and its
+        // only remaining effect was a dialog at launch explaining that a piece
+        // of bookkeeping had gone stale. Continuous Protection is unaffected:
+        // its baseline is scheduleManifestPath, recorded when a capture is
+        // saved.
+        setSelectedProfile('');
+        setSelectedProfilePath('');
+
         // Refresh profiles list
         const discovered = await discoverProfiles(dir);
         setProfiles(discovered);
@@ -3048,7 +3006,6 @@ function AppContent() {
               onFlowReset={() => { setFlowHasWork(prev => ({ ...prev, setup: false })); setRecentlyImportedProfile(null); }}
               onProfileSelect={(profile) => {
                 setProfileSelection(profile.name, profile.path);
-                updateSettings({ selectedProfileName: profile.name });
               }}
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
@@ -3069,7 +3026,6 @@ function AppContent() {
               restoreTargetSupported={restoreTargetSupported}
               onPreview={async (profile, previewOptions) => {
                 setProfileSelection(profile.name, profile.path);
-                updateSettings({ selectedProfileName: profile.name });
                 setIsRunning(true);
                 setLiveAppEvents([]);
                 setLiveConfigEvents([]);
@@ -3089,7 +3045,6 @@ function AppContent() {
               }}
               onApply={async (profile, restoreOptions) => {
                 setProfileSelection(profile.name, profile.path);
-                updateSettings({ selectedProfileName: profile.name });
                 setIsRunning(true);
                 setLiveAppEvents([]);
                 setLiveConfigEvents([]);
@@ -3964,29 +3919,11 @@ function AppContent() {
                   />
                 </div>
                 
-                <div className="flex items-center justify-between pt-3 border-t border-border/50">
-                  <div>
-                    <label className="text-sm font-medium">Reset selected profile</label>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedProfile ? `Currently: ${selectedProfile}` : 'No profile selected'}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={selectedProfile ? 'text-warning hover:text-warning' : ''}
-                    onClick={() => {
-                      clearSelectedProfile();
-                      setSelectedProfile('');
-                      setSelectedProfilePath('');
-                      setSettings({ ...settings, selectedProfileName: null });
-                      showToast('Selected profile cleared', 'success');
-                    }}
-                    disabled={!selectedProfile}
-                  >
-                    Clear
-                  </Button>
-                </div>
+                {/*
+                  The "Reset selected profile" control lived here to clear a
+                  selection that outlived the session. Selection is per-session
+                  now, so there is nothing durable left to reset.
+                */}
               </CardContent>
             </Card>
 
