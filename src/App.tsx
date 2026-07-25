@@ -17,6 +17,7 @@ import {
 import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration } from './settings';
 import { loadDraft, clearDraft } from './lib/draft-store';
 import { resolveDraftContent } from './lib/draft-content-resolver';
+import { isConfigOnlyApp } from './lib/app-event-kind';
 import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-discovery';
 import { findImportedProfile } from './lib/profile-import';
 import { createNativeProfileDropHandler, createProfileImportCoordinator } from './lib/native-profile-drop';
@@ -2255,7 +2256,12 @@ function AppContent() {
               // Update counters on status change
               const isFinal = ['installed', 'present', 'skipped', 'failed'].includes(appEvent.statusKey || '');
               const wasNonFinal = existing.statusKey === 'installing' || existing.statusKey === 'to_install';
-              if (isFinal && wasNonFinal) {
+              // Config-only synthesized apps belong to the "Settings only"
+              // section and are excluded from every app counter on the results
+              // screen. Counting them here let the in-progress total run ahead
+              // of the final one — "97 already present" during a run that ended
+              // reporting 91 apps.
+              if (isFinal && wasNonFinal && !isConfigOnlyApp(appEvent)) {
                 if (appEvent.statusKey === 'installed') counters.installed++;
                 else if (appEvent.statusKey === 'present') counters.alreadyPresent++;
                 else if (appEvent.statusKey === 'skipped') counters.skipped++;
@@ -2266,7 +2272,7 @@ function AppContent() {
               // New item — also count if it arrives directly in a final state
               // (CLI may skip non-final events for fast-resolved items)
               const isFinal = ['installed', 'present', 'skipped', 'failed'].includes(appEvent.statusKey || '');
-              if (isFinal) {
+              if (isFinal && !isConfigOnlyApp(appEvent)) {
                 if (appEvent.statusKey === 'installed') counters.installed++;
                 else if (appEvent.statusKey === 'present') counters.alreadyPresent++;
                 else if (appEvent.statusKey === 'skipped') counters.skipped++;
