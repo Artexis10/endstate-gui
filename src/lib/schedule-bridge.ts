@@ -149,37 +149,22 @@ export function isZipPath(path: string): boolean {
 /**
  * Resolve the drift-check baseline manifest for a freshly saved capture.
  *
- * The engine's scheduled run (`schedule run` → verify) parses raw JSONC
- * only — a `.zip` bundle path baked into the task would fail every scheduled
- * run permanently. Manifest-only saves are their own baseline; zip saves must
- * side-write the bundle's embedded `manifest.jsonc` (always present at the
- * archive root, per the engine's capture-bundle-zip spec) next to the zip and
- * use that instead.
+ * Whatever the user saved IS the baseline. Engine 2.28.0 reads manifest.jsonc
+ * straight out of a capture bundle (Artexis10/endstate#194), so `schedule run`
+ * → verify accepts a `.zip` exactly as it accepts a `.jsonc`.
  *
- * Returns the path to record as `scheduleManifestPath`, or `null` when no
- * scheduler-compatible baseline could be produced (extraction failed).
- * Callers MUST leave the previous baseline untouched on `null` — a `.zip`
- * path is never a valid baseline.
+ * Before that the engine's loader parsed raw JSONC only, so a bundle could never
+ * be a baseline: this side-wrote the bundle's embedded manifest to
+ * `<bundle>.zip.manifest.jsonc` and recorded that instead. The sidecar then had
+ * to stay paired with the bundle forever — renaming or moving the zip silently
+ * orphaned the baseline, and the manifest sat on disk twice. Teaching the engine
+ * to read its own bundle removes the problem instead of managing the pairing.
  *
  * @param savePath - Where the user saved the capture (.jsonc or .zip)
- * @param extractManifest - Side-writes the zip's embedded manifest.jsonc to
- *                          the given destination (Tauri `extract_zip_manifest`)
+ * @returns The path to record as `scheduleManifestPath`.
  */
-export async function resolveScheduleBaselinePath(
-  savePath: string,
-  extractManifest: (zipPath: string, destPath: string) => Promise<void>,
-): Promise<string | null> {
-  if (!isZipPath(savePath)) return savePath;
-  const destPath = `${savePath}.manifest.jsonc`;
-  try {
-    await extractManifest(savePath, destPath);
-    return destPath;
-  } catch (err) {
-    // Best-effort: the save itself succeeded; only the baseline update is
-    // skipped. The previously recorded baseline (if any) remains in force.
-    console.warn('schedule baseline side-write failed:', err);
-    return null;
-  }
+export function resolveScheduleBaselinePath(savePath: string): string {
+  return savePath;
 }
 
 /**
