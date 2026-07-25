@@ -74,9 +74,60 @@ async function navigateToPreview(previewResult: ReturnType<typeof makePreviewWit
   });
 }
 
+/**
+ * Apply result mirroring a real run: winget apps present, config-only settings
+ * SKIPPED. Skipped entries are not part of installed+present+failed, so
+ * subtracting every config-only app from that sum removes apps it never held.
+ */
+function makeApplyWithSkippedManualApps() {
+  return {
+    installed: 0,
+    alreadyPresent: 2,
+    failed: 0,
+    skipped: 2,
+    appEvents: [
+      { app: 'GitHub.cli', action: 'OK', statusKey: 'present' as const, name: 'GitHub CLI', timestamp: 1 },
+      { app: 'Inkscape.Inkscape', action: 'OK', statusKey: 'present' as const, name: 'Inkscape', timestamp: 2 },
+      { app: 'lightroom-classic', action: 'Skipped', statusKey: 'skipped' as const, name: 'Adobe Lightroom Classic', timestamp: 3, driver: 'manual' },
+      { app: 'claude-code', action: 'Skipped', statusKey: 'skipped' as const, name: 'Claude Code', timestamp: 4, driver: 'manual' },
+    ],
+    configModuleMap: {
+      'GitHub.cli': 'apps.github-cli',
+      'lightroom-classic': 'apps.lightroom-classic',
+      'claude-code': 'apps.claude-code',
+    } as Record<string, string>,
+  };
+}
+
 describe('SetupFlow — Config-only (manual) app distinction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('keeps the results app counters consistent when config-only settings are skipped', async () => {
+    // Regression: the results screen carried three different adjustments at
+    // once — the app total subtracted every config-only app (including skipped
+    // ones absent from the sum), the status chips subtracted none, and the
+    // headline subtracted only the present ones. A real run showed
+    // "94 apps", "102 present" and "95 already present" side by side.
+    const onPreview = vi.fn().mockResolvedValue(makePreviewWithManualApps());
+    const onApply = vi.fn().mockResolvedValue(makeApplyWithSkippedManualApps());
+    renderWithProviders(
+      <SetupFlow {...baseProps} onPreview={onPreview} onApply={onApply} />,
+    );
+
+    await userEvent.click(screen.getByText('test-profile'));
+    const applyButton = await screen.findByTestId('setup-flow-apply');
+    await userEvent.click(applyButton);
+    await waitFor(() => {
+      expect(screen.getByText('Setup complete')).toBeInTheDocument();
+    });
+
+    // Two winget apps, both present. The two skipped config-only entries belong
+    // to the "Settings only" section and must not move any app counter.
+    expect(screen.getByText('2 apps')).toBeInTheDocument();
+    expect(screen.getByText('2 present')).toBeInTheDocument();
+    expect(screen.getByText(/0 installed, 2 already present/)).toBeInTheDocument();
   });
 
   it('shows manual apps in a section that says app installation is not included', async () => {
