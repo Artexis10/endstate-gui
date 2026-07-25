@@ -1166,7 +1166,7 @@ export function SetupFlow({
                           dimmed={activeFilters.size > 0 && !activeFilters.has('apps_only')}
                           className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                         >
-                          {previewAppsOnlyCount} apps only
+                          {previewAppsOnlyCount} without settings
                         </FilterChip>
                       )}
                     </div>
@@ -1668,7 +1668,7 @@ export function SetupFlow({
                           dimmed={activeFilters.size > 0 && !activeFilters.has('apps_only')}
                           className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                         >
-                          {applyAppsOnlyCount} apps only
+                          {applyAppsOnlyCount} without settings
                         </FilterChip>
                       )}
                     </div>
