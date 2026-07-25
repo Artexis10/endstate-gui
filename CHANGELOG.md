@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.8.1](https://github.com/Artexis10/endstate-gui/compare/gui-v3.8.0...gui-v3.8.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* **setup:** stop the live counter running ahead, and stop calling a choice a skip ([#209](https://github.com/Artexis10/endstate-gui/issues/209)) ([f56cf2a](https://github.com/Artexis10/endstate-gui/commit/f56cf2ae917ef7b54fb2c4d9ab38dcdb85664097))
+* stop persisting a selected profile ([#207](https://github.com/Artexis10/endstate-gui/issues/207)) ([5452c46](https://github.com/Artexis10/endstate-gui/commit/5452c46a9ed863f6bc45ad850ac5a6a75342fc01))
+
 ## [3.8.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.7.3...gui-v3.8.0) (2026-07-25)
 
 
