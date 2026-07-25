@@ -35,6 +35,7 @@ import type { EngineExecResult } from '@/lib/engine-exec';
 import type { ConfigProgressEvent } from '@/lib/streaming-events';
 import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
 import { ConfigModuleSelector } from '@/components/app/overview/components/config-module-selector';
+import { isConfigOnlyApp } from '@/lib/app-event-kind';
 import { ConfigResolutionList } from './config-resolution-list';
 import { ConfigMigrationProgress } from './config-migration-progress';
 import { EngineEnvelopeError } from '@/lib/engine-envelope-error';
@@ -57,10 +58,6 @@ type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
 
 /** Normalize a string for fuzzy matching: lowercase, + → plus, strip non-alphanumeric */
-/** Config-only apps are synthesized from config modules with driver "manual". */
-function isConfigOnlyApp(event: AppEvent): boolean {
-  return event.driver === 'manual';
-}
 
 interface PreviewResult {
   success?: boolean;
@@ -1710,19 +1707,25 @@ export function SetupFlow({
                             const wasSelected = restoreIntent === 'apps-and-settings' &&
                               selectedModules.length > 0 &&
                               (selectedModules.includes(shortId ?? '') || selectedModules.includes(moduleId ?? ''));
-                            // If not selected, show as skipped regardless of engine status
+                            // Settings the user chose not to restore are not a
+                            // problem, so they must not borrow the warning
+                            // vocabulary. An orange SKIPPED beside every setting
+                            // reads as a run that half-failed when the user
+                            // simply picked "Install apps only". A genuine
+                            // engine skip — selected, then skipped — keeps its
+                            // warning styling below.
                             const cfgStatusKey: StatusKey = wasSelected ? (event.statusKey || 'present') : 'skipped';
                             const cfgLabel = wasSelected
                               ? getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason }).shortLabel
-                              : 'SKIPPED';
+                              : 'EXCLUDED';
                             const cfgColor = wasSelected
                               ? getColorClasses(getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason }).color)
-                              : getColorClasses('warn');
+                              : { text: 'text-muted-foreground' };
                             return (
                               <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
                                 <span className={`w-16 flex-shrink-0 text-right font-medium ${cfgColor.text}`}>{cfgLabel}</span>
                                 <span className="w-4 flex-shrink-0 flex justify-center">
-                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : wasSelected ? getColorClasses('success').text : getColorClasses('warn').text}`} />
+                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : wasSelected ? getColorClasses('success').text : 'text-muted-foreground'}`} />
                                 </span>
                                 <span className={`truncate ${!wasSelected ? 'text-muted-foreground' : ''}`}>
                                   {event.name || formatAppIdentity(event.app)}
