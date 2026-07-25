@@ -149,9 +149,26 @@ export function ConfigResolutionList(
             data-resolution={item.resolution}
           >
             <div className="space-y-1">
-              <p className="text-sm font-medium">{item.label}</p>
+              {/*
+                Lead with the message, not the label. Groups are keyed on
+                (resolution, label, message), so several groups routinely share
+                one label — every card then read "Compatibility unknown" while
+                the only thing telling them apart (predates checks / already
+                applied / target collision / staging failed) sat at the bottom
+                in muted text. The reason is the headline; the compatibility
+                state is context for it.
+              */}
+              <p className="text-sm font-medium">{item.message || item.label}</p>
               <p className="text-xs text-muted-foreground">
-                {`${memberCount} ${memberCount === 1 ? 'setting' : 'settings'}`}
+                {item.message && (
+                  <>
+                    <span>{item.label}</span>
+                    <span aria-hidden="true"> · </span>
+                  </>
+                )}
+                <span>
+                  {`${memberCount} ${memberCount === 1 ? 'setting' : 'settings'}`}
+                </span>
               </p>
               <div className="space-y-1">
                 {item.members.map((member) => (
@@ -170,7 +187,6 @@ export function ConfigResolutionList(
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">{item.message}</p>
               {distinctRemediations(item.members).map((remediation) => (
                 <p key={remediation} className="text-xs text-muted-foreground">
                   {remediation}

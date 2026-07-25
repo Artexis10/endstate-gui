@@ -1156,12 +1156,30 @@ function AppContent() {
               setSelectedProfilePath(firstProfile.path);
               updateSettings({ selectedProfileName: firstProfile.name });
             };
-            setProfileMissingState({
-              previousName: previousLabel,
-              reason: 'deleted',
-              firstAvailableLabel: firstProfile.displayName || firstProfile.name,
-              onAccept: accept,
-            });
+            // The user just deleted this profile from the profile list, so the
+            // "why did my selection change?" explanation the modal exists for is
+            // already obvious, and its "Pick another profile" action only
+            // reopens the list they are already looking at. Switch and say so.
+            //
+            // The exception is a profile with a cloud backup: there the modal
+            // offers real recovery ("Restore from cloud"), which is worth an
+            // interruption right after a delete. The app-start 'not-found' path
+            // keeps the modal too — a selection vanishing with no context is
+            // exactly what it was built for.
+            if (cloudBackupIndex.index.has(previousLabel)) {
+              setProfileMissingState({
+                previousName: previousLabel,
+                reason: 'deleted',
+                firstAvailableLabel: firstProfile.displayName || firstProfile.name,
+                onAccept: accept,
+              });
+            } else {
+              accept();
+              showToast(
+                `Switched to ${firstProfile.displayName || firstProfile.name}.`,
+                'info',
+              );
+            }
           } else {
             // No profiles remain — clear selection immediately (there's no
             // fallback to switch to) and surface a calmer info toast since
