@@ -1595,7 +1595,7 @@ pub fn validate_profile(path: &str) -> Result<ValidationResult, String> {
 mod profile_validation_tests {
     use super::{
         extract_zip_profile, import_profile, import_profile_text, import_zip_from_base64,
-        list_manifest_files, validate_profile_object,
+        list_manifest_files, validate_config_payload_root, validate_profile_object,
     };
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     use serde_json::json;
