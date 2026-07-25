@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.7.3](https://github.com/Artexis10/endstate-gui/compare/gui-v3.7.2...gui-v3.7.3) (2026-07-25)
+
+
+### Bug Fixes
+
+* **import:** accept the readable payload roots engine 2.27.5 writes ([#200](https://github.com/Artexis10/endstate-gui/issues/200)) ([c87ed95](https://github.com/Artexis10/endstate-gui/commit/c87ed950ea8307a2e011be09a52a8c0add0411e9))
+* **import:** show the real reason instead of "Please try again" ([#201](https://github.com/Artexis10/endstate-gui/issues/201)) ([12cab6e](https://github.com/Artexis10/endstate-gui/commit/12cab6eecf6dc69e4193d26c84d92f42d7091e34))
+* **setup:** lead compatibility cards with their reason, and stop re-explaining a delete ([#202](https://github.com/Artexis10/endstate-gui/issues/202)) ([06e0362](https://github.com/Artexis10/endstate-gui/commit/06e0362bb5356bc8b1812fa89f88777bda9acb31))
+
 ## [3.7.2](https://github.com/Artexis10/endstate-gui/compare/gui-v3.7.1...gui-v3.7.2) (2026-07-24)
 
 
