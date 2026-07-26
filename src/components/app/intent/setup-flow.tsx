@@ -38,6 +38,7 @@ import { ConfigModuleSelector } from '@/components/app/overview/components/confi
 import { isConfigOnlyApp } from '@/lib/app-event-kind';
 import { ConfigResolutionList } from './config-resolution-list';
 import { ConfigMigrationProgress } from './config-migration-progress';
+import { ProfileContentsModal } from './profile-contents-modal';
 import { EngineEnvelopeError } from '@/lib/engine-envelope-error';
 import {
   type AppEvent,
@@ -318,6 +319,9 @@ export function SetupFlow({
   onPushProfileToCloud,
 }: SetupFlowProps) {
   const [refreshing, setRefreshing] = useState(false);
+  // Profile whose "What's inside" summary is open. Inspection is read-only and
+  // independent of selection — looking inside a bundle must not start a run.
+  const [inspectedProfile, setInspectedProfile] = useState<DiscoveredProfile | null>(null);
   const [phase, setPhase] = useState<SetupPhase>('browse');
   const [selectedProfile, setSelectedProfile] = useState<DiscoveredProfile | null>(null);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
@@ -859,32 +863,52 @@ export function SetupFlow({
                                 />
                               </p>
                             )}
-                            {!cloudEntry &&
-                              hostedBackupSignedIn &&
-                              hostedBackupSubscriptionStatus === 'active' &&
-                              onPushProfileToCloud && (
-                                <Button
-                                  type="button"
-                                  variant="link"
-                                  size="inline"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    // First host labels the cloud backup with what
-                                    // this row shows — the user-set displayName
-                                    // when present, the file name otherwise.
-                                    onPushProfileToCloud(
-                                      profile.path,
-                                      profile.displayName || profile.name,
-                                    );
-                                  }}
-                                  disabled={interactionBlocked}
-                                  className="mt-1 gap-1 text-xs"
-                                  data-testid={`profile-card-${profile.name}-push-to-cloud`}
-                                >
-                                  <Cloud className="h-3 w-3" aria-hidden="true" />
-                                  Back up to cloud
-                                </Button>
-                              )}
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3">
+                              {/* Inspection sits with the card's other inline
+                                  links rather than the action cluster, so the
+                                  Delete/Select pair stays a two-button decision. */}
+                              <Button
+                                type="button"
+                                variant="link"
+                                size="inline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setInspectedProfile(profile);
+                                }}
+                                aria-label={`What's inside ${profile.displayName || profile.name}`}
+                                className="gap-1 text-xs"
+                                data-testid={`profile-card-${profile.name}-whats-inside`}
+                              >
+                                <Info className="h-3 w-3" aria-hidden="true" />
+                                What&apos;s inside
+                              </Button>
+                              {!cloudEntry &&
+                                hostedBackupSignedIn &&
+                                hostedBackupSubscriptionStatus === 'active' &&
+                                onPushProfileToCloud && (
+                                  <Button
+                                    type="button"
+                                    variant="link"
+                                    size="inline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // First host labels the cloud backup with what
+                                      // this row shows — the user-set displayName
+                                      // when present, the file name otherwise.
+                                      onPushProfileToCloud(
+                                        profile.path,
+                                        profile.displayName || profile.name,
+                                      );
+                                    }}
+                                    disabled={interactionBlocked}
+                                    className="gap-1 text-xs"
+                                    data-testid={`profile-card-${profile.name}-push-to-cloud`}
+                                  >
+                                    <Cloud className="h-3 w-3" aria-hidden="true" />
+                                    Back up to cloud
+                                  </Button>
+                                )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Button
@@ -2048,6 +2072,17 @@ export function SetupFlow({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ProfileContentsModal
+        open={inspectedProfile !== null}
+        onOpenChange={(open) => {
+          if (!open) setInspectedProfile(null);
+        }}
+        profilePath={inspectedProfile?.path ?? ''}
+        profileDisplayName={
+          inspectedProfile ? inspectedProfile.displayName || inspectedProfile.name : ''
+        }
+      />
     </motion.div>
   );
 }
