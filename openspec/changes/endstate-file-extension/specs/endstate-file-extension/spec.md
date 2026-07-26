@@ -86,3 +86,50 @@ The association SHALL NOT claim `.zip`, which belongs to the shell's archive han
 
 - **WHEN** Endstate is uninstalled
 - **THEN** the `.endstate` association it registered is removed
+
+### Requirement: Opening a bundle imports it
+
+A bundle opened from outside the app SHALL be imported exactly as if it had been dropped onto the
+app: the same acceptance rule, the same import transport, the same navigation to the Set up flow,
+and the same reporting when it fails. An association that launched the app and then ignored the
+opened file would leave the user unable to tell whether anything happened.
+
+This SHALL hold whether or not Endstate was already running. When it was, the existing window SHALL
+be focused rather than a second instance started.
+
+The decision of which launch arguments name an importable profile SHALL use the shared extension
+predicate, and SHALL treat everything else as nothing to do — not as an error.
+
+#### Scenario: Opening a bundle with the app closed imports it
+
+- **WHEN** Endstate is launched with a `.endstate` path as an argument
+- **THEN** that bundle is imported through the path-based extract command
+- **AND** the Set up flow is shown, as it is for a drop
+
+#### Scenario: Opening a bundle with the app already running imports it
+
+- **WHEN** a bundle is opened while Endstate is running
+- **THEN** the existing window is focused and raised
+- **AND** the bundle is imported, without starting a second instance
+
+#### Scenario: A bare manifest opens like a bundle
+
+- **WHEN** Endstate is launched with a `.jsonc` manifest path as an argument
+- **THEN** it is imported through the manifest import command
+
+#### Scenario: Non-file arguments are ignored silently
+
+- **WHEN** Endstate is launched with no arguments, or with only options such as the updater's
+  `--updated`, or with an option whose value ends in a profile extension
+- **THEN** no import is attempted
+- **AND** no error is reported
+
+#### Scenario: Opening a bundle mid-run is refused, not queued
+
+- **WHEN** a bundle is opened while a run or another import is in progress
+- **THEN** the import is refused with the same busy message a drop would produce
+
+#### Scenario: Launch arguments are consumed once
+
+- **WHEN** the webview reloads after a bundle was opened at launch
+- **THEN** the bundle is not imported a second time

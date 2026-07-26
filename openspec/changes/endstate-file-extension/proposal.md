@@ -36,6 +36,11 @@ inspectable with tools the user already has. No obfuscation is added.
 - **Windows file association** via `bundle.fileAssociations` in `tauri.conf.json`. The vendored
   NSIS template already drives `APP_ASSOCIATE` / `APP_UNASSOCIATE` from that config, so registering
   and cleanly unregistering the type needs no installer edit.
+- **Double-clicking a bundle imports it.** The association is only worth having if opening a file
+  does something: an association that launches the app and then ignores the file the user opened is
+  worse than no association, because the user has no way to tell whether it worked. The path
+  arrives in `argv` — on a cold start from the process arguments, on a warm start from the
+  single-instance callback — and both routes end in the same import the drag-drop handler runs.
 
 `schedule-bridge`'s `isZipPath` is renamed to `isBundlePath` and re-exported from the shared
 module. It is internal to the app, not a published API.
@@ -58,6 +63,11 @@ module. It is internal to the app, not a published API.
 - `src/App.tsx` — browse filter, save filter, default save name, cache filename, schedule guard.
 - `src-tauri/engine-core/src/cmd.rs` — `BUNDLE_EXTENSIONS` / `MANIFEST_EXTENSIONS`, dialog filter.
 - `src-tauri/tauri.conf.json` — `bundle.fileAssociations`.
+- `src/lib/opened-profile-files.ts` (new) — the pure `argv` → import decision, plus its tests.
+- `src/lib/native-profile-drop.ts` — the drop handler's import tail becomes the shared
+  `beginProfileImport`, so the opened-file route cannot drift from it.
+- `src-tauri/src/lib.rs` — parks launch `argv`, exposes `take_opened_file_args`, and emits
+  `endstate://opened-files` from the single-instance callback.
 - **Producer (separate `endstate` change):** the engine writes `.endstate` by default and accepts
   it wherever it accepts `.zip`.
 - Backward-compatible: an older bundled engine that still writes `.zip` is unaffected — the GUI
@@ -65,8 +75,10 @@ module. It is internal to the app, not a published API.
 
 ## Non-goals
 
-- **Auto-importing the double-clicked file.** The association makes Windows launch Endstate with
-  the path in `argv`; the app does not yet read `argv` to import it. Opening the app is what this
-  change delivers.
+- **Associating `.endstate` on macOS or Linux.** `fileAssociations` is declared for the Windows
+  installer only, which is the shipped desktop target.
+- **A distinct "opened file" experience.** An opened bundle deliberately reuses the drop flow
+  wholesale — same Set up navigation, same busy refusal, same error reporting — rather than growing
+  a second import UX to keep in sync.
 - **Changing `outputFormat`.** It stays `"zip"`: it names the container, which did not change, and
   it is a published cross-repo contract field.

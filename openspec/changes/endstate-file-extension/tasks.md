@@ -42,9 +42,31 @@
 - [x] 5.3 Confirm the config deserializes (`tauri-build` parses it during `cargo check`; the
       config struct is `deny_unknown_fields`, so a wrong key would fail the build)
 
-## 6. Verification
+## 6. Opening a bundle actually imports it
 
-- [x] 6.1 `npx tsc --noEmit` clean
-- [x] 6.2 `npx vitest run` green
-- [x] 6.3 `cargo check --workspace --all-targets` clean
-- [x] 6.4 `openspec validate --all --strict` green
+- [x] 6.1 `native-profile-drop.ts`: the drop handler's import tail becomes the exported
+      `beginProfileImport` (busy check, lease, Set up navigation, lease release), so every entry
+      point shares one funnel
+- [x] 6.2 `src/lib/opened-profile-files.ts`: pure `selectProfilePathsFromArgv` built on
+      `isSupportedProfilePath`, screening out option arguments first; plus
+      `createOpenedFilesHandler`
+- [x] 6.3 `lib.rs`: park launch `argv` in `PendingOpenArgs`, drain it once via
+      `take_opened_file_args`, and emit `endstate://opened-files` from the single-instance callback
+      (which now uses its `arguments` parameter instead of discarding it)
+- [x] 6.4 `App.tsx`: one shared `profileImportDependencies` for drop and open; effect attaches the
+      warm-start listener, then drains the cold-start arguments
+- [x] 6.5 Tests: bundle imports, `.jsonc` imports, `--updated` does not, `--config=x.json` does not,
+      empty argv does not, busy refuses, lease released on failure, and an `.exe` in `argv[0]` is
+      never importable even if the Rust strip were wrong
+- [x] 6.6 No Rust unit test for `launch_file_args`: any `#[cfg(test)]` test referencing
+      `endstate-gui` crate code makes the test binary retain the tauri/wry DLL imports, which fail
+      to load on the windows-gnu host (`STATUS_ENTRYPOINT_NOT_FOUND`). That is why the crate has no
+      tests and CI runs `cargo test -p endstate-engine-core` only. The `argv[0]` strip is covered
+      indirectly by 6.5 instead.
+
+## 7. Verification
+
+- [x] 7.1 `npx tsc --noEmit` clean
+- [x] 7.2 `npx vitest run` green
+- [x] 7.3 `cargo check --workspace --all-targets` clean
+- [x] 7.4 `openspec validate --all --strict` green

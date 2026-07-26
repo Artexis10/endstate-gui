@@ -21,6 +21,7 @@ import { isConfigOnlyApp } from './lib/app-event-kind';
 import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-discovery';
 import { findImportedProfile } from './lib/profile-import';
 import { createNativeProfileDropHandler, createProfileImportCoordinator } from './lib/native-profile-drop';
+import { createOpenedFilesHandler, OPENED_FILES_EVENT } from './lib/opened-profile-files';
 import { friendlyImportError } from './lib/import-errors';
 import { importProfileFromFile, importProfileFromPath } from './lib/dropped-profile-import';
 import { StreamEvent } from './streaming-runner';
@@ -48,7 +49,7 @@ import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from '.
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
 import { IntentLanding, NativeProfileDropFeedback, SaveFlow, SetupFlow } from './components/app/intent';
-import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
+import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke, listen } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
 import { shouldDeleteCaptureArtifact } from './lib/capture-artifact-lifecycle';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
@@ -885,7 +886,9 @@ function AppContent() {
   // Tauri drag-drop: listen for native file drops and import to profiles.
   // Use refs to avoid stale closures and ensure proper async cleanup.
   const dragDropUnlistenRef = useRef<(() => void) | undefined>();
-  const nativeProfileDropHandler = createNativeProfileDropHandler({
+  // One set of dependencies for every way a profile path can reach the app, so
+  // a dropped bundle and a double-clicked one behave identically.
+  const profileImportDependencies = {
     isRunning: () => isRunningRef.current || isProfileImportingRef.current,
     coordinator: profileImportCoordinatorRef.current,
     openSetup: () => {
@@ -894,7 +897,7 @@ function AppContent() {
       setCurrentPage('setup');
       setActiveFlowPage('setup');
     },
-    importPaths: async (paths) => {
+    importPaths: async (paths: string[]) => {
       setIsProfileImporting(true);
       try {
         await importFilePaths(paths);
@@ -903,6 +906,9 @@ function AppContent() {
       }
     },
     onBlocked: () => showToast(PROFILE_IMPORT_BUSY_MESSAGE, 'error'),
+  };
+  const nativeProfileDropHandler = createNativeProfileDropHandler({
+    ...profileImportDependencies,
     setDragAccepted: setNativeDragAccepted,
   });
   const nativeProfileDropHandlerRef = useRef(nativeProfileDropHandler);
@@ -935,6 +941,49 @@ function AppContent() {
       nativeProfileDropHandlerRef.current.dispose();
       dragDropUnlistenRef.current?.();
       dragDropUnlistenRef.current = undefined;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Windows file association: a bundle double-clicked in Explorer arrives as a
+  // launch argument, not a drop. Two routes, both ending in the same import as
+  // a drop (see ./lib/opened-profile-files):
+  //   cold start — Rust parked argv before this webview existed; drain it once.
+  //   warm start — the single-instance plugin focused us and emitted the argv.
+  const openedFilesHandler = createOpenedFilesHandler(profileImportDependencies);
+  const openedFilesHandlerRef = useRef(openedFilesHandler);
+  openedFilesHandlerRef.current = openedFilesHandler;
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    (async () => {
+      try {
+        unlisten = await listen<string[]>(OPENED_FILES_EVENT, (event) => {
+          openedFilesHandlerRef.current(event.payload);
+        });
+        if (cancelled) {
+          unlisten();
+          unlisten = undefined;
+          return;
+        }
+
+        // Drain after the listener is attached, so a bundle opened during
+        // startup cannot slip between the two.
+        const launchArgs = await invoke<string[]>('take_opened_file_args');
+        if (cancelled) return;
+        openedFilesHandlerRef.current(launchArgs);
+      } catch {
+        // Not in Tauri runtime, or an older backend without the command.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+      unlisten = undefined;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

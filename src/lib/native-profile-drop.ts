@@ -19,13 +19,54 @@ export interface ProfileImportCoordinator {
   tryAcquire: () => ProfileImportLease | null;
 }
 
-export interface NativeProfileDropDependencies {
+/**
+ * What it takes to turn a list of accepted profile paths into an import,
+ * independent of how those paths arrived.
+ *
+ * Shared with the file-association path (`./opened-profile-files`) so a bundle
+ * that was dropped and a bundle that was double-clicked behave identically.
+ */
+export interface ProfileImportDependencies {
   isRunning: () => boolean;
   coordinator: ProfileImportCoordinator;
   openSetup: () => void;
   importPaths: (paths: string[]) => Promise<void>;
   onBlocked: () => void;
+}
+
+export interface NativeProfileDropDependencies extends ProfileImportDependencies {
   setDragAccepted?: (accepted: boolean) => void;
+}
+
+/**
+ * Start importing already-accepted profile paths.
+ *
+ * Refuses while a run or another import holds the app, takes the single import
+ * lease, opens the Set up flow, and releases the lease however the import ends.
+ * The one funnel every entry point goes through.
+ */
+export function beginProfileImport(
+  dependencies: ProfileImportDependencies,
+  paths: string[],
+): void {
+  if (paths.length === 0) return;
+
+  if (dependencies.isRunning()) {
+    dependencies.onBlocked();
+    return;
+  }
+
+  const lease = dependencies.coordinator.tryAcquire();
+  if (!lease) {
+    dependencies.onBlocked();
+    return;
+  }
+
+  dependencies.openSetup();
+  void dependencies.importPaths(paths).then(
+    () => lease.release(),
+    () => lease.release(),
+  );
 }
 
 export interface NativeProfileDropHandler {
@@ -87,24 +128,7 @@ export function createNativeProfileDropHandler(
 
     if (eventType !== 'drop') return;
     setAccepted(false);
-    if (acceptedPaths.length === 0) return;
-
-    if (dependencies.isRunning()) {
-      dependencies.onBlocked();
-      return;
-    }
-
-    const lease = dependencies.coordinator.tryAcquire();
-    if (!lease) {
-      dependencies.onBlocked();
-      return;
-    }
-
-    dependencies.openSetup();
-    void dependencies.importPaths(acceptedPaths).then(
-      () => lease.release(),
-      () => lease.release(),
-    );
+    beginProfileImport(dependencies, acceptedPaths);
   }) as NativeProfileDropHandler;
 
   handler.dispose = () => setAccepted(false);

@@ -892,6 +892,46 @@ async fn run_endstate_streaming(
     Ok(result)
 }
 
+/// Event carrying the file arguments of a *warm* launch to the frontend.
+///
+/// Emitted from the single-instance callback when the user opens a bundle while
+/// Endstate is already running. Cold starts cannot use an event — the webview
+/// does not exist yet — so they go through [`PendingOpenArgs`] instead.
+const OPENED_FILES_EVENT: &str = "endstate://opened-files";
+
+/// Command-line arguments captured at process start, waiting for the frontend.
+///
+/// When Windows opens a `.endstate` bundle via the file association it launches
+/// us with the path as `argv[1]` (see `windows/installer.nsi`, which registers
+/// `endstate.exe "%1"`). At that moment there is nothing listening, so the
+/// arguments are parked here and the frontend drains them once on mount via
+/// [`take_opened_file_args`].
+///
+/// Raw argv is handed over verbatim: which arguments actually name an importable
+/// profile is decided by the single shared predicate in
+/// `src/lib/profile-extensions.ts`, so that rule is never duplicated here.
+#[derive(Default)]
+struct PendingOpenArgs(std::sync::Mutex<Vec<String>>);
+
+/// Drain the launch arguments captured before the webview existed.
+///
+/// Returns them at most once: a reload of the webview must not re-import a
+/// bundle the user already opened.
+#[tauri::command]
+fn take_opened_file_args(pending: State<'_, PendingOpenArgs>) -> Vec<String> {
+    match pending.0.lock() {
+        Ok(mut args) => std::mem::take(&mut *args),
+        // A poisoned mutex only means a previous holder panicked; there is
+        // nothing to import in that case and failing the launch would be worse.
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Strip `argv[0]` (our own executable path) from a launch argument vector.
+fn launch_file_args<I: IntoIterator<Item = String>>(arguments: I) -> Vec<String> {
+    arguments.into_iter().skip(1).collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -899,11 +939,19 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(
-            |app, _arguments, _working_directory| {
+            |app, arguments, _working_directory| {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.unminimize();
                     let _ = window.set_focus();
+                }
+
+                // Warm start: the running instance already has a listener, so
+                // hand the arguments straight to it. Emitting unconditionally
+                // is safe — the frontend ignores argv that names no profile.
+                let opened = launch_file_args(arguments);
+                if !opened.is_empty() {
+                    let _ = app.emit(OPENED_FILES_EVENT, opened);
                 }
             },
         ));
@@ -917,6 +965,11 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(create_run_state())
         .manage(EventBroadcaster::new())
+        // Cold start: park argv now, before the window exists, so a bundle
+        // double-clicked from Explorer survives until the frontend can drain it.
+        .manage(PendingOpenArgs(std::sync::Mutex::new(launch_file_args(
+            std::env::args(),
+        ))))
         .setup(|app| {
             #[cfg(all(not(debug_assertions), any(windows, target_os = "linux")))]
             {
@@ -972,8 +1025,10 @@ pub fn run() {
             rename_file,
             copy_file,
             cleanup_capture_cache,
-            validate_profile
+            validate_profile,
+            take_opened_file_args
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
