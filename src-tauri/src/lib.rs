@@ -370,52 +370,6 @@ fn extract_zip_profile(zip_path: String, profiles_dir: String) -> Result<String,
     endstate_engine_core::cmd::extract_zip_profile(&zip_path, &profiles_dir)
 }
 
-/// Side-write the embedded `manifest.jsonc` from a capture bundle zip.
-///
-/// Capture zips always contain `manifest.jsonc` at the archive root (see the
-/// engine's capture-bundle-zip spec). The scheduled drift check
-/// (`schedule run` → verify) parses raw JSONC only, so a `.zip` path can
-/// never be the schedule baseline. This extracts just the manifest (no full
-/// unpack, no leftover profile folders) so the GUI can record a
-/// scheduler-compatible baseline path next to the saved zip.
-///
-/// # Arguments
-/// * `zip_path` - Path to the capture bundle zip
-/// * `dest_path` - Path to write the extracted manifest.jsonc to
-///
-/// # Returns
-/// * `Ok(())` - Manifest written to `dest_path`
-/// * `Err(String)` - Zip missing, unreadable, or has no manifest.jsonc
-#[tauri::command]
-fn extract_zip_manifest(zip_path: String, dest_path: String) -> Result<(), String> {
-    use std::io::Read;
-    use std::path::Path;
-
-    let source = Path::new(&zip_path);
-    if !source.exists() || !source.is_file() {
-        return Err("Zip file does not exist".to_string());
-    }
-
-    let file = fs::File::open(source)
-        .map_err(|e| format!("Failed to open zip file: {}", e))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("Failed to read zip archive: {}", e))?;
-
-    let mut entry = archive
-        .by_name("manifest.jsonc")
-        .map_err(|_| "Zip does not contain manifest.jsonc".to_string())?;
-
-    let mut buf = Vec::new();
-    entry
-        .read_to_end(&mut buf)
-        .map_err(|e| format!("Failed to read manifest.jsonc: {}", e))?;
-
-    fs::write(Path::new(&dest_path), &buf)
-        .map_err(|e| format!("Failed to write {}: {}", dest_path, e))?;
-
-    Ok(())
-}
-
 /// Decode and import a browser-provided ZIP through the shared core importer.
 #[tauri::command]
 fn import_zip_from_base64(data: String, file_name: String, profiles_dir: String) -> Result<String, String> {
@@ -1005,7 +959,6 @@ pub fn run() {
             import_profile,
             import_profile_text,
             extract_zip_profile,
-            extract_zip_manifest,
             import_zip_from_base64,
             show_file_dialog,
             open_folder,
