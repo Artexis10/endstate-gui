@@ -1,17 +1,17 @@
 /**
  * DropZone - File drop target for importing profiles (ADR-001)
  *
- * Accepts zip bundles and bare .jsonc manifest files.
- * Renders as a prominent drop area within the Set up flow.
+ * Accepts .endstate capture bundles (and the legacy .zip) plus bare .jsonc
+ * manifest files. Renders as a prominent drop area within the Set up flow.
  */
 
 import { useState, useCallback, useEffect, useRef, type DragEvent } from 'react';
 import { motion } from 'framer-motion';
 import { Upload } from 'lucide-react';
 import { prefersReducedMotion } from '@/lib/motion';
+import { PROFILE_EXTENSIONS, isSupportedProfilePath } from '@/lib/profile-extensions';
 
-const ACCEPTED_EXTENSIONS = ['.zip', '.json', '.jsonc', '.json5'];
-const ACCEPTED_INPUT = ACCEPTED_EXTENSIONS.join(',');
+const ACCEPTED_INPUT = PROFILE_EXTENSIONS.join(',');
 
 interface DropZoneProps {
   onFileDrop: (files: File[]) => void;
@@ -58,10 +58,7 @@ export function DropZone({
     if (disabled) setBrowserDragAccepted(false);
   }, [disabled]);
 
-  const isAcceptedFile = useCallback((file: File) => {
-    const name = file.name.toLowerCase();
-    return ACCEPTED_EXTENSIONS.some(ext => name.endsWith(ext));
-  }, []);
+  const isAcceptedFile = useCallback((file: File) => isSupportedProfilePath(file.name), []);
 
   const hasAcceptedBrowserFile = useCallback((files?: FileList) => {
     if (!files) return true;
@@ -159,7 +156,7 @@ export function DropZone({
           {isDragOver ? 'Drop to import' : 'Click to browse or drop a file'}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Accepts .zip bundles or .jsonc manifest files
+          Accepts .endstate bundles (.zip also works) or .jsonc manifest files
         </p>
       </div>
 

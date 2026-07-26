@@ -53,6 +53,36 @@ describe('importProfileFromPath (native path → no base64/IPC blob)', () => {
     );
   });
 
+  it('routes a dropped .endstate PATH to extract_zip_profile, exactly like a .zip', async () => {
+    const invoke = vi.fn(async () => 'C:\profiles\manifest.jsonc');
+
+    await importProfileFromPath(
+      'C:\Users\me\Downloads\big-capture.endstate',
+      'C:\profiles',
+      invoke,
+    );
+
+    expect(invoke).toHaveBeenCalledWith('extract_zip_profile', {
+      zipPath: 'C:\Users\me\Downloads\big-capture.endstate',
+      profilesDir: 'C:\profiles',
+    });
+    expect(invoke).not.toHaveBeenCalledWith(
+      'import_zip_from_base64',
+      expect.anything(),
+    );
+  });
+
+  it('matches the bundle extension case-insensitively', async () => {
+    const invoke = vi.fn(async () => 'C:\profiles\manifest.jsonc');
+
+    await importProfileFromPath('C:\Downloads\Capture.ENDSTATE', 'C:\profiles', invoke);
+
+    expect(invoke).toHaveBeenCalledWith('extract_zip_profile', {
+      zipPath: 'C:\Downloads\Capture.ENDSTATE',
+      profilesDir: 'C:\profiles',
+    });
+  });
+
   it('routes a non-zip PATH to import_profile', async () => {
     const invoke = vi.fn(async () => 'C:\\profiles\\p.jsonc');
 
@@ -88,6 +118,23 @@ describe('importProfileFromFile (browser/dev-bridge fallback → base64)', () =>
       'extract_zip_profile',
       expect.anything(),
     );
+  });
+
+  it('routes a dropped .endstate File to import_zip_from_base64, exactly like a .zip', async () => {
+    const invoke = vi.fn(
+      async (_cmd: string, _args?: Record<string, unknown>) => 'C:\profiles\manifest.jsonc',
+    );
+    const file = makeFile([1, 2, 3, 4], 'capture.endstate');
+
+    await importProfileFromFile(file, 'C:\profiles', invoke);
+
+    const [cmd, args] = invoke.mock.calls[0];
+    expect(cmd).toBe('import_zip_from_base64');
+    expect(args).toMatchObject({
+      fileName: 'capture.endstate',
+      profilesDir: 'C:\profiles',
+    });
+    expect((args as unknown as { data: string }).data).toBe(btoa(''));
   });
 
   it('routes a manifest File to import_profile_text with its text content', async () => {

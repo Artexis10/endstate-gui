@@ -188,6 +188,18 @@ pub fn ensure_dir(path: &str) -> Result<(), String> {
 
 const IMPORT_STAGING_PREFIX: &str = ".endstate-import-staging-";
 
+/// Extensions that name a capture bundle, most preferred first, without the
+/// leading dot. `.endstate` is the first-class name; `.zip` is what capture
+/// wrote before it and stays accepted permanently — both are the same zip
+/// container with `manifest.jsonc` at the archive root.
+///
+/// The single Rust-side definition. Mirrors `manifest.BundleExtensions` in the
+/// engine and `BUNDLE_EXTENSIONS` in `src/lib/profile-extensions.ts`.
+const BUNDLE_EXTENSIONS: [&str; 2] = ["endstate", "zip"];
+
+/// Extensions that name a bare profile manifest, without the leading dot.
+const MANIFEST_EXTENSIONS: [&str; 3] = ["json", "jsonc", "json5"];
+
 struct StagingDirectory {
     path: PathBuf,
     active: bool,
@@ -597,13 +609,27 @@ pub fn import_zip_from_base64(
     import_zip_archive(archive, file_name, Path::new(profiles_dir))
 }
 
+/// The OpenFileDialog filter for picking a profile: capture bundles first, then
+/// bare manifests. Built from the shared extension lists so the picker can
+/// never offer a narrower set than the importer accepts.
+fn profile_dialog_filter() -> String {
+    let patterns: Vec<String> = BUNDLE_EXTENSIONS
+        .iter()
+        .chain(MANIFEST_EXTENSIONS.iter())
+        .map(|ext| format!("*.{}", ext))
+        .collect();
+    format!("Profile Files|{}", patterns.join(";"))
+}
+
 pub fn show_file_dialog() -> Result<Option<String>, String> {
+    // The filter is assembled from a fixed extension list, so it contains no
+    // quotes and needs no escaping inside the single-quoted PowerShell string.
+    let script = format!(
+        "Add-Type -AssemblyName System.Windows.Forms; $dialog = New-Object System.Windows.Forms.OpenFileDialog; $dialog.Filter = '{}'; $dialog.Title = 'Select Profile File'; if ($dialog.ShowDialog() -eq 'OK') {{ $dialog.FileName }} else {{ '' }}",
+        profile_dialog_filter()
+    );
     let output = Command::new("powershell")
-        .args(&[
-            "-NoProfile",
-            "-Command",
-            "Add-Type -AssemblyName System.Windows.Forms; $dialog = New-Object System.Windows.Forms.OpenFileDialog; $dialog.Filter = 'Profile Files|*.json;*.jsonc;*.json5'; $dialog.Title = 'Select Profile File'; if ($dialog.ShowDialog() -eq 'OK') { $dialog.FileName } else { '' }"
-        ])
+        .args(&["-NoProfile", "-Command", script.as_str()])
         .output()
         .map_err(|e| format!("Failed to show file dialog: {}", e))?;
     let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -630,7 +656,7 @@ pub fn list_manifest_files(directory: &str) -> Result<Vec<String>, String> {
                 .extension()
                 .map(|ext| {
                     let e = ext.to_string_lossy().to_lowercase();
-                    e == "json" || e == "jsonc" || e == "json5"
+                    MANIFEST_EXTENSIONS.contains(&e.as_str())
                 })
                 .unwrap_or(false)
     }

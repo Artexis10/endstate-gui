@@ -421,7 +421,7 @@ test.describe('capture artifact flow regression', () => {
     await page.getByTestId('save-flow-save-file').click();
     const download = await downloadPromise;
     const downloadedPath = await download.path();
-    expect(download.suggestedFilename()).toMatch(/\.zip$/);
+    expect(download.suggestedFilename()).toMatch(/\.endstate$/);
     expect(downloadedPath).not.toBeNull();
     const downloadedBytes = readFileSync(downloadedPath!);
     expect(downloadedBytes).toEqual(connectedJourneyBundle);

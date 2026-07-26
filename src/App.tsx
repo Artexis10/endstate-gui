@@ -21,6 +21,7 @@ import { isConfigOnlyApp } from './lib/app-event-kind';
 import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-discovery';
 import { findImportedProfile } from './lib/profile-import';
 import { createNativeProfileDropHandler, createProfileImportCoordinator } from './lib/native-profile-drop';
+import { createOpenedFilesHandler, OPENED_FILES_EVENT } from './lib/opened-profile-files';
 import { friendlyImportError } from './lib/import-errors';
 import { importProfileFromFile, importProfileFromPath } from './lib/dropped-profile-import';
 import { StreamEvent } from './streaming-runner';
@@ -48,7 +49,7 @@ import { loadLastRunForCommand, migrateLegacyLastRun, type LastRunData } from '.
 import { loadLifecycleState, recordLifecycleEvent, formatRelativeTime, type LifecycleState, type LifecycleEvent } from './lib/lifecycle-state';
 import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
 import { IntentLanding, NativeProfileDropFeedback, SaveFlow, SetupFlow } from './components/app/intent';
-import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke } from './lib/tauri-bridge';
+import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke, listen } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
 import { shouldDeleteCaptureArtifact } from './lib/capture-artifact-lifecycle';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
@@ -110,10 +111,15 @@ import {
   engineSupportsSchedule,
   engineSupportsScheduleAutoPush,
   driftStateFromStatus,
-  isZipPath,
+  isBundlePath,
   resolveScheduleBaselinePath,
   ScheduleCommandError,
 } from './lib/schedule-bridge';
+import {
+  BUNDLE_DIALOG_EXTENSIONS,
+  DEFAULT_BUNDLE_EXTENSION,
+  PROFILE_DIALOG_EXTENSIONS,
+} from './lib/profile-extensions';
 import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, backupLogout, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
@@ -826,7 +832,7 @@ function AppContent() {
         multiple: true,
         filters: [{
           name: 'Profile files',
-          extensions: ['zip', 'json', 'jsonc', 'json5'],
+          extensions: PROFILE_DIALOG_EXTENSIONS,
         }],
       });
       if (!selected) return;
@@ -880,7 +886,9 @@ function AppContent() {
   // Tauri drag-drop: listen for native file drops and import to profiles.
   // Use refs to avoid stale closures and ensure proper async cleanup.
   const dragDropUnlistenRef = useRef<(() => void) | undefined>();
-  const nativeProfileDropHandler = createNativeProfileDropHandler({
+  // One set of dependencies for every way a profile path can reach the app, so
+  // a dropped bundle and a double-clicked one behave identically.
+  const profileImportDependencies = {
     isRunning: () => isRunningRef.current || isProfileImportingRef.current,
     coordinator: profileImportCoordinatorRef.current,
     openSetup: () => {
@@ -889,7 +897,7 @@ function AppContent() {
       setCurrentPage('setup');
       setActiveFlowPage('setup');
     },
-    importPaths: async (paths) => {
+    importPaths: async (paths: string[]) => {
       setIsProfileImporting(true);
       try {
         await importFilePaths(paths);
@@ -898,6 +906,9 @@ function AppContent() {
       }
     },
     onBlocked: () => showToast(PROFILE_IMPORT_BUSY_MESSAGE, 'error'),
+  };
+  const nativeProfileDropHandler = createNativeProfileDropHandler({
+    ...profileImportDependencies,
     setDragAccepted: setNativeDragAccepted,
   });
   const nativeProfileDropHandlerRef = useRef(nativeProfileDropHandler);
@@ -930,6 +941,49 @@ function AppContent() {
       nativeProfileDropHandlerRef.current.dispose();
       dragDropUnlistenRef.current?.();
       dragDropUnlistenRef.current = undefined;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Windows file association: a bundle double-clicked in Explorer arrives as a
+  // launch argument, not a drop. Two routes, both ending in the same import as
+  // a drop (see ./lib/opened-profile-files):
+  //   cold start — Rust parked argv before this webview existed; drain it once.
+  //   warm start — the single-instance plugin focused us and emitted the argv.
+  const openedFilesHandler = createOpenedFilesHandler(profileImportDependencies);
+  const openedFilesHandlerRef = useRef(openedFilesHandler);
+  openedFilesHandlerRef.current = openedFilesHandler;
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    (async () => {
+      try {
+        unlisten = await listen<string[]>(OPENED_FILES_EVENT, (event) => {
+          openedFilesHandlerRef.current(event.payload);
+        });
+        if (cancelled) {
+          unlisten();
+          unlisten = undefined;
+          return;
+        }
+
+        // Drain after the listener is attached, so a bundle opened during
+        // startup cannot slip between the two.
+        const launchArgs = await invoke<string[]>('take_opened_file_args');
+        if (cancelled) return;
+        openedFilesHandlerRef.current(launchArgs);
+      } catch {
+        // Not in Tauri runtime, or an older backend without the command.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+      unlisten = undefined;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1652,13 +1706,14 @@ function AppContent() {
           // what the task actually verifies against), then the last saved
           // capture. No manifest → nothing to self-heal.
           const manifest = schedStatus.manifest || settings.scheduleManifestPath || undefined;
-          if (settings.scheduleEnabled && manifest && isZipPath(manifest)) {
-            // A .zip baseline can never verify — the scheduled run parses raw
-            // JSONC only — so re-asserting would just re-register a task that
-            // fails every day. Leave it unregistered; the next manifest-only
-            // save (or zip save with a successful manifest side-write)
-            // re-points the schedule at a usable baseline.
-            console.warn('schedule self-heal skipped: baseline is a .zip bundle the scheduled verify cannot parse:', manifest);
+          if (settings.scheduleEnabled && manifest && isBundlePath(manifest)) {
+            // A bundle baseline (.endstate or the legacy .zip) can never verify
+            // against an engine whose loader parses raw JSONC only, so
+            // re-asserting would just re-register a task that fails every day.
+            // Leave it unregistered; the next manifest-only save (or bundle
+            // save with a successful manifest side-write) re-points the
+            // schedule at a usable baseline.
+            console.warn('schedule self-heal skipped: baseline is a bundle the scheduled verify cannot parse:', manifest);
           } else if (settings.scheduleEnabled && manifest) {
             void scheduleEnable(settings, {
               manifest,
@@ -1720,7 +1775,7 @@ function AppContent() {
     await ensureDirectory(tempDir);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
-    const filename = `capture_${timestamp}.zip`;
+    const filename = `capture_${timestamp}${DEFAULT_BUNDLE_EXTENSION}`;
     const outputPath = `${tempDir}\\${filename}`;
 
     // Get profiles directory for run artifacts (separate from cache)
@@ -2837,9 +2892,11 @@ function AppContent() {
                 }
               }}
               onSaveToFile={async (captureResult) => {
+                // `outputFormat` names the container (still "zip"); the file the
+                // user saves is named with the first-class bundle extension.
                 const isZip = captureResult.outputFormat === 'zip' && captureResult.outputPath;
-                const ext = isZip ? 'zip' : 'jsonc';
-                const defaultName = `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`;
+                const ext = isZip ? DEFAULT_BUNDLE_EXTENSION : '.jsonc';
+                const defaultName = `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}${ext}`;
                 let savedPath: string | undefined;
                 if (isTauriRuntime()) {
                   // Native Tauri: use OS save dialog
@@ -2847,7 +2904,7 @@ function AppContent() {
                   const savePath = await save({
                     defaultPath: defaultName,
                     filters: isZip
-                      ? [{ name: 'Endstate Bundle', extensions: ['zip'] }]
+                      ? [{ name: 'Endstate Bundle', extensions: BUNDLE_DIALOG_EXTENSIONS }]
                       : [{ name: 'Endstate Profile', extensions: ['jsonc'] }],
                     title: 'Save Capture File',
                   });
@@ -2897,7 +2954,7 @@ function AppContent() {
                     } catch {
                       // read_file_base64 unavailable — fall back to jsonc text
                       blob = new Blob([captureResult.draftText], { type: 'application/json' });
-                      downloadName = defaultName.replace('.zip', '.jsonc');
+                      downloadName = defaultName.replace(DEFAULT_BUNDLE_EXTENSION, '.jsonc');
                     }
                   } else {
                     blob = new Blob([captureResult.draftText], { type: 'application/json' });

@@ -20,7 +20,7 @@ describe('DropZone', () => {
   it('shows idle text when not dragging', () => {
     renderWithProviders(<DropZone {...defaultProps} />);
     expect(screen.getByText(/click to browse or drop a file/i)).toBeInTheDocument();
-    expect(screen.getByText(/accepts .zip bundles or .jsonc manifest files/i)).toBeInTheDocument();
+    expect(screen.getByText(/accepts .endstate bundles \(.zip also works\) or .jsonc manifest files/i)).toBeInTheDocument();
   });
 
   it('shows drag-over text during drag', () => {
@@ -130,7 +130,7 @@ describe('DropZone', () => {
     expect(onFileDrop).not.toHaveBeenCalled();
   });
 
-  it('accepts .json, .jsonc, .json5, and .zip extensions', () => {
+  it('accepts .json, .jsonc, .json5, .zip, and .endstate extensions', () => {
     const onFileDrop = vi.fn();
     renderWithProviders(<DropZone onFileDrop={onFileDrop} />);
     const zone = screen.getByTestId('drop-zone');
@@ -140,11 +140,13 @@ describe('DropZone', () => {
       createFile('b.jsonc'),
       createFile('c.json5'),
       createFile('d.zip'),
+      createFile('e.endstate'),
+      createFile('f.ENDSTATE'),
     ];
     fireEvent.drop(zone, { dataTransfer: { files } });
 
     expect(onFileDrop).toHaveBeenCalledTimes(1);
-    expect(onFileDrop.mock.calls[0][0]).toHaveLength(4);
+    expect(onFileDrop.mock.calls[0][0]).toHaveLength(6);
   });
 
   it('does not respond to drag when disabled', () => {
@@ -194,7 +196,7 @@ describe('DropZone', () => {
     renderWithProviders(<DropZone {...defaultProps} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input).toBeTruthy();
-    expect(input.accept).toBe('.zip,.json,.jsonc,.json5');
+    expect(input.accept).toBe('.endstate,.zip,.json,.jsonc,.json5');
     expect(input.getAttribute('aria-hidden')).toBe('true');
   });
 });

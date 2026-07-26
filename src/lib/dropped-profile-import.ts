@@ -18,7 +18,12 @@
  *
  * Keeping the dispatch here (instead of inline in `App.tsx`) makes the
  * runtime split explicit and unit-testable.
+ *
+ * Bundles arrive as `.endstate` or as the legacy `.zip`; both are the same zip
+ * container, so both take the same transport. See `./profile-extensions`.
  */
+
+import { isBundlePath, isManifestPath } from './profile-extensions';
 
 /**
  * Minimal shape of the tauri-bridge `invoke` these helpers need. All profile
@@ -29,19 +34,6 @@ export type ImportInvoke = (
   cmd: string,
   args?: Record<string, unknown>,
 ) => Promise<string>;
-
-function isZipName(name: string): boolean {
-  return name.toLowerCase().endsWith('.zip');
-}
-
-function isManifestName(name: string): boolean {
-  const lower = name.toLowerCase();
-  return (
-    lower.endsWith('.jsonc') ||
-    lower.endsWith('.json') ||
-    lower.endsWith('.json5')
-  );
-}
 
 /** Base64-encode a File's raw bytes (browser/dev-bridge transport only). */
 export async function fileToBase64(file: File): Promise<string> {
@@ -64,7 +56,7 @@ export async function importProfileFromPath(
   invoke: ImportInvoke,
 ): Promise<string> {
   const fileName = path.split(/[/\\]/).pop() || '';
-  if (isZipName(fileName)) {
+  if (isBundlePath(fileName)) {
     return invoke('extract_zip_profile', {
       zipPath: path,
       profilesDir,
@@ -88,7 +80,7 @@ export async function importProfileFromFile(
   profilesDir: string,
   invoke: ImportInvoke,
 ): Promise<string | null> {
-  if (isZipName(file.name)) {
+  if (isBundlePath(file.name)) {
     const data = await fileToBase64(file);
     return invoke('import_zip_from_base64', {
       data,
@@ -96,7 +88,7 @@ export async function importProfileFromFile(
       profilesDir,
     });
   }
-  if (isManifestName(file.name)) {
+  if (isManifestPath(file.name)) {
     const content = await file.text();
     return invoke('import_profile_text', {
       content,
