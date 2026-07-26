@@ -1,3 +1,9 @@
+import { isSupportedProfilePath } from './profile-extensions';
+
+// Re-exported so existing callers (and tests) keep importing the predicate from
+// here, while the extension list itself lives in exactly one place.
+export { isSupportedProfilePath };
+
 export interface NativeProfileDropEvent {
   payload: {
     type: string;
@@ -25,14 +31,6 @@ export interface NativeProfileDropDependencies {
 export interface NativeProfileDropHandler {
   (event: NativeProfileDropEvent): void;
   dispose: () => void;
-}
-
-export function isSupportedProfilePath(path: string): boolean {
-  const normalized = path.toLowerCase();
-  return normalized.endsWith('.zip')
-    || normalized.endsWith('.json')
-    || normalized.endsWith('.jsonc')
-    || normalized.endsWith('.json5');
 }
 
 export function createProfileImportCoordinator(): ProfileImportCoordinator {

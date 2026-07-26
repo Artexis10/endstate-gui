@@ -12,7 +12,7 @@ import {
   engineSupportsSchedule,
   engineSupportsScheduleAutoPush,
   driftStateFromStatus,
-  isZipPath,
+  isBundlePath,
   resolveScheduleBaselinePath,
   ScheduleCommandError,
 } from './schedule-bridge';
@@ -242,17 +242,25 @@ describe('driftStateFromStatus', () => {
   });
 });
 
-describe('isZipPath', () => {
-  it('detects .zip extensions case-insensitively', () => {
-    expect(isZipPath('C:\snap.zip')).toBe(true);
-    expect(isZipPath('C:\SNAP.ZIP')).toBe(true);
-    expect(isZipPath('C:\snap.Zip ')).toBe(true);
+describe('isBundlePath', () => {
+  it('detects the legacy .zip extension case-insensitively', () => {
+    expect(isBundlePath('C:\snap.zip')).toBe(true);
+    expect(isBundlePath('C:\SNAP.ZIP')).toBe(true);
+    expect(isBundlePath('C:\snap.Zip ')).toBe(true);
   });
 
-  it('rejects non-zip paths', () => {
-    expect(isZipPath('C:\snap.jsonc')).toBe(false);
-    expect(isZipPath('C:\snap.zip.manifest.jsonc')).toBe(false);
-    expect(isZipPath('C:\zip')).toBe(false);
+  it('detects the .endstate extension case-insensitively', () => {
+    expect(isBundlePath('C:\snap.endstate')).toBe(true);
+    expect(isBundlePath('C:\SNAP.ENDSTATE')).toBe(true);
+    expect(isBundlePath('C:\snap.EndState ')).toBe(true);
+  });
+
+  it('rejects paths that are not bundles', () => {
+    expect(isBundlePath('C:\snap.jsonc')).toBe(false);
+    expect(isBundlePath('C:\snap.zip.manifest.jsonc')).toBe(false);
+    expect(isBundlePath('C:\snap.endstate.manifest.jsonc')).toBe(false);
+    expect(isBundlePath('C:\zip')).toBe(false);
+    expect(isBundlePath('C:\endstate')).toBe(false);
   });
 });
 

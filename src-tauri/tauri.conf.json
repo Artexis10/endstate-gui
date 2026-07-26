@@ -29,6 +29,15 @@
     "externalBin": [
       "binaries/endstate"
     ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "endstate"
+        ],
+        "name": "EndstateCaptureBundle",
+        "description": "Endstate capture bundle"
+      }
+    ],
     "resources": {
       "engine/modules/": "engine/modules/",
       "engine/SCHEMA_VERSION": "engine/SCHEMA_VERSION"

@@ -141,10 +141,13 @@ export async function scheduleStatus(
   return runScheduleOnce<ScheduleStatusData>(settings, ['status']);
 }
 
-/** True when the path points at a zip bundle (case-insensitive). */
-export function isZipPath(path: string): boolean {
-  return /\.zip$/i.test(path.trim());
-}
+/**
+ * True when the path points at a capture bundle — `.endstate`, or the legacy
+ * `.zip` — case-insensitively. Re-exported from the shared extension module so
+ * schedule callers and the import surface can never disagree about what a
+ * bundle is.
+ */
+export { isBundlePath } from './profile-extensions';
 
 /**
  * Resolve the drift-check baseline manifest for a freshly saved capture.

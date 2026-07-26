@@ -138,7 +138,7 @@ The `restore` phase is only emitted when `--EnableRestore` is active and restore
 ### --RestoreFilter Flag
 
 ```powershell
-endstate apply --manifest ./profile.zip --EnableRestore --RestoreFilter vscode,git --json
+endstate apply --manifest ./profile.endstate --EnableRestore --RestoreFilter vscode,git --json
 ```
 
 - Absent → restore ALL modules (backward compatible)
@@ -222,12 +222,12 @@ Available from: apply result modal, profile context menu, standalone action. Rea
 ### 5. PROFILE VIEW
 
 ```
-my-machine.zip
+my-machine.endstate
 12 apps · 8 settings
 Last restore: 3 days ago (revert available)
 ```
 
-Profile type detection: `.zip` = bundle with configs, `.jsonc` = manifest-only.
+Profile type detection: `.endstate` (or the legacy `.zip`) = bundle with configs, `.jsonc` = manifest-only.
 
 ### 6. EXPORT/RE-CAPTURE (Path B — lower priority)
 

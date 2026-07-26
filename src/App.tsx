@@ -110,10 +110,15 @@ import {
   engineSupportsSchedule,
   engineSupportsScheduleAutoPush,
   driftStateFromStatus,
-  isZipPath,
+  isBundlePath,
   resolveScheduleBaselinePath,
   ScheduleCommandError,
 } from './lib/schedule-bridge';
+import {
+  BUNDLE_DIALOG_EXTENSIONS,
+  DEFAULT_BUNDLE_EXTENSION,
+  PROFILE_DIALOG_EXTENSIONS,
+} from './lib/profile-extensions';
 import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, backupLogout, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
@@ -826,7 +831,7 @@ function AppContent() {
         multiple: true,
         filters: [{
           name: 'Profile files',
-          extensions: ['zip', 'json', 'jsonc', 'json5'],
+          extensions: PROFILE_DIALOG_EXTENSIONS,
         }],
       });
       if (!selected) return;
@@ -1652,13 +1657,14 @@ function AppContent() {
           // what the task actually verifies against), then the last saved
           // capture. No manifest → nothing to self-heal.
           const manifest = schedStatus.manifest || settings.scheduleManifestPath || undefined;
-          if (settings.scheduleEnabled && manifest && isZipPath(manifest)) {
-            // A .zip baseline can never verify — the scheduled run parses raw
-            // JSONC only — so re-asserting would just re-register a task that
-            // fails every day. Leave it unregistered; the next manifest-only
-            // save (or zip save with a successful manifest side-write)
-            // re-points the schedule at a usable baseline.
-            console.warn('schedule self-heal skipped: baseline is a .zip bundle the scheduled verify cannot parse:', manifest);
+          if (settings.scheduleEnabled && manifest && isBundlePath(manifest)) {
+            // A bundle baseline (.endstate or the legacy .zip) can never verify
+            // against an engine whose loader parses raw JSONC only, so
+            // re-asserting would just re-register a task that fails every day.
+            // Leave it unregistered; the next manifest-only save (or bundle
+            // save with a successful manifest side-write) re-points the
+            // schedule at a usable baseline.
+            console.warn('schedule self-heal skipped: baseline is a bundle the scheduled verify cannot parse:', manifest);
           } else if (settings.scheduleEnabled && manifest) {
             void scheduleEnable(settings, {
               manifest,
@@ -1720,7 +1726,7 @@ function AppContent() {
     await ensureDirectory(tempDir);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
-    const filename = `capture_${timestamp}.zip`;
+    const filename = `capture_${timestamp}${DEFAULT_BUNDLE_EXTENSION}`;
     const outputPath = `${tempDir}\\${filename}`;
 
     // Get profiles directory for run artifacts (separate from cache)
@@ -2837,9 +2843,11 @@ function AppContent() {
                 }
               }}
               onSaveToFile={async (captureResult) => {
+                // `outputFormat` names the container (still "zip"); the file the
+                // user saves is named with the first-class bundle extension.
                 const isZip = captureResult.outputFormat === 'zip' && captureResult.outputPath;
-                const ext = isZip ? 'zip' : 'jsonc';
-                const defaultName = `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`;
+                const ext = isZip ? DEFAULT_BUNDLE_EXTENSION : '.jsonc';
+                const defaultName = `endstate-capture_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}${ext}`;
                 let savedPath: string | undefined;
                 if (isTauriRuntime()) {
                   // Native Tauri: use OS save dialog
@@ -2847,7 +2855,7 @@ function AppContent() {
                   const savePath = await save({
                     defaultPath: defaultName,
                     filters: isZip
-                      ? [{ name: 'Endstate Bundle', extensions: ['zip'] }]
+                      ? [{ name: 'Endstate Bundle', extensions: BUNDLE_DIALOG_EXTENSIONS }]
                       : [{ name: 'Endstate Profile', extensions: ['jsonc'] }],
                     title: 'Save Capture File',
                   });
@@ -2897,7 +2905,7 @@ function AppContent() {
                     } catch {
                       // read_file_base64 unavailable — fall back to jsonc text
                       blob = new Blob([captureResult.draftText], { type: 'application/json' });
-                      downloadName = defaultName.replace('.zip', '.jsonc');
+                      downloadName = defaultName.replace(DEFAULT_BUNDLE_EXTENSION, '.jsonc');
                     }
                   } else {
                     blob = new Blob([captureResult.draftText], { type: 'application/json' });
