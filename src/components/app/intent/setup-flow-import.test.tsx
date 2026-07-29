@@ -33,7 +33,6 @@ function makeProps(overrides: Partial<SetupFlowProps> = {}): SetupFlowProps {
     recentlyImportedProfile: importedProfile,
     onRecentlyImportedConsumed: vi.fn(),
     onBack: vi.fn(),
-    onProfileSelect: vi.fn(),
     onOpenProfilesFolder: vi.fn(),
     onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
     onFileDrop: vi.fn(),
@@ -55,17 +54,14 @@ describe('SetupFlow imported profile handoff', () => {
   it('keeps the exact imported profile in browse until Review setup starts one install-only preview', async () => {
     const user = userEvent.setup();
     const onPreview = vi.fn().mockResolvedValue(previewResult);
-    const onProfileSelect = vi.fn();
     const onRecentlyImportedConsumed = vi.fn();
     const props = makeProps({
       onPreview,
-      onProfileSelect,
       onRecentlyImportedConsumed,
     });
     const { rerender } = renderWithProviders(setupFlow(props));
 
     expect(onPreview).not.toHaveBeenCalled();
-    expect(onProfileSelect).not.toHaveBeenCalled();
 
     const importedCard = screen.getByTestId('profile-card-captured-bundle');
     const existingCard = screen.getByTestId('profile-card-existing-profile');
@@ -79,7 +75,6 @@ describe('SetupFlow imported profile handoff', () => {
 
     await waitFor(() => expect(onPreview).toHaveBeenCalledTimes(1));
     expect(onPreview).toHaveBeenCalledWith(importedProfile, { restoreIntent: 'apps-only' });
-    expect(onProfileSelect).toHaveBeenCalledWith(importedProfile);
     expect(onRecentlyImportedConsumed).toHaveBeenCalledTimes(1);
 
     rerender(setupFlow({

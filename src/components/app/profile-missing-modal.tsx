@@ -2,27 +2,21 @@
  * Modal explaining that the previously-selected profile is gone, with
  * actionable next steps.
  *
- * Replaces the older info toast "Selected profile no longer exists — switched
- * to X." which fired silently after a delete OR at app-start when the saved
- * profile name didn't resolve to a file. The toast told the user a fact but
- * gave them nothing to do with it; this modal explains *why* the switch
- * happened and lets the user pick what should happen next.
+ * Handles the startup case where the saved Capture profile no longer resolves
+ * to a local file. Deliberate deletion clears the saved target without opening
+ * this modal or switching to an unrelated profile.
  *
  * Action priorities:
  *   1. **Restore from cloud** — only shown when the previous profile has a
  *      cloud backup (i.e. user can recover the actual content, not just
  *      fall back to another local profile). This is the highest-value action
  *      and is rendered first when available.
- *   2. **Switch to {firstAvailable}** — the existing auto-switch behavior,
- *      now confirmed rather than silent. Default action.
- *   3. **Pick another profile** — opens ManageProfilesModal.
- *   4. **Continue without a profile** — explicit no-op for users who want to
+ *   2. **Switch to {firstAvailable}** — an explicit replacement choice.
+ *   3. **Continue without a profile** — explicit no-op for users who want to
  *      defer the decision.
  *
- * The pane never blocks — closing the dialog without picking an action
- * falls back to "Switch to {firstAvailable}" (mirrors the previous silent
- * behavior), so a user who reflexively closes still ends up in the most
- * familiar state.
+ * Closing the dialog defers the choice and leaves Capture without a saved
+ * target; it never changes profiles implicitly.
  */
 
 import {
@@ -41,15 +35,12 @@ export interface ProfileMissingModalProps {
   onOpenChange: (open: boolean) => void;
   /** Name of the profile that's gone — shown in the body copy. */
   previousName: string;
-  /** Why it's missing — drives the explanatory body copy. */
-  reason: 'deleted' | 'not-found';
   /** Display name of the fallback profile (or null when none available). */
   firstAvailableLabel: string | null;
   /** Whether the missing profile has a cloud backup. Gates the Restore CTA. */
   hasCloudBackup: boolean;
   onSwitchToFirstAvailable: () => void;
   onRestoreFromCloud: () => void;
-  onPickAnother: () => void;
   onContinueWithoutProfile: () => void;
 }
 
@@ -57,22 +48,14 @@ export function ProfileMissingModal({
   open,
   onOpenChange,
   previousName,
-  reason,
   firstAvailableLabel,
   hasCloudBackup,
   onSwitchToFirstAvailable,
   onRestoreFromCloud,
-  onPickAnother,
   onContinueWithoutProfile,
 }: ProfileMissingModalProps) {
-  const headline =
-    reason === 'deleted'
-      ? `"${previousName}" was deleted`
-      : `"${previousName}" couldn't be found`;
-  const body =
-    reason === 'deleted'
-      ? 'The profile you had selected was just removed. Pick what should happen next:'
-      : 'The profile you had selected isn\'t in this folder anymore — it may have been moved or removed, or the profiles folder changed. Pick what should happen next:';
+  const headline = `"${previousName}" couldn't be found`;
+  const body = 'The Capture profile you had selected isn\'t in this folder anymore — it may have been moved or removed, or the profiles folder changed. Pick what should happen next:';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -115,18 +98,6 @@ export function ProfileMissingModal({
               Switch to "{firstAvailableLabel}"
             </Button>
           )}
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              onOpenChange(false);
-              onPickAnother();
-            }}
-            data-testid="profile-missing-pick-another"
-            className="justify-start"
-          >
-            Pick another profile
-          </Button>
           <Button
             type="button"
             variant="ghost"

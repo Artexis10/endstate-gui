@@ -24,7 +24,6 @@ const mockProfile = {
 const baseProps = {
   profiles: [mockProfile],
   onBack: vi.fn(),
-  onProfileSelect: vi.fn(),
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),
@@ -185,6 +184,8 @@ describe('SetupFlow — per-app picker', () => {
           ...base.actions,
           { type: 'install', id: 'lightroom', ref: null, status: 'present', message: '' },
         ],
+        restoreModulesAvailable: [{ id: 'apps.lightroom', displayName: 'Lightroom Classic' }],
+        synthesizedAppIds: ['lightroom'],
       };
       const onPreview = vi.fn().mockResolvedValue(preview);
       const onApply = vi.fn().mockResolvedValue({
@@ -199,8 +200,39 @@ describe('SetupFlow — per-app picker', () => {
       await userEvent.click(screen.getByTestId('app-picker-checkbox-git-git'));
       await userEvent.click(screen.getByTestId('setup-flow-apply'));
 
-      expect(onApply).toHaveBeenCalledWith(mockProfile, {
+      expect(onApply).toHaveBeenCalledWith(mockProfile, expect.objectContaining({
         onlyAppIds: ['7zip-7zip', 'firefox', 'lightroom'],
+      }));
+    });
+
+    it('makes user-authored manual apps selectable and includes them in picker counts', async () => {
+      const base = makePreviewWithActions();
+      const preview = {
+        ...base,
+        alreadyPresent: 2,
+        appEvents: [
+          ...base.appEvents,
+          { app: 'lightroom', action: 'OK', statusKey: 'present' as const, name: 'Lightroom Classic', timestamp: 4, driver: 'manual' },
+        ],
+        actions: [
+          ...base.actions,
+          { type: 'install', id: 'lightroom', ref: null, status: 'present', message: '' },
+        ],
+      };
+      const onPreview = vi.fn().mockResolvedValue(preview);
+      const onApply = vi.fn().mockResolvedValue({
+        installed: 1, alreadyPresent: 2, failed: 0, skipped: 0, appEvents: [],
+      });
+      await renderToPreviewDone({ onPreview, onApply, applyOnlySupported: true });
+
+      expect(screen.getByTestId('app-picker-count')).toHaveTextContent('4 of 4 selected');
+      expect(screen.getByTestId('app-picker-checkbox-lightroom')).toBeChecked();
+
+      await userEvent.click(screen.getByTestId('app-picker-checkbox-lightroom'));
+      await userEvent.click(screen.getByTestId('setup-flow-apply'));
+
+      expect(onApply).toHaveBeenCalledWith(mockProfile, {
+        onlyAppIds: ['git-git', '7zip-7zip', 'firefox'],
       });
     });
 
@@ -301,8 +333,10 @@ describe('SetupFlow — per-app picker', () => {
       const preview = {
         installed: 1,
         alreadyPresent: 0,
-        appEvents: [{ app: 'lightroom', action: 'To install', name: 'Lightroom Classic', timestamp: 1 }],
+        appEvents: [{ app: 'lightroom', action: 'To install', statusKey: 'to_install' as const, name: 'Lightroom Classic', timestamp: 1, driver: 'manual' }],
         actions: [{ type: 'install', id: 'lightroom', ref: null, status: 'to_install', message: '' }],
+        restoreModulesAvailable: [{ id: 'apps.lightroom', displayName: 'Lightroom Classic' }],
+        synthesizedAppIds: ['lightroom'],
       };
       const onPreview = vi.fn().mockResolvedValue(preview);
       await renderToPreviewDone({ onPreview, applyOnlySupported: true });

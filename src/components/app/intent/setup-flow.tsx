@@ -35,7 +35,6 @@ import type { EngineExecResult } from '@/lib/engine-exec';
 import type { ConfigProgressEvent } from '@/lib/streaming-events';
 import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
 import { ConfigModuleSelector } from '@/components/app/overview/components/config-module-selector';
-import { isConfigOnlyApp } from '@/lib/app-event-kind';
 import { ConfigResolutionList } from './config-resolution-list';
 import { ConfigMigrationProgress } from './config-migration-progress';
 import { ProfileContentsModal } from './profile-contents-modal';
@@ -58,7 +57,87 @@ import { CommandWarningList } from '@/components/app/command-warning-list';
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
 
-/** Normalize a string for fuzzy matching: lowercase, + → plus, strip non-alphanumeric */
+function appIdSet(appIds: string[] | undefined): Set<string> {
+  return new Set(appIds ?? []);
+}
+
+function isConfigOnlyApp(event: AppEvent, synthesizedAppIds: Set<string>): boolean {
+  return synthesizedAppIds.has(event.app);
+}
+
+interface ApplyAppCounts {
+  total: number;
+  installed: number;
+  present: number;
+  skipped: number;
+  failed: number;
+}
+
+function countApplyActions(
+  actions: EndstateApplyData['actions'],
+  synthesizedAppIds: Set<string>,
+  dryRun: boolean,
+): ApplyAppCounts | null {
+  if (!actions?.length) return null;
+
+  const authoredActions = actions.filter((action) =>
+    !isConfigOnlyAction(action, synthesizedAppIds),
+  );
+  const installed = authoredActions.filter((action) =>
+    action.status === 'installed' || (dryRun && action.status === 'to_install'),
+  ).length;
+  const present = authoredActions.filter((action) => action.status === 'present').length;
+  const failed = authoredActions.filter((action) => action.status === 'failed').length;
+  const skipped = authoredActions.length - installed - present - failed;
+
+  return { total: authoredActions.length, installed, present, skipped, failed };
+}
+
+/** Count synthesized terminal rows so legacy callers can adjust action totals per status. */
+function countSynthesizedApplyEvents(
+  events: AppEvent[],
+  synthesizedAppIds: Set<string>,
+  dryRun: boolean,
+): ApplyAppCounts {
+  const synthesizedRows = events.filter((event) =>
+    (!event.kind || event.kind === 'app')
+    && event.app !== '── APPLY ──'
+    && event.app !== '── VERIFY ──'
+    && !event.app.startsWith('copy:')
+    && isConfigOnlyApp(event, synthesizedAppIds),
+  );
+  const installed = synthesizedRows.filter((event) =>
+    event.statusKey === 'installed' || (dryRun && event.statusKey === 'to_install'),
+  ).length;
+  const present = synthesizedRows.filter((event) => event.statusKey === 'present').length;
+  const failed = synthesizedRows.filter((event) => event.statusKey === 'failed').length;
+  const skipped = synthesizedRows.length - installed - present - failed;
+
+  return { total: synthesizedRows.length, installed, present, skipped, failed };
+}
+
+function normalizeConfigModuleId(moduleId: string): string {
+  return moduleId.startsWith('apps.') ? moduleId.slice('apps.'.length) : moduleId;
+}
+
+/**
+ * The engine's config map is catalog metadata. Only restore modules explicitly
+ * advertised for this profile are evidence that the profile carries settings.
+ */
+function profileConfigModuleMap(
+  configMap: Record<string, string> | undefined,
+  restoreModules: RestoreModuleRef[] | undefined,
+): Record<string, string> {
+  const availableModuleIds = new Set(
+    (restoreModules ?? []).map((moduleRef) => normalizeConfigModuleId(moduleRef.id)),
+  );
+  if (availableModuleIds.size === 0) return {};
+
+  return Object.fromEntries(
+    Object.entries(configMap ?? {}).filter(([, moduleId]) =>
+      availableModuleIds.has(normalizeConfigModuleId(moduleId))),
+  );
+}
 
 interface PreviewResult {
   success?: boolean;
@@ -74,6 +153,8 @@ interface PreviewResult {
    * simply stays dark without it.
    */
   actions?: EndstateApplyData['actions'];
+  /** Ref-less manual rows appended by the engine, not authored profile apps. */
+  synthesizedAppIds?: string[];
   restoreModulesAvailable?: RestoreModuleRef[];
   /** Maps winget ID → config module name for apps with settings */
   configModuleMap?: Record<string, string>;
@@ -86,14 +167,25 @@ export interface SetupPreviewOptions {
   restoreIntent: RestoreIntent;
 }
 
+function isConfigOnlyAction(
+  action: NonNullable<EndstateApplyData['actions']>[number],
+  synthesizedAppIds: Set<string>,
+): boolean {
+  return !!action.id && synthesizedAppIds.has(action.id);
+}
+
 /**
- * Derive the picker's selectable set from preview envelope actions: apps with
- * a manifest `id` AND a winget `ref` (installable rows). Ref-less actions are
- * manual/config-only apps — they are governed by the restore-intent controls,
- * not the picker, and are always kept in a subset run (see buildOnlyAppIds).
+ * Every manifest app with an id is selectable except a synthesized settings
+ * row. In particular, a user-authored manual app is still an app even though
+ * it has no package-manager ref.
  */
-function selectablePickerIds(actions: EndstateApplyData['actions']): string[] {
-  return (actions ?? []).filter((a) => a.id && a.ref).map((a) => a.id!);
+function selectablePickerIds(
+  actions: EndstateApplyData['actions'],
+  synthesizedAppIds: Set<string>,
+): string[] {
+  return (actions ?? [])
+    .filter((action) => action.id && !isConfigOnlyAction(action, synthesizedAppIds))
+    .map((action) => action.id!);
 }
 
 /**
@@ -156,22 +248,25 @@ function moduleDisplayNameMap(
 
 /**
  * Build the `--only` id list for a subset apply, in envelope action order:
- * the SELECTED winget app ids plus ALL manual/config-only app ids. Manual ids
+ * the selected app ids plus all synthesized config-only ids. Config-only ids
  * are always included so the "Settings only" section and restore-intent
- * composition behave exactly as an unfiltered run.
+ * composition behave exactly as an unfiltered run; ordinary manual apps honor
+ * the user's picker selection.
  *
  * Note: deselecting a winget app also removes its matched config modules from
  * the engine's restore scope (subset apply = subset restore), even if that
  * module is still checked in the module selector — the engine matches modules
  * against the filtered app set.
  */
-function buildOnlyAppIds(actions: EndstateApplyData['actions'], selected: Set<string>): string[] {
+function buildOnlyAppIds(
+  actions: EndstateApplyData['actions'],
+  selected: Set<string>,
+  synthesizedAppIds: Set<string>,
+): string[] {
   const out: string[] = [];
   for (const a of actions ?? []) {
     if (!a.id) continue;
-    if (a.ref) {
-      if (selected.has(a.id)) out.push(a.id);
-    } else {
+    if (isConfigOnlyAction(a, synthesizedAppIds) || selected.has(a.id)) {
       out.push(a.id);
     }
   }
@@ -191,6 +286,8 @@ interface ApplyResult {
   failed: number;
   skipped: number;
   appEvents: AppEvent[];
+  /** Authoritative terminal app actions when available. */
+  actions?: EndstateApplyData['actions'];
   /** Maps winget ID → config module name for apps with settings */
   configModuleMap?: Record<string, string>;
   restoreModulesAvailable?: RestoreModuleRef[];
@@ -210,7 +307,6 @@ export interface SetupFlowProps {
   /** Clears the one-shot imported treatment after review or lifecycle reset. */
   onRecentlyImportedConsumed?: () => void;
   onBack: () => void;
-  onProfileSelect: (profile: DiscoveredProfile) => void;
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
   onFileDrop: (files: File[]) => void;
@@ -287,7 +383,6 @@ export function SetupFlow({
   recentlyImportedProfile,
   onRecentlyImportedConsumed,
   onBack,
-  onProfileSelect,
   onOpenProfilesFolder,
   onRefreshProfiles,
   onFileDrop,
@@ -356,6 +451,46 @@ export function SetupFlow({
       ? applyResult.restoreModulesAvailable
       : previewResult?.restoreModulesAvailable,
   );
+  const previewProfileConfigMap = profileConfigModuleMap(
+    previewResult?.configModuleMap,
+    previewResult?.restoreModulesAvailable,
+  );
+  const applyRestoreModules = applyResult?.restoreModulesAvailable?.length
+    ? applyResult.restoreModulesAvailable
+    : previewResult?.restoreModulesAvailable;
+  const applyProfileConfigMap = profileConfigModuleMap(
+    applyResult?.configModuleMap ?? previewResult?.configModuleMap,
+    applyRestoreModules,
+  );
+  const previewSynthesizedAppIds = appIdSet(previewResult?.synthesizedAppIds);
+  // Apply runs the same profile plan as its preview. Keep using preview
+  // provenance because the apply result only streams item rows, not actions.
+  const applySynthesizedAppIds = previewSynthesizedAppIds;
+  const applyActionCounts = applyResult
+    ? countApplyActions(
+        applyResult.actions,
+        applySynthesizedAppIds,
+        applyResult.dryRun ?? false,
+      )
+    : null;
+  const synthesizedApplyCounts = applyResult
+    ? countSynthesizedApplyEvents(
+        applyResult.appEvents,
+        applySynthesizedAppIds,
+        applyResult.dryRun ?? false,
+      )
+    : { total: 0, installed: 0, present: 0, skipped: 0, failed: 0 };
+  const fallbackInstalled = Math.max(0, (applyResult?.installed ?? 0) - synthesizedApplyCounts.installed);
+  const fallbackPresent = Math.max(0, (applyResult?.alreadyPresent ?? 0) - synthesizedApplyCounts.present);
+  const fallbackSkipped = Math.max(0, (applyResult?.skipped ?? 0) - synthesizedApplyCounts.skipped);
+  const fallbackFailed = Math.max(0, (applyResult?.failed ?? 0) - synthesizedApplyCounts.failed);
+  const applyDisplayAppCounts: ApplyAppCounts = applyActionCounts ?? {
+    total: fallbackInstalled + fallbackPresent + fallbackSkipped + fallbackFailed,
+    installed: fallbackInstalled,
+    present: fallbackPresent,
+    skipped: fallbackSkipped,
+    failed: fallbackFailed,
+  };
   const reduced = prefersReducedMotion();
   const transition = reduced
     ? { duration: 0.01 }
@@ -412,23 +547,34 @@ export function SetupFlow({
     e.app !== '── APPLY ──' && e.app !== '── VERIFY ──' && !e.app.startsWith('copy:');
 
   /** Winget apps carrying no settings — the complement of the `settings` filter. */
-  const appsOnlyCount = (events: AppEvent[], configMap: Record<string, string>) =>
+  const appsOnlyCount = (
+    events: AppEvent[],
+    configMap: Record<string, string>,
+    synthesizedAppIds: Set<string>,
+  ) =>
     events.filter(
-      (e) => isDisplayableEvent(e) && !isConfigOnlyApp(e) && !(e.app in configMap),
+      (e) =>
+        isDisplayableEvent(e)
+        && !isConfigOnlyApp(e, synthesizedAppIds)
+        && !(e.app in configMap),
     ).length;
 
-  const filterEvents = (events: AppEvent[], configMap: Record<string, string>) => {
+  const filterEvents = (
+    events: AppEvent[],
+    configMap: Record<string, string>,
+    synthesizedAppIds: Set<string>,
+  ) => {
     const filtered = events.filter(isDisplayableEvent);
     if (activeFilters.size === 0) return filtered;
     return filtered.filter(event => {
       const statusKey: StatusKey = event.statusKey || 'skipped';
       for (const f of activeFilters) {
-        if (f === 'settings' && (event.app in configMap || isConfigOnlyApp(event))) return true;
+        if (f === 'settings' && (event.app in configMap || isConfigOnlyApp(event, synthesizedAppIds))) return true;
         // Complement of `settings`. The filter set had a positive "has settings"
         // filter but no way to ask the opposite question — "which of these are
         // just app installs?" — which is the more common one when reviewing a
         // plan.
-        if (f === 'apps_only' && !(event.app in configMap || isConfigOnlyApp(event))) return true;
+        if (f === 'apps_only' && !(event.app in configMap || isConfigOnlyApp(event, synthesizedAppIds))) return true;
         if (f === statusKey) return true;
       }
       return false;
@@ -457,7 +603,6 @@ export function SetupFlow({
 
   const handleSelectProfile = (profile: DiscoveredProfile) => {
     setSelectedProfile(profile);
-    onProfileSelect(profile);
     setRestoreIntent('apps-only');
     setSelectedModules([]);
     setRestoreTargets([]);
@@ -486,7 +631,10 @@ export function SetupFlow({
       const result = await onPreview(profile, { restoreIntent: intent });
       if (!previewIsActive(profile, intent, generation)) return;
       setPreviewResult(result);
-      const pickerIds = selectablePickerIds(result.actions);
+      const pickerIds = selectablePickerIds(
+        result.actions,
+        appIdSet(result.synthesizedAppIds),
+      );
       const isSameProfile = selectedAppIdsProfileRef.current === profile.path;
       setSelectedAppIds((current) => {
         if (!isSameProfile) {
@@ -512,11 +660,11 @@ export function SetupFlow({
 
   const handleApply = async () => {
     if (!selectedProfile) return;
-    const settingsCount = previewResult?.restoreModulesAvailable?.length ?? Object.keys(previewResult?.configModuleMap ?? {}).length;
+    const settingsCount = previewResult?.restoreModulesAvailable?.length ?? 0;
     // Per-app subset: only when the engine advertises --only AND the user
     // deselected at least one app. All-selected omits the field entirely so
     // the apply invocation is byte-identical to a picker-less run.
-    const pickerIds = selectablePickerIds(previewResult?.actions);
+    const pickerIds = selectablePickerIds(previewResult?.actions, previewSynthesizedAppIds);
     const selectedCount = pickerIds.filter((id) => selectedAppIds.has(id)).length;
     const unmappable = hasUnmappableInstallable(previewResult?.actions);
     if (unmappable && applyOnlySupported) {
@@ -541,11 +689,11 @@ export function SetupFlow({
           // "Notepad++ · contextMenu.xml" during streaming, not just after the
           // terminal envelope lands.
           ...(previewResult?.restoreModulesAvailable ? { restoreModulesAvailable: previewResult.restoreModulesAvailable } : {}),
-          ...(previewResult?.configModuleMap ? { configModuleMap: previewResult.configModuleMap } : {}),
+          ...(Object.keys(previewProfileConfigMap).length > 0 ? { configModuleMap: previewProfileConfigMap } : {}),
         }
       : undefined;
     const options = subsetActive
-      ? { ...(restoreOpts ?? {}), onlyAppIds: buildOnlyAppIds(previewResult?.actions, selectedAppIds) }
+      ? { ...(restoreOpts ?? {}), onlyAppIds: buildOnlyAppIds(previewResult?.actions, selectedAppIds, previewSynthesizedAppIds) }
       : restoreOpts;
     setPhase('applying');
     setApplyResult(null);
@@ -1044,14 +1192,14 @@ export function SetupFlow({
 
         {/* Preview done: Show results + Apply button */}
         {phase === 'preview-done' && previewResult && (() => {
-          const configMap = previewResult.configModuleMap ?? {};
+          const configMap = previewProfileConfigMap;
           const hasConfigMap = Object.keys(configMap).length > 0;
-          const settingsCount = previewResult.restoreModulesAvailable?.length ?? Object.keys(configMap).length;
+          const settingsCount = previewResult.restoreModulesAvailable?.length ?? 0;
           // Active settings count reflects user's restore selection
           const activeSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
           // Separate config-only synthesized apps from winget apps
-          const configOnlyPresent = previewResult.appEvents.filter(e => isConfigOnlyApp(e) && (e.statusKey === 'present' || !e.statusKey)).length;
-          const configOnlyToInstall = previewResult.appEvents.filter(e => isConfigOnlyApp(e) && e.statusKey === 'to_install').length;
+          const configOnlyPresent = previewResult.appEvents.filter(e => isConfigOnlyApp(e, previewSynthesizedAppIds) && (e.statusKey === 'present' || !e.statusKey)).length;
+          const configOnlyToInstall = previewResult.appEvents.filter(e => isConfigOnlyApp(e, previewSynthesizedAppIds) && e.statusKey === 'to_install').length;
           const adjustedInstalled = previewResult.installed - configOnlyToInstall;
           const adjustedPresent = previewResult.alreadyPresent - configOnlyPresent;
           const totalApps = adjustedInstalled + adjustedPresent;
@@ -1060,29 +1208,34 @@ export function SetupFlow({
           // planning logic. Dark (pickerEnabled false) → display counts are
           // exactly the adjusted envelope counts, byte-identical to before.
           const pickerActions = previewResult.actions ?? [];
-          const pickerIds = selectablePickerIds(pickerActions);
+          const pickerIds = selectablePickerIds(pickerActions, previewSynthesizedAppIds);
+          const pickerIdSet = new Set(pickerIds);
           const pickerEnabled = applyOnlySupported && pickerIds.length > 0;
           const pickerSelectedCount = pickerIds.filter((id) => selectedAppIds.has(id)).length;
           const manifestIdByEventKey = new Map<string, string>();
           if (pickerEnabled) {
             for (const a of pickerActions) {
-              if (!a.id) continue;
+              if (!a.id || !pickerIdSet.has(a.id)) continue;
               if (a.ref) manifestIdByEventKey.set(a.ref, a.id);
               manifestIdByEventKey.set(a.id, a.id);
             }
           }
           const selectedToInstall = pickerActions.filter((a) =>
-            a.id && a.ref && selectedAppIds.has(a.id) && (a.status === 'to_install' || a.status === 'installed')).length;
+            a.id && pickerIdSet.has(a.id) && selectedAppIds.has(a.id) && (a.status === 'to_install' || a.status === 'installed')).length;
           const selectedPresent = pickerActions.filter((a) =>
-            a.id && a.ref && selectedAppIds.has(a.id) && a.status === 'present').length;
+            a.id && pickerIdSet.has(a.id) && selectedAppIds.has(a.id) && a.status === 'present').length;
           const displayInstalled = pickerEnabled ? selectedToInstall : adjustedInstalled;
           const displayPresent = pickerEnabled ? selectedPresent : adjustedPresent;
           const displayTotal = pickerEnabled ? displayInstalled + displayPresent : totalApps;
           // Partition filtered events
-          const previewAppsOnlyCount = appsOnlyCount(previewResult.appEvents, configMap);
-          const allFilteredEvents = filterEvents(previewResult.appEvents, configMap);
-          const wingetEvents = allFilteredEvents.filter(e => !isConfigOnlyApp(e));
-          const configOnlyEvents = allFilteredEvents.filter(e => isConfigOnlyApp(e));
+          const previewAppsOnlyCount = appsOnlyCount(
+            previewResult.appEvents,
+            configMap,
+            previewSynthesizedAppIds,
+          );
+          const allFilteredEvents = filterEvents(previewResult.appEvents, configMap, previewSynthesizedAppIds);
+          const wingetEvents = allFilteredEvents.filter(e => !isConfigOnlyApp(e, previewSynthesizedAppIds));
+          const configOnlyEvents = allFilteredEvents.filter(e => isConfigOnlyApp(e, previewSynthesizedAppIds));
           const showConfigOnlySection = configOnlyEvents.length > 0 && (activeFilters.size === 0 || activeFilters.has('settings'));
           return (
           <motion.div
@@ -1491,37 +1644,27 @@ export function SetupFlow({
             exit={{ opacity: 0, y: -8 }}
             transition={transition}
           >
-            <Card className={`border-l-2 ${applyResult.success === false || applyResult.failed > 0 || applyResult.error ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
+            <Card className={`border-l-2 ${applyResult.success === false || applyDisplayAppCounts.failed > 0 || applyResult.error ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
               <CardContent className="py-6 px-6">
                 <div className="flex items-center gap-3 mb-4">
-                  {applyResult.success === false || applyResult.failed > 0 || applyResult.error ? (
+                  {applyResult.success === false || applyDisplayAppCounts.failed > 0 || applyResult.error ? (
                     <XCircle className="h-5 w-5 text-amber-500" />
                   ) : (
                     <CheckCircle2 className="h-5 w-5 text-green-500" />
                   )}
                   <div>
                     <p className="text-sm font-medium">
-                      {applyResult.success === false || applyResult.failed > 0 || applyResult.error
+                      {applyResult.success === false || applyDisplayAppCounts.failed > 0 || applyResult.error
                         ? 'Setup completed with errors'
                         : applyResult.dryRun
                           ? 'Preview complete — nothing was installed'
                           : 'Setup complete'}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {(() => {
-                        // Exclude config-only synthesized apps from install/present counts
-                        const cfgOnlyPresent = applyResult.appEvents.filter(e => isConfigOnlyApp(e) && (e.statusKey === 'present' || !e.statusKey)).length;
-                        const cfgOnlyInstalled = applyResult.appEvents.filter(e => isConfigOnlyApp(e) && e.statusKey === 'installed').length;
-                        const adjInstalled = applyResult.installed - cfgOnlyInstalled;
-                        const adjPresent = applyResult.alreadyPresent - cfgOnlyPresent;
-                        // A dry run installs nothing, so reporting an install
-                        // count would be a claim about work that never happened.
-                        // Report what *would* change instead.
-                        return applyResult.dryRun
-                          ? `${adjInstalled} would be installed, ${adjPresent} already present`
-                          : `${adjInstalled} installed, ${adjPresent} already present`;
-                      })()}
-                      {applyResult.failed > 0 ? `, ${applyResult.failed} failed` : ''}
+                      {applyResult.dryRun
+                        ? `${applyDisplayAppCounts.installed} would be installed, ${applyDisplayAppCounts.present} already present`
+                        : `${applyDisplayAppCounts.installed} installed, ${applyDisplayAppCounts.present} already present`}
+                      {applyDisplayAppCounts.failed > 0 ? `, ${applyDisplayAppCounts.failed} failed` : ''}
                       {(() => {
                         const restored = applyResult.configsRestored ?? 0;
                         const settingsFailed = applyResult.configsFailed ?? 0;
@@ -1560,7 +1703,7 @@ export function SetupFlow({
 
                 {/* Activity summary */}
                 {applyResult.appEvents.length > 0 && (() => {
-                  const fullConfigMap = applyResult.configModuleMap ?? {};
+                  const fullConfigMap = applyProfileConfigMap;
                   // Filter config map to only include entries for modules the user selected
                   const applyConfigMap = selectedModules.length > 0
                     ? Object.fromEntries(Object.entries(fullConfigMap).filter(([, qualifiedId]) => {
@@ -1574,86 +1717,67 @@ export function SetupFlow({
                   // Fall back to selected modules count when restore counters are empty (only when restore was requested)
                   const configMapSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
                   const applySettingsTotal = applySettingsProcessed > 0 ? applySettingsProcessed : configMapSettingsCount;
-                  // Config-only synthesized apps get their own "Settings only"
-                  // section, so every app counter here excludes them — and must
-                  // exclude them the SAME way. Three different adjustments used to
-                  // coexist on this one screen: the headline subtracted config-only
-                  // *present*, this total subtracted *all* config-only (including
-                  // skipped ones that were never in the sum, so they were removed
-                  // from a total that never held them), and the status chips
-                  // subtracted nothing. One real run showed "94 apps", "102 present"
-                  // and "95 already present" side by side. Adjust per status, the
-                  // way the preview screen above already does.
-                  const applyConfigOnlyWithStatus = (status: StatusKey) =>
-                    applyResult.appEvents.filter(
-                      (e) =>
-                        isConfigOnlyApp(e) &&
-                        (e.statusKey === status || (status === 'present' && !e.statusKey)),
-                    ).length;
-                  const adjApplyInstalled =
-                    applyResult.installed - applyConfigOnlyWithStatus('installed');
-                  const adjApplyPresent =
-                    applyResult.alreadyPresent - applyConfigOnlyWithStatus('present');
-                  const adjApplyFailed =
-                    applyResult.failed - applyConfigOnlyWithStatus('failed');
-                  const totalApplyApps = adjApplyInstalled + adjApplyPresent + adjApplyFailed;
                   // Partition filtered events
-                  const applyAppsOnlyCount = appsOnlyCount(applyResult.appEvents, applyConfigMap);
-                  const allApplyEvents = filterEvents(applyResult.appEvents, applyConfigMap);
-                  const applyWingetEvents = allApplyEvents.filter(e => !isConfigOnlyApp(e));
-                  const applyConfigOnlyEvents = allApplyEvents.filter(e => isConfigOnlyApp(e));
+                  const applyAppsOnlyCount = appsOnlyCount(
+                    applyResult.appEvents,
+                    applyConfigMap,
+                    applySynthesizedAppIds,
+                  );
+                  const allApplyEvents = filterEvents(applyResult.appEvents, applyConfigMap, applySynthesizedAppIds);
+                  const applyWingetEvents = allApplyEvents.filter(e => !isConfigOnlyApp(e, applySynthesizedAppIds));
+                  const applyConfigOnlyEvents = allApplyEvents.filter(e => isConfigOnlyApp(e, applySynthesizedAppIds));
                   const showApplyConfigOnlySection = applyConfigOnlyEvents.length > 0 && (activeFilters.size === 0 || activeFilters.has('settings'));
                   return (
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
-                      {totalApplyApps > 0 && (
+                      {applyDisplayAppCounts.total > 0 && (
                         <FilterChip
                           onClick={clearFilters}
                           pressed={activeFilters.size === 0}
                           dimmed={activeFilters.size > 0}
                           className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                         >
-                          {totalApplyApps} {totalApplyApps === 1 ? 'app' : 'apps'}
+                          {applyDisplayAppCounts.total} {applyDisplayAppCounts.total === 1 ? 'app' : 'apps'}
                         </FilterChip>
                       )}
-                      {adjApplyInstalled > 0 && (
+                      {applyDisplayAppCounts.installed > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('installed')}
                           pressed={activeFilters.has('installed')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('installed')}
                           className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                         >
-                          {adjApplyInstalled} installed
+                          {applyDisplayAppCounts.installed} installed
                         </FilterChip>
                       )}
-                      {adjApplyPresent > 0 && (
+                      {applyDisplayAppCounts.present > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('present')}
                           pressed={activeFilters.has('present')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('present')}
                           className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                         >
-                          {adjApplyPresent} present
+                          {applyDisplayAppCounts.present} present
                         </FilterChip>
                       )}
-                      {applyResult.skipped > 0 && (
+                      {applyDisplayAppCounts.skipped > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('skipped')}
                           pressed={activeFilters.has('skipped')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('skipped')}
                           className={`${getColorClasses('warn').bg} ${getColorClasses('warn').text}`}
                         >
-                          {applyResult.skipped} skipped
+                          {applyDisplayAppCounts.skipped} skipped
                         </FilterChip>
                       )}
-                      {adjApplyFailed > 0 && (
+                      {applyDisplayAppCounts.failed > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('failed')}
                           pressed={activeFilters.has('failed')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('failed')}
                           className={`${getColorClasses('error').bg} ${getColorClasses('error').text}`}
                         >
-                          {adjApplyFailed} failed
+                          {applyDisplayAppCounts.failed} failed
                         </FilterChip>
                       )}
                       {applySettingsTotal > 0 && (
@@ -1768,7 +1892,7 @@ export function SetupFlow({
                   <Button variant="ghost" onClick={handleBackToProfiles}>
                     Back to profiles
                   </Button>
-                  {onUndoDryRun && restoreIntent === 'apps-and-settings' && ((applyResult.configsRestored ?? 0) > 0 || Object.keys(applyResult.configModuleMap ?? {}).length > 0) && (
+                  {onUndoDryRun && restoreIntent === 'apps-and-settings' && ((applyResult.configsRestored ?? 0) > 0 || Object.keys(applyProfileConfigMap).length > 0) && (
                     <Button
                       variant="ghost"
                       size="sm"

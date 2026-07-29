@@ -124,6 +124,7 @@ import { AccountSection } from './components/app/account/account-section';
 import { backupStatus, backupList, backupPush, backupLogout, BackupCommandError } from './lib/backup-bridge';
 import { useBackupNameIndex } from './components/app/backup/use-backup-name-index';
 import { profileKeyFor } from './lib/profile-key';
+import { findSynthesizedManualAppIds, loadAuthoredProfileAppIds } from './lib/profile-app-provenance';
 import { resolveCloudEntriesByKey, buildProfilePushArgs, pruneProfileBackupIds } from './lib/cloud-hosting';
 import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
 import { isBackupChunkEvent } from './lib/streaming-events';
@@ -165,6 +166,19 @@ async function readBundleMetadata(profilePath: string): Promise<{
     if (!configModulesIncluded?.length) return null;
     return { configModulesIncluded };
   } catch {
+    return null;
+  }
+}
+
+async function readAuthoredProfileAppIds(profilePath: string): Promise<Set<string> | null> {
+  try {
+    return await loadAuthoredProfileAppIds(
+      profilePath,
+      (path) => invoke<string>('read_text_file', { path }),
+    );
+  } catch {
+    // Older bridges or an externally moved profile may make source provenance
+    // unavailable. Stay conservative: do not hide any planned rows as settings-only.
     return null;
   }
 }
@@ -218,16 +232,6 @@ function AppContent() {
   const profileImportCoordinatorRef = useRef(createProfileImportCoordinator());
   const [selectedProfile, setSelectedProfile] = useState('');
   const [selectedProfilePath, setSelectedProfilePath] = useState('');
-  // Refs for immediate access in async callbacks (avoid stale closures)
-  const selectedProfileRef = useRef(selectedProfile);
-  const selectedProfilePathRef = useRef(selectedProfilePath);
-  // Helper: update profile state + refs atomically
-  const setProfileSelection = (name: string, path: string) => {
-    selectedProfileRef.current = name;
-    selectedProfilePathRef.current = path;
-    setSelectedProfile(name);
-    setSelectedProfilePath(path);
-  };
   
   const [state, setState] = useState<AppState>({
     status: 'loading',
@@ -423,13 +427,10 @@ function AppContent() {
     [settings.profileBackupIds, cloudBackupIndex.byId],
   );
 
-  // ProfileMissingModal state — replaces the older info toast that fired after
-  // a delete OR at app-start when the saved profile name couldn't be resolved.
-  // The modal explains *why* the switch happened and gives the user actionable
-  // options (restore from cloud, switch, pick another, continue without).
+  // ProfileMissingModal state — shown only when a saved Capture target cannot
+  // be resolved at startup. Deliberate deletion clears that target in place.
   interface ProfileMissingState {
     previousName: string;
-    reason: 'deleted' | 'not-found';
     firstAvailableLabel: string | null;
     onAccept: () => void;
   }
@@ -1183,6 +1184,7 @@ function AppContent() {
     if (!deleteProfilePath) return;
 
     try {
+      const deletedProfile = profiles.find((profile) => profile.path === deleteProfilePath);
       // Delete both setup and metadata files
       await deleteProfileFiles(deleteProfilePath);
       if (recentlyImportedProfile?.path === deleteProfilePath) {
@@ -1196,50 +1198,16 @@ function AppContent() {
         const discovered = await discoverProfiles(dir);
         setProfiles(discovered);
         
-        // Selection fallback: if selected profile was deleted (shouldn't happen due to check above)
-        // or if it disappeared for another reason, surface the modal so the
-        // user understands what happened and can pick what comes next.
-        const selectedStillExists = discovered.some(p => p.path === selectedProfilePath);
-        if (!selectedStillExists) {
-          const previousLabel = selectedProfile;
-          if (discovered.length > 0) {
-            const firstProfile = discovered[0];
-            const accept = () => {
-              setSelectedProfile(firstProfile.name);
-              setSelectedProfilePath(firstProfile.path);
-            };
-            // The user just deleted this profile from the profile list, so the
-            // "why did my selection change?" explanation the modal exists for is
-            // already obvious, and its "Pick another profile" action only
-            // reopens the list they are already looking at. Switch and say so.
-            //
-            // The exception is a profile with a cloud backup: there the modal
-            // offers real recovery ("Restore from cloud"), which is worth an
-            // interruption right after a delete. The app-start 'not-found' path
-            // keeps the modal too — a selection vanishing with no context is
-            // exactly what it was built for.
-            if (cloudBackupIndex.index.has(previousLabel)) {
-              setProfileMissingState({
-                previousName: previousLabel,
-                reason: 'deleted',
-                firstAvailableLabel: firstProfile.displayName || firstProfile.name,
-                onAccept: accept,
-              });
-            } else {
-              accept();
-              showToast(
-                `Switched to ${firstProfile.displayName || firstProfile.name}.`,
-                'info',
-              );
-            }
-          } else {
-            // No profiles remain — clear selection immediately (there's no
-            // fallback to switch to) and surface a calmer info toast since
-            // the user has no actionable choice beyond capturing.
-            setSelectedProfile('');
-            setSelectedProfilePath('');
-            showToast('No profiles available. Create a profile by capturing your computer setup.', 'info');
-          }
+        // Setup profile choice is local to Setup. If the deliberately deleted
+        // file also happened to be the saved Capture target, clear that stale
+        // target and let Capture ask next time; never switch profiles here.
+        if (
+          deleteProfilePath === selectedProfilePath
+          || settings.selectedProfileName === deletedProfile?.name
+        ) {
+          setSelectedProfile('');
+          setSelectedProfilePath('');
+          updateSettings({ selectedProfileName: null });
         }
       }
     } catch (err) {
@@ -1336,7 +1304,6 @@ function AppContent() {
         // saved.
         setSelectedProfile('');
         setSelectedProfilePath('');
-
         // Refresh profiles list
         const discovered = await discoverProfiles(dir);
         setProfiles(discovered);
@@ -2003,13 +1970,13 @@ function AppContent() {
     return { count: capturedCount, draftText, apps: appsList, appsIncluded: enrichedAppsIncluded, envelopeData };
   };
 
-  const handlePreviewFromOverview = async (restoreIntent: RestoreIntent = 'apps-only') => {
-    // Use refs for immediate access (state may not have settled in async callbacks)
-    const profileName = selectedProfileRef.current || selectedProfile;
-    const profilePath = selectedProfilePathRef.current || selectedProfilePath;
-    if (!profileName) {
-      throw new Error('Please select a setup profile');
-    }
+  const handlePreviewFromOverview = async (
+    profile: DiscoveredProfile,
+    restoreIntent: RestoreIntent = 'apps-only',
+  ) => {
+    const profileName = profile.name;
+    const profilePath = profile.path;
+    const authoredProfileAppIds = await readAuthoredProfileAppIds(profilePath);
 
     setIsRunning(true);
     setRunLogs('');
@@ -2089,6 +2056,9 @@ function AppContent() {
     const previewError = applyResult.envelope?.error;
     const hasConfigTerminalData = (envelopeData?.configResolutions?.length ?? 0) > 0;
     const previewActions = envelopeData?.actions ?? [];
+    const synthesizedAppIds = authoredProfileAppIds
+      ? findSynthesizedManualAppIds(previewActions, authoredProfileAppIds)
+      : [];
     let installed: number, alreadyPresent: number;
     if (previewActions.length > 0) {
       installed = previewActions.filter(a => a.status === 'to_install' || a.status === 'installed').length;
@@ -2178,6 +2148,7 @@ function AppContent() {
       // matches on) plus the winget `ref` streamed events are keyed by —
       // the setup-flow per-app picker maps rows to ids through these.
       actions: previewActions,
+      synthesizedAppIds,
       restoreModulesAvailable,
       configModuleMap,
       configResolutions: envelopeData?.configResolutions,
@@ -2187,13 +2158,12 @@ function AppContent() {
   };
 
 
-  const handleApplyFromOverview = async (restoreOptions?: ApplyRestoreOptions) => {
-    // Use refs for immediate access (state may not have settled in async callbacks)
-    const profileName = selectedProfileRef.current || selectedProfile;
-    const profilePath = selectedProfilePathRef.current || selectedProfilePath;
-    if (!profileName) {
-      throw new Error('Please select a setup profile');
-    }
+  const handleApplyFromOverview = async (
+    profile: DiscoveredProfile,
+    restoreOptions?: ApplyRestoreOptions,
+  ) => {
+    const profileName = profile.name;
+    const profilePath = profile.path;
 
     setIsRunning(true);
     setRunLogs('');
@@ -2576,6 +2546,7 @@ function AppContent() {
       installed, alreadyPresent, failed, skipped,
       profile: profileName,
       appEvents: reconciledEvents,
+      actions: envelopeActions,
       configModuleMap: configModuleMapResult,
       restoreItems: envelopeData?.restoreItems,
       restoreSummary,
@@ -3067,9 +3038,6 @@ function AppContent() {
               onBack={() => { setActiveFlowPage(null); setFlowHasWork(prev => ({ ...prev, setup: false })); setRecentlyImportedProfile(null); setNativeDragAccepted(false); setSetupFlowResetKey(k => k + 1); setCurrentPage('landing'); }}
               resetKey={setupFlowResetKey}
               onFlowReset={() => { setFlowHasWork(prev => ({ ...prev, setup: false })); setRecentlyImportedProfile(null); }}
-              onProfileSelect={(profile) => {
-                setProfileSelection(profile.name, profile.path);
-              }}
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
               onFileDrop={handleFileDrop}
@@ -3088,7 +3056,6 @@ function AppContent() {
               applyOnlySupported={applyOnlySupported}
               restoreTargetSupported={restoreTargetSupported}
               onPreview={async (profile, previewOptions) => {
-                setProfileSelection(profile.name, profile.path);
                 setIsRunning(true);
                 setLiveAppEvents([]);
                 setLiveConfigEvents([]);
@@ -3097,7 +3064,7 @@ function AppContent() {
                 setOverviewActionStatus('setup', 'running');
                 setOverviewActionProgress('setup', { message: 'Evaluating changes' });
                 try {
-                  const result = await handlePreviewFromOverview(previewOptions.restoreIntent);
+                  const result = await handlePreviewFromOverview(profile, previewOptions.restoreIntent);
                   setOverviewActionStatus('setup', result.success === false ? 'error' : 'success');
                   setFlowHasWork(prev => ({ ...prev, setup: true }));
                   return result;
@@ -3107,7 +3074,6 @@ function AppContent() {
                 }
               }}
               onApply={async (profile, restoreOptions) => {
-                setProfileSelection(profile.name, profile.path);
                 setIsRunning(true);
                 setLiveAppEvents([]);
                 setLiveConfigEvents([]);
@@ -3116,7 +3082,7 @@ function AppContent() {
                 setOverviewActionStatus('setup', 'running');
                 setOverviewActionProgress('setup', { message: 'Applying setup...' });
                 try {
-                  const result = await handleApplyFromOverview(restoreOptions);
+                  const result = await handleApplyFromOverview(profile, restoreOptions);
                   setOverviewActionStatus(
                     'setup',
                     result.success === false || result.failed > 0 ? 'error' : 'success',
@@ -4406,21 +4372,17 @@ function AppContent() {
         error={logViewerError}
       />
 
-      {/* Profile Missing Modal — replaces the older info toast when the
-          previously-selected profile no longer exists (delete or not-found
-          on resolve). Lives at the App root so both emission sites surface
-          it the same way. */}
+      {/* The saved Capture target disappeared outside the app. */}
       <ProfileMissingModal
         open={!!profileMissingState}
         onOpenChange={(open) => {
           if (!open) setProfileMissingState(null);
         }}
         previousName={profileMissingState?.previousName ?? ''}
-        reason={profileMissingState?.reason ?? 'deleted'}
         firstAvailableLabel={profileMissingState?.firstAvailableLabel ?? null}
         hasCloudBackup={
-          // Best-effort "this just-deleted profile may have a cloud backup"
-          // hint. The deleted profile is gone, so we only have its former name
+          // Best-effort "this missing profile may have a cloud backup" hint.
+          // The local profile is gone, so we only have its former name
           // (not a path key to resolve by id) — a name match against the list
           // is the right heuristic here. This is a discoverability nudge to the
           // Backup pane, not the authoritative per-profile badge (which is
@@ -4437,12 +4399,6 @@ function AppContent() {
           // Route the user to the backup pane; they'll see the cloud-backed
           // profile in the list and can pick a version to restore.
           setCurrentPage('backup');
-        }}
-        onPickAnother={() => {
-          setProfileMissingState(null);
-          // Open the setup flow so the user can pick a different profile.
-          setActiveFlowPage('setup');
-          setCurrentPage('setup');
         }}
         onContinueWithoutProfile={() => {
           setProfileMissingState(null);

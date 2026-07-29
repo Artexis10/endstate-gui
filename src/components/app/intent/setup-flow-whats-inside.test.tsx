@@ -56,10 +56,9 @@ describe('SetupFlow — "What\'s inside"', () => {
   });
 
   it('opens the summary for that profile without selecting it', async () => {
-    const onProfileSelect = vi.fn();
     const user = userEvent.setup();
 
-    renderWithProviders(<SetupFlow {...baseProps} onProfileSelect={onProfileSelect} />);
+    renderWithProviders(<SetupFlow {...baseProps} />);
 
     await user.click(screen.getByRole('button', { name: "What's inside Work Laptop" }));
 
@@ -69,7 +68,6 @@ describe('SetupFlow — "What\'s inside"', () => {
     expect(within(apps).getByText('VLC media player')).toBeVisible();
 
     // Inspecting a bundle must never start a run.
-    expect(onProfileSelect).not.toHaveBeenCalled();
     expect(baseProps.onPreview).not.toHaveBeenCalled();
   });
 

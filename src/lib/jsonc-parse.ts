@@ -96,6 +96,7 @@ export interface ProfileManifest {
   /** ISO 8601 capture timestamp. The field is `captured`, not `capturedAt`. */
   captured?: string;
   apps?: ProfileApp[];
+  includes?: string[];
   /** Manifest v1 settings lane. */
   restore?: ProfileRestoreEntry[];
   /** Manifest v2 settings lane. */
@@ -112,7 +113,6 @@ export interface ProfileApp {
     windows?: string;
   };
 }
-
 /** One manifest-v1 restore operation. Module identity is derived from `source`. */
 export interface ProfileRestoreEntry {
   type?: string;
@@ -148,4 +148,3 @@ export interface ProfileModuleSnapshot {
   id?: string;
   displayName?: string;
 }
-

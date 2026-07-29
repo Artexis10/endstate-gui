@@ -13,7 +13,6 @@ const profiles: DiscoveredProfile[] = [
 const baseProps = {
   profiles,
   onBack: vi.fn(),
-  onProfileSelect: vi.fn(),
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),

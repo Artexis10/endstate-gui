@@ -14,7 +14,6 @@ const mockProfile = {
 const baseProps = {
   profiles: [mockProfile],
   onBack: vi.fn(),
-  onProfileSelect: vi.fn(),
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),
@@ -45,6 +44,43 @@ function makePreviewWithManualApps() {
       'lightroom-classic': 'apps.lightroom-classic',
       'claude-code': 'apps.claude-code',
     } as Record<string, string>,
+    restoreModulesAvailable: [
+      { id: 'apps.github-cli', displayName: 'GitHub CLI' },
+      { id: 'apps.lightroom-classic', displayName: 'Adobe Lightroom Classic' },
+      { id: 'apps.claude-code', displayName: 'Claude Code' },
+    ],
+    synthesizedAppIds: ['lightroom-classic', 'claude-code'],
+  };
+}
+
+/** Real manual install entries are apps, even though their driver is "manual". */
+function makePreviewWithUserAuthoredManualApps() {
+  return {
+    installed: 3,
+    alreadyPresent: 3,
+    appEvents: [
+      { app: '7zip', action: 'OK', statusKey: 'present' as const, name: '7-Zip', timestamp: 1, driver: 'manual' },
+      { app: 'obsidian', action: 'OK', statusKey: 'present' as const, name: 'Obsidian', timestamp: 2, driver: 'manual' },
+      { app: 'vlc', action: 'OK', statusKey: 'present' as const, name: 'VLC media player', timestamp: 3, driver: 'manual' },
+      { app: 'blender', action: 'To install', statusKey: 'to_install' as const, name: 'Blender', timestamp: 4, driver: 'manual' },
+      { app: 'handbrake', action: 'To install', statusKey: 'to_install' as const, name: 'HandBrake', timestamp: 5, driver: 'manual' },
+      { app: 'keepassxc', action: 'To install', statusKey: 'to_install' as const, name: 'KeePassXC', timestamp: 6, driver: 'manual' },
+    ],
+    actions: [
+      { id: '7zip', ref: null, driver: 'manual', status: 'present' },
+      { id: 'obsidian', ref: null, driver: 'manual', status: 'present' },
+      { id: 'vlc', ref: null, driver: 'manual', status: 'present' },
+      { id: 'blender', ref: null, driver: 'manual', status: 'to_install', manual: { verifyPath: '%ProgramFiles%\\Blender\\blender.exe' } },
+      { id: 'handbrake', ref: null, driver: 'manual', status: 'to_install', manual: { verifyPath: '%ProgramFiles%\\HandBrake\\HandBrake.exe' } },
+      { id: 'keepassxc', ref: null, driver: 'manual', status: 'to_install', manual: { verifyPath: '%ProgramFiles%\\KeePassXC\\KeePassXC.exe' } },
+    ],
+    // Catalog metadata is not evidence that this profile carries settings.
+    configModuleMap: {
+      'Git.Git': 'apps.git-bash',
+      // The global catalog can map an app in this profile even when the
+      // profile carries no restore payload for that module.
+      'vlc': 'apps.vlc',
+    } as Record<string, string>,
   };
 }
 
@@ -62,7 +98,7 @@ function makePreviewWingetOnly() {
   };
 }
 
-async function navigateToPreview(previewResult: ReturnType<typeof makePreviewWithManualApps>) {
+async function navigateToPreview(previewResult: Record<string, unknown>) {
   const onPreview = vi.fn().mockResolvedValue(previewResult);
   renderWithProviders(
     <SetupFlow {...baseProps} onPreview={onPreview} />
@@ -97,6 +133,22 @@ function makeApplyWithSkippedManualApps() {
       'claude-code': 'apps.claude-code',
     } as Record<string, string>,
   };
+}
+
+async function navigateToApply(
+  previewResult: Record<string, unknown>,
+  applyResult: Record<string, unknown>,
+) {
+  const onPreview = vi.fn().mockResolvedValue(previewResult);
+  const onApply = vi.fn().mockResolvedValue(applyResult);
+  renderWithProviders(
+    <SetupFlow {...baseProps} onPreview={onPreview} onApply={onApply} />,
+  );
+  await userEvent.click(screen.getByText('test-profile'));
+  await userEvent.click(await screen.findByTestId('setup-flow-apply'));
+  await waitFor(() => {
+    expect(screen.getByText('Setup complete')).toBeInTheDocument();
+  });
 }
 
 describe('SetupFlow — Config-only (manual) app distinction', () => {
@@ -183,5 +235,82 @@ describe('SetupFlow — Config-only (manual) app distinction', () => {
     expect(screen.getByText('2 to install')).toBeInTheDocument();
     // 2 winget apps present (GitHub CLI, Inkscape) — not 4 (which would include manual)
     expect(screen.getByText('2 present')).toBeInTheDocument();
+  });
+
+  it('counts user-authored manual install entries as apps rather than settings-only rows', async () => {
+    await navigateToPreview(makePreviewWithUserAuthoredManualApps());
+
+    expect(screen.getByText('3 to install, 3 already present')).toBeInTheDocument();
+    expect(screen.getByText('6 apps')).toBeInTheDocument();
+    expect(screen.queryByText('Settings only — app installation not included')).not.toBeInTheDocument();
+  });
+
+  it('does not infer profile-owned settings from the global config module map', async () => {
+    await navigateToPreview(makePreviewWingetOnly());
+
+    expect(screen.queryByText(/settings available/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /restore settings/i })).not.toBeInTheDocument();
+  });
+
+  it('does not hide an authored manual app just because it shares a config mapping', async () => {
+    const preview = makePreviewWithUserAuthoredManualApps();
+    await navigateToPreview({
+      ...preview,
+      restoreModulesAvailable: [{ id: 'apps.vlc', displayName: 'VLC media player' }],
+      configModuleMap: { vlc: 'apps.vlc' },
+      synthesizedAppIds: [],
+    });
+
+    expect(screen.getByText('6 apps')).toBeInTheDocument();
+    expect(screen.queryByText('Settings only — app installation not included')).not.toBeInTheDocument();
+  });
+
+  it('does not subtract a skipped synthesized row from the authored app total after apply', async () => {
+    const preview = {
+      installed: 1,
+      alreadyPresent: 1,
+      appEvents: [
+        { app: 'authored-app', action: 'OK', statusKey: 'present' as const, name: 'Authored app', timestamp: 1 },
+        { app: 'settings-only', action: 'To install', statusKey: 'to_install' as const, name: 'Settings only', timestamp: 2, driver: 'manual' },
+      ],
+      actions: [
+        { id: 'authored-app', ref: 'Vendor.Authored', status: 'present' },
+        { id: 'settings-only', ref: null, driver: 'manual', status: 'to_install' },
+      ],
+      synthesizedAppIds: ['settings-only'],
+      restoreModulesAvailable: [{ id: 'apps.settings-only', displayName: 'Settings only' }],
+    };
+    const apply = {
+      installed: 0,
+      alreadyPresent: 1,
+      skipped: 1,
+      failed: 0,
+      appEvents: [
+        { app: 'authored-app', action: 'Already present', statusKey: 'present' as const, name: 'Authored app', timestamp: 3 },
+        { app: 'settings-only', action: 'Manual action required', statusKey: 'skipped' as const, name: 'Settings only', timestamp: 4, driver: 'manual' },
+      ],
+    };
+
+    await navigateToApply(preview, apply);
+
+    expect(screen.getByText('1 app')).toBeInTheDocument();
+    expect(screen.getByText('1 present')).toBeInTheDocument();
+    expect(screen.queryByText('1 skipped')).not.toBeInTheDocument();
+  });
+
+  it('does not include a present synthesized row in the apply status chips', async () => {
+    const preview = makePreviewWithManualApps();
+    const apply = {
+      installed: 0,
+      alreadyPresent: 4,
+      skipped: 0,
+      failed: 0,
+      appEvents: preview.appEvents.filter((event) => event.statusKey === 'present'),
+    };
+
+    await navigateToApply(preview, apply);
+
+    expect(screen.getByText('2 present')).toBeInTheDocument();
+    expect(screen.queryByText('4 present')).not.toBeInTheDocument();
   });
 });

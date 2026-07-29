@@ -8,28 +8,22 @@ function makeProps(overrides: Partial<Parameters<typeof ProfileMissingModal>[0]>
     open: true,
     onOpenChange: vi.fn(),
     previousName: 'work-laptop',
-    reason: 'deleted' as const,
     firstAvailableLabel: 'gaming-pc',
     hasCloudBackup: false,
     onSwitchToFirstAvailable: vi.fn(),
     onRestoreFromCloud: vi.fn(),
-    onPickAnother: vi.fn(),
     onContinueWithoutProfile: vi.fn(),
     ...overrides,
   };
 }
 
 describe('ProfileMissingModal', () => {
-  it('renders the deleted headline when reason is deleted', () => {
-    renderWithProviders(<ProfileMissingModal {...makeProps({ reason: 'deleted' })} />);
-    expect(screen.getByText(/"work-laptop" was deleted/)).toBeInTheDocument();
-  });
-
-  it('renders the not-found headline with explanatory body', () => {
-    renderWithProviders(<ProfileMissingModal {...makeProps({ reason: 'not-found' })} />);
+  it('renders the missing Capture profile headline with explanatory body', () => {
+    renderWithProviders(<ProfileMissingModal {...makeProps()} />);
     expect(
       screen.getByText(/"work-laptop" couldn't be found/),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Capture profile/i)).toBeInTheDocument();
     expect(screen.getByText(/profiles folder changed/i)).toBeInTheDocument();
   });
 
@@ -71,17 +65,18 @@ describe('ProfileMissingModal', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('Pick another and Continue without each fire their callback and close', () => {
-    const onPickAnother = vi.fn();
+  it('does not offer a Setup picker as a replacement Capture target', () => {
+    renderWithProviders(<ProfileMissingModal {...makeProps()} />);
+    expect(screen.queryByText('Pick another profile')).not.toBeInTheDocument();
+  });
+
+  it('Continue without fires its callback and closes', () => {
     const onContinueWithoutProfile = vi.fn();
     renderWithProviders(
       <ProfileMissingModal
-        {...makeProps({ onPickAnother, onContinueWithoutProfile })}
+        {...makeProps({ onContinueWithoutProfile })}
       />,
     );
-    fireEvent.click(screen.getByTestId('profile-missing-pick-another'));
-    expect(onPickAnother).toHaveBeenCalledTimes(1);
-
     fireEvent.click(screen.getByTestId('profile-missing-continue-without'));
     expect(onContinueWithoutProfile).toHaveBeenCalledTimes(1);
   });

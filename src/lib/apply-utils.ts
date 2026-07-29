@@ -553,7 +553,7 @@ export interface AppEvent {
   reason?: string | null; // Engine reason for status discrimination (e.g., 'filtered', 'sensitive', 'already_installed')
   /** Friendly display name from engine (e.g., "Visual Studio Code") */
   name?: string;
-  /** Engine driver (e.g., "winget", "manual"). Manual entries are synthesized config-only apps. */
+  /** Engine driver (e.g., "winget", "manual"). Manual rows may be authored apps or engine-synthesized settings rows. */
   driver?: string;
   /**
    * Row kind. Undefined/'app' is an installable app row (default). 'restore' is
