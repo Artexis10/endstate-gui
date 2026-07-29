@@ -17,7 +17,6 @@ const profiles: DiscoveredProfile[] = [
 const baseProps = {
   profiles,
   onBack: vi.fn(),
-  onProfileSelect: vi.fn(),
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),
@@ -147,12 +146,12 @@ describe('SetupFlow — "Back up to cloud" action on local-only profile cards', 
   });
 
   it('does not propagate the click to the parent card (select handler stays untriggered)', () => {
-    const onProfileSelect = vi.fn();
+    const onPreview = vi.fn();
     const onPushProfileToCloud = vi.fn();
     renderWithProviders(
       <SetupFlow
         {...baseProps}
-        onProfileSelect={onProfileSelect}
+        onPreview={onPreview}
         hostedBackupSignedIn={true}
         hostedBackupSubscriptionStatus="active"
         cloudBackupIndex={cloudIndex}
@@ -161,6 +160,6 @@ describe('SetupFlow — "Back up to cloud" action on local-only profile cards', 
     );
     fireEvent.click(screen.getByTestId('profile-card-local-pc-push-to-cloud'));
     expect(onPushProfileToCloud).toHaveBeenCalledTimes(1);
-    expect(onProfileSelect).not.toHaveBeenCalled();
+    expect(onPreview).not.toHaveBeenCalled();
   });
 });

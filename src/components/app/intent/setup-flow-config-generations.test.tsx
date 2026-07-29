@@ -50,7 +50,6 @@ function deferred<T>() {
 const baseProps = {
   profiles: [profile],
   onBack: vi.fn(),
-  onProfileSelect: vi.fn(),
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),

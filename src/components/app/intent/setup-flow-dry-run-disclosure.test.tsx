@@ -36,7 +36,6 @@ const previewResult = {
 const baseProps = {
   profiles: [mockProfile],
   onBack: vi.fn(),
-  onProfileSelect: vi.fn(),
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),
