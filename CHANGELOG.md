@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.9.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.8.1...gui-v3.9.0) (2026-07-29)
+
+
+### Features
+
+* accept and register the .endstate capture bundle extension ([#211](https://github.com/Artexis10/endstate-gui/issues/211)) ([1bde7dc](https://github.com/Artexis10/endstate-gui/commit/1bde7dc3ed74c6cfbbdd8cb33cd682f4626c364a))
+* add an in-app "What's inside" view for profiles ([#212](https://github.com/Artexis10/endstate-gui/issues/212)) ([25f8493](https://github.com/Artexis10/endstate-gui/commit/25f84933f926ac06a341069f7f7209fb2be0373f))
+* bump engine to v2.29.0 ([#214](https://github.com/Artexis10/endstate-gui/issues/214)) ([b177e43](https://github.com/Artexis10/endstate-gui/commit/b177e4316a02814532b9fc096381d4c4a9d24f4b))
+
+
+### Bug Fixes
+
+* **setup:** correct profile and settings preview state ([#215](https://github.com/Artexis10/endstate-gui/issues/215)) ([5e416c5](https://github.com/Artexis10/endstate-gui/commit/5e416c51c772b09cb4a25bbfd96d3ae3f846f7d7))
+
 ## [3.8.1](https://github.com/Artexis10/endstate-gui/compare/gui-v3.8.0...gui-v3.8.1) (2026-07-25)
 
 
