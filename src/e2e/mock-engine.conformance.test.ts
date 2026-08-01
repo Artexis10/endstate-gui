@@ -66,25 +66,48 @@ describe('mock engine conforms to the real profile inspection envelope', () => {
       unidentifiedSettingsRowCount: 0,
     });
     expect(data.apps.filter((app) => app.hasSettings)).toHaveLength(7);
-    expect(data.settingsApps.map((row) => row.associationStatus)).toEqual([
-      'included', 'included', 'included', 'included',
-      'included', 'included', 'included', 'not_in_profile',
-    ]);
-    for (const row of data.settingsApps.slice(0, 7)) {
+    expect(new Set(data.apps.map((app) => app.id)).size).toBe(data.apps.length);
+    for (const app of data.apps) {
+      expect(app.id).toBe(`app:${app.manifestAppId.toLowerCase()}:1`);
+    }
+    expect(data.apps.map((app) => `${app.displayName.toLowerCase()}\u0000${app.id}`)).toEqual(
+      [...data.apps]
+        .sort((left, right) => {
+          const leftKey = `${left.displayName.toLowerCase()}\u0000${left.id}`;
+          const rightKey = `${right.displayName.toLowerCase()}\u0000${right.id}`;
+          return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+        })
+        .map((app) => `${app.displayName.toLowerCase()}\u0000${app.id}`),
+    );
+    expect(data.settingsApps.filter((row) => row.associationStatus === 'included')).toHaveLength(7);
+    expect(data.settingsApps.filter((row) => row.associationStatus === 'not_in_profile')).toHaveLength(1);
+    for (const row of data.settingsApps.filter((row) => row.associationStatus === 'included')) {
+      expect(row.id).toBe(`settings:${row.appId}`);
       expect(row.ownerId).toBe(row.appId);
       expect(row.appIncluded).toBe(true);
       expect(row.candidateAppIds).toEqual([row.appId]);
       expect(row.packageRefs).toEqual(expect.any(Array));
       expect(row.moduleIds).toEqual(expect.any(Array));
     }
-    expect(data.settingsApps[data.settingsApps.length - 1]).toMatchObject({
+    expect(data.settingsApps.find((row) => row.associationStatus === 'not_in_profile')).toMatchObject({
+      id: 'settings:package:vendor.absent',
+      ownerId: 'package:vendor.absent',
       associationStatus: 'not_in_profile',
       appId: null,
       appIncluded: false,
       candidateAppIds: [],
     });
-    expect(data.apps[2].packageRefs).toContain('com.endstate.hidden-package-ref');
-    expect(data.settingsApps[2].moduleIds).toContain('apps.hidden-module-id');
+    expect(data.settingsApps.map((row) => `${row.displayName.toLowerCase()}\u0000${row.id}`)).toEqual(
+      [...data.settingsApps]
+        .sort((left, right) => {
+          const leftKey = `${left.displayName.toLowerCase()}\u0000${left.id}`;
+          const rightKey = `${right.displayName.toLowerCase()}\u0000${right.id}`;
+          return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+        })
+        .map((row) => `${row.displayName.toLowerCase()}\u0000${row.id}`),
+    );
+    expect(data.apps.find((app) => app.manifestAppId === 'cursor')?.packageRefs).toContain('com.endstate.hidden-package-ref');
+    expect(data.settingsApps.find((row) => row.appId === 'app:cursor:1')?.moduleIds).toContain('apps.hidden-module-id');
     expect(data.warnings).toContainEqual(expect.objectContaining({ impact: 'inventory_incomplete' }));
   });
 });

@@ -22,6 +22,7 @@ test.describe('real-engine profile contents inspection', () => {
   });
 
   test('renders the real profile inspect inventory without selecting or previewing it', async ({ page, request }) => {
+    expect(seeded.name).toMatch(/^ci-profile-inspection-[a-z0-9-]+$/);
     const expected = await profileInspectionEnvelope(request, seeded.path);
     const browserInvokes: Array<{ cmd?: string; args?: { args?: string[] } }> = [];
     page.on('request', (requestEvent) => {

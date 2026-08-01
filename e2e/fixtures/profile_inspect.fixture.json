@@ -23,7 +23,7 @@
         "hasSettings": true
       },
       {
-        "id": "app:adobe-creative-cloud:2",
+        "id": "app:adobe-creative-cloud:1",
         "manifestAppId": "adobe-creative-cloud",
         "displayName": "Adobe Creative Cloud",
         "packageRefs": [
@@ -32,7 +32,88 @@
         "hasSettings": true
       },
       {
-        "id": "app:cursor:3",
+        "id": "app:apple-mobile-device-support:1",
+        "manifestAppId": "apple-mobile-device-support",
+        "displayName": "Apple Mobile Device Support",
+        "packageRefs": [
+          "Vendor.AppleMobileDeviceSupport"
+        ],
+        "hasSettings": true
+      },
+      {
+        "id": "app:apple-software-update:1",
+        "manifestAppId": "apple-software-update",
+        "displayName": "Apple Software Update",
+        "packageRefs": [
+          "Vendor.AppleSoftwareUpdate"
+        ],
+        "hasSettings": true
+      },
+      {
+        "id": "app:audacity:1",
+        "manifestAppId": "audacity",
+        "displayName": "Audacity",
+        "packageRefs": [
+          "Vendor.Audacity"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:bitwarden:1",
+        "manifestAppId": "bitwarden",
+        "displayName": "Bitwarden",
+        "packageRefs": [
+          "Vendor.Bitwarden"
+        ],
+        "hasSettings": true
+      },
+      {
+        "id": "app:blender:1",
+        "manifestAppId": "blender",
+        "displayName": "Blender",
+        "packageRefs": [
+          "Vendor.Blender"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:brave:1",
+        "manifestAppId": "brave",
+        "displayName": "Brave",
+        "packageRefs": [
+          "Vendor.Brave"
+        ],
+        "hasSettings": true
+      },
+      {
+        "id": "app:calibre:1",
+        "manifestAppId": "calibre",
+        "displayName": "Calibre",
+        "packageRefs": [
+          "Vendor.Calibre"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:capcut:1",
+        "manifestAppId": "capcut",
+        "displayName": "CapCut",
+        "packageRefs": [
+          "Vendor.Capcut"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:cloudflared:1",
+        "manifestAppId": "cloudflared",
+        "displayName": "cloudflared",
+        "packageRefs": [
+          "Vendor.Cloudflared"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:cursor:1",
         "manifestAppId": "cursor",
         "displayName": "Cursor",
         "packageRefs": [
@@ -42,457 +123,7 @@
         "hasSettings": true
       },
       {
-        "id": "app:apple-mobile-device-support:4",
-        "manifestAppId": "apple-mobile-device-support",
-        "displayName": "Apple Mobile Device Support",
-        "packageRefs": [
-          "Vendor.AppleMobileDeviceSupport"
-        ],
-        "hasSettings": true
-      },
-      {
-        "id": "app:apple-software-update:5",
-        "manifestAppId": "apple-software-update",
-        "displayName": "Apple Software Update",
-        "packageRefs": [
-          "Vendor.AppleSoftwareUpdate"
-        ],
-        "hasSettings": true
-      },
-      {
-        "id": "app:bitwarden:6",
-        "manifestAppId": "bitwarden",
-        "displayName": "Bitwarden",
-        "packageRefs": [
-          "Vendor.Bitwarden"
-        ],
-        "hasSettings": true
-      },
-      {
-        "id": "app:brave:7",
-        "manifestAppId": "brave",
-        "displayName": "Brave",
-        "packageRefs": [
-          "Vendor.Brave"
-        ],
-        "hasSettings": true
-      },
-      {
-        "id": "app:burntsushi-ripgrep-msvc:8",
-        "manifestAppId": "burntsushi-ripgrep-msvc",
-        "displayName": "ripgrep (MSVC)",
-        "packageRefs": [
-          "Vendor.BurntsushiRipgrepMsvc"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:capcut:9",
-        "manifestAppId": "capcut",
-        "displayName": "CapCut",
-        "packageRefs": [
-          "Vendor.Capcut"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:cloudflared:10",
-        "manifestAppId": "cloudflared",
-        "displayName": "cloudflared",
-        "packageRefs": [
-          "Vendor.Cloudflared"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:discord:11",
-        "manifestAppId": "discord",
-        "displayName": "Discord",
-        "packageRefs": [
-          "Vendor.Discord"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:docker-desktop:12",
-        "manifestAppId": "docker-desktop",
-        "displayName": "Docker Desktop",
-        "packageRefs": [
-          "Vendor.DockerDesktop"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:figma:13",
-        "manifestAppId": "figma",
-        "displayName": "Figma",
-        "packageRefs": [
-          "Vendor.Figma"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:firefox:14",
-        "manifestAppId": "firefox",
-        "displayName": "Firefox",
-        "packageRefs": [
-          "Vendor.Firefox"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:git:15",
-        "manifestAppId": "git",
-        "displayName": "Git",
-        "packageRefs": [
-          "Vendor.Git"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:github-desktop:16",
-        "manifestAppId": "github-desktop",
-        "displayName": "GitHub Desktop",
-        "packageRefs": [
-          "Vendor.GithubDesktop"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:google-chrome:17",
-        "manifestAppId": "google-chrome",
-        "displayName": "Google Chrome",
-        "packageRefs": [
-          "Vendor.GoogleChrome"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:handbrake:18",
-        "manifestAppId": "handbrake",
-        "displayName": "HandBrake",
-        "packageRefs": [
-          "Vendor.Handbrake"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:keepassxc:19",
-        "manifestAppId": "keepassxc",
-        "displayName": "KeePassXC",
-        "packageRefs": [
-          "Vendor.Keepassxc"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:libreoffice:20",
-        "manifestAppId": "libreoffice",
-        "displayName": "LibreOffice",
-        "packageRefs": [
-          "Vendor.Libreoffice"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:microsoft-powertoys:21",
-        "manifestAppId": "microsoft-powertoys",
-        "displayName": "Microsoft PowerToys",
-        "packageRefs": [
-          "Vendor.MicrosoftPowertoys"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:microsoft-teams:22",
-        "manifestAppId": "microsoft-teams",
-        "displayName": "Microsoft Teams",
-        "packageRefs": [
-          "Vendor.MicrosoftTeams"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:nodejs:23",
-        "manifestAppId": "nodejs",
-        "displayName": "Node.js",
-        "packageRefs": [
-          "Vendor.Nodejs"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:notion:24",
-        "manifestAppId": "notion",
-        "displayName": "Notion",
-        "packageRefs": [
-          "Vendor.Notion"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:obsidian:25",
-        "manifestAppId": "obsidian",
-        "displayName": "Obsidian",
-        "packageRefs": [
-          "Vendor.Obsidian"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:openvpn:26",
-        "manifestAppId": "openvpn",
-        "displayName": "OpenVPN",
-        "packageRefs": [
-          "Vendor.Openvpn"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:paint-net:27",
-        "manifestAppId": "paint-net",
-        "displayName": "Paint.NET",
-        "packageRefs": [
-          "Vendor.PaintNet"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:postgresql:28",
-        "manifestAppId": "postgresql",
-        "displayName": "PostgreSQL",
-        "packageRefs": [
-          "Vendor.Postgresql"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:powershell:29",
-        "manifestAppId": "powershell",
-        "displayName": "PowerShell",
-        "packageRefs": [
-          "Vendor.Powershell"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:python:30",
-        "manifestAppId": "python",
-        "displayName": "Python",
-        "packageRefs": [
-          "Vendor.Python"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:qbittorrent:31",
-        "manifestAppId": "qbittorrent",
-        "displayName": "qBittorrent",
-        "packageRefs": [
-          "Vendor.Qbittorrent"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:rustup:32",
-        "manifestAppId": "rustup",
-        "displayName": "Rustup",
-        "packageRefs": [
-          "Vendor.Rustup"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:slack:33",
-        "manifestAppId": "slack",
-        "displayName": "Slack",
-        "packageRefs": [
-          "Vendor.Slack"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:spotify:34",
-        "manifestAppId": "spotify",
-        "displayName": "Spotify",
-        "packageRefs": [
-          "Vendor.Spotify"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:steam:35",
-        "manifestAppId": "steam",
-        "displayName": "Steam",
-        "packageRefs": [
-          "Vendor.Steam"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:telegram:36",
-        "manifestAppId": "telegram",
-        "displayName": "Telegram Desktop",
-        "packageRefs": [
-          "Vendor.Telegram"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:termius:37",
-        "manifestAppId": "termius",
-        "displayName": "Termius",
-        "packageRefs": [
-          "Vendor.Termius"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:thunderbird:38",
-        "manifestAppId": "thunderbird",
-        "displayName": "Thunderbird",
-        "packageRefs": [
-          "Vendor.Thunderbird"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:transmission:39",
-        "manifestAppId": "transmission",
-        "displayName": "Transmission",
-        "packageRefs": [
-          "Vendor.Transmission"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:unified-remote:40",
-        "manifestAppId": "unified-remote",
-        "displayName": "Unified Remote",
-        "packageRefs": [
-          "Vendor.UnifiedRemote"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:vcredist:41",
-        "manifestAppId": "vcredist",
-        "displayName": "Visual C++ Redistributable",
-        "packageRefs": [
-          "Vendor.Vcredist"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:vlc:42",
-        "manifestAppId": "vlc",
-        "displayName": "VLC media player",
-        "packageRefs": [
-          "Vendor.Vlc"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:vscode:43",
-        "manifestAppId": "vscode",
-        "displayName": "Visual Studio Code",
-        "packageRefs": [
-          "Vendor.Vscode"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:warp:44",
-        "manifestAppId": "warp",
-        "displayName": "Warp",
-        "packageRefs": [
-          "Vendor.Warp"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:winscp:45",
-        "manifestAppId": "winscp",
-        "displayName": "WinSCP",
-        "packageRefs": [
-          "Vendor.Winscp"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:winfsp:46",
-        "manifestAppId": "winfsp",
-        "displayName": "WinFsp",
-        "packageRefs": [
-          "Vendor.Winfsp"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:xconvert:47",
-        "manifestAppId": "xconvert",
-        "displayName": "XnConvert",
-        "packageRefs": [
-          "Vendor.Xconvert"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:yt-dlp-ffmpeg:48",
-        "manifestAppId": "yt-dlp-ffmpeg",
-        "displayName": "yt-dlp FFmpeg",
-        "packageRefs": [
-          "Vendor.YtDlpFfmpeg"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:yt-dlp:49",
-        "manifestAppId": "yt-dlp",
-        "displayName": "yt-dlp",
-        "packageRefs": [
-          "Vendor.YtDlp"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:zoom:50",
-        "manifestAppId": "zoom",
-        "displayName": "Zoom",
-        "packageRefs": [
-          "Vendor.Zoom"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:audacity:51",
-        "manifestAppId": "audacity",
-        "displayName": "Audacity",
-        "packageRefs": [
-          "Vendor.Audacity"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:blender:52",
-        "manifestAppId": "blender",
-        "displayName": "Blender",
-        "packageRefs": [
-          "Vendor.Blender"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:calibre:53",
-        "manifestAppId": "calibre",
-        "displayName": "Calibre",
-        "packageRefs": [
-          "Vendor.Calibre"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:cygwin:54",
+        "id": "app:cygwin:1",
         "manifestAppId": "cygwin",
         "displayName": "Cygwin",
         "packageRefs": [
@@ -501,7 +132,7 @@
         "hasSettings": false
       },
       {
-        "id": "app:dbeaver:55",
+        "id": "app:dbeaver:1",
         "manifestAppId": "dbeaver",
         "displayName": "DBeaver",
         "packageRefs": [
@@ -510,7 +141,25 @@
         "hasSettings": false
       },
       {
-        "id": "app:ffmpeg:56",
+        "id": "app:discord:1",
+        "manifestAppId": "discord",
+        "displayName": "Discord",
+        "packageRefs": [
+          "Vendor.Discord"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:docker-desktop:1",
+        "manifestAppId": "docker-desktop",
+        "displayName": "Docker Desktop",
+        "packageRefs": [
+          "Vendor.DockerDesktop"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:ffmpeg:1",
         "manifestAppId": "ffmpeg",
         "displayName": "FFmpeg",
         "packageRefs": [
@@ -519,7 +168,25 @@
         "hasSettings": false
       },
       {
-        "id": "app:gimp:57",
+        "id": "app:figma:1",
+        "manifestAppId": "figma",
+        "displayName": "Figma",
+        "packageRefs": [
+          "Vendor.Figma"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:firefox:1",
+        "manifestAppId": "firefox",
+        "displayName": "Firefox",
+        "packageRefs": [
+          "Vendor.Firefox"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:gimp:1",
         "manifestAppId": "gimp",
         "displayName": "GIMP",
         "packageRefs": [
@@ -528,7 +195,25 @@
         "hasSettings": false
       },
       {
-        "id": "app:go:58",
+        "id": "app:git:1",
+        "manifestAppId": "git",
+        "displayName": "Git",
+        "packageRefs": [
+          "Vendor.Git"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:github-desktop:1",
+        "manifestAppId": "github-desktop",
+        "displayName": "GitHub Desktop",
+        "packageRefs": [
+          "Vendor.GithubDesktop"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:go:1",
         "manifestAppId": "go",
         "displayName": "Go",
         "packageRefs": [
@@ -537,7 +222,25 @@
         "hasSettings": false
       },
       {
-        "id": "app:inkscape:59",
+        "id": "app:google-chrome:1",
+        "manifestAppId": "google-chrome",
+        "displayName": "Google Chrome",
+        "packageRefs": [
+          "Vendor.GoogleChrome"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:handbrake:1",
+        "manifestAppId": "handbrake",
+        "displayName": "HandBrake",
+        "packageRefs": [
+          "Vendor.Handbrake"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:inkscape:1",
         "manifestAppId": "inkscape",
         "displayName": "Inkscape",
         "packageRefs": [
@@ -546,16 +249,7 @@
         "hasSettings": false
       },
       {
-        "id": "app:jdk:60",
-        "manifestAppId": "jdk",
-        "displayName": "OpenJDK",
-        "packageRefs": [
-          "Vendor.Jdk"
-        ],
-        "hasSettings": false
-      },
-      {
-        "id": "app:kdenlive:61",
+        "id": "app:kdenlive:1",
         "manifestAppId": "kdenlive",
         "displayName": "Kdenlive",
         "packageRefs": [
@@ -564,7 +258,25 @@
         "hasSettings": false
       },
       {
-        "id": "app:lm-studio:62",
+        "id": "app:keepassxc:1",
+        "manifestAppId": "keepassxc",
+        "displayName": "KeePassXC",
+        "packageRefs": [
+          "Vendor.Keepassxc"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:libreoffice:1",
+        "manifestAppId": "libreoffice",
+        "displayName": "LibreOffice",
+        "packageRefs": [
+          "Vendor.Libreoffice"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:lm-studio:1",
         "manifestAppId": "lm-studio",
         "displayName": "LM Studio",
         "packageRefs": [
@@ -573,7 +285,25 @@
         "hasSettings": false
       },
       {
-        "id": "app:mongodb-compass:63",
+        "id": "app:microsoft-powertoys:1",
+        "manifestAppId": "microsoft-powertoys",
+        "displayName": "Microsoft PowerToys",
+        "packageRefs": [
+          "Vendor.MicrosoftPowertoys"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:microsoft-teams:1",
+        "manifestAppId": "microsoft-teams",
+        "displayName": "Microsoft Teams",
+        "packageRefs": [
+          "Vendor.MicrosoftTeams"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:mongodb-compass:1",
         "manifestAppId": "mongodb-compass",
         "displayName": "MongoDB Compass",
         "packageRefs": [
@@ -582,7 +312,7 @@
         "hasSettings": false
       },
       {
-        "id": "app:neovim:64",
+        "id": "app:neovim:1",
         "manifestAppId": "neovim",
         "displayName": "Neovim",
         "packageRefs": [
@@ -591,7 +321,25 @@
         "hasSettings": false
       },
       {
-        "id": "app:nvidia-app:65",
+        "id": "app:nodejs:1",
+        "manifestAppId": "nodejs",
+        "displayName": "Node.js",
+        "packageRefs": [
+          "Vendor.Nodejs"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:notion:1",
+        "manifestAppId": "notion",
+        "displayName": "Notion",
+        "packageRefs": [
+          "Vendor.Notion"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:nvidia-app:1",
         "manifestAppId": "nvidia-app",
         "displayName": "NVIDIA App",
         "packageRefs": [
@@ -600,7 +348,16 @@
         "hasSettings": false
       },
       {
-        "id": "app:ollama:66",
+        "id": "app:obsidian:1",
+        "manifestAppId": "obsidian",
+        "displayName": "Obsidian",
+        "packageRefs": [
+          "Vendor.Obsidian"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:ollama:1",
         "manifestAppId": "ollama",
         "displayName": "Ollama",
         "packageRefs": [
@@ -609,7 +366,43 @@
         "hasSettings": false
       },
       {
-        "id": "app:postman:67",
+        "id": "app:jdk:1",
+        "manifestAppId": "jdk",
+        "displayName": "OpenJDK",
+        "packageRefs": [
+          "Vendor.Jdk"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:openvpn:1",
+        "manifestAppId": "openvpn",
+        "displayName": "OpenVPN",
+        "packageRefs": [
+          "Vendor.Openvpn"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:paint-net:1",
+        "manifestAppId": "paint-net",
+        "displayName": "Paint.NET",
+        "packageRefs": [
+          "Vendor.PaintNet"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:postgresql:1",
+        "manifestAppId": "postgresql",
+        "displayName": "PostgreSQL",
+        "packageRefs": [
+          "Vendor.Postgresql"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:postman:1",
         "manifestAppId": "postman",
         "displayName": "Postman",
         "packageRefs": [
@@ -618,7 +411,16 @@
         "hasSettings": false
       },
       {
-        "id": "app:putty:68",
+        "id": "app:powershell:1",
+        "manifestAppId": "powershell",
+        "displayName": "PowerShell",
+        "packageRefs": [
+          "Vendor.Powershell"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:putty:1",
         "manifestAppId": "putty",
         "displayName": "PuTTY",
         "packageRefs": [
@@ -627,7 +429,43 @@
         "hasSettings": false
       },
       {
-        "id": "app:signal:69",
+        "id": "app:python:1",
+        "manifestAppId": "python",
+        "displayName": "Python",
+        "packageRefs": [
+          "Vendor.Python"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:qbittorrent:1",
+        "manifestAppId": "qbittorrent",
+        "displayName": "qBittorrent",
+        "packageRefs": [
+          "Vendor.Qbittorrent"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:burntsushi-ripgrep-msvc:1",
+        "manifestAppId": "burntsushi-ripgrep-msvc",
+        "displayName": "ripgrep (MSVC)",
+        "packageRefs": [
+          "Vendor.BurntsushiRipgrepMsvc"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:rustup:1",
+        "manifestAppId": "rustup",
+        "displayName": "Rustup",
+        "packageRefs": [
+          "Vendor.Rustup"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:signal:1",
         "manifestAppId": "signal",
         "displayName": "Signal",
         "packageRefs": [
@@ -636,7 +474,34 @@
         "hasSettings": false
       },
       {
-        "id": "app:sysinternals:70",
+        "id": "app:slack:1",
+        "manifestAppId": "slack",
+        "displayName": "Slack",
+        "packageRefs": [
+          "Vendor.Slack"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:spotify:1",
+        "manifestAppId": "spotify",
+        "displayName": "Spotify",
+        "packageRefs": [
+          "Vendor.Spotify"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:steam:1",
+        "manifestAppId": "steam",
+        "displayName": "Steam",
+        "packageRefs": [
+          "Vendor.Steam"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:sysinternals:1",
         "manifestAppId": "sysinternals",
         "displayName": "Sysinternals",
         "packageRefs": [
@@ -645,7 +510,61 @@
         "hasSettings": false
       },
       {
-        "id": "app:visual-studio:71",
+        "id": "app:telegram:1",
+        "manifestAppId": "telegram",
+        "displayName": "Telegram Desktop",
+        "packageRefs": [
+          "Vendor.Telegram"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:termius:1",
+        "manifestAppId": "termius",
+        "displayName": "Termius",
+        "packageRefs": [
+          "Vendor.Termius"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:thunderbird:1",
+        "manifestAppId": "thunderbird",
+        "displayName": "Thunderbird",
+        "packageRefs": [
+          "Vendor.Thunderbird"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:transmission:1",
+        "manifestAppId": "transmission",
+        "displayName": "Transmission",
+        "packageRefs": [
+          "Vendor.Transmission"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:unified-remote:1",
+        "manifestAppId": "unified-remote",
+        "displayName": "Unified Remote",
+        "packageRefs": [
+          "Vendor.UnifiedRemote"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:vcredist:1",
+        "manifestAppId": "vcredist",
+        "displayName": "Visual C++ Redistributable",
+        "packageRefs": [
+          "Vendor.Vcredist"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:visual-studio:1",
         "manifestAppId": "visual-studio",
         "displayName": "Visual Studio",
         "packageRefs": [
@@ -654,11 +573,92 @@
         "hasSettings": false
       },
       {
-        "id": "app:windows-terminal:72",
+        "id": "app:vscode:1",
+        "manifestAppId": "vscode",
+        "displayName": "Visual Studio Code",
+        "packageRefs": [
+          "Vendor.Vscode"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:vlc:1",
+        "manifestAppId": "vlc",
+        "displayName": "VLC media player",
+        "packageRefs": [
+          "Vendor.Vlc"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:warp:1",
+        "manifestAppId": "warp",
+        "displayName": "Warp",
+        "packageRefs": [
+          "Vendor.Warp"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:windows-terminal:1",
         "manifestAppId": "windows-terminal",
         "displayName": "Windows Terminal",
         "packageRefs": [
           "Vendor.WindowsTerminal"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:winfsp:1",
+        "manifestAppId": "winfsp",
+        "displayName": "WinFsp",
+        "packageRefs": [
+          "Vendor.Winfsp"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:winscp:1",
+        "manifestAppId": "winscp",
+        "displayName": "WinSCP",
+        "packageRefs": [
+          "Vendor.Winscp"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:xconvert:1",
+        "manifestAppId": "xconvert",
+        "displayName": "XnConvert",
+        "packageRefs": [
+          "Vendor.Xconvert"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:yt-dlp:1",
+        "manifestAppId": "yt-dlp",
+        "displayName": "yt-dlp",
+        "packageRefs": [
+          "Vendor.YtDlp"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:yt-dlp-ffmpeg:1",
+        "manifestAppId": "yt-dlp-ffmpeg",
+        "displayName": "yt-dlp FFmpeg",
+        "packageRefs": [
+          "Vendor.YtDlpFfmpeg"
+        ],
+        "hasSettings": false
+      },
+      {
+        "id": "app:zoom:1",
+        "manifestAppId": "zoom",
+        "displayName": "Zoom",
+        "packageRefs": [
+          "Vendor.Zoom"
         ],
         "hasSettings": false
       }
@@ -680,14 +680,30 @@
         "candidateAppIds": [
           "app:7zip:1"
         ],
-        "capturedEntryCount": 1
+        "capturedEntryCount": 0
       },
       {
-        "id": "settings:app:adobe-creative-cloud:2",
+        "id": "settings:package:vendor.absent",
+        "displayName": "Absent settings",
+        "associationStatus": "not_in_profile",
+        "ownerId": "package:vendor.absent",
+        "appId": null,
+        "appIncluded": false,
+        "packageRefs": [
+          "Vendor.Absent"
+        ],
+        "moduleIds": [
+          "apps.absent"
+        ],
+        "candidateAppIds": [],
+        "capturedEntryCount": 0
+      },
+      {
+        "id": "settings:app:adobe-creative-cloud:1",
         "displayName": "Adobe Creative Cloud settings",
         "associationStatus": "included",
-        "ownerId": "app:adobe-creative-cloud:2",
-        "appId": "app:adobe-creative-cloud:2",
+        "ownerId": "app:adobe-creative-cloud:1",
+        "appId": "app:adobe-creative-cloud:1",
         "appIncluded": true,
         "packageRefs": [
           "Vendor.AdobeCreativeCloud"
@@ -696,16 +712,88 @@
           "apps.adobe-creative-cloud"
         ],
         "candidateAppIds": [
-          "app:adobe-creative-cloud:2"
+          "app:adobe-creative-cloud:1"
         ],
-        "capturedEntryCount": 2
+        "capturedEntryCount": 0
       },
       {
-        "id": "settings:app:cursor:3",
+        "id": "settings:app:apple-mobile-device-support:1",
+        "displayName": "Apple Mobile Device Support settings",
+        "associationStatus": "included",
+        "ownerId": "app:apple-mobile-device-support:1",
+        "appId": "app:apple-mobile-device-support:1",
+        "appIncluded": true,
+        "packageRefs": [
+          "Vendor.AppleMobileDeviceSupport"
+        ],
+        "moduleIds": [
+          "apps.apple-mobile-device-support"
+        ],
+        "candidateAppIds": [
+          "app:apple-mobile-device-support:1"
+        ],
+        "capturedEntryCount": 0
+      },
+      {
+        "id": "settings:app:apple-software-update:1",
+        "displayName": "Apple Software Update settings",
+        "associationStatus": "included",
+        "ownerId": "app:apple-software-update:1",
+        "appId": "app:apple-software-update:1",
+        "appIncluded": true,
+        "packageRefs": [
+          "Vendor.AppleSoftwareUpdate"
+        ],
+        "moduleIds": [
+          "apps.apple-software-update"
+        ],
+        "candidateAppIds": [
+          "app:apple-software-update:1"
+        ],
+        "capturedEntryCount": 0
+      },
+      {
+        "id": "settings:app:bitwarden:1",
+        "displayName": "Bitwarden settings",
+        "associationStatus": "included",
+        "ownerId": "app:bitwarden:1",
+        "appId": "app:bitwarden:1",
+        "appIncluded": true,
+        "packageRefs": [
+          "Vendor.Bitwarden"
+        ],
+        "moduleIds": [
+          "apps.bitwarden"
+        ],
+        "candidateAppIds": [
+          "app:bitwarden:1"
+        ],
+        "capturedEntryCount": 0
+      },
+      {
+        "id": "settings:app:brave:1",
+        "displayName": "Brave settings",
+        "associationStatus": "included",
+        "ownerId": "app:brave:1",
+        "appId": "app:brave:1",
+        "appIncluded": true,
+        "packageRefs": [
+          "Vendor.Brave"
+        ],
+        "moduleIds": [
+          "apps.brave"
+        ],
+        "candidateAppIds": [
+          "app:brave:1"
+        ],
+        "capturedEntryCount": 0
+      },
+      {
+        "id": "settings:app:cursor:1",
         "displayName": "Cursor settings",
         "associationStatus": "included",
-        "ownerId": "app:cursor:3",
-        "appId": "app:cursor:3",
+        "ownerId": "app:cursor:1",
+        "appId": "app:cursor:1",
         "appIncluded": true,
         "packageRefs": [
           "AnySphere.Cursor",
@@ -716,97 +804,9 @@
           "apps.hidden-module-id"
         ],
         "candidateAppIds": [
-          "app:cursor:3"
+          "app:cursor:1"
         ],
-        "capturedEntryCount": 3
-      },
-      {
-        "id": "settings:app:apple-mobile-device-support:4",
-        "displayName": "Apple Mobile Device Support settings",
-        "associationStatus": "included",
-        "ownerId": "app:apple-mobile-device-support:4",
-        "appId": "app:apple-mobile-device-support:4",
-        "appIncluded": true,
-        "packageRefs": [
-          "Vendor.AppleMobileDeviceSupport"
-        ],
-        "moduleIds": [
-          "apps.apple-mobile-device-support"
-        ],
-        "candidateAppIds": [
-          "app:apple-mobile-device-support:4"
-        ],
-        "capturedEntryCount": 4
-      },
-      {
-        "id": "settings:app:apple-software-update:5",
-        "displayName": "Apple Software Update settings",
-        "associationStatus": "included",
-        "ownerId": "app:apple-software-update:5",
-        "appId": "app:apple-software-update:5",
-        "appIncluded": true,
-        "packageRefs": [
-          "Vendor.AppleSoftwareUpdate"
-        ],
-        "moduleIds": [
-          "apps.apple-software-update"
-        ],
-        "candidateAppIds": [
-          "app:apple-software-update:5"
-        ],
-        "capturedEntryCount": 5
-      },
-      {
-        "id": "settings:app:bitwarden:6",
-        "displayName": "Bitwarden settings",
-        "associationStatus": "included",
-        "ownerId": "app:bitwarden:6",
-        "appId": "app:bitwarden:6",
-        "appIncluded": true,
-        "packageRefs": [
-          "Vendor.Bitwarden"
-        ],
-        "moduleIds": [
-          "apps.bitwarden"
-        ],
-        "candidateAppIds": [
-          "app:bitwarden:6"
-        ],
-        "capturedEntryCount": 6
-      },
-      {
-        "id": "settings:app:brave:7",
-        "displayName": "Brave settings",
-        "associationStatus": "included",
-        "ownerId": "app:brave:7",
-        "appId": "app:brave:7",
-        "appIncluded": true,
-        "packageRefs": [
-          "Vendor.Brave"
-        ],
-        "moduleIds": [
-          "apps.brave"
-        ],
-        "candidateAppIds": [
-          "app:brave:7"
-        ],
-        "capturedEntryCount": 7
-      },
-      {
-        "id": "settings:package:vendor.absent-settings",
-        "displayName": "Retired App settings",
-        "associationStatus": "not_in_profile",
-        "ownerId": "package:vendor.absent-settings",
-        "appId": null,
-        "appIncluded": false,
-        "packageRefs": [
-          "Vendor.AbsentSettings"
-        ],
-        "moduleIds": [
-          "apps.absent-settings"
-        ],
-        "candidateAppIds": [],
-        "capturedEntryCount": 3
+        "capturedEntryCount": 0
       }
     ],
     "warnings": [

@@ -1,4 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
@@ -45,6 +48,10 @@ export interface SeededProfile {
 export interface SeededInspectionProfile extends SeededProfile {
   /** Every copied raw-profile file, retained for precise cleanup. */
   copiedPaths: string[];
+  /** Unique profile directory created for this particular test run. */
+  directory: string;
+  /** Parent profiles root used to prove cleanup cannot escape this seed. */
+  profilesDirectory: string;
 }
 
 const INSPECTION_FIXTURE_FILES = [
@@ -61,24 +68,39 @@ const INSPECTION_FIXTURE_FILES = [
  */
 export async function seedInspectionProfile(
   request: APIRequestContext,
-  name = 'ci-profile-inspection',
 ): Promise<SeededInspectionProfile> {
   const profilesDir = await bridgeInvoke<string>(request, 'get_default_profiles_directory');
   const fixtureRoot = path.resolve(process.cwd(), 'tests/fixtures/profile-inspect-profile');
-  const destinationRoot = path.join(profilesDir, name);
-  const copiedPaths: string[] = [];
-
-  for (const relativePath of INSPECTION_FIXTURE_FILES) {
-    const destination = path.join(destinationRoot, relativePath);
-    await bridgeInvoke(request, 'delete_file_silent', { path: destination }).catch(() => {});
-    await bridgeInvoke(request, 'copy_file', {
-      sourcePath: path.join(fixtureRoot, relativePath),
-      destPath: destination,
-    });
-    copiedPaths.push(destination);
+  const name = `ci-profile-inspection-${randomUUID()}`;
+  const profilesRoot = path.resolve(profilesDir);
+  const destinationRoot = path.join(profilesRoot, name);
+  if (path.dirname(destinationRoot) !== profilesRoot || existsSync(destinationRoot)) {
+    throw new Error(`Refusing to seed profile into an unsafe directory: ${destinationRoot}`);
   }
 
-  return { path: path.join(destinationRoot, 'manifest.jsonc'), name, copiedPaths };
+  const seeded: SeededInspectionProfile = {
+    path: path.join(destinationRoot, 'manifest.jsonc'),
+    name,
+    copiedPaths: [],
+    directory: destinationRoot,
+    profilesDirectory: profilesRoot,
+  };
+
+  try {
+    for (const relativePath of INSPECTION_FIXTURE_FILES) {
+      const destination = path.join(destinationRoot, relativePath);
+      await bridgeInvoke(request, 'copy_file', {
+        sourcePath: path.join(fixtureRoot, relativePath),
+        destPath: destination,
+      });
+      seeded.copiedPaths.push(destination);
+    }
+  } catch (error) {
+    await removeInspectionProfile(request, seeded);
+    throw error;
+  }
+
+  return seeded;
 }
 
 /**
@@ -117,11 +139,19 @@ export async function removeInspectionProfile(
   request: APIRequestContext,
   profile: SeededInspectionProfile,
 ): Promise<void> {
-  await Promise.all(
-    profile.copiedPaths.map((filePath) =>
-      bridgeInvoke(request, 'delete_file_silent', { path: filePath }).catch(() => {}),
-    ),
+  const directory = path.resolve(profile.directory);
+  const profilesRoot = path.resolve(
+    await bridgeInvoke<string>(request, 'get_default_profiles_directory'),
   );
+  if (
+    !/^ci-profile-inspection-[a-z0-9-]+$/i.test(profile.name) ||
+    path.basename(directory) !== profile.name ||
+    path.dirname(directory) !== profilesRoot ||
+    profilesRoot !== path.resolve(profile.profilesDirectory)
+  ) {
+    throw new Error(`Refusing to remove a non-test inspection directory: ${directory}`);
+  }
+  await rm(directory, { recursive: true, force: true });
 }
 
 export interface ApplyAction {

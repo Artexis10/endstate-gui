@@ -51,6 +51,8 @@ test.describe("profile contents inspection", () => {
     const appsSearch = dialog.getByRole('searchbox', { name: 'Search apps' });
     await appsSearch.fill('hidden-package-ref');
     await expect(dialog.getByText('Cursor', { exact: true })).toBeVisible();
+    const appsPanel = dialog.getByRole('tabpanel', { includeHidden: true }).nth(0);
+    await expect(appsPanel.getByRole('listitem')).toHaveCount(1);
     await expect(dialog.getByText('72 apps', { exact: true })).toBeVisible();
 
     await settingsTab.click();
@@ -66,7 +68,7 @@ test.describe("profile contents inspection", () => {
     await expect(settingsSearch).toHaveValue('hidden-module-id');
     await settingsSearch.fill('');
     await expect(settingsPanel.getByRole('listitem')).toHaveCount(8);
-    await expect(dialog.getByText('Retired App settings', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Absent settings', { exact: true })).toBeVisible();
     await expect(dialog.getByText('App not included', { exact: true })).toBeVisible();
 
     await expect(dialog.getByText('1 captured entry', { exact: true })).toHaveCount(0);
@@ -74,9 +76,16 @@ test.describe("profile contents inspection", () => {
     await expect(dialog.getByText(PROFILE_PATH, { exact: true })).toHaveCount(0);
     await expect(dialog.getByText('Some settings inventory could not be verified.', { exact: true })).toBeVisible();
 
+    // Both queries are deliberately still populated when the dialog closes;
+    // reopening must start a fresh inspection session for both tabs.
+    await settingsSearch.fill('hidden-module-id');
+    await expect(settingsPanel.getByRole('listitem')).toHaveCount(1);
+
     await dialog.getByRole('button', { name: 'Close', exact: true }).first().click();
     await card.getByRole('button', { name: "What's inside hugo-desktop" }).click();
     await expect(dialog.getByRole('searchbox', { name: 'Search apps' })).toHaveValue('');
+    await settingsTab.click();
+    await expect(dialog.getByRole('searchbox', { name: 'Search app settings' })).toHaveValue('');
 
     const commands = await page.evaluate(() => (window as any).__ENDSTATE_E2E_COMMANDS__);
     expect(commands).toContainEqual({ command: 'profile', args: ['inspect', PROFILE_PATH] });
