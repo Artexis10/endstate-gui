@@ -1,26 +1,61 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderWithProviders, screen, within } from '../../../test/test-utils';
-import userEvent from '@testing-library/user-event';
-import '@testing-library/jest-dom/vitest';
-import { SetupFlow } from './setup-flow';
-import type { DiscoveredProfile } from '../../../file-discovery';
-
-vi.mock('@/lib/tauri-bridge', () => ({
-  invoke: vi.fn(),
-}));
-
-vi.mock('@/lib/use-show-details', () => ({
-  useShowDetails: vi.fn(() => false),
-}));
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderWithProviders, screen, within } from "../../../test/test-utils";
+import userEvent from "@testing-library/user-event";
+import "@testing-library/jest-dom/vitest";
+import { SetupFlow } from "./setup-flow";
+import type { DiscoveredProfile } from "../../../file-discovery";
+import type { ProfileInspectionData } from "@/types";
 
 const profiles: DiscoveredProfile[] = [
-  { name: 'work-laptop', path: 'C:\\Setups\\work-laptop\\manifest.jsonc', displayName: 'Work Laptop' },
+  {
+    name: "work-laptop",
+    path: "C:\\Setups\\work-laptop\\manifest.jsonc",
+    displayName: "Work Laptop",
+  },
 ];
+
+const contents: ProfileInspectionData = {
+  profile: {
+    name: "work-laptop",
+    capturedAt: null,
+    manifestVersion: 2,
+    manifestPath: profiles[0].path,
+  },
+  summary: {
+    appCount: 1,
+    settingsRowCount: 1,
+    verifiedSettingsAppCount: 1,
+    unidentifiedSettingsRowCount: 0,
+  },
+  apps: [
+    {
+      id: "app:vlc:1",
+      manifestAppId: "vlc",
+      displayName: "VLC media player",
+      packageRefs: ["VideoLAN.VLC"],
+      hasSettings: true,
+    },
+  ],
+  settingsApps: [
+    {
+      id: "settings:vlc",
+      displayName: "VLC media player",
+      associationStatus: "included",
+      ownerId: "app:vlc:1",
+      appId: "app:vlc:1",
+      appIncluded: true,
+      packageRefs: ["VideoLAN.VLC"],
+      moduleIds: ["apps.vlc"],
+      candidateAppIds: ["app:vlc:1"],
+      capturedEntryCount: 1,
+    },
+  ],
+  warnings: [],
+};
 
 const baseProps = {
   profiles,
   onBack: vi.fn(),
-  onProfileSelect: vi.fn(),
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),
@@ -30,64 +65,53 @@ const baseProps = {
   liveAppEvents: [],
   onPreview: vi.fn(),
   onApply: vi.fn(),
+  profileInspectionSupported: true,
+  onInspectProfile: vi.fn().mockResolvedValue(contents),
 };
 
-const MANIFEST = JSON.stringify({
-  version: 1,
-  name: 'work-laptop',
-  captured: '2026-07-18T12:00:00Z',
-  apps: [{ id: 'vlc', displayName: 'VLC media player' }],
-  restore: [{ type: 'copy', source: './configs/vlc/vlcrc' }],
-});
-
 describe('SetupFlow — "What\'s inside"', () => {
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    const { invoke } = await import('@/lib/tauri-bridge');
-    vi.mocked(invoke).mockResolvedValue(MANIFEST);
-  });
+  beforeEach(() => vi.clearAllMocks());
 
   it('offers a "What\'s inside" affordance on each profile card', () => {
     renderWithProviders(<SetupFlow {...baseProps} />);
-
     expect(
-      screen.getByRole('button', { name: "What's inside Work Laptop" }),
+      screen.getByRole("button", { name: "What's inside Work Laptop" }),
     ).toBeInTheDocument();
   });
 
-  it('opens the summary for that profile without selecting it', async () => {
+  it("inspects the exact manifest without selecting, previewing, detecting, or applying", async () => {
     const user = userEvent.setup();
-
     renderWithProviders(<SetupFlow {...baseProps} />);
 
-    await user.click(screen.getByRole('button', { name: "What's inside Work Laptop" }));
-
-    const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText("What's inside")).toBeVisible();
-    const apps = await screen.findByRole('region', { name: 'Apps' });
-    expect(within(apps).getByText('VLC media player')).toBeVisible();
-
-    // Inspecting a bundle must never start a run.
+    await user.click(
+      screen.getByRole("button", { name: "What's inside Work Laptop" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("VLC media player")).toBeVisible();
+    expect(baseProps.onInspectProfile).toHaveBeenCalledWith(profiles[0].path);
     expect(baseProps.onPreview).not.toHaveBeenCalled();
+    expect(baseProps.onApply).not.toHaveBeenCalled();
   });
 
-  it('reads the manifest of the card that was clicked', async () => {
+  it("shows the update-required state without invoking inspection on an older engine", async () => {
     const user = userEvent.setup();
-    const { invoke } = await import('@/lib/tauri-bridge');
+    const onInspectProfile = vi.fn();
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        profileInspectionSupported={false}
+        onInspectProfile={onInspectProfile}
+      />,
+    );
 
-    renderWithProviders(<SetupFlow {...baseProps} />);
-
-    await user.click(screen.getByRole('button', { name: "What's inside Work Laptop" }));
-    await screen.findByRole('dialog');
-
-    expect(vi.mocked(invoke)).toHaveBeenCalledWith('read_text_file', {
-      path: 'C:\\Setups\\work-laptop\\manifest.jsonc',
-    });
-  });
-
-  it('keeps the summary closed until the affordance is used', () => {
-    renderWithProviders(<SetupFlow {...baseProps} />);
-
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "What's inside Work Laptop" }),
+    );
+    expect(
+      await screen.findByText(
+        "Update Endstate to inspect app settings accurately.",
+      ),
+    ).toBeVisible();
+    expect(onInspectProfile).not.toHaveBeenCalled();
   });
 });

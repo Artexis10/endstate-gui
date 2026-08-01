@@ -1,232 +1,416 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '../../../test/test-utils';
-import userEvent from '@testing-library/user-event';
-import '@testing-library/jest-dom/vitest';
-import { ProfileContentsModal } from './profile-contents-modal';
-import { useShowDetails } from '@/lib/use-show-details';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "../../../test/test-utils";
+import userEvent from "@testing-library/user-event";
+import "@testing-library/jest-dom/vitest";
+import { ProfileContentsModal } from "./profile-contents-modal";
+import { useShowDetails } from "@/lib/use-show-details";
+import type { ProfileInspectionData } from "@/types";
 
-vi.mock('@/lib/tauri-bridge', () => ({
-  invoke: vi.fn(),
-}));
-
-vi.mock('@/lib/use-show-details', () => ({
+vi.mock("@/lib/use-show-details", () => ({
   useShowDetails: vi.fn(() => false),
 }));
 
 const defaultProps = {
   open: true,
   onOpenChange: vi.fn(),
-  profilePath: 'C:\\Setups\\my-desktop\\manifest.jsonc',
-  profileDisplayName: 'My desktop',
+  profilePath: "C:\\Setups\\my-desktop\\manifest.jsonc",
+  profileDisplayName: "My desktop",
+  profileInspectionSupported: true,
 };
 
-/** A v1 profile: two apps, three restore entries across two modules. */
-const V1_MANIFEST = JSON.stringify({
-  version: 1,
-  name: 'my-desktop',
-  captured: '2026-07-18T12:00:00Z',
-  apps: [
-    { id: 'vlc', displayName: 'VLC media player', refs: { windows: 'VideoLAN.VLC' } },
-    { id: 'notepad-plus-plus', displayName: 'Notepad++', refs: { windows: 'Notepad++.Notepad++' } },
-  ],
-  restore: [
-    { type: 'copy', source: './configs/vlc/vlcrc' },
-    { type: 'copy', source: './configs/notepad-plus-plus/config.xml' },
-    { type: 'copy', source: './configs/notepad-plus-plus/shortcuts.xml' },
-  ],
-});
-
-async function mockManifest(content: string) {
-  const { invoke } = await import('@/lib/tauri-bridge');
-  vi.mocked(invoke).mockResolvedValue(content);
+function inspection(
+  overrides: Partial<ProfileInspectionData> = {},
+): ProfileInspectionData {
+  const apps = [
+    {
+      id: "app:vlc:1",
+      manifestAppId: "vlc",
+      displayName: "VLC media player",
+      packageRefs: ["VideoLAN.VLC"],
+      hasSettings: true,
+    },
+    {
+      id: "app:obsidian:1",
+      manifestAppId: "obsidian",
+      displayName: "Obsidian",
+      packageRefs: ["Obsidian.Obsidian"],
+      hasSettings: false,
+    },
+  ];
+  const settingsApps = [
+    {
+      id: "settings:vlc",
+      displayName: "VLC media player",
+      associationStatus: "included" as const,
+      ownerId: "app:vlc:1",
+      appId: "app:vlc:1",
+      appIncluded: true,
+      packageRefs: ["VideoLAN.VLC"],
+      moduleIds: ["apps.vlc"],
+      candidateAppIds: ["app:vlc:1"],
+      capturedEntryCount: 2,
+    },
+    {
+      id: "settings:steam",
+      displayName: "Steam",
+      associationStatus: "not_in_profile" as const,
+      ownerId: "owner:steam",
+      appId: null,
+      appIncluded: false,
+      packageRefs: ["Valve.Steam"],
+      moduleIds: ["apps.steam"],
+      candidateAppIds: [],
+      capturedEntryCount: 1,
+    },
+    {
+      id: "settings:unknown",
+      displayName: "Unidentified app settings",
+      associationStatus: "unresolved" as const,
+      ownerId: null,
+      appId: null,
+      appIncluded: false,
+      packageRefs: [],
+      moduleIds: ["apps.unknown"],
+      candidateAppIds: [],
+      capturedEntryCount: 3,
+    },
+  ];
+  return {
+    profile: {
+      name: "my-desktop",
+      capturedAt: "2026-07-18T12:00:00Z",
+      manifestVersion: 2,
+      manifestPath: defaultProps.profilePath,
+    },
+    summary: {
+      appCount: apps.length,
+      settingsRowCount: settingsApps.length,
+      verifiedSettingsAppCount: 2,
+      unidentifiedSettingsRowCount: 1,
+    },
+    apps,
+    settingsApps,
+    warnings: [],
+    ...overrides,
+  };
 }
 
-/** The Apps / Settings sections are named regions, so each can be queried alone. */
-const appsSection = () => screen.findByRole('region', { name: 'Apps' });
-const settingsSection = () => screen.findByRole('region', { name: 'Settings' });
+function renderModal(
+  data = inspection(),
+  props: Partial<React.ComponentProps<typeof ProfileContentsModal>> = {},
+) {
+  const onInspectProfile = vi.fn().mockResolvedValue(data);
+  render(
+    <ProfileContentsModal
+      {...defaultProps}
+      onInspectProfile={onInspectProfile}
+      {...props}
+    />,
+  );
+  return { onInspectProfile };
+}
 
-describe('ProfileContentsModal', () => {
+describe("ProfileContentsModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useShowDetails).mockReturnValue(false);
   });
 
-  it('renders nothing when closed', () => {
-    render(<ProfileContentsModal {...defaultProps} open={false} />);
+  it("renders semantic Apps and App settings totals from the engine result", async () => {
+    renderModal();
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(await screen.findByText("2 apps")).toBeVisible();
+    expect(screen.getByText("3 app settings")).toBeVisible();
+    expect(screen.getByText("Settings for 2 apps")).toBeVisible();
+    expect(screen.getByText("1 unidentified app settings row")).toBeVisible();
   });
 
-  it('renders app and settings counts from the manifest', async () => {
-    await mockManifest(V1_MANIFEST);
+  it("describes 72 apps and settings for 8 apps without counting files as settings", async () => {
+    const apps = Array.from({ length: 72 }, (_, index) => ({
+      id: `app:${index}`,
+      manifestAppId: `app-${index}`,
+      displayName: `App ${index}`,
+      packageRefs: [],
+      hasSettings: index < 8,
+    }));
+    const settingsApps = apps.slice(0, 8).map((app, index) => ({
+      id: `settings:${index}`,
+      displayName: app.displayName,
+      associationStatus: "included" as const,
+      ownerId: app.id,
+      appId: app.id,
+      appIncluded: true,
+      packageRefs: [],
+      moduleIds: [`apps.${index}`],
+      candidateAppIds: [app.id],
+      capturedEntryCount: index + 1,
+    }));
+    renderModal(
+      inspection({
+        apps,
+        settingsApps,
+        summary: {
+          appCount: 72,
+          settingsRowCount: 8,
+          verifiedSettingsAppCount: 8,
+          unidentifiedSettingsRowCount: 0,
+        },
+      }),
+    );
 
-    render(<ProfileContentsModal {...defaultProps} />);
+    expect(await screen.findByText("72 apps")).toBeVisible();
+    expect(screen.getByText("8 app settings")).toBeVisible();
+    expect(screen.getByText("Settings for 8 apps")).toBeVisible();
+    expect(screen.queryByText("1 captured entry")).not.toBeInTheDocument();
+  });
 
-    const dialog = await screen.findByRole('dialog');
-    await waitFor(() => {
-      expect(within(dialog).getByText('2 apps')).toBeVisible();
+  it("shows only the Apps tab initially and marks settings-bearing apps quietly", async () => {
+    renderModal();
+
+    const appsTab = await screen.findByRole("tab", { name: "Apps (2)" });
+    expect(appsTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("VLC media player")).toBeVisible();
+    expect(screen.getByText("Settings included")).toBeVisible();
+    expect(screen.queryByText("App not included")).not.toBeInTheDocument();
+  });
+
+  it("uses App settings as the default tab for a settings-only profile", async () => {
+    const data = inspection({
+      apps: [],
+      summary: {
+        appCount: 0,
+        settingsRowCount: 3,
+        verifiedSettingsAppCount: 2,
+        unidentifiedSettingsRowCount: 1,
+      },
     });
-    expect(within(dialog).getByText('2 settings')).toBeVisible();
-  });
-
-  it('lists apps by display name', async () => {
-    await mockManifest(V1_MANIFEST);
-
-    render(<ProfileContentsModal {...defaultProps} />);
-
-    const apps = await appsSection();
-    expect(within(apps).getByText('VLC media player')).toBeVisible();
-    expect(within(apps).getByText('Notepad++')).toBeVisible();
-  });
-
-  it('lists settings modules by display name with their file counts', async () => {
-    await mockManifest(V1_MANIFEST);
-
-    render(<ProfileContentsModal {...defaultProps} />);
-
-    const settings = await settingsSection();
-    // VLC contributes one file, Notepad++ two.
-    expect(within(settings).getByText('VLC media player')).toBeVisible();
-    expect(within(settings).getByText('1 file')).toBeVisible();
-    expect(within(settings).getByText('Notepad++')).toBeVisible();
-    expect(within(settings).getByText('2 files')).toBeVisible();
-  });
-
-  it('falls back to the package ref when an app has no display name', async () => {
-    await mockManifest(
-      JSON.stringify({
-        version: 1,
-        apps: [{ id: 'jq', refs: { windows: 'jqlang.jq' } }],
-      }),
-    );
-
-    render(<ProfileContentsModal {...defaultProps} />);
-
-    expect(await screen.findByText('jqlang.jq')).toBeVisible();
-  });
-
-  it('shows the captured timestamp', async () => {
-    await mockManifest(V1_MANIFEST);
-
-    render(<ProfileContentsModal {...defaultProps} />);
-
-    expect(await screen.findByText(/captured/i)).toBeVisible();
-  });
-
-  it('states calmly that an install-only profile has no settings', async () => {
-    await mockManifest(
-      JSON.stringify({
-        version: 1,
-        name: 'apps-only',
-        apps: [{ id: 'jq', displayName: 'jq' }],
-      }),
-    );
-
-    render(<ProfileContentsModal {...defaultProps} />);
+    renderModal(data);
 
     expect(
-      await screen.findByText('This profile installs apps only — no settings are included.'),
-    ).toBeVisible();
-    expect(screen.getByText('1 app')).toBeVisible();
-    // A settings-free profile is a normal outcome, not a warning.
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it('states that a settings-only profile installs no apps', async () => {
-    await mockManifest(
-      JSON.stringify({
-        version: 1,
-        apps: [],
-        restore: [{ type: 'copy', source: './configs/vlc/vlcrc' }],
-      }),
-    );
-
-    render(<ProfileContentsModal {...defaultProps} />);
-
+      await screen.findByRole("tab", { name: "App settings (3)" }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(
-      await screen.findByText('This profile carries settings only — it installs no apps.'),
+      screen.getByText(
+        "This profile carries app settings but includes no apps.",
+      ),
     ).toBeVisible();
   });
 
-  it('does not leak raw module ids into the summary', async () => {
-    await mockManifest(
-      JSON.stringify({
-        version: 2,
-        name: 'capture-v2',
-        apps: [],
-        configCaptures: [
+  it("supports standard keyboard tab activation and focus movement", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const apps = await screen.findByRole("tab", { name: "Apps (2)" });
+    const settings = screen.getByRole("tab", { name: "App settings (3)" });
+    apps.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(settings).toHaveFocus();
+    expect(settings).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Home}");
+    expect(apps).toHaveFocus();
+    expect(apps).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{End}");
+    expect(settings).toHaveFocus();
+    expect(settings).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("scopes search to the active tab and preserves queries when switching", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("tab", { name: "Apps (2)" });
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search apps" }),
+      "obsidian",
+    );
+    expect(screen.getByText("Obsidian")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "App settings (3)" }));
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search app settings" }),
+      "steam",
+    );
+    expect(screen.getByText("Steam")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "Apps (2)" }));
+    expect(screen.getByRole("searchbox", { name: "Search apps" })).toHaveValue(
+      "obsidian",
+    );
+  });
+
+  it("shows calm no-results copy without changing totals", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("searchbox", { name: "Search apps" });
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search apps" }),
+      "missing",
+    );
+    expect(screen.getByText("No apps match “missing”.")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Apps (2)" })).toBeVisible();
+  });
+
+  it("labels settings-only apps and leaves unidentified rows unassociated", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await user.click(
+      await screen.findByRole("tab", { name: "App settings (3)" }),
+    );
+
+    expect(screen.getByText("App not included")).toBeVisible();
+    expect(screen.getByText("Unidentified app settings")).toBeVisible();
+    expect(
+      screen.getByText("Association could not be identified."),
+    ).toBeVisible();
+  });
+
+  it("keeps technical provenance behind Configuration details", async () => {
+    vi.mocked(useShowDetails).mockReturnValue(true);
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByText("2 apps");
+
+    expect(screen.queryByText("apps.vlc")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(defaultProps.profilePath),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Configuration details" }),
+    );
+    expect(screen.getByText("apps.vlc")).toBeVisible();
+    expect(screen.getByText(defaultProps.profilePath)).toBeVisible();
+    expect(screen.getByText("2 captured entries")).toBeVisible();
+  });
+
+  it("shows inventory-completeness warnings but keeps diagnostics in details", async () => {
+    vi.mocked(useShowDetails).mockReturnValue(true);
+    const user = userEvent.setup();
+    renderModal(
+      inspection({
+        warnings: [
           {
-            captureId: 'photoshop-preferences-installed',
-            moduleId: 'apps.photoshop',
-            configSetId: 'preferences',
-            payloadManifest: [{ relativePath: 'prefs.psp' }],
+            code: "PARTIAL",
+            message: "Some settings could not be inventoried.",
+            impact: "inventory_incomplete",
           },
+          { code: "TRACE", message: "Technical trace.", impact: "diagnostic" },
         ],
       }),
     );
-
-    render(<ProfileContentsModal {...defaultProps} />);
-
-    await screen.findByText('1 setting');
-    // The module is counted, but nothing names it with its engine id.
-    expect(screen.queryByText('apps.photoshop')).not.toBeInTheDocument();
-    expect(screen.queryByText('photoshop')).not.toBeInTheDocument();
-    expect(screen.queryByText('photoshop-preferences-installed')).not.toBeInTheDocument();
-    expect(screen.queryByText('preferences')).not.toBeInTheDocument();
-  });
-
-  it('reveals module ids and the file path only under Configuration details', async () => {
-    vi.mocked(useShowDetails).mockReturnValue(true);
-    await mockManifest(V1_MANIFEST);
-    const user = userEvent.setup();
-
-    render(<ProfileContentsModal {...defaultProps} />);
-
-    await appsSection();
-    expect(screen.queryByText(/notepad-plus-plus/)).not.toBeInTheDocument();
-    expect(screen.queryByText(defaultProps.profilePath)).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Configuration details' }));
-
-    expect(screen.getByText('notepad-plus-plus, vlc')).toBeInTheDocument();
-    expect(screen.getByText(defaultProps.profilePath)).toBeInTheDocument();
-  });
-
-  it('hides the details disclosure entirely when show-details is off', async () => {
-    await mockManifest(V1_MANIFEST);
-
-    render(<ProfileContentsModal {...defaultProps} />);
-
-    await appsSection();
     expect(
-      screen.queryByRole('button', { name: 'Configuration details' }),
-    ).not.toBeInTheDocument();
+      await screen.findByText("Some settings could not be inventoried."),
+    ).toBeVisible();
+    expect(screen.queryByText("Technical trace.")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Configuration details" }),
+    );
+    expect(screen.getByText("Technical trace.")).toBeVisible();
   });
 
-  it('surfaces a read failure instead of an empty summary', async () => {
-    const { invoke } = await import('@/lib/tauri-bridge');
-    vi.mocked(invoke).mockRejectedValue(new Error('File does not exist'));
+  it("states when the profile has no recorded capture date", async () => {
+    renderModal(
+      inspection({ profile: { ...inspection().profile, capturedAt: null } }),
+    );
 
-    render(<ProfileContentsModal {...defaultProps} />);
-
-    const alert = await screen.findByRole('alert');
-    expect(within(alert).getByText('This profile could not be read.')).toBeVisible();
-    expect(within(alert).getByText('File does not exist')).toBeVisible();
+    expect(await screen.findByText("No capture date recorded")).toBeVisible();
   });
 
-  it('closes when Close is pressed', async () => {
-    await mockManifest(V1_MANIFEST);
-    const onOpenChange = vi.fn();
+  it("surfaces a structured inspection failure instead of an empty inventory", async () => {
+    const onInspectProfile = vi
+      .fn()
+      .mockRejectedValue(new Error("MANIFEST_INVALID: missing apps"));
+    render(
+      <ProfileContentsModal
+        {...defaultProps}
+        onInspectProfile={onInspectProfile}
+      />,
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("This profile could not be read.");
+    expect(alert).toHaveTextContent("MANIFEST_INVALID: missing apps");
+  });
+
+  it("resets both tab queries when reopened", async () => {
     const user = userEvent.setup();
+    const onInspectProfile = vi.fn().mockResolvedValue(inspection());
+    const { rerender } = render(
+      <ProfileContentsModal
+        {...defaultProps}
+        onInspectProfile={onInspectProfile}
+      />,
+    );
+    await screen.findByRole("searchbox", { name: "Search apps" });
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search apps" }),
+      "obsidian",
+    );
+    rerender(
+      <ProfileContentsModal
+        {...defaultProps}
+        open={false}
+        onInspectProfile={onInspectProfile}
+      />,
+    );
+    rerender(
+      <ProfileContentsModal
+        {...defaultProps}
+        open
+        onInspectProfile={onInspectProfile}
+      />,
+    );
+    expect(
+      await screen.findByRole("searchbox", { name: "Search apps" }),
+    ).toHaveValue("");
+  });
 
-    render(<ProfileContentsModal {...defaultProps} onOpenChange={onOpenChange} />);
+  it("shows an update-required state without inspection on stale engines", async () => {
+    const onInspectProfile = vi.fn();
+    render(
+      <ProfileContentsModal
+        {...defaultProps}
+        profileInspectionSupported={false}
+        onInspectProfile={onInspectProfile}
+      />,
+    );
 
-    await appsSection();
-    // The footer button and the Dialog's own sr-only dismiss both read "Close";
-    // the footer one renders first.
-    const [footerClose] = screen.getAllByRole('button', { name: 'Close' });
-    await user.click(footerClose);
+    expect(
+      await screen.findByText(
+        "Update Endstate to inspect app settings accurately.",
+      ),
+    ).toBeVisible();
+    expect(onInspectProfile).not.toHaveBeenCalled();
+  });
 
-    expect(onOpenChange).toHaveBeenCalledWith(false);
+  it("suppresses a stale inspection response after the profile changes", async () => {
+    let resolveFirst: (data: ProfileInspectionData) => void = () => undefined;
+    const first = new Promise<ProfileInspectionData>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const onInspectProfile = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockResolvedValueOnce(
+        inspection({ profile: { ...inspection().profile, name: "second" } }),
+      );
+    const { rerender } = render(
+      <ProfileContentsModal
+        {...defaultProps}
+        onInspectProfile={onInspectProfile}
+      />,
+    );
+    rerender(
+      <ProfileContentsModal
+        {...defaultProps}
+        profilePath="C:\\Setups\\second\\manifest.jsonc"
+        onInspectProfile={onInspectProfile}
+      />,
+    );
+    await screen.findByText("2 apps");
+    resolveFirst(
+      inspection({ profile: { ...inspection().profile, name: "stale" } }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("stale")).not.toBeInTheDocument(),
+    );
   });
 });

@@ -51,6 +51,7 @@ import { loadSidebarVisible, saveSidebarVisible } from './lib/ui-mode';
 import { IntentLanding, NativeProfileDropFeedback, SaveFlow, SetupFlow } from './components/app/intent';
 import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invoke, listen } from './lib/tauri-bridge';
 import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
+import { inspectProfileContents } from './lib/profile-contents';
 import { shouldDeleteCaptureArtifact } from './lib/capture-artifact-lifecycle';
 import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
@@ -3055,6 +3056,8 @@ function AppContent() {
               liveConfigEvents={liveConfigEvents}
               applyOnlySupported={applyOnlySupported}
               restoreTargetSupported={restoreTargetSupported}
+              profileInspectionSupported={state.capabilities?.data?.features?.profileInspection === true}
+              onInspectProfile={(manifestPath) => inspectProfileContents(settings, manifestPath)}
               onPreview={async (profile, previewOptions) => {
                 setIsRunning(true);
                 setLiveAppEvents([]);

@@ -30,6 +30,7 @@ import type {
   RestoreIntent,
   RestoreModuleRef,
   RestoreTargetMapping,
+  ProfileInspectionData,
 } from '@/types';
 import type { EngineExecResult } from '@/lib/engine-exec';
 import type { ConfigProgressEvent } from '@/lib/streaming-events';
@@ -376,6 +377,10 @@ export interface SetupFlowProps {
    *  screen. Only rendered when the user is signed in + subscription is
    *  active + the profile is not already in `cloudBackupIndex`. */
   onPushProfileToCloud?: (profilePath: string, profileName: string) => void;
+  /** Current-engine support for the read-only `profile inspect` boundary. */
+  profileInspectionSupported?: boolean;
+  /** Inspects a saved manifest without selecting or previewing it. */
+  onInspectProfile?: (manifestPath: string) => Promise<ProfileInspectionData>;
 }
 
 export function SetupFlow({
@@ -412,6 +417,8 @@ export function SetupFlow({
   onOpenHostedBackup,
   onRestoreFromCloud,
   onPushProfileToCloud,
+  profileInspectionSupported = false,
+  onInspectProfile,
 }: SetupFlowProps) {
   const [refreshing, setRefreshing] = useState(false);
   // Profile whose "What's inside" summary is open. Inspection is read-only and
@@ -2206,6 +2213,8 @@ export function SetupFlow({
         profileDisplayName={
           inspectedProfile ? inspectedProfile.displayName || inspectedProfile.name : ''
         }
+        profileInspectionSupported={profileInspectionSupported}
+        onInspectProfile={onInspectProfile}
       />
     </motion.div>
   );

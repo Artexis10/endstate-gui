@@ -15,18 +15,18 @@
 
 ## 3. Consume The Inspection Contract In The GUI
 
-- [ ] 3.1 Add failing GUI contract tests for `features.profileInspection`, the `profile inspect` invocation, schema validation, stale-engine handling, and unreadable-profile errors.
-- [ ] 3.2 Add typed profile-inspection envelope models and capability detection, then route **What's inside** through the dedicated engine command.
-- [ ] 3.3 Remove the GUI-owned settings ownership/label inference path while retaining only structural presentation helpers such as search filtering and pluralization.
+- [x] 3.1 Add failing GUI contract tests for `features.profileInspection`, the `profile inspect` invocation, schema validation, stale-engine handling, and unreadable-profile errors.
+- [x] 3.2 Add typed profile-inspection envelope models and capability detection, then route **What's inside** through the dedicated engine command.
+- [x] 3.3 Remove the GUI-owned settings ownership/label inference path while retaining only structural presentation helpers such as search filtering and pluralization.
 - [ ] 3.4 Update the bundled-engine revision/resources and contract fixtures to the reviewed engine build.
 
 ## 4. Build The Two-Tab Modal
 
-- [ ] 4.1 Add failing component tests for **Apps**/**App settings** totals, default-tab selection, keyboard tab behavior, scoped search, no-results copy, and search reset across profiles.
-- [ ] 4.2 Add failing regression tests proving **Settings for 8 apps** renders with eight rows, settings-only apps say **App not included**, unidentified rows do not inflate the app count, and captured-file counts stay out of default rows.
-- [ ] 4.3 Implement the accessible two-tab control, scoped search, compact Setup-style rows, settings-included indicators, medium-width fixed-shell layout, and active-list-only scrolling.
-- [ ] 4.4 Keep package refs, module ids, ambiguous candidates, captured-entry counts, diagnostic warnings, manifest version, and path inside **Configuration details**, while rendering presentation-affecting warnings in the normal dialog.
-- [ ] 4.5 Update Set up flow integration tests to prove inspection remains independent of selection, preview, machine detection, and apply.
+- [x] 4.1 Add failing component tests for **Apps**/**App settings** totals, default-tab selection, keyboard tab behavior, scoped search, no-results copy, and search reset across profiles.
+- [x] 4.2 Add failing regression tests proving **Settings for 8 apps** renders with eight rows, settings-only apps say **App not included**, unidentified rows do not inflate the app count, and captured-file counts stay out of default rows.
+- [x] 4.3 Implement the accessible two-tab control, scoped search, compact Setup-style rows, settings-included indicators, medium-width fixed-shell layout, and active-list-only scrolling.
+- [x] 4.4 Keep package refs, module ids, ambiguous candidates, captured-entry counts, diagnostic warnings, manifest version, and path inside **Configuration details**, while rendering presentation-affecting warnings in the normal dialog.
+- [x] 4.5 Update Set up flow integration tests to prove inspection remains independent of selection, preview, machine detection, and apply.
 
 ## 5. Verify And Release The GUI Fix
 
