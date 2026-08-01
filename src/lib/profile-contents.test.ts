@@ -1,16 +1,132 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   appLabel,
+  inspectProfileContents,
   loadProfileContents,
   moduleIdFromRestoreSource,
+  ProfileInspectionError,
   shortModuleId,
   summarizeProfileManifest,
 } from './profile-contents';
 import type { ProfileManifest } from './jsonc-parse';
+import type { AppSettings } from '../settings';
 
 vi.mock('./tauri-bridge', () => ({
   invoke: vi.fn(),
 }));
+
+vi.mock('./engine-exec', () => ({
+  runEndstateOnce: vi.fn(),
+}));
+
+const SETTINGS = {
+  engineMode: 'bundled',
+  customProfilesDirectory: '',
+} as AppSettings;
+
+function inspectionEnvelope() {
+  return {
+    schemaVersion: '1.0',
+    cliVersion: '2.30.0',
+    command: 'profile',
+    runId: 'run-1',
+    timestampUtc: '2026-08-01T12:00:00Z',
+    success: true,
+    data: {
+      profile: {
+        name: null,
+        capturedAt: null,
+        manifestVersion: 2,
+        manifestPath: 'C:\\Profiles\\example\\manifest.jsonc',
+      },
+      summary: {
+        appCount: 2,
+        settingsRowCount: 4,
+        verifiedSettingsAppCount: 2,
+        unidentifiedSettingsRowCount: 2,
+      },
+      apps: [
+        {
+          id: 'app:one:1',
+          manifestAppId: 'one',
+          displayName: 'One',
+          packageRefs: ['Example.One'],
+          hasSettings: true,
+        },
+        {
+          id: 'app:two:1',
+          manifestAppId: 'two',
+          displayName: 'Two',
+          packageRefs: [],
+          hasSettings: false,
+        },
+      ],
+      settingsApps: [
+        {
+          id: 'settings:app:one:1',
+          displayName: 'One settings',
+          associationStatus: 'included',
+          ownerId: 'app:one:1',
+          appId: 'app:one:1',
+          appIncluded: true,
+          packageRefs: ['Example.One'],
+          moduleIds: ['one'],
+          candidateAppIds: ['app:one:1'],
+          capturedEntryCount: 3,
+        },
+        {
+          id: 'settings:absent',
+          displayName: 'Absent settings',
+          associationStatus: 'not_in_profile',
+          ownerId: 'owner:absent',
+          appId: null,
+          appIncluded: false,
+          packageRefs: ['Example.Absent'],
+          moduleIds: ['absent'],
+          candidateAppIds: [],
+          capturedEntryCount: 0,
+        },
+        {
+          id: 'settings:module:ambiguous',
+          displayName: 'Ambiguous settings',
+          associationStatus: 'ambiguous',
+          ownerId: null,
+          appId: null,
+          appIncluded: false,
+          packageRefs: ['Example.One', 'Example.Two'],
+          moduleIds: ['ambiguous'],
+          candidateAppIds: ['app:one:1', 'app:two:1'],
+          capturedEntryCount: 1,
+        },
+        {
+          id: 'settings:module:unresolved',
+          displayName: 'Unresolved settings',
+          associationStatus: 'unresolved',
+          ownerId: null,
+          appId: null,
+          appIncluded: false,
+          packageRefs: [],
+          moduleIds: ['unresolved'],
+          candidateAppIds: [],
+          capturedEntryCount: 0,
+        },
+      ],
+      warnings: [{ code: 'LEGACY', message: 'Legacy metadata', impact: 'diagnostic' }],
+    },
+    error: null,
+  };
+}
+
+async function mockInspection(envelope = inspectionEnvelope()) {
+  const { runEndstateOnce } = await import('./engine-exec');
+  vi.mocked(runEndstateOnce).mockResolvedValue({
+    success: true,
+    envelope,
+    stdout: JSON.stringify(envelope),
+    stderr: '',
+    exitCode: 0,
+  } as never);
+}
 
 describe('moduleIdFromRestoreSource', () => {
   it('derives the module id from the bundle-relative configs path', () => {
@@ -306,5 +422,161 @@ describe('loadProfileContents', () => {
     vi.mocked(invoke).mockResolvedValue('not json at all');
 
     await expect(loadProfileContents('C:\\Setups\\broken\\manifest.jsonc')).rejects.toThrow();
+  });
+});
+
+describe('inspectProfileContents', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await mockInspection();
+  });
+
+  it('uses the current settings and only profile inspect with the manifest path', async () => {
+    const contents = await inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc');
+    const { runEndstateOnce } = await import('./engine-exec');
+
+    expect(runEndstateOnce).toHaveBeenCalledWith(SETTINGS, 'profile', [
+      'inspect',
+      'C:\\Profiles\\example\\manifest.jsonc',
+    ]);
+    expect(contents.apps.map((app) => app.displayName)).toEqual(['One', 'Two']);
+  });
+
+  it('preserves a valid engine result exactly, including explicit nulls and engine order', async () => {
+    const envelope = inspectionEnvelope();
+    (envelope.data as Record<string, unknown>).extra = { future: true };
+    (envelope.data.apps[0] as Record<string, unknown>).extra = 'allowed';
+    await mockInspection(envelope);
+
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).resolves.toEqual(
+      envelope.data,
+    );
+  });
+
+  it.each([
+    ['non-1.x schema', (envelope: any) => { envelope.schemaVersion = '2.0'; }],
+    ['wrong command', (envelope: any) => { envelope.command = 'inspect'; }],
+    ['failed success flag', (envelope: any) => { envelope.success = false; }],
+    ['non-null success error', (envelope: any) => { envelope.error = { code: 'BAD', message: 'bad' }; }],
+  ])('fails closed on a %s success envelope', async (_name, mutate) => {
+    const envelope = inspectionEnvelope();
+    mutate(envelope);
+    await mockInspection(envelope);
+
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).rejects.toThrow(
+      /incompatible profile inspection response/i,
+    );
+  });
+
+  it.each([
+    ['apps', (envelope: any) => { delete envelope.data.apps; }],
+    ['settingsApps', (envelope: any) => { envelope.data.settingsApps = null; }],
+    ['warnings', (envelope: any) => { delete envelope.data.warnings; }],
+    ['app packageRefs', (envelope: any) => { envelope.data.apps[0].packageRefs = null; }],
+    ['settings packageRefs', (envelope: any) => { delete envelope.data.settingsApps[0].packageRefs; }],
+    ['settings moduleIds', (envelope: any) => { envelope.data.settingsApps[0].moduleIds = null; }],
+    ['settings candidateAppIds', (envelope: any) => { delete envelope.data.settingsApps[0].candidateAppIds; }],
+    ['profile name', (envelope: any) => { delete envelope.data.profile.name; }],
+    ['profile capturedAt', (envelope: any) => { delete envelope.data.profile.capturedAt; }],
+    ['row ownerId', (envelope: any) => { delete envelope.data.settingsApps[0].ownerId; }],
+    ['row appId', (envelope: any) => { delete envelope.data.settingsApps[0].appId; }],
+  ])('rejects a missing or null required %s field', async (_name, mutate) => {
+    const envelope = inspectionEnvelope();
+    mutate(envelope);
+    await mockInspection(envelope);
+
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).rejects.toThrow(
+      /incompatible profile inspection response/i,
+    );
+  });
+
+  it.each([
+    ['negative app count', (envelope: any) => { envelope.data.summary.appCount = -1; }],
+    ['fractional app count', (envelope: any) => { envelope.data.summary.appCount = 1.5; }],
+    ['negative captured entry count', (envelope: any) => { envelope.data.settingsApps[0].capturedEntryCount = -1; }],
+    ['unknown association status', (envelope: any) => { envelope.data.settingsApps[0].associationStatus = 'maybe'; }],
+    ['unknown warning impact', (envelope: any) => { envelope.data.warnings[0].impact = 'unknown'; }],
+  ])('rejects an invalid %s', async (_name, mutate) => {
+    const envelope = inspectionEnvelope();
+    mutate(envelope);
+    await mockInspection(envelope);
+
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).rejects.toThrow(
+      /incompatible profile inspection response/i,
+    );
+  });
+
+  it.each([
+    ['included has a null owner', (row: any) => { row.ownerId = null; }],
+    ['included has a different app id', (row: any) => { row.appId = 'app:two:1'; }],
+    ['included is not marked included', (row: any) => { row.appIncluded = false; }],
+    ['included has no sole candidate', (row: any) => { row.candidateAppIds = []; }],
+    ['not in profile has an app id', (row: any) => { row.appId = 'app:one:1'; }],
+    ['not in profile is marked included', (row: any) => { row.appIncluded = true; }],
+    ['ambiguous has an owner', (row: any) => { row.ownerId = 'app:one:1'; }],
+    ['ambiguous has no candidates', (row: any) => { row.candidateAppIds = []; }],
+    ['unresolved has candidates', (row: any) => { row.candidateAppIds = ['app:one:1']; }],
+  ])('rejects when %s', async (_name, mutate) => {
+    const envelope = inspectionEnvelope();
+    const rows = envelope.data.settingsApps;
+    const row = rows.find((candidate) => {
+      if (_name.startsWith('included')) return candidate.associationStatus === 'included';
+      if (_name.startsWith('not in profile')) return candidate.associationStatus === 'not_in_profile';
+      if (_name.startsWith('ambiguous')) return candidate.associationStatus === 'ambiguous';
+      return candidate.associationStatus === 'unresolved';
+    });
+    mutate(row);
+    await mockInspection(envelope);
+
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).rejects.toThrow(
+      /incompatible profile inspection response/i,
+    );
+  });
+
+  it('rejects mismatched summary counts, invalid references, and hasSettings disagreement', async () => {
+    const mismatch = inspectionEnvelope();
+    mismatch.data.summary.appCount = 1;
+    await mockInspection(mismatch);
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).rejects.toThrow(
+      /incompatible profile inspection response/i,
+    );
+
+    const invalidReference = inspectionEnvelope();
+    invalidReference.data.settingsApps[0].appId = 'app:missing:1';
+    invalidReference.data.settingsApps[0].ownerId = 'app:missing:1';
+    invalidReference.data.settingsApps[0].candidateAppIds = ['app:missing:1'];
+    await mockInspection(invalidReference);
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).rejects.toThrow(
+      /incompatible profile inspection response/i,
+    );
+
+    const hasSettingsMismatch = inspectionEnvelope();
+    hasSettingsMismatch.data.apps[0].hasSettings = false;
+    await mockInspection(hasSettingsMismatch);
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).rejects.toThrow(
+      /incompatible profile inspection response/i,
+    );
+  });
+
+  it('surfaces a structured engine failure with its code and message', async () => {
+    const { runEndstateOnce } = await import('./engine-exec');
+    vi.mocked(runEndstateOnce).mockResolvedValue({
+      success: false,
+      error: { kind: 'command_failed', message: 'Manifest was invalid' },
+      envelope: {
+        schemaVersion: '1.0',
+        command: 'profile',
+        success: false,
+        data: null,
+        error: { code: 'MANIFEST_VALIDATION_ERROR', message: 'Manifest was invalid' },
+      },
+    } as never);
+
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).rejects.toMatchObject(
+      { name: 'ProfileInspectionError', code: 'MANIFEST_VALIDATION_ERROR', message: 'Manifest was invalid' },
+    );
+    await expect(inspectProfileContents(SETTINGS, 'C:\\Profiles\\example\\manifest.jsonc')).rejects.toBeInstanceOf(
+      ProfileInspectionError,
+    );
   });
 });

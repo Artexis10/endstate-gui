@@ -1,10 +1,9 @@
 /**
  * "What's inside" — a human summary of what a capture bundle contains.
  *
- * Profiles reachable from the Set up flow are already imported and extracted, so
- * `manifest.jsonc` and its sibling `provenance/modules/*.json` snapshots are
- * plain files on disk. This module reads those and nothing else: no engine
- * spawn, no zip handling.
+ * The legacy local loader remains temporarily while the dialog migration lands.
+ * New callers use `inspectProfileContents`, which delegates all ownership and
+ * label semantics to the engine's read-only `profile inspect` command.
  *
  * Raw module ids are deliberately never used as a label. An id that cannot be
  * resolved to a friendly name yields a counted-but-unnamed module rather than a
@@ -15,6 +14,13 @@
  */
 
 import { invoke } from './tauri-bridge';
+import { runEndstateOnce } from './engine-exec';
+import { z } from 'zod';
+import type { AppSettings } from '../settings';
+import type {
+  EndstateEnvelope,
+  ProfileInspectionData,
+} from '../types';
 import {
   parseJsonc,
   type ProfileApp,
@@ -277,4 +283,197 @@ export async function loadProfileContents(manifestPath: string): Promise<Profile
   const manifest = parseJsonc<ProfileManifest>(content);
   const snapshotNames = await readSnapshotDisplayNames(manifestPath, manifest);
   return summarizeProfileManifest(manifest, snapshotNames);
+}
+
+const nonNegativeInteger = z.number().int().nonnegative();
+const associationStatus = z.enum(['included', 'not_in_profile', 'ambiguous', 'unresolved']);
+
+const inspectionAppSchema = z.object({
+  id: z.string(),
+  manifestAppId: z.string(),
+  displayName: z.string(),
+  packageRefs: z.array(z.string()),
+  hasSettings: z.boolean(),
+}).passthrough();
+
+const inspectionSettingsAppSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  associationStatus,
+  ownerId: z.string().nullable(),
+  appId: z.string().nullable(),
+  appIncluded: z.boolean(),
+  packageRefs: z.array(z.string()),
+  moduleIds: z.array(z.string()),
+  candidateAppIds: z.array(z.string()),
+  capturedEntryCount: nonNegativeInteger,
+}).passthrough();
+
+const inspectionDataSchema = z.object({
+  profile: z.object({
+    name: z.string().nullable(),
+    capturedAt: z.string().nullable(),
+    manifestVersion: z.number().int(),
+    manifestPath: z.string(),
+  }).passthrough(),
+  summary: z.object({
+    appCount: nonNegativeInteger,
+    settingsRowCount: nonNegativeInteger,
+    verifiedSettingsAppCount: nonNegativeInteger,
+    unidentifiedSettingsRowCount: nonNegativeInteger,
+  }).passthrough(),
+  apps: z.array(inspectionAppSchema),
+  settingsApps: z.array(inspectionSettingsAppSchema),
+  warnings: z.array(z.object({
+    code: z.string(),
+    message: z.string(),
+    impact: z.enum(['diagnostic', 'inventory_incomplete']),
+  }).passthrough()),
+}).passthrough();
+
+const inspectionEnvelopeSchema = z.object({
+  schemaVersion: z.string().regex(/^1\./),
+  command: z.literal('profile'),
+  success: z.literal(true),
+  data: inspectionDataSchema,
+  error: z.null(),
+}).passthrough();
+
+/** Structured error from the read-only profile inspection command. */
+export class ProfileInspectionError extends Error {
+  readonly code: string;
+  readonly remediation?: string;
+  readonly detail?: Record<string, unknown>;
+
+  constructor(args: {
+    code: string;
+    message: string;
+    remediation?: string;
+    detail?: Record<string, unknown>;
+  }) {
+    super(args.message);
+    this.name = 'ProfileInspectionError';
+    this.code = args.code;
+    this.remediation = args.remediation;
+    this.detail = args.detail;
+  }
+}
+
+function incompatibleInspectionResponse(): ProfileInspectionError {
+  return new ProfileInspectionError({
+    code: 'INCOMPATIBLE_PROFILE_INSPECTION_RESPONSE',
+    message: 'Incompatible profile inspection response. Please update Endstate and try again.',
+  });
+}
+
+function validateInspectionRelations(data: ProfileInspectionData): void {
+  const appsById = new Map(data.apps.map((app) => [app.id, app]));
+  if (appsById.size !== data.apps.length) throw incompatibleInspectionResponse();
+
+  const includedAppIds = new Set<string>();
+  let verifiedSettingsAppCount = 0;
+  let unidentifiedSettingsRowCount = 0;
+
+  for (const row of data.settingsApps) {
+    const candidatesResolve = row.candidateAppIds.every((candidateId) => appsById.has(candidateId));
+    if (!candidatesResolve) throw incompatibleInspectionResponse();
+
+    switch (row.associationStatus) {
+      case 'included':
+        if (
+          !row.ownerId ||
+          !row.appId ||
+          row.ownerId !== row.appId ||
+          !row.appIncluded ||
+          row.candidateAppIds.length !== 1 ||
+          row.candidateAppIds[0] !== row.appId ||
+          !appsById.has(row.appId)
+        ) {
+          throw incompatibleInspectionResponse();
+        }
+        includedAppIds.add(row.appId);
+        verifiedSettingsAppCount += 1;
+        break;
+      case 'not_in_profile':
+        if (!row.ownerId || row.appId !== null || row.appIncluded || row.candidateAppIds.length !== 0) {
+          throw incompatibleInspectionResponse();
+        }
+        verifiedSettingsAppCount += 1;
+        break;
+      case 'ambiguous':
+        if (
+          row.ownerId !== null ||
+          row.appId !== null ||
+          row.appIncluded ||
+          row.candidateAppIds.length === 0
+        ) {
+          throw incompatibleInspectionResponse();
+        }
+        unidentifiedSettingsRowCount += 1;
+        break;
+      case 'unresolved':
+        if (
+          row.ownerId !== null ||
+          row.appId !== null ||
+          row.appIncluded ||
+          row.candidateAppIds.length !== 0
+        ) {
+          throw incompatibleInspectionResponse();
+        }
+        unidentifiedSettingsRowCount += 1;
+        break;
+    }
+  }
+
+  for (const app of data.apps) {
+    if (app.hasSettings !== includedAppIds.has(app.id)) throw incompatibleInspectionResponse();
+  }
+
+  if (
+    data.summary.appCount !== data.apps.length ||
+    data.summary.settingsRowCount !== data.settingsApps.length ||
+    data.summary.verifiedSettingsAppCount !== verifiedSettingsAppCount ||
+    data.summary.unidentifiedSettingsRowCount !== unidentifiedSettingsRowCount
+  ) {
+    throw incompatibleInspectionResponse();
+  }
+}
+
+/**
+ * Read one saved, extracted profile through the engine's inspection boundary.
+ * The GUI deliberately does not read the manifest or snapshots on this path.
+ */
+export async function inspectProfileContents(
+  settings: AppSettings,
+  manifestPath: string,
+): Promise<ProfileInspectionData> {
+  const result = await runEndstateOnce<EndstateEnvelope<unknown>>(
+    settings,
+    'profile',
+    ['inspect', manifestPath],
+  );
+
+  if (!result.success) {
+    const envelope = result.envelope as EndstateEnvelope<unknown> | undefined;
+    if (envelope?.error) {
+      throw new ProfileInspectionError({
+        code: envelope.error.code,
+        message: envelope.error.message,
+        remediation: envelope.error.remediation,
+        detail: envelope.error.detail,
+      });
+    }
+    throw new ProfileInspectionError({
+      code: result.error.kind.toUpperCase(),
+      message: result.error.message,
+      detail: result.error.stderr ? { stderr: result.error.stderr } : undefined,
+    });
+  }
+
+  const parsed = inspectionEnvelopeSchema.safeParse(result.envelope);
+  if (!parsed.success) throw incompatibleInspectionResponse();
+
+  const data = parsed.data.data as ProfileInspectionData;
+  validateInspectionRelations(data);
+  return data;
 }
