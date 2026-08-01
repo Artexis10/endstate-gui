@@ -4,6 +4,19 @@
 
 The `tauri.ts` fixture provides context-level `__TAURI__` and `__ENDSTATE_MOCK_ENGINE__` mocks for E2E tests that require these APIs to be available **before** page creation.
 
+## Profile inspection fixture
+
+`profile_inspect.fixture.json` is the deterministic long-profile response for
+the **What's inside** E2E flow. It is deliberately an engine-shaped successful
+`profile inspect --json` envelope: 72 Apps rows, eight verified settings rows
+(seven included and one app not in the profile), and an inventory-incomplete
+warning. The mock-engine conformance test keeps its required keys, nullability,
+status matrix, summary semantics, and representative rows aligned with
+`tests/fixtures/profile-inspect-envelope.golden.json` from the real engine.
+
+Package references and module IDs are included so search can be tested without
+showing those technical values in the normal row UI.
+
 ## When to Use the Fixture
 
 Use `import { test, expect } from './fixtures/tauri'` when:
