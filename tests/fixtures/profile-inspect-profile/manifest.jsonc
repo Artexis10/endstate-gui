@@ -1,0 +1,67 @@
+{
+  "version": 2,
+  "apps": [
+    {
+      "id": "included-app",
+      "displayName": "Included App",
+      "refs": { "windows": "Vendor.Included" }
+    },
+    {
+      "id": "other-app",
+      "displayName": "Other App",
+      "refs": { "windows": "Vendor.Other" }
+    }
+  ],
+  "configCaptures": [
+    {
+      "captureId": "included-capture",
+      "moduleId": "apps.included",
+      "configSetId": "preferences",
+      "sourceInstance": {
+        "id": "included-instance",
+        "detectorId": "package",
+        "rawVersion": "1.0",
+        "normalizedVersion": "1",
+        "evidence": {
+          "type": "package",
+          "backend": "winget",
+          "ref": "Vendor.Included"
+        }
+      },
+      "sourceGeneration": "v1",
+      "sourceGenerationFingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+      "captureModule": {
+        "schemaVersion": 2,
+        "contentHash": "c585718149bcaa1d85c8cb12ff3504dd4621abbf6606eaec876a453f24619e3a",
+        "snapshotPath": "provenance/modules/included.json"
+      },
+      "payloadRoot": "configs/included-capture",
+      "payloadManifest": []
+    },
+    {
+      "captureId": "absent-capture",
+      "moduleId": "apps.absent",
+      "configSetId": "preferences",
+      "sourceInstance": {
+        "id": "absent-instance",
+        "detectorId": "package",
+        "rawVersion": "1.0",
+        "normalizedVersion": "1",
+        "evidence": {
+          "type": "package",
+          "backend": "winget",
+          "ref": "Vendor.Absent"
+        }
+      },
+      "sourceGeneration": "v1",
+      "sourceGenerationFingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+      "captureModule": {
+        "schemaVersion": 2,
+        "contentHash": "d9b155431093bff05fddc73cb2eb8590dfa29c41ce443c32fc134222d6a40764",
+        "snapshotPath": "provenance/modules/absent.json"
+      },
+      "payloadRoot": "configs/absent-capture",
+      "payloadManifest": []
+    }
+  ]
+}
