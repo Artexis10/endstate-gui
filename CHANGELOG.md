@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.10.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.9.0...gui-v3.10.0) (2026-08-01)
+
+
+### Features
+
+* bump engine to v2.30.0 ([9ad0f58](https://github.com/Artexis10/endstate-gui/commit/9ad0f58503d637d6d46ca1da7d5623b0f3d2657c))
+
+
+### Bug Fixes
+
+* **setup:** show accurate searchable profile contents ([#220](https://github.com/Artexis10/endstate-gui/issues/220)) ([5d3df41](https://github.com/Artexis10/endstate-gui/commit/5d3df41d7a7eb0386fea1768a4d6ff08062937cf))
+
 ## [3.9.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.8.1...gui-v3.9.0) (2026-07-29)
 
 
