@@ -1,0 +1,78 @@
+{
+  "_generatedBy": "tests/contract.test.js against Endstate v2.30.0 — do not hand-edit",
+  "schemaVersion": "1.0",
+  "command": "profile",
+  "success": true,
+  "error": null,
+  "data": {
+    "profile": {
+      "name": null,
+      "capturedAt": null,
+      "manifestVersion": 2,
+      "manifestPath": "<fixture-manifest-path>"
+    },
+    "apps": [
+      {
+        "id": "app:included-app:1",
+        "manifestAppId": "included-app",
+        "displayName": "Included App",
+        "packageRefs": [
+          "Vendor.Included"
+        ],
+        "hasSettings": true
+      },
+      {
+        "id": "app:other-app:1",
+        "manifestAppId": "other-app",
+        "displayName": "Other App",
+        "packageRefs": [
+          "Vendor.Other"
+        ],
+        "hasSettings": false
+      }
+    ],
+    "settingsApps": [
+      {
+        "id": "settings:package:vendor.absent",
+        "displayName": "Absent settings",
+        "associationStatus": "not_in_profile",
+        "ownerId": "package:vendor.absent",
+        "appId": null,
+        "appIncluded": false,
+        "packageRefs": [
+          "Vendor.Absent"
+        ],
+        "moduleIds": [
+          "apps.absent"
+        ],
+        "candidateAppIds": [],
+        "capturedEntryCount": 0
+      },
+      {
+        "id": "settings:app:included-app:1",
+        "displayName": "Included settings",
+        "associationStatus": "included",
+        "ownerId": "app:included-app:1",
+        "appId": "app:included-app:1",
+        "appIncluded": true,
+        "packageRefs": [
+          "Vendor.Included"
+        ],
+        "moduleIds": [
+          "apps.included"
+        ],
+        "candidateAppIds": [
+          "app:included-app:1"
+        ],
+        "capturedEntryCount": 0
+      }
+    ],
+    "warnings": [],
+    "summary": {
+      "appCount": 2,
+      "settingsRowCount": 2,
+      "verifiedSettingsAppCount": 2,
+      "unidentifiedSettingsRowCount": 0
+    }
+  }
+}

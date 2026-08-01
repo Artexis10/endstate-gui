@@ -32,13 +32,11 @@ function checkEndstateAvailable() {
   return true;
 }
 
-function runEndstate(command, args = []) {
+function runEndstate(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
-    const fullArgs = [
-      command,
-      '--json',
-      ...args,
-    ];
+    const fullArgs = options.jsonAfterArgs
+      ? [command, ...args, '--json']
+      : [command, '--json', ...args];
 
     const proc = spawn(ENDSTATE_ENGINE_PATH, fullArgs, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -137,9 +135,13 @@ async function testCapabilities() {
   if (!Array.isArray(applyFlags) || !applyFlags.includes('--restore-target')) {
     throw new Error('Pinned engine does not advertise apply --restore-target');
   }
+  if (envelope.data?.features?.profileInspection !== true) {
+    throw new Error('Pinned engine does not advertise features.profileInspection=true');
+  }
   
   console.log('   ✓ Envelope structure valid');
   console.log('   ✓ Config generation target mapping supported');
+  console.log('   ✓ Profile inspection supported');
 
   // The pinned engine must report the version we pinned. Nothing else asserts
   // this: verify-engine-pin.yml proves only that the release exists and carries
@@ -166,6 +168,183 @@ async function testCapabilities() {
   }
   console.log(`   ✓ Schema version: ${envelope.schemaVersion}`);
   console.log(`   ✓ Success: ${envelope.success}`);
+}
+
+function assertExactKeys(value, expectedKeys, subject) {
+  const actual = Object.keys(value).sort();
+  const expected = [...expectedKeys].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`${subject} keys differ: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+}
+
+function assertRowsSorted(rows, subject) {
+  const actual = rows.map((row) => row.id);
+  const expected = [...rows]
+    .sort((left, right) => {
+      const label = left.displayName.localeCompare(right.displayName, undefined, { sensitivity: 'accent' });
+      return label || left.id.localeCompare(right.id);
+    })
+    .map((row) => row.id);
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`${subject} is not deterministically ordered: ${JSON.stringify(actual)}`);
+  }
+}
+
+async function testProfileInspectionAndRegenerateGolden() {
+  const profile = join(testDir, 'fixtures', 'profile-inspect-profile', 'manifest.jsonc');
+  console.log('\n📋 Testing: endstate profile inspect <profile-inspect-fixture> --json');
+
+  const result = await runEndstate('profile', ['inspect', profile], { jsonAfterArgs: true });
+  if (result.exitCode !== 0) {
+    throw new Error(`profile inspect exited with code ${result.exitCode}: ${result.stderr.trim()}`);
+  }
+
+  const envelope = parseEnvelope(result.stdout);
+  if (!/^1\.\d+$/.test(envelope.schemaVersion)) {
+    throw new Error(`Expected schema 1.x, got ${JSON.stringify(envelope.schemaVersion)}`);
+  }
+  if (envelope.command !== 'profile' || envelope.success !== true || envelope.error !== null) {
+    throw new Error(`Expected successful profile envelope, got ${JSON.stringify(envelope)}`);
+  }
+  assertExactKeys(
+    envelope,
+    ['schemaVersion', 'cliVersion', 'command', 'runId', 'timestampUtc', 'success', 'data', 'error'],
+    'profile inspect envelope'
+  );
+
+  const data = envelope.data;
+  assertExactKeys(data, ['profile', 'apps', 'settingsApps', 'warnings', 'summary'], 'profile inspect data');
+  assertExactKeys(data.profile, ['name', 'capturedAt', 'manifestVersion', 'manifestPath'], 'profile inspect profile');
+  assertExactKeys(
+    data.summary,
+    ['appCount', 'settingsRowCount', 'verifiedSettingsAppCount', 'unidentifiedSettingsRowCount'],
+    'profile inspect summary'
+  );
+
+  if (data.profile.name !== null || data.profile.capturedAt !== null || data.profile.manifestVersion !== 2) {
+    throw new Error(`Fixture must preserve nullable profile metadata, got ${JSON.stringify(data.profile)}`);
+  }
+  if (data.profile.manifestPath !== profile) {
+    throw new Error(`profile inspect returned the wrong manifest path: ${JSON.stringify(data.profile.manifestPath)}`);
+  }
+  if (!Array.isArray(data.apps) || data.apps.length < 2) {
+    throw new Error('Expected at least two Apps rows from the profile inspection fixture');
+  }
+  if (!Array.isArray(data.settingsApps) || data.settingsApps.length < 2 || !Array.isArray(data.warnings)) {
+    throw new Error('Expected non-empty settingsApps and non-null warnings arrays from profile inspect');
+  }
+
+  for (const app of data.apps) {
+    assertExactKeys(app, ['id', 'manifestAppId', 'displayName', 'packageRefs', 'hasSettings'], 'profile inspect app');
+    if (!Array.isArray(app.packageRefs)) {
+      throw new Error(`App ${app.id} has a non-array packageRefs field`);
+    }
+  }
+  assertRowsSorted(data.apps, 'Apps rows');
+
+  const statusCounts = new Map();
+  const settingsRowIds = new Set();
+  const verifiedOwnerIds = new Set();
+  for (const row of data.settingsApps) {
+    assertExactKeys(
+      row,
+      ['id', 'displayName', 'associationStatus', 'ownerId', 'appId', 'appIncluded', 'packageRefs', 'moduleIds', 'candidateAppIds', 'capturedEntryCount'],
+      'profile inspect settings row'
+    );
+    for (const field of ['packageRefs', 'moduleIds', 'candidateAppIds']) {
+      if (!Array.isArray(row[field])) {
+        throw new Error(`Settings row ${row.id} has a non-array ${field} field`);
+      }
+    }
+    if (settingsRowIds.has(row.id)) {
+      throw new Error(`Duplicate profile inspect settings row id ${JSON.stringify(row.id)}`);
+    }
+    settingsRowIds.add(row.id);
+    statusCounts.set(row.associationStatus, (statusCounts.get(row.associationStatus) || 0) + 1);
+    const isIncluded = row.associationStatus === 'included';
+    const isAbsent = row.associationStatus === 'not_in_profile';
+    const isAmbiguous = row.associationStatus === 'ambiguous';
+    const isUnresolved = row.associationStatus === 'unresolved';
+    if (!isIncluded && !isAbsent && !isAmbiguous && !isUnresolved) {
+      throw new Error(`Unexpected associationStatus ${JSON.stringify(row.associationStatus)}`);
+    }
+    if ((isIncluded || isAbsent) !== (typeof row.ownerId === 'string')) {
+      throw new Error(`ownerId/status matrix mismatch for ${row.id}`);
+    }
+    if (isIncluded || isAbsent) {
+      if (verifiedOwnerIds.has(row.ownerId)) {
+        throw new Error(`Duplicate verified ownerId ${JSON.stringify(row.ownerId)}`);
+      }
+      verifiedOwnerIds.add(row.ownerId);
+    }
+    if (isIncluded !== (typeof row.appId === 'string') || isIncluded !== row.appIncluded) {
+      throw new Error(`appId/appIncluded/status matrix mismatch for ${row.id}`);
+    }
+    if (isIncluded && (row.candidateAppIds.length !== 1 || row.candidateAppIds[0] !== row.appId)) {
+      throw new Error(`included candidate matrix mismatch for ${row.id}`);
+    }
+    if ((!isIncluded && !isAmbiguous) && row.candidateAppIds.length !== 0) {
+      throw new Error(`non-candidate row ${row.id} has candidate IDs`);
+    }
+  }
+  assertRowsSorted(data.settingsApps, 'Settings rows');
+
+  if (statusCounts.get('included') !== 1 || statusCounts.get('not_in_profile') !== 1) {
+    throw new Error(`Fixture must yield one included and one not_in_profile row, got ${JSON.stringify(Object.fromEntries(statusCounts))}`);
+  }
+  if (data.summary.appCount !== data.apps.length || data.summary.settingsRowCount !== data.settingsApps.length) {
+    throw new Error(`Summary inventory counts differ from finalized arrays: ${JSON.stringify(data.summary)}`);
+  }
+  const verified = verifiedOwnerIds.size;
+  const unidentified = data.settingsApps.filter(
+    (row) => row.associationStatus === 'ambiguous' || row.associationStatus === 'unresolved'
+  ).length;
+  if (data.summary.verifiedSettingsAppCount !== verified || data.summary.unidentifiedSettingsRowCount !== unidentified) {
+    throw new Error(`Summary association counts differ from finalized rows: ${JSON.stringify(data.summary)}`);
+  }
+  const included = data.settingsApps.find((row) => row.associationStatus === 'included');
+  const absent = data.settingsApps.find((row) => row.associationStatus === 'not_in_profile');
+  if (
+    included?.appId !== 'app:included-app:1'
+    || included.ownerId !== included.appId
+    || JSON.stringify(included.packageRefs) !== JSON.stringify(['Vendor.Included'])
+    || JSON.stringify(included.moduleIds) !== JSON.stringify(['apps.included'])
+  ) {
+    throw new Error(`Included settings fixture semantics drifted: ${JSON.stringify(included)}`);
+  }
+  if (
+    absent?.ownerId !== 'package:vendor.absent'
+    || absent.appId !== null
+    || absent.appIncluded !== false
+    || JSON.stringify(absent.packageRefs) !== JSON.stringify(['Vendor.Absent'])
+    || JSON.stringify(absent.moduleIds) !== JSON.stringify(['apps.absent'])
+  ) {
+    throw new Error(`Absent-owner settings fixture semantics drifted: ${JSON.stringify(absent)}`);
+  }
+
+  // The engine returns the input's absolute path verbatim. It is asserted above,
+  // but normalized only in the committed golden because a CI checkout path is not
+  // part of the inspection contract's semantic inventory.
+  const goldenData = JSON.parse(JSON.stringify(data));
+  goldenData.profile.manifestPath = '<fixture-manifest-path>';
+  const golden = {
+    _generatedBy: 'tests/contract.test.js against Endstate v2.30.0 — do not hand-edit',
+    schemaVersion: envelope.schemaVersion,
+    command: envelope.command,
+    success: envelope.success,
+    error: envelope.error,
+    data: goldenData,
+  };
+  const goldenPath = join(testDir, 'fixtures', 'profile-inspect-envelope.golden.json');
+  const previous = existsSync(goldenPath) ? readFileSync(goldenPath, 'utf8') : '';
+  const next = JSON.stringify(golden, null, 2) + '\n';
+  if (previous !== next) {
+    writeFileSync(goldenPath, next);
+    console.log('   ⚠ profile inspection golden regenerated — commit the diff');
+  } else {
+    console.log('   ✓ profile inspection golden unchanged');
+  }
 }
 
 async function testReport() {
@@ -862,6 +1041,7 @@ async function runTests() {
     await testReport();
     await testVerifyMissing();
     await testApplyMissing();
+    await testProfileInspectionAndRegenerateGolden();
     await testApplyPayloadAndRegenerateGolden();
     await testRestorePayloadAndRegenerateGolden();
     await testMixedPartialFailure();

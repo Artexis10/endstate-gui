@@ -1,4 +1,8 @@
 import type { APIRequestContext, Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import path from 'node:path';
 
 /**
  * Helpers for the real-engine lane. These talk to the standalone dev bridge
@@ -41,6 +45,64 @@ export interface SeededProfile {
   name: string;
 }
 
+export interface SeededInspectionProfile extends SeededProfile {
+  /** Every copied raw-profile file, retained for precise cleanup. */
+  copiedPaths: string[];
+  /** Unique profile directory created for this particular test run. */
+  directory: string;
+  /** Parent profiles root used to prove cleanup cannot escape this seed. */
+  profilesDirectory: string;
+}
+
+const INSPECTION_FIXTURE_FILES = [
+  'manifest.jsonc',
+  'metadata.json',
+  'provenance/modules/included.json',
+  'provenance/modules/absent.json',
+];
+
+/**
+ * Copy the committed extracted profile fixture, including the sibling metadata
+ * and provenance snapshots that `profile inspect` reads. Importing just a
+ * manifest would test a different, incomplete profile shape.
+ */
+export async function seedInspectionProfile(
+  request: APIRequestContext,
+): Promise<SeededInspectionProfile> {
+  const profilesDir = await bridgeInvoke<string>(request, 'get_default_profiles_directory');
+  const fixtureRoot = path.resolve(process.cwd(), 'tests/fixtures/profile-inspect-profile');
+  const name = `ci-profile-inspection-${randomUUID()}`;
+  const profilesRoot = path.resolve(profilesDir);
+  const destinationRoot = path.join(profilesRoot, name);
+  if (path.dirname(destinationRoot) !== profilesRoot || existsSync(destinationRoot)) {
+    throw new Error(`Refusing to seed profile into an unsafe directory: ${destinationRoot}`);
+  }
+
+  const seeded: SeededInspectionProfile = {
+    path: path.join(destinationRoot, 'manifest.jsonc'),
+    name,
+    copiedPaths: [],
+    directory: destinationRoot,
+    profilesDirectory: profilesRoot,
+  };
+
+  try {
+    for (const relativePath of INSPECTION_FIXTURE_FILES) {
+      const destination = path.join(destinationRoot, relativePath);
+      await bridgeInvoke(request, 'copy_file', {
+        sourcePath: path.join(fixtureRoot, relativePath),
+        destPath: destination,
+      });
+      seeded.copiedPaths.push(destination);
+    }
+  } catch (error) {
+    await removeInspectionProfile(request, seeded);
+    throw error;
+  }
+
+  return seeded;
+}
+
 /**
  * Write a real manifest into the engine's default profiles directory through
  * the same transactional import command the drop zone uses. Clears any prior
@@ -72,6 +134,26 @@ export async function removeProfile(request: APIRequestContext, path: string): P
   await bridgeInvoke(request, 'delete_file_silent', { path }).catch(() => {});
 }
 
+/** Remove all raw fixture files written by seedInspectionProfile. */
+export async function removeInspectionProfile(
+  request: APIRequestContext,
+  profile: SeededInspectionProfile,
+): Promise<void> {
+  const directory = path.resolve(profile.directory);
+  const profilesRoot = path.resolve(
+    await bridgeInvoke<string>(request, 'get_default_profiles_directory'),
+  );
+  if (
+    !/^ci-profile-inspection-[a-z0-9-]+$/i.test(profile.name) ||
+    path.basename(directory) !== profile.name ||
+    path.dirname(directory) !== profilesRoot ||
+    profilesRoot !== path.resolve(profile.profilesDirectory)
+  ) {
+    throw new Error(`Refusing to remove a non-test inspection directory: ${directory}`);
+  }
+  await rm(directory, { recursive: true, force: true });
+}
+
 export interface ApplyAction {
   id: string;
   ref: string;
@@ -87,6 +169,70 @@ export interface ApplyEnvelope {
     summary: { total: number; success: number; skipped: number; failed: number };
     actions: ApplyAction[];
   };
+}
+
+export interface ProfileInspectionEnvelope {
+  schemaVersion: string;
+  command: 'profile';
+  success: true;
+  error: null;
+  data: {
+    profile: {
+      name: string | null;
+      capturedAt: string | null;
+      manifestVersion: number;
+      manifestPath: string;
+    };
+    apps: Array<{
+      id: string;
+      displayName: string;
+      hasSettings: boolean;
+    }>;
+    settingsApps: Array<{
+      id: string;
+      displayName: string;
+      associationStatus: 'included' | 'not_in_profile' | 'ambiguous' | 'unresolved';
+      appId: string | null;
+      appIncluded: boolean;
+    }>;
+    warnings: Array<{ code: string; message: string; impact: 'diagnostic' | 'inventory_incomplete' }>;
+    summary: {
+      appCount: number;
+      settingsRowCount: number;
+      verifiedSettingsAppCount: number;
+      unidentifiedSettingsRowCount: number;
+    };
+  };
+}
+
+/** Ground-truth, validated `profile inspect` response from the real engine. */
+export async function profileInspectionEnvelope(
+  request: APIRequestContext,
+  profilePath: string,
+): Promise<ProfileInspectionEnvelope> {
+  const exec = await bridgeInvoke<{ stdout: string; stderr: string; exitCode: number }>(
+    request,
+    'endstate_exec',
+    { exe: '__bundled__', args: ['profile', 'inspect', profilePath, '--json'] },
+  );
+  if (exec.exitCode !== 0) {
+    throw new Error(`profile inspect exited ${exec.exitCode}: ${exec.stderr.trim()}`);
+  }
+  const envelope = JSON.parse(exec.stdout) as ProfileInspectionEnvelope;
+  if (
+    !/^1\./.test(envelope.schemaVersion) ||
+    envelope.command !== 'profile' ||
+    envelope.success !== true ||
+    envelope.error !== null ||
+    !Array.isArray(envelope.data?.apps) ||
+    !Array.isArray(envelope.data?.settingsApps) ||
+    !Array.isArray(envelope.data?.warnings) ||
+    envelope.data.summary.appCount !== envelope.data.apps.length ||
+    envelope.data.summary.settingsRowCount !== envelope.data.settingsApps.length
+  ) {
+    throw new Error('Real engine returned an incompatible profile inspection envelope');
+  }
+  return envelope;
 }
 
 /**

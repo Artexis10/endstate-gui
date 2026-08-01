@@ -23,7 +23,94 @@
 import { describe, it, expect } from 'vitest';
 import golden from '../../tests/fixtures/apply-envelope.golden.json';
 import restoreGolden from '../../tests/fixtures/restore-envelope.golden.json';
+import inspectionGolden from '../../tests/fixtures/profile-inspect-envelope.golden.json';
+import inspectionFixture from '../../e2e/fixtures/profile_inspect.fixture.json';
 import { scenarioEnvelope } from './mock-engine';
+
+describe('mock engine conforms to the real profile inspection envelope', () => {
+  it('provides the committed long-profile inspection envelope', () => {
+    const envelope = scenarioEnvelope('profile_inspect_ok' as never) as Record<string, unknown>;
+    expect(envelope).toEqual(inspectionFixture);
+  });
+
+  it('keeps the profile inspection wrapper and data shape aligned with the real-engine golden', () => {
+    const envelope = inspectionFixture as Record<string, unknown>;
+    const data = envelope.data as Record<string, unknown>;
+    const goldenData = inspectionGolden.data as Record<string, unknown>;
+
+    for (const key of Object.keys(inspectionGolden).filter((key) => key !== '_generatedBy')) {
+      expect(Object.prototype.hasOwnProperty.call(envelope, key), `mock profile envelope is missing ${key}`).toBe(true);
+    }
+    expect(Object.keys(data).sort()).toEqual(Object.keys(goldenData).sort());
+    expect(envelope.schemaVersion).toMatch(/^1\./);
+    expect(envelope.command).toBe('profile');
+    expect(envelope.success).toBe(true);
+    expect(envelope.error).toBeNull();
+    expect(data.profile).toEqual(expect.objectContaining({ name: expect.any(String), capturedAt: expect.any(String) }));
+    expect(Object.keys((data.apps as Array<Record<string, unknown>>)[0]).sort()).toEqual(
+      Object.keys((goldenData.apps as Array<Record<string, unknown>>)[0]).sort(),
+    );
+    expect(Object.keys((data.settingsApps as Array<Record<string, unknown>>)[0]).sort()).toEqual(
+      Object.keys((goldenData.settingsApps as Array<Record<string, unknown>>)[0]).sort(),
+    );
+  });
+
+  it('preserves the long-profile summary, association matrix, identities, and searchable provenance', () => {
+    const data = inspectionFixture.data;
+    expect(data.apps).toHaveLength(72);
+    expect(data.settingsApps).toHaveLength(8);
+    expect(data.summary).toEqual({
+      appCount: 72,
+      settingsRowCount: 8,
+      verifiedSettingsAppCount: 8,
+      unidentifiedSettingsRowCount: 0,
+    });
+    expect(data.apps.filter((app) => app.hasSettings)).toHaveLength(7);
+    expect(new Set(data.apps.map((app) => app.id)).size).toBe(data.apps.length);
+    for (const app of data.apps) {
+      expect(app.id).toBe(`app:${app.manifestAppId.toLowerCase()}:1`);
+    }
+    expect(data.apps.map((app) => `${app.displayName.toLowerCase()}\u0000${app.id}`)).toEqual(
+      [...data.apps]
+        .sort((left, right) => {
+          const leftKey = `${left.displayName.toLowerCase()}\u0000${left.id}`;
+          const rightKey = `${right.displayName.toLowerCase()}\u0000${right.id}`;
+          return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+        })
+        .map((app) => `${app.displayName.toLowerCase()}\u0000${app.id}`),
+    );
+    expect(data.settingsApps.filter((row) => row.associationStatus === 'included')).toHaveLength(7);
+    expect(data.settingsApps.filter((row) => row.associationStatus === 'not_in_profile')).toHaveLength(1);
+    for (const row of data.settingsApps.filter((row) => row.associationStatus === 'included')) {
+      expect(row.id).toBe(`settings:${row.appId}`);
+      expect(row.ownerId).toBe(row.appId);
+      expect(row.appIncluded).toBe(true);
+      expect(row.candidateAppIds).toEqual([row.appId]);
+      expect(row.packageRefs).toEqual(expect.any(Array));
+      expect(row.moduleIds).toEqual(expect.any(Array));
+    }
+    expect(data.settingsApps.find((row) => row.associationStatus === 'not_in_profile')).toMatchObject({
+      id: 'settings:package:vendor.absent',
+      ownerId: 'package:vendor.absent',
+      associationStatus: 'not_in_profile',
+      appId: null,
+      appIncluded: false,
+      candidateAppIds: [],
+    });
+    expect(data.settingsApps.map((row) => `${row.displayName.toLowerCase()}\u0000${row.id}`)).toEqual(
+      [...data.settingsApps]
+        .sort((left, right) => {
+          const leftKey = `${left.displayName.toLowerCase()}\u0000${left.id}`;
+          const rightKey = `${right.displayName.toLowerCase()}\u0000${right.id}`;
+          return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+        })
+        .map((row) => `${row.displayName.toLowerCase()}\u0000${row.id}`),
+    );
+    expect(data.apps.find((app) => app.manifestAppId === 'cursor')?.packageRefs).toContain('com.endstate.hidden-package-ref');
+    expect(data.settingsApps.find((row) => row.appId === 'app:cursor:1')?.moduleIds).toContain('apps.hidden-module-id');
+    expect(data.warnings).toContainEqual(expect.objectContaining({ impact: 'inventory_incomplete' }));
+  });
+});
 
 describe('mock engine conforms to the real apply envelope', () => {
   const envelope = scenarioEnvelope('apply_ok_minimal') as Record<string, unknown>;

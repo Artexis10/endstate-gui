@@ -165,6 +165,8 @@ export interface EndstateCapabilitiesData {
     streaming?: boolean;
     parallelInstall?: boolean;
     configModules?: boolean;
+    /** Additive read-only `profile inspect` capability (engine v2.30+). */
+    profileInspection?: boolean;
     jsonOutput?: boolean;
     manualApps?: boolean;
     hostedBackup?: EndstateHostedBackupCapability;
@@ -187,6 +189,71 @@ export interface EndstateCapabilitiesData {
   gitCommit?: string | null;
   gitDirty?: boolean;
   bootstrapTimestamp?: string | null;
+}
+
+/** Engine-authored ownership classification for one app-settings row. */
+export type ProfileInspectionAssociationStatus =
+  | 'included'
+  | 'not_in_profile'
+  | 'ambiguous'
+  | 'unresolved';
+
+/** Impact level for an engine-authored profile-inspection warning. */
+export type ProfileInspectionWarningImpact = 'diagnostic' | 'inventory_incomplete';
+
+/** Saved-profile identity reported by `endstate profile inspect --json`. */
+export interface ProfileInspectionProfile {
+  name: string | null;
+  capturedAt: string | null;
+  manifestVersion: number;
+  manifestPath: string;
+}
+
+/** Finalized inspection counts, derived by the engine from returned rows. */
+export interface ProfileInspectionSummary {
+  appCount: number;
+  settingsRowCount: number;
+  verifiedSettingsAppCount: number;
+  unidentifiedSettingsRowCount: number;
+}
+
+/** One Apps-inventory row from the read-only profile inspection. */
+export interface ProfileInspectionApp {
+  id: string;
+  manifestAppId: string;
+  displayName: string;
+  packageRefs: string[];
+  hasSettings: boolean;
+}
+
+/** One grouped, profile-owned app-settings row from the inspection. */
+export interface ProfileInspectionSettingsApp {
+  id: string;
+  displayName: string;
+  associationStatus: ProfileInspectionAssociationStatus;
+  ownerId: string | null;
+  appId: string | null;
+  appIncluded: boolean;
+  packageRefs: string[];
+  moduleIds: string[];
+  candidateAppIds: string[];
+  capturedEntryCount: number;
+}
+
+/** Engine-authored profile-inspection warning. */
+export interface ProfileInspectionWarning {
+  code: string;
+  message: string;
+  impact: ProfileInspectionWarningImpact;
+}
+
+/** Complete successful `profile inspect` payload. */
+export interface ProfileInspectionData {
+  profile: ProfileInspectionProfile;
+  summary: ProfileInspectionSummary;
+  apps: ProfileInspectionApp[];
+  settingsApps: ProfileInspectionSettingsApp[];
+  warnings: ProfileInspectionWarning[];
 }
 
 // -----------------------------------------------------------------------------

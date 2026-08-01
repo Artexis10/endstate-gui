@@ -13,6 +13,7 @@ import type { StreamEvent, RunResult } from '../streaming-runner';
 import type { EngineExecResult } from '../lib/engine-exec';
 import { parseEventsFile, replayEvents } from '../lib/event-replay';
 import fixtureContent from '../../e2e/fixtures/capture_ok_realistic.events.jsonl?raw';
+import profileInspectionFixture from '../../e2e/fixtures/profile_inspect.fixture.json';
 
 // Scenario types
 export type E2EScenario =
@@ -24,6 +25,7 @@ export type E2EScenario =
   | 'capture_ok_minimal'
   | 'capture_ok_replay'
   | 'capabilities_ok'
+  | 'profile_inspect_ok'
   // Fault-injection scenarios (unhappy paths). These fire only on the real
   // (non-dry-run) apply invocation — init and preview stay healthy so the app
   // can boot and reach the Apply button. See getScenarioForCommand.
@@ -285,10 +287,16 @@ const SCENARIOS: Record<E2EScenario, {
       data: {
         version: '1.0.0',
         drivers: ['winget', 'scoop'],
-        features: [],
+        features: { profileInspection: true },
         commands: ['capture', 'apply', 'verify', 'report'],
       },
     },
+    exitCode: 0,
+  },
+
+  profile_inspect_ok: {
+    events: [],
+    envelope: profileInspectionFixture,
     exitCode: 0,
   },
 
@@ -385,6 +393,15 @@ function getScenarioForCommand(command: string, args: string[]): E2EScenario {
     return explicitScenario;
   }
 
+  if (explicitScenario === 'profile_inspect_ok') {
+    if (command === 'capabilities') return 'capabilities_ok';
+    if (command === 'report') return 'report_empty';
+    if (command === 'profile' && args.length === 2 && args[0] === 'inspect') {
+      return 'profile_inspect_ok';
+    }
+    return 'preview_ok_minimal';
+  }
+
   if (explicitScenario !== 'preview_ok_minimal') {
     return explicitScenario;
   }
@@ -421,6 +438,10 @@ export async function runEndstateStreaming<T>(
   onEvent?: (event: StreamEvent) => void,
   _options?: { onNdjsonEvent?: (event: any) => void }
 ): Promise<RunResult<T>> {
+  if (typeof window !== 'undefined') {
+    const commands = (window as any).__ENDSTATE_E2E_COMMANDS__;
+    if (Array.isArray(commands)) commands.push({ command, args: [...args] });
+  }
   const scenario = getScenarioForCommand(command, args);
   const scenarioData = SCENARIOS[scenario];
 

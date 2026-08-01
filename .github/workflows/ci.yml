@@ -95,6 +95,17 @@ jobs:
           ENDSTATE_ENGINE_PATH: ${{ github.workspace }}/endstate-linux-amd64
         run: npm run test:contract
 
+      - name: Assert profile inspection golden is committed
+        shell: bash
+        run: |
+          if ! git diff --quiet -- tests/fixtures/profile-inspect-envelope.golden.json; then
+            echo "::error file=tests/fixtures/profile-inspect-envelope.golden.json::The real engine's profile inspection envelope no longer matches the committed golden fixture."
+            git --no-pager diff -- tests/fixtures/profile-inspect-envelope.golden.json
+            echo "Regenerate locally with: ENDSTATE_ENGINE_PATH=<pinned-engine> npm run test:contract"
+            exit 1
+          fi
+          echo "Profile inspection golden matches the pinned engine."
+
   # A genuine install against a real package manager. Every other job either
   # mocks the engine or only exercises its error paths, so nothing else proves
   # that apply actually installs, that a dry run installs nothing, or that a

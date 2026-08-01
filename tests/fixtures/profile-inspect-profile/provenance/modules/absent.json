@@ -1,0 +1,7 @@
+{
+  "moduleSchemaVersion": 2,
+  "id": "apps.absent",
+  "displayName": "Absent settings",
+  "sensitivity": "none",
+  "matches": { "winget": ["Vendor.Absent"] }
+}
