@@ -87,11 +87,29 @@ describe('SetupFlow — "What\'s inside"', () => {
       screen.getByRole("button", { name: "What's inside Work Laptop" }),
     );
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("VLC media player")).toBeVisible();
+    expect(within(within(dialog).getByRole("tabpanel")).getByText("VLC media player")).toBeVisible();
     expect(baseProps.onInspectProfile).toHaveBeenCalledWith(profiles[0].path);
     expect(baseProps.onPreview).not.toHaveBeenCalled();
     expect(baseProps.onApply).not.toHaveBeenCalled();
   });
+
+  it.each(["{Enter}", " "])(
+    "opens with %s without selecting the profile",
+    async (key) => {
+      const user = userEvent.setup();
+      renderWithProviders(<SetupFlow {...baseProps} />);
+
+      screen
+        .getByRole("button", { name: "What's inside Work Laptop" })
+        .focus();
+      await user.keyboard(key);
+
+      expect(await screen.findByRole("dialog")).toBeVisible();
+      expect(baseProps.onInspectProfile).toHaveBeenCalledWith(profiles[0].path);
+      expect(baseProps.onPreview).not.toHaveBeenCalled();
+      expect(baseProps.onApply).not.toHaveBeenCalled();
+    },
+  );
 
   it("shows the update-required state without invoking inspection on an older engine", async () => {
     const user = userEvent.setup();

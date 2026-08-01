@@ -78,7 +78,10 @@ export function ProfileContentsModal({
   profileInspectionSupported = false,
   onInspectProfile,
 }: ProfileContentsModalProps) {
-  const [contents, setContents] = useState<ProfileInspectionData | null>(null);
+  const [contents, setContents] = useState<{
+    profilePath: string;
+    data: ProfileInspectionData;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileContentsTab>("apps");
@@ -115,7 +118,7 @@ export function ProfileContentsModal({
       .current(profilePath)
       .then((result) => {
         if (requestId.current !== currentRequest) return;
-        setContents(result);
+        setContents({ profilePath, data: result });
         setActiveTab(defaultTab(result));
       })
       .catch((err: unknown) => {
@@ -136,21 +139,26 @@ export function ProfileContentsModal({
 
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     let nextTab: ProfileContentsTab | null = null;
-    if (event.key === "ArrowLeft" || event.key === "Home") nextTab = "apps";
-    if (event.key === "ArrowRight" || event.key === "End") nextTab = "settings";
+    if (event.key === "Home") nextTab = "apps";
+    if (event.key === "End") nextTab = "settings";
+    if (event.key === "ArrowLeft") nextTab = activeTab === "apps" ? "settings" : "apps";
+    if (event.key === "ArrowRight") nextTab = activeTab === "apps" ? "settings" : "apps";
     if (!nextTab) return;
     event.preventDefault();
     chooseTab(nextTab, true);
   };
 
-  const appCount = contents?.apps.length ?? 0;
-  const settingsCount = contents?.settingsApps.length ?? 0;
+  // State updates happen after render. Keep a completed inspection tied to the
+  // profile that requested it so a changed path cannot paint prior contents.
+  const loadedContents = contents?.profilePath === profilePath ? contents.data : null;
+  const appCount = loadedContents?.apps.length ?? 0;
+  const settingsCount = loadedContents?.settingsApps.length ?? 0;
   const filteredApps =
-    contents?.apps.filter((app) =>
+    loadedContents?.apps.filter((app) =>
       rowMatches(appsQuery, [app.displayName, ...app.packageRefs]),
     ) ?? [];
   const filteredSettings =
-    contents?.settingsApps.filter((row) =>
+    loadedContents?.settingsApps.filter((row) =>
       rowMatches(settingsQuery, [
         row.displayName,
         ...row.packageRefs,
@@ -166,14 +174,14 @@ export function ProfileContentsModal({
         <DialogHeader className="flex-shrink-0 pr-8">
           <DialogTitle>What&apos;s inside</DialogTitle>
           <DialogDescription>
-            {profileDisplayName || contents?.profile.name || "This profile"}
-            {contents?.profile.capturedAt
-              ? ` · captured ${formatCaptured(contents.profile.capturedAt)}`
+            {profileDisplayName || loadedContents?.profile.name || "This profile"}
+            {loadedContents?.profile.capturedAt
+              ? ` · captured ${formatCaptured(loadedContents.profile.capturedAt)}`
               : ""}
           </DialogDescription>
         </DialogHeader>
 
-        {!loading && !error && !contents && !profileInspectionSupported && (
+        {!loading && !error && !loadedContents && !profileInspectionSupported && (
           <p className="text-sm text-muted-foreground">
             Update Endstate to inspect app settings accurately.
           </p>
@@ -201,7 +209,7 @@ export function ProfileContentsModal({
           </div>
         )}
 
-        {contents && !loading && !error && (
+        {loadedContents && !loading && !error && (
           <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-hidden">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">
@@ -213,28 +221,28 @@ export function ProfileContentsModal({
               <Badge variant="secondary">
                 Settings for{" "}
                 {pluralize(
-                  contents.summary.verifiedSettingsAppCount,
+                  loadedContents.summary.verifiedSettingsAppCount,
                   "app",
                   "apps",
                 )}
               </Badge>
-              {contents.summary.unidentifiedSettingsRowCount > 0 && (
+              {loadedContents.summary.unidentifiedSettingsRowCount > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {pluralize(
-                    contents.summary.unidentifiedSettingsRowCount,
+                    loadedContents.summary.unidentifiedSettingsRowCount,
                     "unidentified app settings row",
                     "unidentified app settings rows",
                   )}
                 </span>
               )}
-              {!contents.profile.capturedAt && (
+              {!loadedContents.profile.capturedAt && (
                 <span className="text-xs text-muted-foreground">
                   No capture date recorded
                 </span>
               )}
             </div>
 
-            {contents.warnings
+            {loadedContents.warnings
               .filter((warning) => warning.impact === "inventory_incomplete")
               .map((warning) => (
                 <p
@@ -310,13 +318,16 @@ export function ProfileContentsModal({
             />
 
             <div
-              id={`${tabId}-${activeTab}-panel`}
-              role="tabpanel"
-              aria-labelledby={`${tabId}-${activeTab}-tab`}
+              data-testid="profile-contents-scroll-region"
               className="min-h-0 flex-1 overflow-y-auto pr-1"
             >
-              {activeTab === "apps" &&
-                (filteredApps.length === 0 ? (
+              <div
+                id={`${tabId}-apps-panel`}
+                role="tabpanel"
+                aria-labelledby={`${tabId}-apps-tab`}
+                hidden={activeTab !== "apps"}
+              >
+                {filteredApps.length === 0 ? (
                   <p className="py-4 text-sm text-muted-foreground">
                     {appsQuery.trim()
                       ? `No apps match “${appsQuery.trim()}”.`
@@ -343,9 +354,15 @@ export function ProfileContentsModal({
                       </li>
                     ))}
                   </ul>
-                ))}
-              {activeTab === "settings" &&
-                (filteredSettings.length === 0 ? (
+                )}
+              </div>
+              <div
+                id={`${tabId}-settings-panel`}
+                role="tabpanel"
+                aria-labelledby={`${tabId}-settings-tab`}
+                hidden={activeTab !== "settings"}
+              >
+                {filteredSettings.length === 0 ? (
                   <p className="py-4 text-sm text-muted-foreground">
                     {settingsQuery.trim()
                       ? `No app settings match “${settingsQuery.trim()}”.`
@@ -369,27 +386,32 @@ export function ProfileContentsModal({
                       </li>
                     ))}
                   </ul>
-                ))}
-            </div>
+                )}
+              </div>
 
-            <DetailsDisclosure
-              title="Configuration details"
-              className="flex-shrink-0 border-t pt-3"
-            >
-              <dl className="space-y-2 text-xs text-muted-foreground">
+              <DetailsDisclosure title="Configuration details" className="border-t pt-3">
+                <dl className="space-y-2 text-xs text-muted-foreground">
                 <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
                   <dt>Manifest version</dt>
                   <dd className="font-mono">
-                    {contents.profile.manifestVersion}
+                    {loadedContents.profile.manifestVersion}
                   </dd>
                 </div>
                 <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
                   <dt>Path</dt>
                   <dd className="break-all font-mono">
-                    {contents.profile.manifestPath}
+                    {loadedContents.profile.manifestPath}
                   </dd>
                 </div>
-                {contents.settingsApps.map((row) => (
+                {loadedContents.apps.map((app) =>
+                  app.packageRefs.length > 0 ? (
+                    <div key={app.id} className="border-t pt-2">
+                      <dt className="font-medium text-foreground">{app.displayName}</dt>
+                      <dd className="mt-1 break-all font-mono">{app.packageRefs.join(", ")}</dd>
+                    </div>
+                  ) : null,
+                )}
+                {loadedContents.settingsApps.map((row) => (
                   <div
                     key={row.id}
                     className="border-t pt-2 first:border-t-0 first:pt-0"
@@ -419,7 +441,7 @@ export function ProfileContentsModal({
                     </dd>
                   </div>
                 ))}
-                {contents.warnings
+                {loadedContents.warnings
                   .filter((warning) => warning.impact === "diagnostic")
                   .map((warning) => (
                     <div key={warning.code} className="border-t pt-2">
@@ -429,8 +451,9 @@ export function ProfileContentsModal({
                       <dd>{warning.message}</dd>
                     </div>
                   ))}
-              </dl>
-            </DetailsDisclosure>
+                </dl>
+              </DetailsDisclosure>
+            </div>
           </div>
         )}
 

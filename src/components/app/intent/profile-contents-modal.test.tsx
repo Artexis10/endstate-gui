@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "../../../test/test-utils";
+import { render, screen, waitFor, within } from "../../../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { ProfileContentsModal } from "./profile-contents-modal";
@@ -169,9 +169,13 @@ describe("ProfileContentsModal", () => {
 
     const appsTab = await screen.findByRole("tab", { name: "Apps (2)" });
     expect(appsTab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("VLC media player")).toBeVisible();
+    expect(
+      within(document.getElementById(appsTab.getAttribute("aria-controls")!)!).getByText(
+        "VLC media player",
+      ),
+    ).toBeVisible();
     expect(screen.getByText("Settings included")).toBeVisible();
-    expect(screen.queryByText("App not included")).not.toBeInTheDocument();
+    expect(screen.getByText("App not included")).not.toBeVisible();
   });
 
   it("uses App settings as the default tab for a settings-only profile", async () => {
@@ -212,6 +216,28 @@ describe("ProfileContentsModal", () => {
     await user.keyboard("{End}");
     expect(settings).toHaveFocus();
     expect(settings).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("wraps tab arrows and keeps every tab's controlled panel in the DOM", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const apps = await screen.findByRole("tab", { name: "Apps (2)" });
+    const settings = screen.getByRole("tab", { name: "App settings (3)" });
+    for (const tab of [apps, settings]) {
+      expect(document.getElementById(tab.getAttribute("aria-controls")!)).toHaveAttribute(
+        "role",
+        "tabpanel",
+      );
+    }
+
+    apps.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(settings).toHaveFocus();
+    expect(settings).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowRight}");
+    expect(apps).toHaveFocus();
+    expect(apps).toHaveAttribute("aria-selected", "true");
   });
 
   it("scopes search to the active tab and preserves queries when switching", async () => {
@@ -279,6 +305,37 @@ describe("ProfileContentsModal", () => {
     expect(screen.getByText("apps.vlc")).toBeVisible();
     expect(screen.getByText(defaultProps.profilePath)).toBeVisible();
     expect(screen.getByText("2 captured entries")).toBeVisible();
+  });
+
+  it("keeps app package refs hidden by default and shows them for install-only profiles in details", async () => {
+    vi.mocked(useShowDetails).mockReturnValue(true);
+    const user = userEvent.setup();
+    renderModal(
+      inspection({
+        apps: [{
+          id: "app:solo:1", manifestAppId: "solo", displayName: "Solo app",
+          packageRefs: ["Example.Solo"], hasSettings: false,
+        }],
+        settingsApps: [],
+        summary: { appCount: 1, settingsRowCount: 0, verifiedSettingsAppCount: 0, unidentifiedSettingsRowCount: 0 },
+      }),
+    );
+    await screen.findByText("1 app");
+    expect(screen.queryByText("Example.Solo")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Configuration details" }));
+    expect(screen.getByText("Example.Solo")).toBeVisible();
+  });
+
+  it("keeps expanded details inside the only scrollable content region", async () => {
+    vi.mocked(useShowDetails).mockReturnValue(true);
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByText("2 apps");
+    await user.click(screen.getByRole("button", { name: "Configuration details" }));
+
+    const scrollRegion = screen.getByTestId("profile-contents-scroll-region");
+    expect(scrollRegion).toHaveClass("overflow-y-auto");
+    expect(scrollRegion).toContainElement(screen.getByText(defaultProps.profilePath));
   });
 
   it("shows inventory-completeness warnings but keeps diagnostics in details", async () => {
@@ -412,5 +469,24 @@ describe("ProfileContentsModal", () => {
     await waitFor(() =>
       expect(screen.queryByText("stale")).not.toBeInTheDocument(),
     );
+  });
+
+  it("never renders loaded contents for a previous profile path", async () => {
+    let resolveCurrent: (data: ProfileInspectionData) => void = () => undefined;
+    const current = new Promise<ProfileInspectionData>((resolve) => { resolveCurrent = resolve; });
+    const old = inspection({ apps: [{
+      id: "app:old:1", manifestAppId: "old", displayName: "Old profile app",
+      packageRefs: [], hasSettings: false,
+    }], settingsApps: [], summary: { appCount: 1, settingsRowCount: 0, verifiedSettingsAppCount: 0, unidentifiedSettingsRowCount: 0 } });
+    const onInspectProfile = vi.fn().mockResolvedValueOnce(old).mockReturnValueOnce(current);
+    const { rerender } = render(<ProfileContentsModal {...defaultProps} onInspectProfile={onInspectProfile} />);
+    expect(await screen.findByText("Old profile app")).toBeVisible();
+
+    rerender(<ProfileContentsModal {...defaultProps} profilePath="C:\\Setups\\current\\manifest.jsonc" onInspectProfile={onInspectProfile} />);
+    expect(screen.queryByText("Old profile app")).not.toBeInTheDocument();
+    resolveCurrent(inspection());
+    expect(
+      await within(await screen.findByRole("tabpanel")).findByText("VLC media player"),
+    ).toBeVisible();
   });
 });
