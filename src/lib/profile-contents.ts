@@ -332,8 +332,11 @@ const inspectionDataSchema = z.object({
 }).passthrough();
 
 const inspectionEnvelopeSchema = z.object({
-  schemaVersion: z.string().regex(/^1\./),
+  schemaVersion: z.string().regex(/^1\.\d+$/),
+  cliVersion: z.string().min(1),
   command: z.literal('profile'),
+  runId: z.string().min(1),
+  timestampUtc: z.string().min(1),
   success: z.literal(true),
   data: inspectionDataSchema,
   error: z.null(),
@@ -405,7 +408,8 @@ function validateInspectionRelations(data: ProfileInspectionData): void {
           row.ownerId !== null ||
           row.appId !== null ||
           row.appIncluded ||
-          row.candidateAppIds.length === 0
+          row.candidateAppIds.length < 2 ||
+          new Set(row.candidateAppIds).size !== row.candidateAppIds.length
         ) {
           throw incompatibleInspectionResponse();
         }

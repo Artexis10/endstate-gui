@@ -455,9 +455,18 @@ describe('inspectProfileContents', () => {
 
   it.each([
     ['non-1.x schema', (envelope: any) => { envelope.schemaVersion = '2.0'; }],
+    ['incomplete schema version', (envelope: any) => { envelope.schemaVersion = '1.'; }],
+    ['non-numeric schema minor', (envelope: any) => { envelope.schemaVersion = '1.bad'; }],
+    ['schema version suffix', (envelope: any) => { envelope.schemaVersion = '1.0-junk'; }],
     ['wrong command', (envelope: any) => { envelope.command = 'inspect'; }],
     ['failed success flag', (envelope: any) => { envelope.success = false; }],
     ['non-null success error', (envelope: any) => { envelope.error = { code: 'BAD', message: 'bad' }; }],
+    ['missing cli version', (envelope: any) => { delete envelope.cliVersion; }],
+    ['empty cli version', (envelope: any) => { envelope.cliVersion = ''; }],
+    ['missing run id', (envelope: any) => { delete envelope.runId; }],
+    ['empty run id', (envelope: any) => { envelope.runId = ''; }],
+    ['missing timestamp', (envelope: any) => { delete envelope.timestampUtc; }],
+    ['empty timestamp', (envelope: any) => { envelope.timestampUtc = ''; }],
   ])('fails closed on a %s success envelope', async (_name, mutate) => {
     const envelope = inspectionEnvelope();
     mutate(envelope);
@@ -515,6 +524,8 @@ describe('inspectProfileContents', () => {
     ['not in profile is marked included', (row: any) => { row.appIncluded = true; }],
     ['ambiguous has an owner', (row: any) => { row.ownerId = 'app:one:1'; }],
     ['ambiguous has no candidates', (row: any) => { row.candidateAppIds = []; }],
+    ['ambiguous has only one candidate', (row: any) => { row.candidateAppIds = ['app:one:1']; }],
+    ['ambiguous repeats a candidate', (row: any) => { row.candidateAppIds = ['app:one:1', 'app:one:1']; }],
     ['unresolved has candidates', (row: any) => { row.candidateAppIds = ['app:one:1']; }],
   ])('rejects when %s', async (_name, mutate) => {
     const envelope = inspectionEnvelope();
