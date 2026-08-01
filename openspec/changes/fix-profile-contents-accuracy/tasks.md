@@ -1,9 +1,9 @@
 ## 1. Establish The Cross-Repo Contract
 
 - [x] 1.1 Archive the already-shipped `add-profile-contents-view` GUI change in its own documentation PR so `profile-contents-inspection` becomes current spec truth before this delta is archived.
-- [ ] 1.2 Create the engine OpenSpec change for `profile inspect`, the additive `features.profileInspection` capability, and the no-machine-evaluation invariant.
-- [ ] 1.3 Update the engine profile, CLI JSON, and GUI integration contracts with the structured inspection envelope and label/ownership precedence.
-- [ ] 1.4 Validate both repositories' OpenSpec changes strictly before implementation.
+- [x] 1.2 Create the engine OpenSpec change for `profile inspect`, the additive `features.profileInspection` capability, and the no-machine-evaluation invariant.
+- [x] 1.3 Update the engine profile, CLI JSON, and GUI integration contracts with the structured inspection envelope and label/ownership precedence.
+- [x] 1.4 Validate both repositories' OpenSpec changes strictly before implementation.
 
 ## 2. Implement Read-Only Engine Inspection
 
