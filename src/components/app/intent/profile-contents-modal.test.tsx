@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, within } from "../../../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
@@ -114,6 +114,10 @@ describe("ProfileContentsModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useShowDetails).mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("renders semantic Apps and App settings totals from the engine result", async () => {
@@ -260,6 +264,42 @@ describe("ProfileContentsModal", () => {
     expect(screen.getByRole("searchbox", { name: "Search apps" })).toHaveValue(
       "obsidian",
     );
+  });
+
+  it("matches ordinary search text independently of locale casing rules", async () => {
+    vi.spyOn(String.prototype, "toLocaleLowerCase")
+      .mockImplementation(function (this: string) {
+        return this.replace(/I/g, "ı").toLowerCase();
+      });
+    const user = userEvent.setup();
+    renderModal(
+      inspection({
+        apps: [
+          {
+            id: "app:irfanview:1",
+            manifestAppId: "irfanview",
+            displayName: "IrfanView",
+            packageRefs: [],
+            hasSettings: false,
+          },
+        ],
+        settingsApps: [],
+        summary: {
+          appCount: 1,
+          settingsRowCount: 0,
+          verifiedSettingsAppCount: 0,
+          unidentifiedSettingsRowCount: 0,
+        },
+      }),
+    );
+    await screen.findByRole("searchbox", { name: "Search apps" });
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search apps" }),
+      "irfanview",
+    );
+
+    expect(screen.getByText("IrfanView")).toBeVisible();
   });
 
   it("shows calm no-results copy without changing totals", async () => {

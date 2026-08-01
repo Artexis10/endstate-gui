@@ -50,10 +50,10 @@ function defaultTab(contents: ProfileInspectionData): ProfileContentsTab {
 }
 
 function rowMatches(query: string, values: string[]): boolean {
-  const needle = query.trim().toLocaleLowerCase();
+  const needle = query.trim().toLowerCase();
   return (
     !needle ||
-    values.some((value) => value.toLocaleLowerCase().includes(needle))
+    values.some((value) => value.toLowerCase().includes(needle))
   );
 }
 
