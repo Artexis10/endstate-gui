@@ -135,6 +135,34 @@ describe("inspectProfileContents", () => {
     expect(contents.apps.map((app) => app.displayName)).toEqual(["One", "Two"]);
   });
 
+  it("fails closed when the response describes a different manifest", async () => {
+    const envelope = inspectionEnvelope();
+    envelope.data.profile.manifestPath = "C:\\Profiles\\other\\manifest.jsonc";
+    await mockInspection(envelope);
+
+    await expect(
+      inspectProfileContents(SETTINGS, "C:\\Profiles\\example\\manifest.jsonc"),
+    ).rejects.toThrow(/incompatible profile inspection response/i);
+  });
+
+  it("accepts Windows-equivalent manifest separators and casing", async () => {
+    await expect(
+      inspectProfileContents(SETTINGS, "c:/profiles/example/manifest.jsonc"),
+    ).resolves.toMatchObject({
+      profile: { manifestPath: "C:\\Profiles\\example\\manifest.jsonc" },
+    });
+  });
+
+  it("does not collapse a UNC path into a drive-rooted path", async () => {
+    const envelope = inspectionEnvelope();
+    envelope.data.profile.manifestPath = "\\\\server\\share\\manifest.jsonc";
+    await mockInspection(envelope);
+
+    await expect(
+      inspectProfileContents(SETTINGS, "\\server\\share\\manifest.jsonc"),
+    ).rejects.toThrow(/incompatible profile inspection response/i);
+  });
+
   it.each([
     [
       "non-1.x schema",
@@ -295,6 +323,29 @@ describe("inspectProfileContents", () => {
     const envelope = inspectionEnvelope();
     mutate(envelope);
     await mockInspection(envelope);
+    await expect(
+      inspectProfileContents(SETTINGS, "C:\\Profiles\\example\\manifest.jsonc"),
+    ).rejects.toThrow(/incompatible profile inspection response/i);
+  });
+
+  it.each([
+    [
+      "settings row IDs are duplicated",
+      (envelope: any) => {
+        envelope.data.settingsApps[3].id = envelope.data.settingsApps[2].id;
+      },
+    ],
+    [
+      "verified owner IDs are duplicated",
+      (envelope: any) => {
+        envelope.data.settingsApps[1].ownerId = envelope.data.settingsApps[0].ownerId;
+      },
+    ],
+  ])("rejects when %s", async (_name, mutate) => {
+    const envelope = inspectionEnvelope();
+    mutate(envelope);
+    await mockInspection(envelope);
+
     await expect(
       inspectProfileContents(SETTINGS, "C:\\Profiles\\example\\manifest.jsonc"),
     ).rejects.toThrow(/incompatible profile inspection response/i);

@@ -110,16 +110,37 @@ function incompatibleInspectionResponse(): ProfileInspectionError {
   });
 }
 
-function validateInspectionRelations(data: ProfileInspectionData): void {
+function sameWindowsPath(left: string, right: string): boolean {
+  const normalize = (path: string) => {
+    const windowsPath = path.replace(/\//g, "\\");
+    const isUnc = windowsPath.startsWith("\\\\");
+    const compactPath = windowsPath.replace(/\\{2,}/g, "\\");
+    return `${isUnc ? "\\" : ""}${compactPath}`.toLowerCase();
+  };
+  return normalize(left) === normalize(right);
+}
+
+function validateInspectionRelations(
+  data: ProfileInspectionData,
+  manifestPath: string,
+): void {
+  if (!sameWindowsPath(data.profile.manifestPath, manifestPath)) {
+    throw incompatibleInspectionResponse();
+  }
+
   const appsById = new Map(data.apps.map((app) => [app.id, app]));
   if (appsById.size !== data.apps.length)
     throw incompatibleInspectionResponse();
 
+  const settingsRowIds = new Set<string>();
   const includedAppIds = new Set<string>();
-  let verifiedSettingsAppCount = 0;
+  const verifiedOwnerIds = new Set<string>();
   let unidentifiedSettingsRowCount = 0;
 
   for (const row of data.settingsApps) {
+    if (settingsRowIds.has(row.id)) throw incompatibleInspectionResponse();
+    settingsRowIds.add(row.id);
+
     if (
       !row.candidateAppIds.every((candidateId) => appsById.has(candidateId))
     ) {
@@ -139,7 +160,8 @@ function validateInspectionRelations(data: ProfileInspectionData): void {
           throw incompatibleInspectionResponse();
         }
         includedAppIds.add(row.appId);
-        verifiedSettingsAppCount += 1;
+        if (verifiedOwnerIds.has(row.ownerId)) throw incompatibleInspectionResponse();
+        verifiedOwnerIds.add(row.ownerId);
         break;
       case "not_in_profile":
         if (
@@ -150,7 +172,8 @@ function validateInspectionRelations(data: ProfileInspectionData): void {
         ) {
           throw incompatibleInspectionResponse();
         }
-        verifiedSettingsAppCount += 1;
+        if (verifiedOwnerIds.has(row.ownerId)) throw incompatibleInspectionResponse();
+        verifiedOwnerIds.add(row.ownerId);
         break;
       case "ambiguous":
         if (
@@ -185,7 +208,7 @@ function validateInspectionRelations(data: ProfileInspectionData): void {
   if (
     data.summary.appCount !== data.apps.length ||
     data.summary.settingsRowCount !== data.settingsApps.length ||
-    data.summary.verifiedSettingsAppCount !== verifiedSettingsAppCount ||
+    data.summary.verifiedSettingsAppCount !== verifiedOwnerIds.size ||
     data.summary.unidentifiedSettingsRowCount !== unidentifiedSettingsRowCount
   ) {
     throw incompatibleInspectionResponse();
@@ -221,6 +244,6 @@ export async function inspectProfileContents(
   const parsed = inspectionEnvelopeSchema.safeParse(result.envelope);
   if (!parsed.success) throw incompatibleInspectionResponse();
   const data = parsed.data.data as ProfileInspectionData;
-  validateInspectionRelations(data);
+  validateInspectionRelations(data, manifestPath);
   return data;
 }

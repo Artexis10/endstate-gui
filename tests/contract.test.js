@@ -244,6 +244,8 @@ async function testProfileInspectionAndRegenerateGolden() {
   assertRowsSorted(data.apps, 'Apps rows');
 
   const statusCounts = new Map();
+  const settingsRowIds = new Set();
+  const verifiedOwnerIds = new Set();
   for (const row of data.settingsApps) {
     assertExactKeys(
       row,
@@ -255,6 +257,10 @@ async function testProfileInspectionAndRegenerateGolden() {
         throw new Error(`Settings row ${row.id} has a non-array ${field} field`);
       }
     }
+    if (settingsRowIds.has(row.id)) {
+      throw new Error(`Duplicate profile inspect settings row id ${JSON.stringify(row.id)}`);
+    }
+    settingsRowIds.add(row.id);
     statusCounts.set(row.associationStatus, (statusCounts.get(row.associationStatus) || 0) + 1);
     const isIncluded = row.associationStatus === 'included';
     const isAbsent = row.associationStatus === 'not_in_profile';
@@ -265,6 +271,12 @@ async function testProfileInspectionAndRegenerateGolden() {
     }
     if ((isIncluded || isAbsent) !== (typeof row.ownerId === 'string')) {
       throw new Error(`ownerId/status matrix mismatch for ${row.id}`);
+    }
+    if (isIncluded || isAbsent) {
+      if (verifiedOwnerIds.has(row.ownerId)) {
+        throw new Error(`Duplicate verified ownerId ${JSON.stringify(row.ownerId)}`);
+      }
+      verifiedOwnerIds.add(row.ownerId);
     }
     if (isIncluded !== (typeof row.appId === 'string') || isIncluded !== row.appIncluded) {
       throw new Error(`appId/appIncluded/status matrix mismatch for ${row.id}`);
@@ -284,8 +296,10 @@ async function testProfileInspectionAndRegenerateGolden() {
   if (data.summary.appCount !== data.apps.length || data.summary.settingsRowCount !== data.settingsApps.length) {
     throw new Error(`Summary inventory counts differ from finalized arrays: ${JSON.stringify(data.summary)}`);
   }
-  const verified = data.settingsApps.filter((row) => row.associationStatus === 'included' || row.associationStatus === 'not_in_profile').length;
-  const unidentified = data.settingsApps.length - verified;
+  const verified = verifiedOwnerIds.size;
+  const unidentified = data.settingsApps.filter(
+    (row) => row.associationStatus === 'ambiguous' || row.associationStatus === 'unresolved'
+  ).length;
   if (data.summary.verifiedSettingsAppCount !== verified || data.summary.unidentifiedSettingsRowCount !== unidentified) {
     throw new Error(`Summary association counts differ from finalized rows: ${JSON.stringify(data.summary)}`);
   }
