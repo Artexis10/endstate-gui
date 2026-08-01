@@ -83,7 +83,7 @@ export function ProfileContentsModal({
     data: ProfileInspectionData;
   } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ profilePath: string; message: string } | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileContentsTab>("apps");
   const [appsQuery, setAppsQuery] = useState("");
   const [settingsQuery, setSettingsQuery] = useState("");
@@ -123,7 +123,10 @@ export function ProfileContentsModal({
       })
       .catch((err: unknown) => {
         if (requestId.current !== currentRequest) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError({
+          profilePath,
+          message: err instanceof Error ? err.message : String(err),
+        });
       })
       .finally(() => {
         if (requestId.current === currentRequest) setLoading(false);
@@ -151,6 +154,7 @@ export function ProfileContentsModal({
   // State updates happen after render. Keep a completed inspection tied to the
   // profile that requested it so a changed path cannot paint prior contents.
   const loadedContents = contents?.profilePath === profilePath ? contents.data : null;
+  const loadedError = error?.profilePath === profilePath ? error.message : null;
   const appCount = loadedContents?.apps.length ?? 0;
   const settingsCount = loadedContents?.settingsApps.length ?? 0;
   const filteredApps =
@@ -181,7 +185,7 @@ export function ProfileContentsModal({
           </DialogDescription>
         </DialogHeader>
 
-        {!loading && !error && !loadedContents && !profileInspectionSupported && (
+        {!loading && !loadedError && !loadedContents && !profileInspectionSupported && (
           <p className="text-sm text-muted-foreground">
             Update Endstate to inspect app settings accurately.
           </p>
@@ -197,7 +201,7 @@ export function ProfileContentsModal({
           </p>
         )}
 
-        {error && (
+        {loadedError && (
           <div
             className="rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2"
             role="alert"
@@ -205,11 +209,11 @@ export function ProfileContentsModal({
             <p className="text-sm text-foreground">
               This profile could not be read.
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">{error}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{loadedError}</p>
           </div>
         )}
 
-        {loadedContents && !loading && !error && (
+        {loadedContents && !loading && !loadedError && (
           <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-hidden">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">

@@ -489,4 +489,20 @@ describe("ProfileContentsModal", () => {
       await within(await screen.findByRole("tabpanel")).findByText("VLC media player"),
     ).toBeVisible();
   });
+
+  it("never renders an inspection error for a previous profile path", async () => {
+    let resolveCurrent: (data: ProfileInspectionData) => void = () => undefined;
+    const current = new Promise<ProfileInspectionData>((resolve) => { resolveCurrent = resolve; });
+    const onInspectProfile = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("A profile could not be read"))
+      .mockReturnValueOnce(current);
+    const { rerender } = render(<ProfileContentsModal {...defaultProps} onInspectProfile={onInspectProfile} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("A profile could not be read");
+
+    rerender(<ProfileContentsModal {...defaultProps} profilePath="C:\\Setups\\current\\manifest.jsonc" onInspectProfile={onInspectProfile} />);
+    expect(screen.queryByText("A profile could not be read")).not.toBeInTheDocument();
+    resolveCurrent(inspection());
+    expect(await screen.findByRole("tabpanel")).toBeVisible();
+  });
 });

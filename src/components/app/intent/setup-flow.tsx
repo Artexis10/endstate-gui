@@ -1033,8 +1033,10 @@ export function SetupFlow({
                                 onKeyDown={(e) => {
                                   // The card is a keyboard-selectable parent. Let the
                                   // button keep its native Enter/Space activation while
-                                  // keeping those keys out of the card's selection handler.
-                                  e.stopPropagation();
+                                  // keeping only those keys out of the card's selection handler.
+                                  if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+                                    e.stopPropagation();
+                                  }
                                 }}
                                 aria-label={`What's inside ${profile.displayName || profile.name}`}
                                 className="gap-1 text-xs"

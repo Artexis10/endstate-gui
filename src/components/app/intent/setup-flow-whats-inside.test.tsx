@@ -111,6 +111,27 @@ describe('SetupFlow — "What\'s inside"', () => {
     },
   );
 
+  it("isolates only activation keys and lets shortcuts bubble normally", async () => {
+    const user = userEvent.setup();
+    const onBubbledKey = vi.fn();
+    renderWithProviders(
+      <div onKeyDown={(event) => onBubbledKey(event.key, event.ctrlKey)}>
+        <SetupFlow {...baseProps} />
+      </div>,
+    );
+
+    const inspect = screen.getByRole("button", { name: "What's inside Work Laptop" });
+    inspect.focus();
+    await user.keyboard("{Control>}k{/Control}");
+    expect(onBubbledKey).toHaveBeenCalledWith("k", true);
+    expect(baseProps.onPreview).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(baseProps.onPreview).not.toHaveBeenCalled();
+  });
+
   it("shows the update-required state without invoking inspection on an older engine", async () => {
     const user = userEvent.setup();
     const onInspectProfile = vi.fn();
