@@ -11,6 +11,21 @@ export interface AppSettings {
   autoBackupEnabled: boolean;
   /** Whether the one-time auto-backup consent prompt has been shown. */
   autoBackupPromptSeen: boolean;
+  /**
+   * ISO timestamp of the single post-capture Endstate Cloud invitation.
+   *
+   * Written BEFORE the invitation renders (record-before-present), so a crash
+   * mid-presentation cannot turn a one-time invitation into a recurring prompt.
+   * Null means it has never been presented. Same one-time shape as
+   * `autoBackupPromptSeen`.
+   */
+  cloudInvitationShownAt: string | null;
+  /**
+   * Set once the user answers the invitation in any way — protect, keep it
+   * local, or dismiss. Permanently suppresses automatic presentation; Endstate
+   * Cloud stays reachable from the sidebar entry.
+   */
+  cloudInvitationDismissed: boolean;
   /** Persistent map: profile key → its hosted-backup id, so auto-push updates the same backup. */
   profileBackupIds: Record<string, string>;
   /** Opt-in for the scheduled daily drift check ("Continuous protection"). */
@@ -61,6 +76,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   showDetails: false,
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
+  cloudInvitationShownAt: null,
+  cloudInvitationDismissed: false,
   profileBackupIds: {},
   scheduleEnabled: false,
   scheduleTime: '09:00',
@@ -172,6 +189,8 @@ export async function loadSettingsWithProfileMigration(
         showDetails: rawSettings.showDetails,
         autoBackupEnabled: rawSettings.autoBackupEnabled,
         autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
+        cloudInvitationShownAt: rawSettings.cloudInvitationShownAt,
+        cloudInvitationDismissed: rawSettings.cloudInvitationDismissed,
         profileBackupIds: rawSettings.profileBackupIds,
         scheduleEnabled: rawSettings.scheduleEnabled,
         scheduleTime: rawSettings.scheduleTime,
@@ -192,6 +211,8 @@ export async function loadSettingsWithProfileMigration(
         showDetails: rawSettings.showDetails,
         autoBackupEnabled: rawSettings.autoBackupEnabled,
         autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
+        cloudInvitationShownAt: rawSettings.cloudInvitationShownAt,
+        cloudInvitationDismissed: rawSettings.cloudInvitationDismissed,
         profileBackupIds: rawSettings.profileBackupIds,
         scheduleEnabled: rawSettings.scheduleEnabled,
         scheduleTime: rawSettings.scheduleTime,
@@ -215,6 +236,8 @@ export async function loadSettingsWithProfileMigration(
       showDetails: rawSettings.showDetails,
       autoBackupEnabled: rawSettings.autoBackupEnabled,
       autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
+      cloudInvitationShownAt: rawSettings.cloudInvitationShownAt,
+      cloudInvitationDismissed: rawSettings.cloudInvitationDismissed,
       profileBackupIds: rawSettings.profileBackupIds,
       scheduleEnabled: rawSettings.scheduleEnabled,
       scheduleTime: rawSettings.scheduleTime,

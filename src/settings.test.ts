@@ -16,6 +16,10 @@ const LEGACY_KEY = 'endstate-gui-settings';
 const AUTO_BACKUP_DEFAULTS = {
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
+  // One-time post-capture cloud invitation, defaulted to "never presented,
+  // never answered" so the round-trip assertions keep matching loadSettings().
+  cloudInvitationShownAt: null as string | null,
+  cloudInvitationDismissed: false,
   profileBackupIds: {} as Record<string, string>,
   scheduleEnabled: false,
   scheduleTime: '09:00',
@@ -221,6 +225,8 @@ describe('settings', () => {
       showDetails: false,
       autoBackupEnabled: true,
       autoBackupPromptSeen: true,
+      cloudInvitationShownAt: null,
+      cloudInvitationDismissed: false,
       profileBackupIds: { 'my-profile': 'b-123' },
       scheduleEnabled: false,
       scheduleTime: '09:00',
@@ -282,6 +288,82 @@ describe('settings', () => {
       expect(migrated.selectedProfileName).toBe('foo');
       expect(migrated.autoBackupEnabled).toBe(true);
       expect(migrated.profileBackupIds).toEqual({ foo: 'b-9' });
+    });
+  });
+
+  // The post-capture Endstate Cloud invitation is offered at most once in the
+  // product's lifetime, so its two flags are the only thing standing between an
+  // invitation and a nag (PRINCIPLES.md §1). They must default to "never
+  // presented, never answered", survive a round trip, be defaulted for settings
+  // blobs written before they existed, and survive every profile migration path
+  // — a flag lost in migration re-arms the prompt.
+  describe('cloud-invitation fields', () => {
+    it('defaults to never presented and never answered', () => {
+      const loaded = loadSettings();
+      expect(loaded.cloudInvitationShownAt).toBeNull();
+      expect(loaded.cloudInvitationDismissed).toBe(false);
+    });
+
+    it('round-trips the cloud-invitation fields through save/load', () => {
+      saveSettings({
+        ...loadSettings(),
+        cloudInvitationShownAt: '2026-08-08T09:30:00.000Z',
+        cloudInvitationDismissed: true,
+      });
+      const loaded = loadSettings();
+      expect(loaded.cloudInvitationShownAt).toBe('2026-08-08T09:30:00.000Z');
+      expect(loaded.cloudInvitationDismissed).toBe(true);
+    });
+
+    it('defaults the cloud-invitation fields for settings stored before they existed', () => {
+      // A settings blob persisted by an older build — no cloud-invitation keys.
+      setItem(
+        'endstate-gui-settings',
+        JSON.stringify({
+          engineMode: 'bundled',
+          customProfilesDirectory: '',
+          selectedProfileName: 'legacy',
+          dryRunEnabled: true,
+          showDetails: false,
+        }),
+      );
+      const loaded = loadSettings();
+      expect(loaded.cloudInvitationShownAt).toBeNull();
+      expect(loaded.cloudInvitationDismissed).toBe(false);
+      expect(loaded.selectedProfileName).toBe('legacy');
+    });
+
+    it('preserves the cloud-invitation fields through loadSettingsWithProfileMigration', async () => {
+      saveSettings({
+        ...loadSettings(),
+        selectedProfileName: 'my-profile',
+        cloudInvitationShownAt: '2026-08-08T09:30:00.000Z',
+        cloudInvitationDismissed: true,
+      });
+      const migrated = await loadSettingsWithProfileMigration('C:\\profiles');
+      expect(migrated.cloudInvitationShownAt).toBe('2026-08-08T09:30:00.000Z');
+      expect(migrated.cloudInvitationDismissed).toBe(true);
+    });
+
+    it('carries the cloud-invitation fields through the legacy name-based migration path', async () => {
+      // This path rebuilds AppSettings field by field; a field omitted there is
+      // silently reset to the default and the invitation returns.
+      setItem(
+        'endstate-gui-settings',
+        JSON.stringify({
+          engineMode: 'bundled',
+          customProfilesDirectory: '',
+          dryRunEnabled: true,
+          showDetails: false,
+          cloudInvitationShownAt: '2026-08-08T09:30:00.000Z',
+          cloudInvitationDismissed: true,
+          lastSelectedProfile: 'foo',
+        }),
+      );
+      const migrated = await loadSettingsWithProfileMigration('C:\\profiles');
+      expect(migrated.selectedProfileName).toBe('foo');
+      expect(migrated.cloudInvitationShownAt).toBe('2026-08-08T09:30:00.000Z');
+      expect(migrated.cloudInvitationDismissed).toBe(true);
     });
   });
 

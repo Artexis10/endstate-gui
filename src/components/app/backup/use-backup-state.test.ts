@@ -46,6 +46,8 @@ const SETTINGS: AppSettings = {
   showDetails: false,
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
+  cloudInvitationShownAt: null,
+  cloudInvitationDismissed: false,
   profileBackupIds: {},
   scheduleEnabled: false,
   scheduleTime: '09:00',
