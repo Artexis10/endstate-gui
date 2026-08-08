@@ -2754,6 +2754,27 @@ function AppContent() {
               hostedBackupSubscriptionStatus={backupStatusData?.subscriptionStatus}
               autoBackupState={autoBackupChip}
               onOpenHostedBackup={() => handleNavigate('backup')}
+              cloudInvitationShownAt={settings.cloudInvitationShownAt}
+              cloudInvitationDismissed={settings.cloudInvitationDismissed}
+              // Pending = the consent dialog is open, or this capture still
+              // owes it (same gate as the capture handler below). Either way
+              // one capture must never produce two prompts.
+              autoBackupConsentPending={
+                autoBackupConsentOpen ||
+                (!settings.autoBackupPromptSeen &&
+                  autoBackupAvailable({
+                    hostedBackupSupported,
+                    ifChangedSupported,
+                    status: backupStatusData,
+                  }))
+              }
+              // Record before present — persisted ahead of the card rendering.
+              onCloudInvitationShown={() =>
+                updateSettings({ cloudInvitationShownAt: new Date().toISOString() })
+              }
+              onCloudInvitationDismissed={() =>
+                updateSettings({ cloudInvitationDismissed: true })
+              }
               onPushToHostedBackup={
                 hostedBackupSupported
                 && backupStatusData?.signedIn

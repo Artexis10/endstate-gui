@@ -68,6 +68,45 @@ export interface SaveOutcome {
   path?: string;
 }
 
+interface CloudInvitationConditions {
+  /** Persisted ISO timestamp of the single prior presentation, or null. */
+  cloudInvitationShownAt: string | null;
+  /** Persisted: the user has already answered the invitation. */
+  cloudInvitationDismissed: boolean;
+  hostedBackupSupported: boolean;
+  hostedBackupSignedIn: boolean;
+  hostedBackupSubscriptionStatus?: SubscriptionStatus;
+  /** The one-time auto-backup consent dialog is open, or still owed. */
+  autoBackupConsentPending: boolean;
+}
+
+/**
+ * Eligibility for the one-time post-capture Endstate Cloud invitation.
+ *
+ * Deliberately narrow: this is an invitation, not a nag (PRINCIPLES.md §1 —
+ * "There will never be a nag screen"). It is offered at most once, only after a
+ * capture the user actually saved, only to someone who is not already paying
+ * for the managed service, and never alongside the auto-backup consent dialog.
+ * The caller additionally restricts it to the `saved` phase, so a failed,
+ * cancelled, or unsaved capture can never reach here.
+ *
+ * The subscriber gate mirrors the hosted-push gate in App.tsx: hosted backup
+ * supported AND signed in AND subscription active. Anything less is not an
+ * active subscriber, so the invitation is informative rather than redundant.
+ */
+function isCloudInvitationEligible(c: CloudInvitationConditions): boolean {
+  if (c.cloudInvitationShownAt !== null) return false;
+  if (c.cloudInvitationDismissed) return false;
+  const activeSubscriber =
+    c.hostedBackupSupported &&
+    c.hostedBackupSignedIn &&
+    c.hostedBackupSubscriptionStatus === 'active';
+  if (activeSubscriber) return false;
+  // Never two prompts from one capture.
+  if (c.autoBackupConsentPending) return false;
+  return true;
+}
+
 export interface SaveFlowProps {
   onBack: () => void;
   engineConnected: boolean;
@@ -104,6 +143,30 @@ export interface SaveFlowProps {
    * auto-backup is active.
    */
   autoBackupState?: 'idle' | 'backing-up' | 'backed-up' | 'paused';
+  /**
+   * Persisted ISO timestamp of the single post-capture Endstate Cloud
+   * invitation, or null when it has never been presented.
+   */
+  cloudInvitationShownAt?: string | null;
+  /** Persisted: the user already answered the invitation — never offer again. */
+  cloudInvitationDismissed?: boolean;
+  /**
+   * True while the one-time auto-backup consent dialog is open or still owed
+   * for this capture. Suppresses the invitation so one capture never produces
+   * two prompts.
+   */
+  autoBackupConsentPending?: boolean;
+  /**
+   * Record-before-present: called synchronously, before the invitation card
+   * renders, so the parent can persist `cloudInvitationShownAt`. A crash during
+   * presentation therefore cannot turn this into a recurring prompt.
+   */
+  onCloudInvitationShown?: () => void;
+  /**
+   * Called when the user answers the invitation in any way (protect, keep it
+   * local, dismiss). The parent persists `cloudInvitationDismissed`.
+   */
+  onCloudInvitationDismissed?: () => void;
 }
 
 export function SaveFlow({
@@ -124,6 +187,11 @@ export function SaveFlow({
   hostedBackupSubscriptionStatus,
   onOpenHostedBackup,
   autoBackupState = 'idle',
+  cloudInvitationShownAt = null,
+  cloudInvitationDismissed = false,
+  autoBackupConsentPending = false,
+  onCloudInvitationShown,
+  onCloudInvitationDismissed,
 }: SaveFlowProps) {
   const [phase, setPhase] = useState<CapturePhase>('idle');
   const [result, setResult] = useState<CaptureResult | null>(null);
@@ -132,6 +200,22 @@ export function SaveFlow({
   const [errorMessage, setErrorMessage] = useState('');
   const [errorOrigin, setErrorOrigin] = useState<ErrorOrigin>(null);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  /**
+   * Session latch for the cloud invitation. Eligibility is evaluated once, at
+   * the moment a save succeeds; the persisted `cloudInvitationShownAt` is
+   * written at that same moment, so it can no longer be used to decide whether
+   * to keep rendering. This latch carries that decision through the render.
+   */
+  const [cloudInvitationVisible, setCloudInvitationVisible] = useState(false);
+  /**
+   * Spent for the lifetime of this mount, set the moment the invitation is
+   * presented. The persisted flags are the durable guard, but they only take
+   * effect once the parent has written and propagated them; this makes a second
+   * presentation impossible in the meantime — including "Save another copy",
+   * which re-enters the save path within the same capture. Deliberately not
+   * cleared by `resetKey` or "Scan again": once offered, it is offered.
+   */
+  const cloudInvitationSpent = useRef(false);
   const [scanCooldown, setScanCooldown] = useState(false);
   const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -156,6 +240,7 @@ export function SaveFlow({
       setErrorMessage('');
       setErrorOrigin(null);
       setActiveFilters(new Set());
+      setCloudInvitationVisible(false);
     }
   }, [resetKey]);
   const reduced = prefersReducedMotion();
@@ -194,6 +279,7 @@ export function SaveFlow({
     setErrorMessage('');
     setErrorOrigin(null);
     setActiveFilters(new Set());
+    setCloudInvitationVisible(false);
     try {
       const captureResult = await onStartCapture();
       setResult(captureResult);
@@ -214,6 +300,24 @@ export function SaveFlow({
     try {
       const outcome = await onSaveToFile(result);
       if (outcome.saved) {
+        // RECORD BEFORE PRESENT. The persisted flag is written synchronously,
+        // ahead of every state update that could render the card, so a crash
+        // mid-presentation leaves the invitation spent rather than pending.
+        if (
+          !cloudInvitationSpent.current &&
+          isCloudInvitationEligible({
+            cloudInvitationShownAt,
+            cloudInvitationDismissed,
+            hostedBackupSupported,
+            hostedBackupSignedIn,
+            hostedBackupSubscriptionStatus,
+            autoBackupConsentPending,
+          })
+        ) {
+          cloudInvitationSpent.current = true;
+          onCloudInvitationShown?.();
+          setCloudInvitationVisible(true);
+        }
         setSavedPath(outcome.path ?? null);
         setHasSavedCopy(true);
         setPhase('saved');
@@ -236,7 +340,23 @@ export function SaveFlow({
     setHasSavedCopy(false);
     setErrorMessage('');
     setErrorOrigin(null);
+    setCloudInvitationVisible(false);
     onFlowReset?.();
+  };
+
+  /**
+   * Any answer retires the invitation permanently. Endstate Cloud stays
+   * reachable from the sidebar entry — this only stops Endstate offering it
+   * unprompted, ever again.
+   */
+  const handleDismissCloudInvitation = () => {
+    setCloudInvitationVisible(false);
+    onCloudInvitationDismissed?.();
+  };
+
+  const handleAcceptCloudInvitation = () => {
+    handleDismissCloudInvitation();
+    onOpenHostedBackup?.();
   };
 
   const handleRetry = () => {
@@ -425,8 +545,16 @@ export function SaveFlow({
                     <p className="text-sm font-medium">Scan complete</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Found {result.count} {result.count === 1 ? 'app' : 'apps'}
-                      {(result.configsIncluded?.length ?? 0) > 0 && (
-                        <> &middot; {result.configsIncluded!.length} {result.configsIncluded!.length === 1 ? 'setting' : 'settings'} captured</>
+                      {/* One settings number for the whole flow. This headline
+                          used to read `configsIncluded.length` while the chips,
+                          the app rows, and now the cloud invitation all read
+                          `settingsCount` — two counts for one fact, which the
+                          UX guardrails forbid ("must never compute counts
+                          differently across UI components"). `settingsCount`
+                          still falls back to `configsIncluded` when the engine
+                          omits structured `configModules`. */}
+                      {settingsCount > 0 && (
+                        <> &middot; {settingsCount} {settingsCount === 1 ? 'setting' : 'settings'} captured</>
                       )}
                     </p>
                   </div>
@@ -659,6 +787,68 @@ export function SaveFlow({
                   )}
                   <Button variant="ghost" onClick={handleSave}>Save another copy</Button>
                 </div>
+
+                {/* One-time Endstate Cloud invitation. Non-blocking, offered at
+                    most once in the product's lifetime, and retired forever by
+                    any answer. Not a gate: the local backup above is already
+                    complete and fully usable without it. No price is shown —
+                    the GUI has no reliable price source, and quoting one here
+                    would turn an invitation into a sales surface.
+                    Visual shell follows subscription-banner.tsx's BannerShell
+                    tone pattern inline rather than extracting it; the codebase
+                    deliberately duplicates that shell (see quota-notice.tsx). */}
+                {cloudInvitationVisible && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={transition}
+                    className="mt-6"
+                  >
+                    <Card
+                      role="status"
+                      aria-live="polite"
+                      data-testid="save-flow-cloud-invitation"
+                      className="border-primary/30 bg-primary/10"
+                    >
+                      <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex items-start gap-3">
+                          <Cloud className="h-5 w-5 mt-0.5 text-primary" aria-hidden="true" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">Your setup is saved locally</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {result.count} applications and {settingsCount} supported settings were captured.
+                            </p>
+                            <p className="text-sm font-medium mt-4">
+                              Keep future versions protected automatically
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Endstate Cloud keeps end-to-end encrypted versions of this setup
+                              ready if this PC or drive fails.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="primary"
+                            onClick={handleAcceptCloudInvitation}
+                            data-testid="save-flow-cloud-invitation-accept"
+                          >
+                            Protect with Endstate Cloud
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={handleDismissCloudInvitation}
+                            data-testid="save-flow-cloud-invitation-dismiss"
+                          >
+                            Keep it local
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
