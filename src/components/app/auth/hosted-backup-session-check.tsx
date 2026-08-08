@@ -16,7 +16,7 @@ export function HostedBackupSessionCheck({
     return (
       <div className="m-6 flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        <span>Checking your Hosted Backup account session…</span>
+        <span>Checking your Endstate Cloud account session…</span>
       </div>
     );
   }
@@ -26,7 +26,7 @@ export function HostedBackupSessionCheck({
       <div className="flex items-start gap-2 text-sm">
         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
         <div>
-          <p className="font-medium">Could not check your Hosted Backup session.</p>
+          <p className="font-medium">Could not check your Endstate Cloud session.</p>
           <p className="mt-1 text-muted-foreground">
             Retry before signing in, creating an account, or using a purchase code.
           </p>

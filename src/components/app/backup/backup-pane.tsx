@@ -472,7 +472,7 @@ export function BackupPane({
   if (!state.status?.signedIn) {
     return (
       <div className="m-6 text-sm text-muted-foreground" data-testid="backup-pane-signed-out">
-        Sign in to view your hosted backups.
+        Sign in to view your Endstate Cloud backups.
       </div>
     );
   }

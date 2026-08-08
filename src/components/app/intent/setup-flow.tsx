@@ -891,7 +891,7 @@ export function SetupFlow({
                   }}
                   tabIndex={interactionBlocked ? -1 : 0}
                   role="button"
-                  aria-label="Restore from your Hosted Backup"
+                  aria-label="Restore from Endstate Cloud"
                   data-testid="setup-restore-from-cloud-cta"
                 >
                   <CardContent className="py-4 px-5 flex items-center gap-4">
@@ -900,7 +900,7 @@ export function SetupFlow({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">
-                        Restore from your Hosted Backup
+                        Restore from Endstate Cloud
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {cloudBackupIndex.size === 1

@@ -62,7 +62,7 @@ export function QuotaMeter({
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label="Hosted Backup storage used"
+        aria-label="Endstate Cloud storage used"
       >
         <div
           className={`h-full ${barColor} transition-[width]`}

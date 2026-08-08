@@ -2808,7 +2808,7 @@ function AppContent() {
                             );
                             markFirstPushFor(pushEmail);
                           } else {
-                            showToast('Pushed to hosted backup.', 'success');
+                            showToast('Pushed to Endstate Cloud.', 'success');
                           }
                           // Refresh the cloud index so the new backup gets a
                           // cloud badge in Setup immediately.
@@ -3177,8 +3177,8 @@ function AppContent() {
           // somehow, route them home rather than rendering a bare pane.
           return (
             <div className="m-6 text-sm text-muted-foreground">
-              Hosted Backup is not available with the bundled engine. Update Endstate to
-              enable Hosted Backup.
+              Endstate Cloud is not available with the bundled engine. Update Endstate to
+              enable it.
             </div>
           );
         }
@@ -3259,8 +3259,8 @@ function AppContent() {
         if (!hostedBackupSupported) {
           return (
             <div className="m-6 text-sm text-muted-foreground">
-              Hosted Backup is not available with the bundled engine. Update Endstate to
-              enable Hosted Backup.
+              Endstate Cloud is not available with the bundled engine. Update Endstate to
+              enable it.
             </div>
           );
         }
@@ -4119,8 +4119,8 @@ function AppContent() {
       case 'setup': return '';
       case 'report': return 'Reports';
       case 'settings': return 'Settings';
-      case 'auth': return 'Hosted Backup';
-      case 'backup': return 'Hosted Backup';
+      case 'auth': return 'Endstate Cloud';
+      case 'backup': return 'Endstate Cloud';
       default: return '';
     }
   };

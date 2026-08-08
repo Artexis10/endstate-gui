@@ -53,8 +53,8 @@ export function ReauthDialog({
           <DialogTitle>Sign in again to continue</DialogTitle>
           <DialogDescription>
             {expectedEmail
-              ? `Your hosted-backup session expired. Enter the password for ${expectedEmail} to keep going.`
-              : 'Your hosted-backup session expired. Sign in again to keep going.'}
+              ? `Your Endstate Cloud session expired. Enter the password for ${expectedEmail} to keep going.`
+              : 'Your Endstate Cloud session expired. Sign in again to keep going.'}
           </DialogDescription>
         </DialogHeader>
         <SignInForm

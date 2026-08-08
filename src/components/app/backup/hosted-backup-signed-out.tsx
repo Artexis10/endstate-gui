@@ -16,9 +16,10 @@ export function HostedBackupSignedOut({
   return (
     <div className="m-6 max-w-xl" data-testid="backup-pane-signed-out">
       <div className="rounded-lg border border-border bg-card p-6">
-        <h2 className="text-lg font-semibold">Hosted Backup</h2>
+        <h2 className="text-lg font-semibold">Endstate Cloud</h2>
         <p className="mt-3 text-sm text-muted-foreground">
-          Save your machine setup to encrypted cloud storage. Restore it on any machine.
+          Endstate Cloud keeps your machine setup in encrypted cloud storage, ready to
+          restore on any machine.
         </p>
         <p className="mt-4 text-sm">
           <span className="font-medium">€4/month</span>

@@ -73,7 +73,7 @@ export function SubscriptionBanner({
       <BannerShell
         tone="success"
         icon={<CheckCircle2 className="h-5 w-5" />}
-        title="Hosted Backup active"
+        title="Endstate Cloud active"
         description="Your backups are up to date."
         action={
           <Button
@@ -144,7 +144,7 @@ export function SubscriptionBanner({
     <BannerShell
       tone="info"
       icon={<Sparkles className="h-5 w-5" />}
-      title="Subscribe to enable hosted backup"
+      title="Subscribe to enable Endstate Cloud"
       description="Encrypted backups in the cloud. Restore on any machine."
       action={
         <Button

@@ -25,7 +25,7 @@ describe('HostedBackupChip', () => {
     );
     const chip = screen.getByTestId('hosted-backup-chip');
     expect(chip).toHaveAttribute('data-state', 'signed-out');
-    expect(chip.textContent).toMatch(/Sign in to Hosted Backup/i);
+    expect(chip.textContent).toMatch(/Sign in to Endstate Cloud/i);
   });
 
   it('renders the active chip when subscription is active', () => {

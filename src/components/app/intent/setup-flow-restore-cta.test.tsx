@@ -89,7 +89,7 @@ describe('SetupFlow — Restore from Hosted Backup CTA', () => {
     );
     const cta = screen.getByTestId('setup-restore-from-cloud-cta');
     expect(cta).toBeInTheDocument();
-    expect(cta).toHaveTextContent(/Restore from your Hosted Backup/);
+    expect(cta).toHaveTextContent(/Restore from Endstate Cloud/);
     expect(cta).toHaveTextContent(/1 backup available/);
   });
 

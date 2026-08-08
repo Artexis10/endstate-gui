@@ -123,7 +123,7 @@ export interface SaveFlowProps {
   /** Called when the flow returns to idle (save completed, scan again, etc.) */
   onFlowReset?: () => void;
   /**
-   * When set, render a secondary "Push to hosted backup" button in the done
+   * When set, render a secondary "Push to Endstate Cloud" button in the done
    * card that invokes this handler with the captured manifest path. Parent
    * gates visibility via subscription state — if undefined, the button is
    * hidden entirely (no soft upsell). See plan §1 decision 3.
@@ -734,7 +734,7 @@ export function SaveFlow({
                       data-testid="save-flow-push-to-backup"
                     >
                       <Cloud className="h-4 w-4 mr-2" />
-                      Push to hosted backup
+                      Push to Endstate Cloud
                     </Button>
                   )}
                   <Button

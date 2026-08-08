@@ -25,7 +25,7 @@ const CASES: Case[] = [
   {
     status: 'active',
     tone: 'success',
-    expectedTextIncludes: 'Hosted Backup active',
+    expectedTextIncludes: 'Endstate Cloud active',
     expectedActionLabel: 'Manage subscription',
   },
   {

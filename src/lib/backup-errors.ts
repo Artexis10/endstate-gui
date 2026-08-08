@@ -60,7 +60,7 @@ export function friendlyBackupError(
       };
     case 'SUBSCRIPTION_REQUIRED':
       return {
-        headline: 'Hosted Backup needs an active subscription',
+        headline: 'Endstate Cloud needs an active subscription',
         body: 'Subscribe to push and restore your backups.',
         cta: { label: 'Manage subscription', action: 'manage-billing' },
         tone: 'warning',
@@ -81,28 +81,28 @@ export function friendlyBackupError(
       };
     case 'RATE_LIMITED':
       return {
-        headline: 'Hosted Backup is busy right now',
+        headline: 'Endstate Cloud is busy right now',
         body: 'Wait a moment, then try again.',
         cta: { label: 'Try again', action: 'retry' },
         tone: 'warning',
       };
     case 'BACKEND_ERROR':
       return {
-        headline: 'Hosted Backup ran into a problem',
+        headline: 'Endstate Cloud ran into a problem',
         body: 'Try again in a few moments.',
         cta: { label: 'Try again', action: 'retry' },
         tone: 'error',
       };
     case 'BACKEND_UNREACHABLE':
       return {
-        headline: "Can't reach Hosted Backup",
+        headline: "Can't reach Endstate Cloud",
         body: 'Check your internet connection, then try again.',
         cta: { label: 'Try again', action: 'retry' },
         tone: 'error',
       };
     case 'BACKEND_INCOMPATIBLE':
       return {
-        headline: "Your app version isn't compatible with Hosted Backup",
+        headline: "Your app version isn't compatible with Endstate Cloud",
         body: 'Update Endstate to the latest version.',
         tone: 'error',
       };

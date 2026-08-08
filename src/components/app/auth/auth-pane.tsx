@@ -43,7 +43,7 @@ export interface AuthPaneProps {
 }
 
 const HEADINGS = {
-  'sign-in': { title: 'Sign in to Endstate', description: 'Access your hosted backups.' },
+  'sign-in': { title: 'Sign in to Endstate', description: 'Access your Endstate Cloud backups.' },
   'sign-up': { title: 'Create your account', description: 'You\'ll get a recovery key in the next step.' },
   'recover': { title: 'Recover your account', description: 'You\'ll need the 24-word recovery key you saved at sign-up.' },
 } as const;

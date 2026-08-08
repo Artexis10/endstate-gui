@@ -6,11 +6,11 @@
  * Renders nothing when hosted backup is unsupported by the engine.
  *
  * State variants:
- *   - signed-out     → muted "Sign in to Hosted Backup" text link
- *   - active         → primary-tinted chip "Hosted Backup · Active"
- *   - grace          → warning-tinted chip "Hosted Backup · Renew"
- *   - cancelled      → warning-tinted chip "Hosted Backup · Renew"
- *   - none + signed-in → muted "Subscribe to Hosted Backup" (rare; user
+ *   - signed-out     → muted "Sign in to Endstate Cloud" text link
+ *   - active         → primary-tinted chip "Endstate Cloud · Active"
+ *   - grace          → warning-tinted chip "Endstate Cloud · Renew"
+ *   - cancelled      → warning-tinted chip "Endstate Cloud · Renew"
+ *   - none + signed-in → muted "Subscribe to Endstate Cloud" (rare; user
  *     finished signup but never paid)
  *
  * Clicking always routes to the Backup pane (`onOpen`) — the pane handles
@@ -49,7 +49,7 @@ export function HostedBackupChip({
         className="border-border bg-card/50 text-muted-foreground hover:bg-card hover:text-foreground"
       >
         <Cloud className="h-3.5 w-3.5" />
-        <span>Sign in to Hosted Backup</span>
+        <span>Sign in to Endstate Cloud</span>
       </Pill>
     );
   }
@@ -64,7 +64,7 @@ export function HostedBackupChip({
         className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
       >
         <Cloud className="h-3.5 w-3.5" />
-        <span>Hosted Backup · Active</span>
+        <span>Endstate Cloud · Active</span>
       </Pill>
     );
   }
@@ -84,7 +84,7 @@ export function HostedBackupChip({
         className="border-warning/30 bg-warning/10 text-warning-foreground hover:bg-warning/20"
       >
         <Cloud className="h-3.5 w-3.5" />
-        <span>Hosted Backup · {label}</span>
+        <span>Endstate Cloud · {label}</span>
       </Pill>
     );
   }
@@ -98,7 +98,7 @@ export function HostedBackupChip({
       className="border-border bg-card/50 text-muted-foreground hover:bg-card hover:text-foreground"
     >
       <Cloud className="h-3.5 w-3.5" />
-      <span>Subscribe to Hosted Backup</span>
+      <span>Subscribe to Endstate Cloud</span>
     </Pill>
   );
 }
