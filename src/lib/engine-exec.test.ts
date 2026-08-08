@@ -322,7 +322,7 @@ ${JSON.stringify(validEnvelope)}`;
         error: {
           code: 'SUBSCRIPTION_REQUIRED',
           message: 'no subscription on file',
-          remediation: 'Subscribe to Endstate Hosted Backup',
+          remediation: 'Subscribe to Endstate Cloud',
           docsKey: 'errors/subscription-required',
         },
       };
