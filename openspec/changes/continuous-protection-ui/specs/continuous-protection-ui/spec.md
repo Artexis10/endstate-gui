@@ -38,7 +38,7 @@ The Settings card SHALL provide a toggle "Check this computer for drift daily" p
 - **THEN** the toggle can still be turned off
 
 ### Requirement: Auto-push sub-toggle is doubly gated
-The card SHALL offer "Back up automatically when changes are found" only when the engine advertises `features.schedule.autoPush` AND the existing auto-backup availability conditions hold (hosted backup supported, `--if-changed` advertised, signed in, active subscription). When enabled it SHALL pass `--auto-push` to `schedule enable`.
+The card SHALL offer "Upload the saved setup to Endstate Cloud" only when the engine advertises `features.schedule.autoPush` AND the existing auto-backup availability conditions hold (hosted backup supported, `--if-changed` advertised, signed in, active subscription). When enabled it SHALL pass `--auto-push` to `schedule enable`.
 
 #### Scenario: Auto-push unavailable
 - **WHEN** either `features.schedule.autoPush` is absent/false or auto-backup conditions do not hold

@@ -96,7 +96,7 @@ export function ContinuousProtectionSetting({
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col pr-4">
             <span id="continuous-protection-autopush-label" className="text-sm font-medium">
-              Back up automatically when changes are found
+              Upload the saved setup to Endstate Cloud
             </span>
             <span className="text-xs text-muted-foreground">
               Each daily check also sends the setup you last saved to Endstate

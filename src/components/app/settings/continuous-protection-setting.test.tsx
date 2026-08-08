@@ -71,7 +71,7 @@ describe('ContinuousProtectionSetting', () => {
   it('hides the auto-push sub-toggle when unavailable', () => {
     renderSetting({ autoPushAvailable: false });
     expect(
-      screen.queryByRole('switch', { name: /back up automatically/i }),
+      screen.queryByRole('switch', { name: /upload the saved setup to endstate cloud/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -79,7 +79,7 @@ describe('ContinuousProtectionSetting', () => {
     const onAutoPushToggle = vi.fn();
     renderSetting({ autoPushAvailable: true, onAutoPushToggle });
     const sub = screen.getByRole('switch', {
-      name: /back up automatically when changes are found/i,
+      name: /upload the saved setup to endstate cloud/i,
     });
     expect(sub).not.toBeChecked();
     await userEvent.click(sub);
@@ -92,7 +92,7 @@ describe('ContinuousProtectionSetting', () => {
       screen.getByRole('switch', { name: /check this computer for drift daily/i }),
     ).toBeDisabled();
     expect(
-      screen.getByRole('switch', { name: /back up automatically/i }),
+      screen.getByRole('switch', { name: /upload the saved setup to endstate cloud/i }),
     ).toBeDisabled();
   });
 });

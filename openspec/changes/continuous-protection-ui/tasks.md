@@ -23,7 +23,7 @@
 **File**: `src/components/app/settings/continuous-protection-setting.tsx`
 - [x] Main toggle "Check this computer for drift daily" + time input (default 09:00)
 - [x] Disabled-with-hint "Save this computer first" when no saved capture; turning OFF always allowed
-- [x] Sub-toggle "Back up automatically when changes are found" rendered only when available
+- [x] Sub-toggle "Upload the saved setup to Endstate Cloud" rendered only when available
 
 ### Task 5: App wiring
 **File**: `src/App.tsx`
