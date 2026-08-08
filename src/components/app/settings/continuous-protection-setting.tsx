@@ -99,8 +99,10 @@ export function ContinuousProtectionSetting({
               Back up automatically when changes are found
             </span>
             <span className="text-xs text-muted-foreground">
-              When the daily check finds drift, save a fresh snapshot to your
-              cloud. Unchanged setups are never re-uploaded.
+              Each daily check also sends the setup you last saved to Endstate
+              Cloud. It uploads that saved snapshot again rather than capturing
+              the drift it found, so save this computer again to record those
+              changes. Unchanged setups are never re-uploaded.
             </span>
           </div>
           <Switch
