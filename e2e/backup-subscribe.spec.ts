@@ -86,7 +86,7 @@ interface BackupConfig {
 const CAPABILITIES_HOSTED_BACKUP = okEnvelope('capabilities', {
   supportedSchemaVersions: { min: '1.0', max: '1.0' },
   commands: ['capabilities', 'apply', 'verify', 'capture', 'report', 'backup'],
-  features: { hostedBackup: { supported: true } },
+  features: { hostedBackup: { supported: true, providerKind: 'endstate-cloud' } },
 });
 
 const STATUS_NONE = okEnvelope('backup', {

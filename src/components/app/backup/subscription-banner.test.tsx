@@ -79,7 +79,7 @@ describe('SubscriptionBanner', () => {
     renderWithProviders(<SubscriptionBanner status="none" />);
 
     expect(screen.getByText(/another Windows PC/i)).toBeInTheDocument();
-    expect(screen.getByText(/Endstate application list and supported non-secret settings/i)).toBeInTheDocument();
+    expect(screen.getByText(/Encrypted Endstate application lists and supported non-secret settings/i)).toBeInTheDocument();
     expect(screen.queryByText(/any machine/i)).not.toBeInTheDocument();
   });
 

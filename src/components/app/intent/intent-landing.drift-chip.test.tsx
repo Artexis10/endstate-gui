@@ -52,13 +52,13 @@ describe('IntentLanding drift chip', () => {
   });
 
   it.each([
-    ['upload pending', 'Upload pending'],
-    ['capture pending', 'Setup check in progress'],
-    ['sign-in required', 'Sign in required to upload'],
-    ['subscription required', 'Subscription required to upload'],
-    ['setup required', 'Open Endstate Cloud and save your first Cloud version'],
-    ['uncertain upload', 'Endstate Cloud may have saved this version — automatic retry is paused to avoid duplicates'],
-    ['upload failed', 'Upload failed'],
+    ['upload-pending', 'Upload pending'],
+    ['capture-pending', 'Setup check in progress'],
+    ['sign-in-required', 'Sign in required to upload'],
+    ['subscription-required', 'Subscription required to upload'],
+    ['setup-required', 'Open Endstate Cloud and save your first Cloud version'],
+    ['upload-uncertain', 'Endstate Cloud may have saved this version — automatic retry is paused to avoid duplicates'],
+    ['upload-failed', 'Upload failed'],
     ['offline', 'Offline — local version saved; Cloud upload will retry'],
     ['local only', 'Saved locally only'],
   ])('renders the actionable %s state instead of a healthy/current claim', (_kind, text) => {
@@ -101,6 +101,7 @@ describe('IntentLanding drift chip', () => {
   it('uses neutral setup-required wording outside the managed service', () => {
     renderLanding({
       scheduleAttention: 'setup-required',
+      managedBackupService: false,
       backupProviderKind: 'unknown',
     });
 
@@ -113,6 +114,7 @@ describe('IntentLanding drift chip', () => {
   it('uses neutral uncertain-upload wording outside the managed service', () => {
     renderLanding({
       scheduleAttention: 'upload-uncertain',
+      managedBackupService: false,
       backupProviderKind: 'self-hosted',
     });
 

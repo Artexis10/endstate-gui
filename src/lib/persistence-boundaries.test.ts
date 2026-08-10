@@ -48,6 +48,7 @@ describe('Persistence Boundaries', () => {
         autoBackupPromptSeen: false,
         cloudInvitationShownAt: null,
         cloudInvitationDismissed: false,
+        cloudInvitationManagedAccountSeen: false,
         profileBackupIds: {},
         scheduleEnabled: false,
         scheduleTime: '09:00',

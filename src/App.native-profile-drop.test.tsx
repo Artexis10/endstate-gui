@@ -365,7 +365,7 @@ describe('App native profile drag ownership', () => {
     expect(screen.queryByText('Undo settings changes from your last setup')).not.toBeInTheDocument();
   });
 
-  it('preserves latest schedule and profile mappings when a saved capture consumes the Cloud invitation', async () => {
+  it('preserves the scheduled baseline when a saved capture consumes the Cloud invitation', async () => {
     capabilitiesFeatures = {
       hostedBackup: {
         supported: true,
@@ -378,7 +378,7 @@ describe('App native profile drag ownership', () => {
     localStorage.setItem('tauri:endstate-gui-settings', JSON.stringify({
       dryRunDefaultCorrected: true,
       scheduleManifestPath: 'C:\\test\\profiles\\previous.jsonc',
-      profileBackupIds: { preserved: 'backup-1' },
+      profileBackupIds: {},
     }));
     window.__ENDSTATE_MOCK_ENGINE__ = {
       runEndstateStreaming: async <T,>(_settings: AppSettings, command: string) => ({
@@ -413,6 +413,6 @@ describe('App native profile drag ownership', () => {
 
     const stored = JSON.parse(localStorage.getItem('tauri:endstate-gui-settings') ?? '{}');
     expect(stored.scheduleManifestPath).toBe('C:\\test\\profiles\\fresh.jsonc');
-    expect(stored.profileBackupIds).toEqual({ preserved: 'backup-1' });
+    expect(stored.profileBackupIds).toEqual({});
   });
 });

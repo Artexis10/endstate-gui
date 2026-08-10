@@ -27,7 +27,7 @@ async function installCaptureMock(page: Page, options: CaptureMockOptions = {}) 
     issuerUrl: 'https://cloud.example.test/',
   };
   await page.addInitScript((mockHostedBackup) => {
-    (window as any).__ENDSTATE_MOCK_ENGINE__ = {
+    const mockEngine: any = {
       runEndstateStreaming: async (
         _settings: unknown,
         command: string,
@@ -86,6 +86,18 @@ async function installCaptureMock(page: Page, options: CaptureMockOptions = {}) 
         return { exitCode: 0, envelope: { success: true, data: {} }, ndjsonEvents: [] };
       },
     };
+    mockEngine.runEndstateOnce = async (settings: unknown, command: string) => {
+      const result = await mockEngine.runEndstateStreaming(settings, command);
+      const success = result.envelope?.success ?? result.exitCode === 0;
+      return {
+        success,
+        envelope: result.envelope,
+        stdout: JSON.stringify(result.envelope ?? {}),
+        stderr: '',
+        exitCode: result.exitCode,
+      };
+    };
+    (window as any).__ENDSTATE_MOCK_ENGINE__ = mockEngine;
   }, hostedBackup);
 }
 

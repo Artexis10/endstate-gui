@@ -20,6 +20,7 @@ const baseProps = {
   liveAppEvents: [],
   onPreview: vi.fn(),
   onApply: vi.fn(),
+  hostedBackupProviderKind: 'endstate-cloud' as const,
 };
 
 function makeIndex(names: string[]): Map<string, BackupListItem> {

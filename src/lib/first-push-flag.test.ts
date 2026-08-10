@@ -25,9 +25,9 @@ describe('first-push-flag', () => {
   });
 
   it.each([
-    ['length', () => vi.spyOn(Storage.prototype, 'length', 'get').mockImplementation(() => { throw new Error('storage denied'); })],
-    ['key', () => vi.spyOn(Storage.prototype, 'key').mockImplementation(() => { throw new Error('storage denied'); })],
-    ['getItem', () => vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('storage denied'); })],
+    ['length', () => vi.spyOn(localStorage, 'length', 'get').mockImplementation(() => { throw new Error('storage denied'); })],
+    ['key', () => vi.spyOn(localStorage, 'key').mockImplementation(() => { throw new Error('storage denied'); })],
+    ['getItem', () => vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw new Error('storage denied'); })],
   ])('treats denied localStorage %s access as prior managed use', (_operation, denyStorage) => {
     const denied = denyStorage();
     try {

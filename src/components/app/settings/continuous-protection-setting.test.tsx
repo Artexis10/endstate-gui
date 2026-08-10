@@ -112,7 +112,7 @@ describe('Scheduled setup checks setting', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /discard ambiguous upload/i }));
     expect(onDiscardAmbiguousUpload).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog')).toHaveTextContent(/local capture is kept/i);
+    expect(screen.getByRole('dialog')).toHaveTextContent(/local capture and scheduled baseline are kept/i);
     await userEvent.click(screen.getByRole('button', { name: /^discard upload$/i }));
     expect(onDiscardAmbiguousUpload).toHaveBeenCalledOnce();
   });
