@@ -8,13 +8,17 @@ vi.mock('./engine-exec', () => ({
 import {
   scheduleEnable,
   scheduleDisable,
+  scheduleDiscardUpload,
   scheduleStatus,
   engineSupportsSchedule,
   engineSupportsScheduleAutoPush,
+  engineSupportsScheduleBackupId,
+  engineSupportsScheduleBundleManifest,
   driftStateFromStatus,
   isBundlePath,
   resolveScheduleBaselinePath,
   ScheduleCommandError,
+  ScheduleStatusSequencer,
 } from './schedule-bridge';
 import type { AppSettings } from '../settings';
 import type { EndstateCapabilitiesData, ScheduleStatusData } from '../types';
@@ -47,10 +51,34 @@ describe('scheduleEnable', () => {
     expect(cliArgs()).toEqual(['enable', '--manifest', 'C:\\snap.zip', '--time', '09:00']);
   });
 
+  it('reasserts a saved bundle path unchanged when repairing a scheduled task', async () => {
+    execMock.mockResolvedValue(okResult({ enabled: true }));
+
+    await scheduleEnable(SETTINGS, {
+      manifest: 'C:\\captures\\saved.endstate',
+      time: '09:00',
+    });
+
+    expect(cliArgs()).toEqual([
+      'enable', '--manifest', 'C:\\captures\\saved.endstate', '--time', '09:00',
+    ]);
+  });
+
   it('appends --auto-push when autoPush is set', async () => {
     execMock.mockResolvedValue(okResult({ enabled: true }));
     await scheduleEnable(SETTINGS, { manifest: 'C:\\snap.zip', autoPush: true });
     expect(cliArgs()).toContain('--auto-push');
+  });
+
+  it('passes a known backup id without guessing another mapping', async () => {
+    execMock.mockResolvedValue(okResult({ enabled: true }));
+    await scheduleEnable(SETTINGS, {
+      manifest: 'C:\\captures\\work.jsonc',
+      backupId: 'backup-work',
+    });
+    expect(cliArgs()).toEqual([
+      'enable', '--manifest', 'C:\\captures\\work.jsonc', '--backup-id', 'backup-work',
+    ]);
   });
 
   it('passes --interval when provided', async () => {
@@ -122,6 +150,14 @@ describe('scheduleDisable / scheduleStatus', () => {
     });
     await expect(scheduleStatus(SETTINGS)).rejects.toBeInstanceOf(ScheduleCommandError);
   });
+
+  it('discards only the explicitly confirmed ambiguous upload artifact', async () => {
+    execMock.mockResolvedValue(okResult({ discarded: true }));
+    await scheduleDiscardUpload(SETTINGS, 'sha256:ambiguous');
+    expect(cliArgs()).toEqual([
+      'discard-upload', '--artifact-sha256', 'sha256:ambiguous', '--confirm',
+    ]);
+  });
 });
 
 describe('engineSupportsSchedule', () => {
@@ -164,6 +200,26 @@ describe('engineSupportsSchedule', () => {
       }),
     ).toBe(false);
   });
+
+  it('requires the additive schedule backup-id flag', () => {
+    expect(engineSupportsScheduleBackupId({
+      commands: { schedule: { flags: [] } },
+      features: { schedule: { supported: true, autoPush: true } },
+    })).toBe(false);
+    expect(engineSupportsScheduleBackupId({
+      commands: { schedule: { flags: ['--backup-id'] } },
+      features: { schedule: { supported: true, autoPush: true } },
+    })).toBe(true);
+  });
+
+  it('requires the additive bundle-manifest capability for bundle baselines', () => {
+    expect(engineSupportsScheduleBundleManifest({
+      features: { schedule: { supported: true, autoPush: false } },
+    })).toBe(false);
+    expect(engineSupportsScheduleBundleManifest({
+      features: { schedule: { supported: true, autoPush: false, bundleManifestSupported: true } },
+    })).toBe(true);
+  });
 });
 
 describe('driftStateFromStatus', () => {
@@ -176,6 +232,49 @@ describe('driftStateFromStatus', () => {
   it('maps missing status to never-run', () => {
     expect(driftStateFromStatus(null)).toEqual({ kind: 'never-run' });
     expect(driftStateFromStatus(undefined)).toEqual({ kind: 'never-run' });
+  });
+
+  it.each(['running', 'future_terminal_state'])('fails closed for a %s last-run marker', (status) => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        pendingUpload: { pending: false, lastOutcome: 'pushed' },
+        lastRun: {
+          ...baseRun,
+          status,
+          verify: { summary: { total: 2, pass: 0, fail: 2 } },
+        },
+      }),
+    ).toEqual({ kind: 'capture-pending', checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
+  it('continues completed runs through ordinary drift mapping', () => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        lastRun: {
+          ...baseRun,
+          status: 'completed',
+          verify: { summary: { total: 2, pass: 0, fail: 2 } },
+        },
+      }),
+    ).toEqual({ kind: 'drift', count: 2, checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
+  it('maps a failed run to failing even when the engine omitted error details', () => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        lastRun: {
+          ...baseRun,
+          status: 'failed',
+          verify: { summary: { total: 2, pass: 2, fail: 0 } },
+        },
+      }),
+    ).toEqual({ kind: 'failing', checkedAt: '2026-07-10T09:00:00Z' });
   });
 
   it('maps enabled-but-never-run (lastRun null) to never-run', () => {
@@ -197,7 +296,7 @@ describe('driftStateFromStatus', () => {
     ).toEqual({ kind: 'never-run' });
   });
 
-  it('maps a clean run (fail = 0) to clean', () => {
+  it('treats an older engine without pending-upload truth as local only', () => {
     expect(
       driftStateFromStatus({
         enabled: true,
@@ -207,7 +306,117 @@ describe('driftStateFromStatus', () => {
           verify: { summary: { total: 10, pass: 10, fail: 0 }, drifted: [] },
         },
       }),
-    ).toEqual({ kind: 'clean', checkedAt: '2026-07-10T09:00:00Z' });
+    ).toEqual({ kind: 'local-only', checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
+  it.each([
+    ['pending', { pending: true }, 'upload-pending'],
+    ['sign-in required', { pending: true, lastOutcome: 'auth_required' }, 'sign-in-required'],
+    ['retryable upload failure', { pending: true, lastOutcome: 'error' }, 'upload-failed'],
+    ['subscription required', { pending: true, lastOutcome: 'subscription_required' }, 'subscription-required'],
+    ['setup required', { pending: true, lastOutcome: 'setup_required' }, 'setup-required'],
+    ['uncertain upload', { pending: true, lastOutcome: 'upload_uncertain' }, 'upload-uncertain'],
+    ['offline upload retry', { pending: true, lastOutcome: 'offline' }, 'offline'],
+  ] as const)('maps %s upload state without calling it current', (_label, pendingUpload, kind) => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        pendingUpload,
+        lastRun: {
+          ...baseRun,
+          verify: { summary: { total: 10, pass: 10, fail: 0 }, drifted: [] },
+        },
+      }),
+    ).toEqual({ kind, checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
+  it('maps an auto-backup subscription requirement even when older status omits pendingUpload', () => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        lastRun: {
+          ...baseRun,
+          verify: { summary: { total: 10, pass: 10, fail: 0 }, drifted: [] },
+          autoBackup: { outcome: 'subscription_required' },
+        },
+      }),
+    ).toEqual({ kind: 'subscription-required', checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
+  it('maps an auto-backup setup requirement without falling back to generic pending', () => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        lastRun: {
+          ...baseRun,
+          verify: { summary: { total: 1, pass: 1, fail: 0 } },
+          autoBackup: { outcome: 'setup_required' },
+        },
+      }),
+    ).toEqual({ kind: 'setup-required', checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
+  it('maps an uncertain auto-backup upload without treating it as retryable pending', () => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        lastRun: {
+          ...baseRun,
+          verify: { summary: { total: 1, pass: 1, fail: 0 } },
+          autoBackup: { outcome: 'upload_uncertain' },
+        },
+      }),
+    ).toEqual({ kind: 'upload-uncertain', checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
+  it.each([
+    ['setup_required', 'setup-required'],
+    ['upload_uncertain', 'upload-uncertain'],
+  ] as const)('gives terminal %s upload truth precedence over detected drift', (outcome, kind) => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        pendingUpload: { pending: true, lastOutcome: outcome },
+        lastRun: {
+          ...baseRun,
+          verify: { summary: { total: 2, pass: 0, fail: 2 } },
+        },
+      }),
+    ).toEqual({ kind, checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
+  it('preserves an additive queued-upload count for callers that need honest aggregate copy', () => {
+    const status: ScheduleStatusData = {
+      enabled: true,
+      autoPush: true,
+      pendingUpload: { pending: true, count: 3, lastOutcome: 'offline' },
+      lastRun: {
+        ...baseRun,
+        verify: { summary: { total: 10, pass: 10, fail: 0 }, drifted: [] },
+      },
+    };
+
+    expect(status.pendingUpload?.count).toBe(3);
+    expect(driftStateFromStatus(status)).toEqual({ kind: 'offline', checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
+  it('treats a present but outcome-less upload field as local only', () => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        pendingUpload: { pending: false },
+        lastRun: {
+          ...baseRun,
+          verify: { summary: { total: 10, pass: 10, fail: 0 }, drifted: [] },
+        },
+      }),
+    ).toEqual({ kind: 'local-only', checkedAt: '2026-07-10T09:00:00Z' });
   });
 
   it('maps drifted items to drift with the fail count', () => {
@@ -215,6 +424,7 @@ describe('driftStateFromStatus', () => {
       driftStateFromStatus({
         enabled: true,
         autoPush: false,
+        pendingUpload: { pending: false, lastOutcome: 'pushed' },
         lastRun: {
           ...baseRun,
           verify: {
@@ -228,17 +438,45 @@ describe('driftStateFromStatus', () => {
     ).toEqual({ kind: 'drift', count: 1, checkedAt: '2026-07-10T09:00:00Z' });
   });
 
+  it('keeps drift actionable when an upload is also pending', () => {
+    expect(
+      driftStateFromStatus({
+        enabled: true,
+        autoPush: true,
+        pendingUpload: { pending: true, lastOutcome: 'offline' },
+        lastRun: {
+          ...baseRun,
+          verify: { summary: { total: 10, pass: 8, fail: 2 } },
+        },
+      }),
+    ).toEqual({ kind: 'drift', count: 2, checkedAt: '2026-07-10T09:00:00Z' });
+  });
+
   it('maps a hard error to failing (drift chip suppressed)', () => {
     expect(
       driftStateFromStatus({
         enabled: true,
         autoPush: false,
+        pendingUpload: { pending: false, lastOutcome: 'pushed' },
         lastRun: {
           ...baseRun,
           error: { code: 'MANIFEST_NOT_FOUND', message: 'manifest missing' },
         },
       }),
     ).toEqual({ kind: 'failing', checkedAt: '2026-07-10T09:00:00Z' });
+  });
+});
+
+describe('ScheduleStatusSequencer', () => {
+  it('rejects an older delayed clean response after newer offline truth is applied', () => {
+    const sequencer = new ScheduleStatusSequencer();
+    const older = sequencer.begin();
+    const newer = sequencer.begin();
+    const applied: string[] = [];
+
+    expect(sequencer.apply(newer, () => applied.push('offline'))).toBe(true);
+    expect(sequencer.apply(older, () => applied.push('clean'))).toBe(false);
+    expect(applied).toEqual(['offline']);
   });
 });
 
@@ -279,19 +517,21 @@ describe('resolveScheduleBaselinePath', () => {
     );
   });
 
-  it('records a saved bundle directly, with no sidecar path', () => {
-    const resolved = resolveScheduleBaselinePath('C:\\captures\\snap.zip');
+  it('records a saved bundle directly only when the engine advertises bundle support', () => {
+    const resolved = resolveScheduleBaselinePath('C:\\captures\\snap.zip', true);
 
     expect(resolved).toBe('C:\\captures\\snap.zip');
     expect(resolved).not.toContain('.manifest.jsonc');
   });
 
-  it('records whatever the user saved, for every path shape', () => {
+  it('fails closed for a bundle on an older schedule-capable engine', () => {
+    expect(resolveScheduleBaselinePath('C:\\captures\\snap.endstate', false)).toBeNull();
+    expect(resolveScheduleBaselinePath('C:\\captures\\snap.zip', false)).toBeNull();
+  });
+
+  it('records raw manifests regardless of bundle capability', () => {
     for (const savePath of [
       'C:\\captures\\snap.jsonc',
-      'C:\\captures\\snap.zip',
-      'C:\\captures\\SNAP.ZIP',
-      '/home/hugo/captures/snap.zip',
     ]) {
       expect(resolveScheduleBaselinePath(savePath)).toBe(savePath);
     }

@@ -46,6 +46,8 @@ const SETTINGS: AppSettings = {
   showDetails: false,
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
+  cloudInvitationShownAt: null,
+  cloudInvitationDismissed: false,
   profileBackupIds: {},
   scheduleEnabled: false,
   scheduleTime: '09:00',
@@ -146,6 +148,26 @@ describe('useBackupState progress reducers', () => {
     expect(mockBackupList).not.toHaveBeenCalled();
     expect(result.current.backups).toEqual([]);
     expect(result.current.error).toBeNull();
+  });
+
+  it('lists self-hosted backups even when managed subscription status is none', async () => {
+    const initialStatus: BackupStatusData = {
+      signedIn: true,
+      email: 'user@example.com',
+      userId: 'u-1',
+      subscriptionStatus: 'none',
+      issuerUrl: 'https://backup.example.test',
+    };
+    mockBackupList.mockResolvedValueOnce({ backups: [] });
+    mockBackupList.mockClear();
+
+    const { result } = renderHook(() => useBackupState(SETTINGS, {
+      initialStatus,
+      providerKind: 'self-hosted',
+    }));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(mockBackupList).toHaveBeenCalledOnce();
   });
 
   it('seeds backups from initialBackups and renders without loading flash', async () => {

@@ -27,6 +27,7 @@ import type { BackupLoginData } from '@/types';
 export interface ReauthDialogProps {
   open: boolean;
   settings: AppSettings;
+  providerKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
   /** When set, the dialog locks the email field to this address so re-auth
    *  stays on the same identity. Pass the previously-signed-in email. */
   expectedEmail?: string;
@@ -37,10 +38,12 @@ export interface ReauthDialogProps {
 export function ReauthDialog({
   open,
   settings,
+  providerKind = 'endstate-cloud',
   expectedEmail,
   onReauthenticated,
   onDismiss,
 }: ReauthDialogProps) {
+  const serviceName = providerKind === 'self-hosted' ? 'self-hosted backup' : providerKind === 'endstate-cloud' ? 'Endstate Cloud' : 'backup service';
   return (
     <Dialog
       open={open}
@@ -53,8 +56,8 @@ export function ReauthDialog({
           <DialogTitle>Sign in again to continue</DialogTitle>
           <DialogDescription>
             {expectedEmail
-              ? `Your hosted-backup session expired. Enter the password for ${expectedEmail} to keep going.`
-              : 'Your hosted-backup session expired. Sign in again to keep going.'}
+              ? `Your ${serviceName} session expired. Enter the password for ${expectedEmail} to keep going.`
+              : `Your ${serviceName} session expired. Sign in again to keep going.`}
           </DialogDescription>
         </DialogHeader>
         <SignInForm

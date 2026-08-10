@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   engineSupportsIfChanged,
   engineSupportsRename,
+  endstateCloudAvailable,
+  hasManagedCloudAccountEvidence,
+  normalizeIssuerUrl,
   autoBackupAvailable,
   isAutoBackupActive,
 } from './backup-capabilities';
@@ -33,6 +36,51 @@ describe('engineSupportsRename', () => {
         features: { hostedBackup: { supported: true, rename: true } },
       } as EndstateCapabilitiesData),
     ).toBe(true);
+  });
+});
+
+describe('Endstate Cloud invitation capability', () => {
+  it('accepts only the managed provider kind and normalizes an issuer trailing slash', () => {
+    const capabilities = {
+      features: {
+        hostedBackup: {
+          supported: true,
+          providerKind: 'endstate-cloud',
+          issuerUrl: 'https://cloud.example.test/',
+        },
+      },
+    } as unknown as EndstateCapabilitiesData;
+
+    expect(normalizeIssuerUrl('https://cloud.example.test/')).toBe('https://cloud.example.test');
+    expect(endstateCloudAvailable(capabilities)).toBe(true);
+  });
+
+  it.each([
+    ['missing provider kind', { supported: true, issuerUrl: 'https://cloud.example.test/' }],
+    ['unknown provider kind', { supported: true, providerKind: 'unknown', issuerUrl: 'https://cloud.example.test/' }],
+    ['self-hosted provider', { supported: true, providerKind: 'self-hosted', issuerUrl: 'https://cloud.example.test/' }],
+    ['invalid issuer', { supported: true, providerKind: 'endstate-cloud', issuerUrl: 'not a url' }],
+  ])('fails closed for %s', (_label, hostedBackup) => {
+    expect(endstateCloudAvailable({ features: { hostedBackup } } as EndstateCapabilitiesData)).toBe(false);
+  });
+});
+
+describe('managed Endstate Cloud account evidence', () => {
+  it.each([
+    ['the durable managed-account marker', { cloudInvitationManagedAccountSeen: true, profileBackupIds: {} }, false],
+    ['a legacy profile-to-backup mapping', { cloudInvitationManagedAccountSeen: false, profileBackupIds: { profile: 'backup-1' } }, false],
+    ['a legacy first-push marker', { cloudInvitationManagedAccountSeen: false, profileBackupIds: {} }, true],
+  ])('recognizes %s after the user is signed out', (_label, settings, hasRecordedFirstPush) => {
+    expect(hasManagedCloudAccountEvidence(settings, hasRecordedFirstPush)).toBe(true);
+  });
+
+  it('does not invent prior account use without durable local evidence', () => {
+    expect(
+      hasManagedCloudAccountEvidence(
+        { cloudInvitationManagedAccountSeen: false, profileBackupIds: {} },
+        false,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -85,6 +133,15 @@ describe('autoBackupAvailable', () => {
         status: ACTIVE_STATUS,
       }),
     ).toBe(true);
+  });
+
+  it('does not require a managed subscription for a signed-in self-hosted service', () => {
+    expect(autoBackupAvailable({
+      hostedBackupSupported: true,
+      ifChangedSupported: true,
+      managedService: false,
+      status: { ...ACTIVE_STATUS, subscriptionStatus: 'none' },
+    })).toBe(true);
   });
 
   it.each([

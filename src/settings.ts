@@ -1,4 +1,4 @@
-import { getItem, setItem } from './lib/storage';
+import { clearAllKnownKeys, getItem, setItem } from './lib/storage';
 import { migrateProfileSelection } from './lib/profile-selection-migration';
 
 export interface AppSettings {
@@ -11,9 +11,26 @@ export interface AppSettings {
   autoBackupEnabled: boolean;
   /** Whether the one-time auto-backup consent prompt has been shown. */
   autoBackupPromptSeen: boolean;
+  /**
+   * ISO timestamp of the single post-capture Endstate Cloud invitation.
+   *
+   * Written BEFORE the invitation renders (record-before-present), so a crash
+   * mid-presentation cannot turn a one-time invitation into a recurring prompt.
+   * Null means it has never been presented. Same one-time shape as
+   * `autoBackupPromptSeen`.
+   */
+  cloudInvitationShownAt: string | null;
+  /**
+   * Set once the user answers the invitation in any way — protect, keep it
+   * local, or dismiss. Permanently suppresses automatic presentation; Endstate
+   * Cloud stays reachable from the sidebar entry.
+   */
+  cloudInvitationDismissed: boolean;
+  /** Durable evidence that the device has already used managed Endstate Cloud. */
+  cloudInvitationManagedAccountSeen?: boolean;
   /** Persistent map: profile key → its hosted-backup id, so auto-push updates the same backup. */
   profileBackupIds: Record<string, string>;
-  /** Opt-in for the scheduled daily drift check ("Continuous protection"). */
+  /** Opt-in for scheduled daily setup checks. */
   scheduleEnabled: boolean;
   /** Time-of-day (HH:MM, 24h) the scheduled drift check runs. */
   scheduleTime: string;
@@ -46,6 +63,48 @@ interface LegacySettings {
 }
 
 const SETTINGS_KEY = 'endstate-gui-settings';
+const CLOUD_INVITATION_CONSUMPTION_KEY = 'endstate-cloud-invitation-consumption';
+
+export interface CloudInvitationConsumption {
+  shownAt: string | null;
+  dismissed: boolean;
+  managedAccountSeen: boolean;
+}
+
+const DEFAULT_CLOUD_INVITATION_CONSUMPTION: CloudInvitationConsumption = {
+  shownAt: null,
+  dismissed: false,
+  managedAccountSeen: false,
+};
+
+/** A denied or malformed consumption record must suppress the invitation. */
+export function loadCloudInvitationConsumption(): CloudInvitationConsumption {
+  try {
+    const stored = getItem(CLOUD_INVITATION_CONSUMPTION_KEY);
+    if (!stored) return DEFAULT_CLOUD_INVITATION_CONSUMPTION;
+    const parsed = JSON.parse(stored) as Partial<CloudInvitationConsumption>;
+    if (typeof parsed.dismissed !== 'boolean' || typeof parsed.managedAccountSeen !== 'boolean') {
+      return { shownAt: 'unknown', dismissed: true, managedAccountSeen: true };
+    }
+    return {
+      shownAt: typeof parsed.shownAt === 'string' ? parsed.shownAt : null,
+      dismissed: parsed.dismissed,
+      managedAccountSeen: parsed.managedAccountSeen,
+    };
+  } catch {
+    return { shownAt: 'unknown', dismissed: true, managedAccountSeen: true };
+  }
+}
+
+export function saveCloudInvitationConsumption(consumption: CloudInvitationConsumption): boolean {
+  try {
+    setItem(CLOUD_INVITATION_CONSUMPTION_KEY, JSON.stringify(consumption));
+    return true;
+  } catch (err) {
+    console.error('Failed to save Endstate Cloud invitation consumption:', err);
+    return false;
+  }
+}
 
 const DEFAULT_SETTINGS: AppSettings = {
   engineMode: 'bundled',
@@ -61,6 +120,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   showDetails: false,
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
+  cloudInvitationShownAt: null,
+  cloudInvitationDismissed: false,
+  cloudInvitationManagedAccountSeen: false,
   profileBackupIds: {},
   scheduleEnabled: false,
   scheduleTime: '09:00',
@@ -115,12 +177,36 @@ export function loadSettings(): AppSettings {
 }
 
 
-export function saveSettings(settings: AppSettings): void {
+export function saveSettings(settings: AppSettings): boolean {
   try {
     setItem(SETTINGS_KEY, JSON.stringify(settings));
+    return true;
   } catch (err) {
     console.error('Failed to save settings:', err);
+    return false;
   }
+}
+
+/**
+ * Replace ordinary preferences in the current settings namespace without
+ * making a one-time invitation available again. Consumption is intentionally
+ * not part of the ordinary reset lifecycle, and no other storage keys or
+ * namespaces are reset here.
+ */
+export function resetAppSettings(): AppSettings {
+  const current = loadSettings();
+  const existingConsumption = loadCloudInvitationConsumption();
+  const consumption: CloudInvitationConsumption = {
+    shownAt: existingConsumption.shownAt ?? current.cloudInvitationShownAt,
+    dismissed: existingConsumption.dismissed || current.cloudInvitationDismissed,
+    managedAccountSeen: existingConsumption.managedAccountSeen || current.cloudInvitationManagedAccountSeen === true,
+  };
+  // Transactionally establish the non-preference record before clearing
+  // ordinary settings. A failed write leaves every old setting untouched.
+  if (!saveCloudInvitationConsumption(consumption)) return current;
+  clearAllKnownKeys();
+  const reset = { ...DEFAULT_SETTINGS };
+  return saveSettings(reset) ? reset : current;
 }
 
 /**
@@ -172,6 +258,9 @@ export async function loadSettingsWithProfileMigration(
         showDetails: rawSettings.showDetails,
         autoBackupEnabled: rawSettings.autoBackupEnabled,
         autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
+        cloudInvitationShownAt: rawSettings.cloudInvitationShownAt,
+        cloudInvitationDismissed: rawSettings.cloudInvitationDismissed,
+        cloudInvitationManagedAccountSeen: rawSettings.cloudInvitationManagedAccountSeen,
         profileBackupIds: rawSettings.profileBackupIds,
         scheduleEnabled: rawSettings.scheduleEnabled,
         scheduleTime: rawSettings.scheduleTime,
@@ -192,6 +281,9 @@ export async function loadSettingsWithProfileMigration(
         showDetails: rawSettings.showDetails,
         autoBackupEnabled: rawSettings.autoBackupEnabled,
         autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
+        cloudInvitationShownAt: rawSettings.cloudInvitationShownAt,
+        cloudInvitationDismissed: rawSettings.cloudInvitationDismissed,
+        cloudInvitationManagedAccountSeen: rawSettings.cloudInvitationManagedAccountSeen,
         profileBackupIds: rawSettings.profileBackupIds,
         scheduleEnabled: rawSettings.scheduleEnabled,
         scheduleTime: rawSettings.scheduleTime,
@@ -215,6 +307,9 @@ export async function loadSettingsWithProfileMigration(
       showDetails: rawSettings.showDetails,
       autoBackupEnabled: rawSettings.autoBackupEnabled,
       autoBackupPromptSeen: rawSettings.autoBackupPromptSeen,
+      cloudInvitationShownAt: rawSettings.cloudInvitationShownAt,
+      cloudInvitationDismissed: rawSettings.cloudInvitationDismissed,
+      cloudInvitationManagedAccountSeen: rawSettings.cloudInvitationManagedAccountSeen,
       profileBackupIds: rawSettings.profileBackupIds,
       scheduleEnabled: rawSettings.scheduleEnabled,
       scheduleTime: rawSettings.scheduleTime,

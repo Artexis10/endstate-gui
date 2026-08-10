@@ -25,7 +25,38 @@ describe('HostedBackupChip', () => {
     );
     const chip = screen.getByTestId('hosted-backup-chip');
     expect(chip).toHaveAttribute('data-state', 'signed-out');
-    expect(chip.textContent).toMatch(/Sign in to Hosted Backup/i);
+    expect(chip.textContent).toMatch(/Sign in to Endstate Cloud/i);
+  });
+
+  it('uses neutral self-hosted language without a managed-service subscription CTA', () => {
+    renderWithProviders(
+      <HostedBackupChip
+        hostedBackupSupported
+        providerKind="self-hosted"
+        signedIn
+        subscriptionStatus="none"
+        onOpen={vi.fn()}
+      />,
+    );
+
+    const chip = screen.getByTestId('hosted-backup-chip');
+    expect(chip).toHaveTextContent('Self-hosted backup');
+    expect(chip).not.toHaveTextContent('Endstate Cloud');
+    expect(chip).not.toHaveTextContent('Subscribe');
+  });
+
+  it('uses neutral language rather than a managed offer for an unknown provider', () => {
+    renderWithProviders(
+      <HostedBackupChip
+        hostedBackupSupported
+        providerKind="unknown"
+        signedIn={false}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('hosted-backup-chip')).toHaveTextContent('Open backup service');
+    expect(screen.getByTestId('hosted-backup-chip')).not.toHaveTextContent(/Endstate Cloud|self-hosted/i);
   });
 
   it('renders the active chip when subscription is active', () => {
@@ -40,6 +71,7 @@ describe('HostedBackupChip', () => {
     const chip = screen.getByTestId('hosted-backup-chip');
     expect(chip).toHaveAttribute('data-state', 'active');
     expect(chip.textContent).toMatch(/Active/);
+    expect(chip).not.toHaveAttribute('title', expect.stringMatching(/up to date/i));
   });
 
   it('renders the cancelled chip with "Renew" label', () => {
@@ -68,6 +100,22 @@ describe('HostedBackupChip', () => {
     const chip = screen.getByTestId('hosted-backup-chip');
     expect(chip).toHaveAttribute('data-state', 'grace');
     expect(chip.textContent).toMatch(/Fix billing/);
+  });
+
+  it.each(['grace', 'cancelled'] as const)('keeps unknown %s status neutral', (subscriptionStatus) => {
+    renderWithProviders(
+      <HostedBackupChip
+        hostedBackupSupported
+        providerKind="unknown"
+        signedIn
+        subscriptionStatus={subscriptionStatus}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    const chip = screen.getByTestId('hosted-backup-chip');
+    expect(chip).toHaveTextContent('Backup service · Needs attention');
+    expect(chip).not.toHaveTextContent(/Endstate Cloud|Renew|Fix billing|self-hosted/i);
   });
 
   it('falls back to "Subscribe" when signed in but no active subscription', () => {

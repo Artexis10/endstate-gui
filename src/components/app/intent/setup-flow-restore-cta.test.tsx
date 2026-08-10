@@ -89,8 +89,39 @@ describe('SetupFlow — Restore from Hosted Backup CTA', () => {
     );
     const cta = screen.getByTestId('setup-restore-from-cloud-cta');
     expect(cta).toBeInTheDocument();
-    expect(cta).toHaveTextContent(/Restore from your Hosted Backup/);
+    expect(cta).toHaveTextContent(/Restore from Endstate Cloud/);
     expect(cta).toHaveTextContent(/1 backup available/);
+  });
+
+  it('uses neutral provider copy for an unknown provider', () => {
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        hostedBackupProviderKind="unknown"
+        hostedBackupSignedIn={true}
+        cloudBackupIndex={makeIndex(['work-laptop'])}
+        onRestoreFromCloud={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('setup-restore-from-cloud-cta')).toHaveTextContent(/Restore from backup service/);
+    expect(screen.getByTestId('setup-restore-from-cloud-cta')).not.toHaveTextContent(/Endstate Cloud|self-hosted/i);
+  });
+
+  it('allows an explicitly self-hosted signed-in user to upload without a managed subscription', () => {
+    const onPushProfileToCloud = vi.fn();
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        hostedBackupProviderKind="self-hosted"
+        hostedBackupSignedIn={true}
+        hostedBackupSubscriptionStatus="none"
+        onPushProfileToCloud={onPushProfileToCloud}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('profile-card-work-laptop-push-to-cloud'));
+    expect(onPushProfileToCloud).toHaveBeenCalledWith('C:\\profiles\\work-laptop.jsonc', 'Work Laptop');
   });
 
   it('pluralises copy when multiple cloud backups exist', () => {

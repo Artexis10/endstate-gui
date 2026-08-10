@@ -12,7 +12,7 @@
  * Playwright runs don't leak the flag across test users.
  */
 
-import { getItem, setItem } from './storage';
+import { getCurrentNamespace, getItem, setItem } from './storage';
 
 const KEY_PREFIX = 'first-push-done:';
 
@@ -24,6 +24,27 @@ function keyFor(email: string): string {
 export function hasSeenFirstPushFor(email: string | undefined | null): boolean {
   if (!email) return true; // No email = no celebration (can't key it)
   return getItem(keyFor(email)) === '1';
+}
+
+/**
+ * Whether this local installation has completed any durable cloud push.
+ * Unlike the per-email toast check, this is intentionally account-agnostic:
+ * it is conservative evidence that Endstate Cloud has already been used here.
+ */
+export function hasRecordedFirstPush(): boolean {
+  try {
+    const prefix = `${getCurrentNamespace()}:${KEY_PREFIX}`;
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(prefix) && localStorage.getItem(key) === '1') return true;
+    }
+    return false;
+  } catch {
+    // Privacy mode or a denied storage backend makes prior use unknowable.
+    // Suppress the invitation rather than crashing the otherwise local app or
+    // re-offering a paid-service prompt to a possibly prior managed account.
+    return true;
+  }
 }
 
 export function markFirstPushFor(email: string | undefined | null): void {

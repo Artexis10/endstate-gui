@@ -61,6 +61,8 @@ import { hasSeenFirstPushFor, markFirstPushFor } from '@/lib/first-push-flag';
 
 export interface BackupPaneProps {
   settings: AppSettings;
+  /** Engine-owned provider identity. Self-hosted endpoints have no managed billing surface. */
+  providerKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
   /** Absolute path to the profile JSON file the user wants to push. */
   selectedProfilePath: string | null;
   selectedProfileName: string | null;
@@ -107,6 +109,7 @@ interface DeleteTarget {
 
 export function BackupPane({
   settings,
+  providerKind = 'endstate-cloud',
   selectedProfilePath,
   selectedProfileName,
   onAuthLost,
@@ -119,7 +122,11 @@ export function BackupPane({
   renameSupported,
   onBackupDeleted,
 }: BackupPaneProps) {
+  const managedService = providerKind === 'endstate-cloud';
+  const selfHostedService = providerKind === 'self-hosted';
+  const backupServiceName = selfHostedService ? 'self-hosted backup service' : managedService ? 'Endstate Cloud' : 'backup service';
   const state = useBackupState(settings, {
+    providerKind,
     onAuthLost,
     initialStatus,
     initialBackups,
@@ -146,9 +153,15 @@ export function BackupPane({
   }, []);
 
   const subscriptionStatus = state.status?.subscriptionStatus ?? 'none';
-  const canWrite = subscriptionStatus === 'active';
-  const canRestore = subscriptionStatus !== 'none';
-  const canDelete = subscriptionStatus !== 'none';
+  const canWrite = selfHostedService
+    ? state.status?.signedIn === true
+    : subscriptionStatus === 'active';
+  const canRestore = selfHostedService
+    ? state.status?.signedIn === true
+    : subscriptionStatus !== 'none';
+  const canDelete = selfHostedService
+    ? state.status?.signedIn === true
+    : subscriptionStatus !== 'none';
 
   // Subscribe / Renew: the engine returns a checkout-transaction URL and we
   // open it in the system browser. The payment overlay renders on substrate's
@@ -165,7 +178,7 @@ export function BackupPane({
         return;
       }
       if (err instanceof BackupCommandError) {
-        const f = friendlyBackupError(err);
+        const f = friendlyBackupError(err, { providerKind });
         showToast(f.headline, f.tone);
       } else {
         showToast(err instanceof Error ? err.message : String(err), 'error');
@@ -205,7 +218,7 @@ export function BackupPane({
         return;
       }
       if (err instanceof BackupCommandError) {
-        const f = friendlyBackupError(err);
+        const f = friendlyBackupError(err, { providerKind });
         showToast(f.headline, f.tone);
       } else {
         showToast(err instanceof Error ? err.message : String(err), 'error');
@@ -230,14 +243,18 @@ export function BackupPane({
           onEvent: state.pushOnEvent,
         });
         const email = state.status?.email;
-        if (!hasSeenFirstPushFor(email)) {
+        if (managedService && !hasSeenFirstPushFor(email)) {
           showToast(
-            'First backup saved to the cloud. Your settings are now safe across machines.',
+            managedService
+              ? 'First Endstate Cloud backup saved. Your Endstate application list and supported non-secret settings are available on another Windows PC.'
+              : selfHostedService
+                ? 'First self-hosted backup saved. Your Endstate application list and supported non-secret settings are available on another Windows PC.'
+                : 'First backup saved. Your Endstate application list and supported non-secret settings are available on another Windows PC.',
             'success',
           );
           markFirstPushFor(email);
         } else {
-          showToast('Backup uploaded.', 'success');
+          showToast(managedService ? 'Backup uploaded.' : selfHostedService ? 'Backup uploaded to your self-hosted service.' : 'Backup uploaded to your backup service.', 'success');
         }
         state.setPushOpen(false);
         await state.refresh();
@@ -247,14 +264,14 @@ export function BackupPane({
       } catch (err) {
         state.setPushOpen(false);
         if (err instanceof BackupCommandError) {
-          const f = friendlyBackupError(err);
+          const f = friendlyBackupError(err, { providerKind });
           showToast(f.headline, f.tone);
         } else {
           showToast(err instanceof Error ? err.message : String(err), 'error');
         }
       }
     },
-    [selectedProfileName, settings, state, showToast],
+    [managedService, selectedProfileName, settings, state, showToast],
   );
 
   // Manual push → soft-warn first if it would approach/exceed quota, then push.
@@ -303,7 +320,7 @@ export function BackupPane({
       } catch (err) {
         state.setPullOpen(false);
         if (err instanceof BackupCommandError) {
-          const f = friendlyBackupError(err);
+          const f = friendlyBackupError(err, { providerKind });
           showToast(f.headline, f.tone);
         } else {
           showToast(err instanceof Error ? err.message : String(err), 'error');
@@ -349,7 +366,7 @@ export function BackupPane({
         setRenameTarget(null);
       } catch (err) {
         if (err instanceof BackupCommandError) {
-          const f = friendlyBackupError(err);
+          const f = friendlyBackupError(err, { providerKind });
           showToast(f.headline, f.tone);
         } else {
           showToast(err instanceof Error ? err.message : String(err), 'error');
@@ -379,7 +396,7 @@ export function BackupPane({
       }
     } catch (err) {
       if (err instanceof BackupCommandError) {
-        const f = friendlyBackupError(err);
+        const f = friendlyBackupError(err, { providerKind });
         showToast(f.headline, f.tone);
       } else {
         showToast(err instanceof Error ? err.message : String(err), 'error');
@@ -430,7 +447,7 @@ export function BackupPane({
 
   const errorView = state.error ? (
     (() => {
-      const f = friendlyBackupError(state.error);
+      const f = friendlyBackupError(state.error, { providerKind });
       const showNetworkIcon =
         !state.status && isNetworkErrorCode(state.error.code);
       const Icon = showNetworkIcon ? WifiOff : CloudOff;
@@ -472,7 +489,7 @@ export function BackupPane({
   if (!state.status?.signedIn) {
     return (
       <div className="m-6 text-sm text-muted-foreground" data-testid="backup-pane-signed-out">
-        Sign in to view your hosted backups.
+        {`Sign in to view your ${backupServiceName} backups.`}
       </div>
     );
   }
@@ -482,6 +499,7 @@ export function BackupPane({
   return (
     <div className="flex flex-col gap-4 p-4" data-testid="backup-pane">
       <SubscriptionBanner
+        managedService={managedService}
         status={subscriptionStatus}
         graceEndsAt={state.status.graceEndsAt}
         onCheckout={handleCheckout}
@@ -496,6 +514,7 @@ export function BackupPane({
       />
 
       <QuotaMeter
+        providerKind={providerKind}
         quotaUsedBytes={state.status.quotaUsedBytes}
         quotaTotalBytes={state.status.quotaTotalBytes}
         versionCount={state.status.versionCount}

@@ -27,9 +27,18 @@ export interface SignInFormProps {
    * signed-in user.
    */
   lockedEmail?: string;
+  /** Self-hosted services own their account lifecycle, so this client must not
+   * advertise the managed sign-up or purchase-code flow. */
+  allowAccountCreation?: boolean;
 }
 
-export function SignInForm({ settings, onSignedIn, onSwitchTab, lockedEmail }: SignInFormProps) {
+export function SignInForm({
+  settings,
+  onSignedIn,
+  onSwitchTab,
+  lockedEmail,
+  allowAccountCreation = true,
+}: SignInFormProps) {
   const [email, setEmail] = useState(lockedEmail ?? '');
   const [passphrase, setPassphrase] = useState('');
   const [busy, setBusy] = useState(false);
@@ -93,7 +102,8 @@ export function SignInForm({ settings, onSignedIn, onSwitchTab, lockedEmail }: S
           {authError.remediation && (
             <p className="mt-1 text-xs text-muted-foreground">{authError.remediation}</p>
           )}
-          {authError.cta && authError.cta.tab !== 'sign-in' && (
+          {authError.cta && authError.cta.tab !== 'sign-in' &&
+            (allowAccountCreation || authError.cta.tab !== 'sign-up') && (
             <Button
               type="button"
               variant="link"
@@ -118,17 +128,19 @@ export function SignInForm({ settings, onSignedIn, onSwitchTab, lockedEmail }: S
       </Button>
       {lockedEmail == null && (
         <div className="space-y-2 pt-1 text-center text-sm">
-          <div className="text-muted-foreground">
-            New to Endstate?{' '}
-            <Button
-              type="button"
-              variant="link"
-              size="inline"
-              onClick={() => onSwitchTab('sign-up')}
-            >
-              Create an account
-            </Button>
-          </div>
+          {allowAccountCreation && (
+            <div className="text-muted-foreground">
+              New to Endstate?{' '}
+              <Button
+                type="button"
+                variant="link"
+                size="inline"
+                onClick={() => onSwitchTab('sign-up')}
+              >
+                Create an account
+              </Button>
+            </div>
+          )}
           <Button
             type="button"
             variant="link"

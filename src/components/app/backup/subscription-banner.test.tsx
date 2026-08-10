@@ -25,7 +25,7 @@ const CASES: Case[] = [
   {
     status: 'active',
     tone: 'success',
-    expectedTextIncludes: 'Hosted Backup active',
+    expectedTextIncludes: 'Endstate Cloud active',
     expectedActionLabel: 'Manage subscription',
   },
   {
@@ -68,6 +68,20 @@ describe('SubscriptionBanner', () => {
       unmount();
     },
   );
+
+  it('does not claim a current backup version from billing status alone', () => {
+    renderWithProviders(<SubscriptionBanner status="active" />);
+
+    expect(screen.getByTestId('subscription-banner')).not.toHaveTextContent(/up to date/i);
+  });
+
+  it('limits the subscribe promise to another Windows PC and supported setup content', () => {
+    renderWithProviders(<SubscriptionBanner status="none" />);
+
+    expect(screen.getByText(/another Windows PC/i)).toBeInTheDocument();
+    expect(screen.getByText(/Endstate application list and supported non-secret settings/i)).toBeInTheDocument();
+    expect(screen.queryByText(/any machine/i)).not.toBeInTheDocument();
+  });
 
   it('invokes onCheckout when Subscribe is clicked (none state)', async () => {
     const onCheckout = vi.fn();

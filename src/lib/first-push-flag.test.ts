@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { hasSeenFirstPushFor, markFirstPushFor } from './first-push-flag';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { hasRecordedFirstPush, hasSeenFirstPushFor, markFirstPushFor } from './first-push-flag';
 import { clearAllKnownKeys } from './storage';
 
 beforeEach(() => {
@@ -17,6 +17,26 @@ describe('first-push-flag', () => {
   it('reports seen after marking', () => {
     markFirstPushFor('alice@example.com');
     expect(hasSeenFirstPushFor('alice@example.com')).toBe(true);
+    expect(hasRecordedFirstPush()).toBe(true);
+  });
+
+  it('reports no prior push before any account has a marker', () => {
+    expect(hasRecordedFirstPush()).toBe(false);
+  });
+
+  it.each([
+    ['length', () => vi.spyOn(Storage.prototype, 'length', 'get').mockImplementation(() => { throw new Error('storage denied'); })],
+    ['key', () => vi.spyOn(Storage.prototype, 'key').mockImplementation(() => { throw new Error('storage denied'); })],
+    ['getItem', () => vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('storage denied'); })],
+  ])('treats denied localStorage %s access as prior managed use', (_operation, denyStorage) => {
+    const denied = denyStorage();
+    try {
+      // Unknown storage state must suppress the invitation, never crash the
+      // otherwise free local application.
+      expect(hasRecordedFirstPush()).toBe(true);
+    } finally {
+      denied.mockRestore();
+    }
   });
 
   it('keys per email — Bob is unaffected by Alice', () => {

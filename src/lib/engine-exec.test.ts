@@ -21,6 +21,8 @@ describe('buildEngineCommand', () => {
     showDetails: false,
     autoBackupEnabled: false,
     autoBackupPromptSeen: false,
+    cloudInvitationShownAt: null,
+    cloudInvitationDismissed: false,
     profileBackupIds: {},
     scheduleEnabled: false,
     scheduleTime: '09:00',
@@ -87,6 +89,8 @@ describe('runEndstateOnce', () => {
     showDetails: false,
     autoBackupEnabled: false,
     autoBackupPromptSeen: false,
+    cloudInvitationShownAt: null,
+    cloudInvitationDismissed: false,
     profileBackupIds: {},
     scheduleEnabled: false,
     scheduleTime: '09:00',
@@ -318,7 +322,7 @@ ${JSON.stringify(validEnvelope)}`;
         error: {
           code: 'SUBSCRIPTION_REQUIRED',
           message: 'no subscription on file',
-          remediation: 'Subscribe to Endstate Hosted Backup',
+          remediation: 'Subscribe to Endstate Cloud',
           docsKey: 'errors/subscription-required',
         },
       };

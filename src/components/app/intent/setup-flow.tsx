@@ -357,8 +357,12 @@ export interface SetupFlowProps {
    * Pass `undefined` (or an empty map) to hide cloud state entirely.
    */
   cloudBackupIndex?: Map<string, BackupListItem>;
+  /** Whether the cloud index resolved successfully for this signed-in account. */
+  cloudStorageKnown?: boolean;
   /** Hosted-backup capability gate. False → hide the chip entirely. */
   hostedBackupSupported?: boolean;
+  /** Engine-owned identity of the configured backup provider. */
+  hostedBackupProviderKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
   /** Whether the user is signed in to Hosted Backup. */
   hostedBackupSignedIn?: boolean;
   /** Current subscription status, if known. */
@@ -411,7 +415,9 @@ export function SetupFlow({
   resetKey,
   onFlowReset,
   cloudBackupIndex,
+  cloudStorageKnown = true,
   hostedBackupSupported = false,
+  hostedBackupProviderKind,
   hostedBackupSignedIn = false,
   hostedBackupSubscriptionStatus,
   onOpenHostedBackup,
@@ -421,6 +427,9 @@ export function SetupFlow({
   onInspectProfile,
 }: SetupFlowProps) {
   const [refreshing, setRefreshing] = useState(false);
+  const backupServiceName = hostedBackupProviderKind === 'self-hosted'
+    ? 'self-hosted backup'
+    : hostedBackupProviderKind === 'endstate-cloud' ? 'Endstate Cloud' : 'backup service';
   // Profile whose "What's inside" summary is open. Inspection is read-only and
   // independent of selection — looking inside a bundle must not start a run.
   const [inspectedProfile, setInspectedProfile] = useState<DiscoveredProfile | null>(null);
@@ -852,6 +861,7 @@ export function SetupFlow({
         {phase === 'browse' && onOpenHostedBackup && (
           <HostedBackupChip
             hostedBackupSupported={hostedBackupSupported}
+            providerKind={hostedBackupProviderKind}
             signedIn={hostedBackupSignedIn}
             subscriptionStatus={hostedBackupSubscriptionStatus}
             onOpen={onOpenHostedBackup}
@@ -891,7 +901,7 @@ export function SetupFlow({
                   }}
                   tabIndex={interactionBlocked ? -1 : 0}
                   role="button"
-                  aria-label="Restore from your Hosted Backup"
+                  aria-label={`Restore from ${backupServiceName}`}
                   data-testid="setup-restore-from-cloud-cta"
                 >
                   <CardContent className="py-4 px-5 flex items-center gap-4">
@@ -900,7 +910,7 @@ export function SetupFlow({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">
-                        Restore from your Hosted Backup
+                        Restore from {backupServiceName}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {cloudBackupIndex.size === 1
@@ -964,7 +974,12 @@ export function SetupFlow({
               {profiles.length > 0 ? (
                 <div className="grid gap-3">
                   {profiles.map((profile) => {
-                    const cloudEntry = cloudBackupIndex?.get(profileKeyFor(profile));
+                    // A list response belongs to one signed-in account. Until
+                    // App confirms that response is current, it must not make
+                    // this profile look cloud-backed after a sign-out/switch.
+                    const cloudEntry = cloudStorageKnown
+                      ? cloudBackupIndex?.get(profileKeyFor(profile))
+                      : undefined;
                     const isRecentlyImported = recentlyImportedProfile?.path === profile.path;
                     const showSecondaryName =
                       !!profile.displayName && profile.displayName !== profile.name;
@@ -1001,6 +1016,7 @@ export function SetupFlow({
                               )}
                               <ProfileStorageChip
                                 cloudEntry={cloudEntry}
+                                cloudStateKnown={cloudStorageKnown}
                                 testId={`profile-card-${profile.name}-storage-chip`}
                               />
                             </div>
@@ -1047,7 +1063,7 @@ export function SetupFlow({
                               </Button>
                               {!cloudEntry &&
                                 hostedBackupSignedIn &&
-                                hostedBackupSubscriptionStatus === 'active' &&
+                                (hostedBackupProviderKind === 'self-hosted' || hostedBackupSubscriptionStatus === 'active') &&
                                 onPushProfileToCloud && (
                                   <Button
                                     type="button"
@@ -1068,7 +1084,9 @@ export function SetupFlow({
                                     data-testid={`profile-card-${profile.name}-push-to-cloud`}
                                   >
                                     <Cloud className="h-3 w-3" aria-hidden="true" />
-                                    Back up to cloud
+                                    {hostedBackupProviderKind === 'self-hosted'
+                                      ? 'Back up to self-hosted service'
+                                      : hostedBackupProviderKind === 'endstate-cloud' ? 'Back up to cloud' : 'Back up'}
                                   </Button>
                                 )}
                             </div>

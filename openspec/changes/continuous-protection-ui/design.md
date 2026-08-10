@@ -1,4 +1,4 @@
-# Design: Continuous Protection UI
+# Design: Scheduled Setup Checks UI
 
 ## Context
 
@@ -18,11 +18,11 @@ Turning on "Check this computer for drift daily" immediately calls `schedule ena
 
 `schedule enable` bakes a manifest path into the task; scheduled runs verify against it while the app is closed. The transient capture cache (`%LOCALAPPDATA%\Endstate\cache\captures`) is wiped on app start (`cleanup_capture_cache`), so the freshly-captured artifact path is NOT durable. The GUI therefore records the path chosen in "Save to file" (`settings.scheduleManifestPath`) as the baseline, and re-points an enabled schedule when a new capture is saved. Until a capture has been saved, the toggle is disabled with the hint "Save this computer first".
 
-A `.zip` bundle save is never recorded directly: the engine's scheduled run (`schedule run` → verify) parses raw JSONC only, so a zip baseline would fail every scheduled run permanently. Instead the GUI side-writes the bundle's embedded `manifest.jsonc` (always present at the archive root, per the engine's capture-bundle-zip spec) next to the saved zip as `<savePath>.manifest.jsonc` via a dedicated Tauri command (`extract_zip_manifest` — single-entry extraction; the existing `extract_zip_profile` full unpack would leave collision-suffixed profile folders behind) and records that path (`resolveScheduleBaselinePath` in `schedule-bridge.ts`). If the side-write fails, the previous baseline is left untouched. Web/browser-download saves never update the baseline — the browser owns the download location, so there is no stable on-disk path.
+An engine advertising `features.schedule.bundleManifestSupported: true` reads a saved `.endstate` bundle or legacy `.zip` directly, so the GUI records the user's saved file as the baseline without a sidecar. Schedule-capable engines without that additive capability fail closed for bundle saves and are never re-armed with a bundle path. Web/browser-download saves never update the baseline — the browser owns the download location, so there is no stable on-disk path.
 
 ### Launch self-heal via idempotent enable
 
-`schedule enable` is idempotent (`schtasks /F`) and re-asserts the current exe path. On boot, when the engine supports schedule and `settings.scheduleEnabled` is true, the GUI re-asserts enable (manifest preference: engine config's manifest, then `scheduleManifestPath`). Failures are logged, never block boot. When the resolved manifest ends in `.zip` (a baseline persisted by a pre-fix build), the re-assert is skipped with a console warning instead of re-registering a task that can never verify; the next successful save re-points the schedule at a usable baseline.
+`schedule enable` is idempotent (`schtasks /F`) and re-asserts the current exe path. On boot, when the engine supports schedule and `settings.scheduleEnabled` is true, the GUI re-asserts enable (manifest preference: engine config's manifest, then `scheduleManifestPath`). `.endstate` and legacy `.zip` baselines are re-asserted only when `bundleManifestSupported` is true. Failures are logged, never block boot.
 
 ### Drift chip mapping is pure and engine-driven
 
@@ -30,7 +30,9 @@ A `.zip` bundle save is never recorded directly: the engine's scheduled run (`sc
 
 ### Auto-push sub-toggle gating
 
-Shown only when `features.schedule.autoPush` AND the existing `autoBackupAvailable` conditions hold (hosted backup supported, `--if-changed` advertised, signed in, active subscription). The flag is passed to `schedule enable --auto-push`; outcomes (`pushed`/`auth_required`/`error`) surface only via engine status, never interactive prompts.
+Shown only when `features.schedule.autoPush` AND the existing `autoBackupAvailable` conditions hold (hosted backup supported, `--if-changed` advertised, signed in, active subscription). The flag is passed to `schedule enable --auto-push`; additive outcomes (`pushed`, `auth_required`, `subscription_required`, `setup_required`, `upload_uncertain`, and `error`) surface only via engine status. `upload_uncertain` pauses automatic retry to avoid duplicate versions; the user checks the configured service or saves a new version manually.
+
+When `capabilities.data.commands.schedule.flags` advertises `--backup-id`, the scheduled task pins the ID mapped to its exact saved manifest path. The GUI never infers an ID from a different profile; it may preserve a `backupId` already returned in engine status. A legacy ambiguous queued upload gets a confirmation-only discard action keyed by its engine-provided artifact hash; discarding retains the local capture and scheduled baseline.
 
 ## Alternatives considered
 

@@ -12,7 +12,7 @@ describe('HostedBackupSessionCheck', () => {
       <HostedBackupSessionCheck failed busy={false} onRetry={onRetry} />,
     );
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/could not check your hosted backup session/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/could not check your endstate cloud session/i);
     await user.click(screen.getByRole('button', { name: /retry session check/i }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
@@ -22,7 +22,21 @@ describe('HostedBackupSessionCheck', () => {
       <HostedBackupSessionCheck failed={false} busy={false} onRetry={vi.fn()} />,
     );
 
-    expect(screen.getByText(/checking your hosted backup account session/i)).toBeInTheDocument();
+    expect(screen.getByText(/checking your endstate cloud session/i)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('keeps a self-hosted session failure free of managed purchase routes', () => {
+    renderWithProviders(
+      <HostedBackupSessionCheck
+        providerKind="self-hosted"
+        failed
+        busy={false}
+        onRetry={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/self-hosted backup service/i);
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/account|purchase code/i);
   });
 });

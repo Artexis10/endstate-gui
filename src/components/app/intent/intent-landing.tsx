@@ -30,6 +30,13 @@ interface IntentLandingProps {
   driftCheckedAt?: string;
   /** True when the last scheduled drift check failed to complete. */
   driftCheckFailing?: boolean;
+  /** Upload truth from the engine; absent status is intentionally local-only. */
+  scheduleAttention?: 'capture-pending' | 'upload-pending' | 'sign-in-required' | 'subscription-required' | 'setup-required' | 'upload-uncertain' | 'upload-failed' | 'offline' | 'local-only';
+  /** Whether subscription language refers to managed Endstate Cloud. */
+  managedBackupService?: boolean;
+  backupProviderKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
+  /** Additive queue size from newer engines; absent remains compatible with one pending upload. */
+  pendingUploadCount?: number;
 }
 
 export function IntentLanding({
@@ -41,6 +48,10 @@ export function IntentLanding({
   driftCount,
   driftCheckedAt,
   driftCheckFailing,
+  scheduleAttention,
+  pendingUploadCount,
+  managedBackupService = false,
+  backupProviderKind = 'unknown',
 }: IntentLandingProps) {
   const reduced = prefersReducedMotion();
   const disabled = !engineConnected;
@@ -128,6 +139,51 @@ export function IntentLanding({
                 title={driftCheckedAt ? `Last checked ${driftCheckedAt}` : undefined}
               >
                 Drift check failing
+              </span>
+            </motion.div>
+          ) : scheduleAttention ? (
+            <motion.div
+              className="absolute top-3 right-3"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+              data-testid="schedule-attention-chip"
+            >
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
+                {pendingUploadCount != null && pendingUploadCount > 1 && scheduleAttention === 'upload-pending'
+                  ? `${pendingUploadCount} uploads pending`
+                  : scheduleAttention === 'capture-pending'
+                    ? 'Setup check in progress'
+                  : pendingUploadCount != null && pendingUploadCount > 1 && scheduleAttention === 'sign-in-required'
+                    ? `Sign in required to upload ${pendingUploadCount} versions`
+                    : scheduleAttention === 'subscription-required'
+                      ? managedBackupService
+                        ? 'Subscription required to upload'
+                        : backupProviderKind === 'self-hosted'
+                          ? 'Upload restricted by your self-hosted backup service'
+                          : 'Upload restricted by your backup service'
+                    : scheduleAttention === 'setup-required'
+                      ? managedBackupService
+                        ? 'Open Endstate Cloud and save your first Cloud version'
+                        : backupProviderKind === 'self-hosted'
+                          ? 'Your self-hosted backup service needs an initial saved version'
+                          : 'Your backup service needs an initial saved version'
+                    : scheduleAttention === 'upload-uncertain'
+                      ? managedBackupService
+                        ? 'Endstate Cloud may have saved this version — automatic retry is paused to avoid duplicates; check it, or save a new version manually'
+                        : 'Your backup service may have saved this version — automatic retry is paused to avoid duplicates; check it, or save a new version manually'
+                    : pendingUploadCount != null && pendingUploadCount > 1 && scheduleAttention === 'upload-failed'
+                      ? `${pendingUploadCount} uploads failed`
+                      : pendingUploadCount != null && pendingUploadCount > 1 && scheduleAttention === 'offline'
+                        ? `Offline — ${pendingUploadCount} local versions saved; uploads will retry`
+                    : {
+                        'upload-pending': 'Upload pending',
+                        'capture-pending': 'Setup check in progress',
+                        'sign-in-required': 'Sign in required to upload',
+                        'upload-failed': 'Upload failed',
+                        offline: 'Offline — local version saved; Cloud upload will retry',
+                        'local-only': 'Saved locally only',
+                      }[scheduleAttention]}
               </span>
             </motion.div>
           ) : saveHasSession ? (

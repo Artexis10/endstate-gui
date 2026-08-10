@@ -33,6 +33,9 @@ export interface AccountSectionProps {
    *  flow with a calm toast. Optional: when absent, AUTH_REQUIRED is shown
    *  as a friendly toast (graceful degradation). */
   onAuthLost?: () => void;
+  /** Managed billing only exists for Endstate Cloud, never for self-hosted endpoints. */
+  managedService?: boolean;
+  providerKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
 }
 
 const SUBSCRIPTION_LABEL: Record<SubscriptionStatus, string> = {
@@ -55,6 +58,8 @@ export function AccountSection({
   onSignedOut,
   onDeleted,
   onAuthLost,
+  managedService = true,
+  providerKind = managedService ? 'endstate-cloud' : 'unknown',
 }: AccountSectionProps) {
   const { showToast } = useToast();
   const [signingOut, setSigningOut] = useState(false);
@@ -82,7 +87,7 @@ export function AccountSection({
         return;
       }
       if (err instanceof BackupCommandError) {
-        const f = friendlyBackupError(err);
+        const f = friendlyBackupError(err, { providerKind });
         showToast(f.headline, f.tone);
       } else {
         showToast(
@@ -138,28 +143,30 @@ export function AccountSection({
             {status.email ?? '(unknown)'}
           </p>
         </div>
-        <div className="flex flex-col gap-1">
-          <p className="text-xs text-muted-foreground">Subscription</p>
-          <div className="flex items-center gap-2">
-            <span
-              data-testid="account-subscription-pill"
-              data-subscription-status={subscription}
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${SUBSCRIPTION_TONE[subscription]}`}
-            >
-              {SUBSCRIPTION_LABEL[subscription]}
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleManageSubscription}
-              disabled={managePending}
-              data-testid="account-manage-subscription"
-            >
-              {managePending ? 'Opening…' : 'Manage subscription'}
-            </Button>
+        {managedService && (
+          <div className="flex flex-col gap-1">
+            <p className="text-xs text-muted-foreground">Subscription</p>
+            <div className="flex items-center gap-2">
+              <span
+                data-testid="account-subscription-pill"
+                data-subscription-status={subscription}
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${SUBSCRIPTION_TONE[subscription]}`}
+              >
+                {SUBSCRIPTION_LABEL[subscription]}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleManageSubscription}
+                disabled={managePending}
+                data-testid="account-manage-subscription"
+              >
+                {managePending ? 'Opening…' : 'Manage subscription'}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex justify-between gap-2 pt-2">
           <Button
             type="button"

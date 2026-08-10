@@ -10,6 +10,51 @@
 
 import type { EndstateCapabilitiesData, BackupStatusData } from '../types';
 
+/** Normalize a valid engine-provided issuer so equivalent trailing-slash forms compare alike. */
+export function normalizeIssuerUrl(issuerUrl: unknown): string | null {
+  if (typeof issuerUrl !== 'string' || issuerUrl.trim() === '') return null;
+  try {
+    return new URL(issuerUrl).toString().replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether capabilities positively identify the managed Endstate Cloud service.
+ * The discriminator is engine-authored; this intentionally makes no GUI URL
+ * allow-list guess and fails closed for old, unknown, or self-hosted engines.
+ */
+export function endstateCloudAvailable(
+  caps: EndstateCapabilitiesData | null | undefined,
+): boolean {
+  const hostedBackup = caps?.features?.hostedBackup;
+  return (
+    hostedBackup?.supported === true &&
+    hostedBackup.providerKind === 'endstate-cloud' &&
+    normalizeIssuerUrl(hostedBackup.issuerUrl) !== null
+  );
+}
+
+/**
+ * Local evidence that managed Endstate Cloud was used before this session.
+ * Old profile-to-backup mappings and first-push flags predate the invitation,
+ * so they must migrate into the same conservative eligibility boundary.
+ */
+export function hasManagedCloudAccountEvidence(
+  settings: {
+    cloudInvitationManagedAccountSeen?: boolean;
+    profileBackupIds: Record<string, string>;
+  },
+  recordedFirstPush: boolean,
+): boolean {
+  return (
+    settings.cloudInvitationManagedAccountSeen === true ||
+    Object.values(settings.profileBackupIds).some(Boolean) ||
+    recordedFirstPush
+  );
+}
+
 /**
  * Whether the engine advertises `backup push --if-changed`.
  *
@@ -58,6 +103,8 @@ export function engineSupportsRename(
 export interface AutoBackupConditions {
   hostedBackupSupported: boolean;
   ifChangedSupported: boolean;
+  /** Endstate Cloud requires an active subscription; self-hosted endpoints do not. */
+  managedService?: boolean;
   status: BackupStatusData | null | undefined;
 }
 
@@ -71,7 +118,7 @@ export function autoBackupAvailable(c: AutoBackupConditions): boolean {
     c.hostedBackupSupported &&
     c.ifChangedSupported &&
     c.status?.signedIn === true &&
-    c.status?.subscriptionStatus === 'active'
+    (c.managedService === false || c.status?.subscriptionStatus === 'active')
   );
 }
 

@@ -1,5 +1,5 @@
 /**
- * Scheduled drift-check ("Continuous protection") CLI bridge.
+ * Scheduled setup checks CLI bridge.
  *
  * Typed wrappers for the `endstate schedule *` subcommand family. Each wrapper
  * invokes the engine via the existing `runEndstateOnce` (single-envelope)
@@ -20,6 +20,7 @@ import {
   ScheduleDisableData,
   ScheduleStatusData,
 } from '../types';
+import { isBundlePath } from './profile-extensions';
 
 /**
  * Structured error from a schedule command.
@@ -107,6 +108,8 @@ export interface ScheduleEnableArgs {
   interval?: 'daily' | 'weekly';
   /** Capture + push automatically when the check finds changes. */
   autoPush?: boolean;
+  /** Engine-pinned backup target for scheduled Cloud uploads. */
+  backupId?: string;
 }
 
 /**
@@ -124,6 +127,7 @@ export async function scheduleEnable(
   if (args.interval) cliArgs.push('--interval', args.interval);
   if (args.time) cliArgs.push('--time', args.time);
   if (args.autoPush) cliArgs.push('--auto-push');
+  if (args.backupId) cliArgs.push('--backup-id', args.backupId);
   return runScheduleOnce<ScheduleEnableData>(settings, cliArgs);
 }
 
@@ -141,6 +145,40 @@ export async function scheduleStatus(
   return runScheduleOnce<ScheduleStatusData>(settings, ['status']);
 }
 
+/** Explicitly discard one legacy ambiguous queued upload; local capture stays intact. */
+export async function scheduleDiscardUpload(
+  settings: AppSettings,
+  artifactSha256: string,
+): Promise<{ discarded: boolean }> {
+  return runScheduleOnce<{ discarded: boolean }>(settings, [
+    'discard-upload', '--artifact-sha256', artifactSha256, '--confirm',
+  ]);
+}
+
+/**
+ * Orders independent `schedule status` requests. A later request represents
+ * fresher engine truth, so a slow earlier response must not repaint the UI as
+ * clean after a newer pending, offline, auth-required, or failed response.
+ */
+export class ScheduleStatusSequencer {
+  private generation = 0;
+
+  begin(): number {
+    this.generation += 1;
+    return this.generation;
+  }
+
+  apply(request: number, apply: () => void): boolean {
+    if (request !== this.generation) return false;
+    apply();
+    return true;
+  }
+
+  invalidate(): void {
+    this.generation += 1;
+  }
+}
+
 /**
  * True when the path points at a capture bundle — `.endstate`, or the legacy
  * `.zip` — case-insensitively. Re-exported from the shared extension module so
@@ -152,28 +190,36 @@ export { isBundlePath } from './profile-extensions';
 /**
  * Resolve the drift-check baseline manifest for a freshly saved capture.
  *
- * Whatever the user saved IS the baseline. Engine 2.28.0 reads manifest.jsonc
- * straight out of a capture bundle (Artexis10/endstate#194), so `schedule run`
- * → verify accepts a `.zip` exactly as it accepts a `.jsonc`.
+ * Whatever the user saved is the baseline when the engine advertises support
+ * for that container. Bundle parsing is additive: schedule-capable engines
+ * before 2.28 cannot safely use a `.endstate` or legacy `.zip` path.
  *
- * Before that the engine's loader parsed raw JSONC only, so a bundle could never
- * be a baseline: this side-wrote the bundle's embedded manifest to
- * `<bundle>.zip.manifest.jsonc` and recorded that instead. The sidecar then had
- * to stay paired with the bundle forever — renaming or moving the zip silently
- * orphaned the baseline, and the manifest sat on disk twice. Teaching the engine
- * to read its own bundle removes the problem instead of managing the pairing.
+ * Older engines therefore fail closed for bundle saves rather than re-arming a
+ * task that will fail on its next run. Raw manifest saves remain compatible.
  *
  * @param savePath - Where the user saved the capture (.jsonc or .zip)
  * @returns The path to record as `scheduleManifestPath`.
  */
-export function resolveScheduleBaselinePath(savePath: string): string {
-  return savePath;
+export function resolveScheduleBaselinePath(
+  savePath: string,
+  bundleManifestSupported = false,
+): string | null {
+  return isBundlePath(savePath) && !bundleManifestSupported ? null : savePath;
+}
+
+/** A pre-bundle engine may verify raw manifests, but must never be re-armed
+ * against a bundle it cannot open. */
+export function scheduleBaselineSupported(
+  manifestPath: string,
+  bundleManifestSupported: boolean,
+): boolean {
+  return !isBundlePath(manifestPath) || bundleManifestSupported;
 }
 
 /**
  * Whether the engine advertises the scheduled drift-check feature.
  *
- * Defaults to FALSE when unknown so the entire Continuous Protection surface
+ * Defaults to FALSE when unknown so the entire scheduled setup checks surface
  * ships dark against engines that predate the `schedule` command family
  * (bundled ≤ 2.21).
  */
@@ -193,6 +239,25 @@ export function engineSupportsScheduleAutoPush(
   return caps?.features?.schedule?.autoPush === true;
 }
 
+/** `--backup-id` is additive; older engines must not receive the flag. */
+export function engineSupportsScheduleBackupId(
+  caps: EndstateCapabilitiesData | null | undefined,
+): boolean {
+  const commands = caps?.commands;
+  return (
+    commands != null &&
+    !Array.isArray(commands) &&
+    commands.schedule?.flags?.includes('--backup-id') === true
+  );
+}
+
+/** Bundle baselines are additive and absent on schedule-capable 2.22–2.27 engines. */
+export function engineSupportsScheduleBundleManifest(
+  caps: EndstateCapabilitiesData | null | undefined,
+): boolean {
+  return caps?.features?.schedule?.bundleManifestSupported === true;
+}
+
 /**
  * UI-facing drift state derived from `schedule status`.
  *
@@ -204,7 +269,16 @@ export type DriftChipState =
   | { kind: 'never-run' }
   | { kind: 'clean'; checkedAt: string }
   | { kind: 'drift'; count: number; checkedAt: string }
-  | { kind: 'failing'; checkedAt: string };
+  | { kind: 'failing'; checkedAt: string }
+  | { kind: 'capture-pending'; checkedAt: string }
+  | { kind: 'upload-pending'; checkedAt: string }
+  | { kind: 'sign-in-required'; checkedAt: string }
+  | { kind: 'subscription-required'; checkedAt: string }
+  | { kind: 'setup-required'; checkedAt: string }
+  | { kind: 'upload-uncertain'; checkedAt: string }
+  | { kind: 'upload-failed'; checkedAt: string }
+  | { kind: 'offline'; checkedAt: string }
+  | { kind: 'local-only'; checkedAt: string };
 
 export function driftStateFromStatus(
   status: ScheduleStatusData | null | undefined,
@@ -216,13 +290,80 @@ export function driftStateFromStatus(
   const lastRun = status.lastRun;
   if (!lastRun) return { kind: 'never-run' };
 
+  // The engine writes `running` as soon as it owns the schedule lock, before
+  // capture/verify results exist. Unknown future markers fail closed too, but
+  // documented terminal states continue to their actual drift/upload truth.
+  if (lastRun.status === 'running' || (
+    lastRun.status != null &&
+    lastRun.status !== 'completed' &&
+    lastRun.status !== 'failed'
+  )) {
+    return { kind: 'capture-pending', checkedAt: lastRun.timestampUtc };
+  }
+
+  if (lastRun.status === 'failed') {
+    return { kind: 'failing', checkedAt: lastRun.timestampUtc };
+  }
+
+  const pendingUpload = status.pendingUpload;
+  const uploadOutcome = pendingUpload?.lastOutcome ?? lastRun.autoBackup?.outcome;
+  // A capture may correctly report the drift that caused it even after the
+  // upload reaches a terminal, user-actionable outcome. That transfer truth
+  // is more current than the pre-capture drift count and must not be hidden.
+  if (uploadOutcome === 'setup_required') {
+    return { kind: 'setup-required', checkedAt: lastRun.timestampUtc };
+  }
+  if (uploadOutcome === 'upload_uncertain') {
+    return { kind: 'upload-uncertain', checkedAt: lastRun.timestampUtc };
+  }
+
+  const count = lastRun.verify?.summary?.fail ?? lastRun.verify?.drifted?.length ?? 0;
+  // Drift remains the primary local action while ordinary upload work waits.
+  if (count > 0) {
+    return { kind: 'drift', count, checkedAt: lastRun.timestampUtc };
+  }
+
   if (lastRun.error) {
     return { kind: 'failing', checkedAt: lastRun.timestampUtc };
   }
 
-  const count = lastRun.verify?.summary?.fail ?? lastRun.verify?.drifted?.length ?? 0;
-  if (count > 0) {
-    return { kind: 'drift', count, checkedAt: lastRun.timestampUtc };
+  if (uploadOutcome === 'subscription_required') {
+    return { kind: 'subscription-required', checkedAt: lastRun.timestampUtc };
   }
+  // Older engines do not report whether a scheduled run's local baseline
+  // reached Endstate Cloud. Unknown is local-only, never silently current.
+  if (!pendingUpload) {
+    return { kind: 'local-only', checkedAt: lastRun.timestampUtc };
+  }
+  if (pendingUpload.pending) {
+    if (pendingUpload.lastOutcome === 'auth_required') {
+      return { kind: 'sign-in-required', checkedAt: lastRun.timestampUtc };
+    }
+    if (pendingUpload.lastOutcome === 'error') {
+      return { kind: 'upload-failed', checkedAt: lastRun.timestampUtc };
+    }
+    if (pendingUpload.lastOutcome === 'offline') {
+      return { kind: 'offline', checkedAt: lastRun.timestampUtc };
+    }
+    return { kind: 'upload-pending', checkedAt: lastRun.timestampUtc };
+  }
+  // Defensively surface a terminal failure even if an engine reports it
+  // alongside pending:false rather than treating a local record as healthy.
+  if (pendingUpload.lastOutcome === 'auth_required') {
+    return { kind: 'sign-in-required', checkedAt: lastRun.timestampUtc };
+  }
+  if (pendingUpload.lastOutcome === 'error') {
+    return { kind: 'upload-failed', checkedAt: lastRun.timestampUtc };
+  }
+  if (pendingUpload.lastOutcome === 'offline') {
+    return { kind: 'offline', checkedAt: lastRun.timestampUtc };
+  }
+  if (
+    pendingUpload.lastOutcome !== 'pushed' &&
+    pendingUpload.lastOutcome !== 'skipped'
+  ) {
+    return { kind: 'local-only', checkedAt: lastRun.timestampUtc };
+  }
+
   return { kind: 'clean', checkedAt: lastRun.timestampUtc };
 }

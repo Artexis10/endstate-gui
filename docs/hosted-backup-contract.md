@@ -13,7 +13,7 @@ For local development, the contract is located at:
 
 ## Summary
 
-The hosted-backup contract defines the v2 paid tier where users upload encrypted profile backups to Endstate-operated infrastructure and restore them on any machine.
+The hosted-backup contract defines the v2 paid tier where users upload encrypted profile backups to Endstate-operated infrastructure and restore them on another supported Windows PC.
 
 Key elements relevant to the GUI:
 

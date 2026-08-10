@@ -23,12 +23,15 @@ import type { BackupListItem } from '@/types';
 export interface ProfileStorageChipProps {
   /** When set, renders the Cloud variant. Undefined → Local-only variant. */
   cloudEntry: BackupListItem | undefined;
+  /** False while cloud state is loading, unavailable, or failed. */
+  cloudStateKnown?: boolean;
   /** Full testid for the chip root. Callers own the namespace. */
   testId?: string;
 }
 
 export function ProfileStorageChip({
   cloudEntry,
+  cloudStateKnown = true,
   testId,
 }: ProfileStorageChipProps) {
   if (cloudEntry) {
@@ -43,6 +46,7 @@ export function ProfileStorageChip({
       </span>
     );
   }
+  if (!cloudStateKnown) return null;
   return (
     <span
       data-testid={testId ?? 'profile-storage-chip'}
