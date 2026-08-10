@@ -60,7 +60,7 @@ describe('IntentLanding drift chip', () => {
     ['upload-uncertain', 'Endstate Cloud may have saved this version — automatic retry is paused to avoid duplicates'],
     ['upload-failed', 'Upload failed'],
     ['offline', 'Offline — local version saved; Cloud upload will retry'],
-    ['local only', 'Saved locally only'],
+    ['local-only', 'Saved locally only'],
   ])('renders the actionable %s state instead of a healthy/current claim', (_kind, text) => {
     renderLanding({ scheduleAttention: _kind as any });
 

@@ -29,6 +29,8 @@ describe('first-push-flag', () => {
     ['key', () => vi.spyOn(localStorage, 'key').mockImplementation(() => { throw new Error('storage denied'); })],
     ['getItem', () => vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw new Error('storage denied'); })],
   ])('treats denied localStorage %s access as prior managed use', (_operation, denyStorage) => {
+    // Seed a matching entry so the key/getItem branches are actually reached.
+    markFirstPushFor('alice@example.com');
     const denied = denyStorage();
     try {
       // Unknown storage state must suppress the invitation, never crash the
