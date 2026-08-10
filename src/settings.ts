@@ -1,4 +1,4 @@
-import { clearAllKnownKeys, getItem, setItem } from './lib/storage';
+import { ALL_NAMESPACES, clearAllKnownKeys, getItem, KNOWN_KEYS, setItem } from './lib/storage';
 import { migrateProfileSelection } from './lib/profile-selection-migration';
 
 export interface AppSettings {
@@ -195,6 +195,14 @@ export function saveSettings(settings: AppSettings): boolean {
  */
 export function resetAppSettings(): AppSettings {
   const current = loadSettings();
+  const previousValues = new Map<string, string | null>();
+  for (const key of KNOWN_KEYS) {
+    previousValues.set(key, localStorage.getItem(key));
+    for (const namespace of ALL_NAMESPACES) {
+      const namespacedKey = `${namespace}:${key}`;
+      previousValues.set(namespacedKey, localStorage.getItem(namespacedKey));
+    }
+  }
   const existingConsumption = loadCloudInvitationConsumption();
   const consumption: CloudInvitationConsumption = {
     shownAt: existingConsumption.shownAt ?? current.cloudInvitationShownAt,
@@ -206,7 +214,21 @@ export function resetAppSettings(): AppSettings {
   if (!saveCloudInvitationConsumption(consumption)) return current;
   clearAllKnownKeys();
   const reset = { ...DEFAULT_SETTINGS };
-  return saveSettings(reset) ? reset : current;
+  if (saveSettings(reset)) return reset;
+
+  for (const [key, value] of previousValues) {
+    try {
+      if (value === null) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, value);
+      }
+    } catch {
+      // A browser that keeps rejecting writes cannot be repaired here. The
+      // successful consumption record remains durable and suppresses repeats.
+    }
+  }
+  return current;
 }
 
 /**

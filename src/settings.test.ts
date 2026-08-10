@@ -178,7 +178,7 @@ describe('settings', () => {
 
   describe('saveSettings', () => {
     it('returns false when the durable local write fails', () => {
-      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
         throw new Error('quota exceeded');
       });
 
@@ -441,8 +441,12 @@ describe('settings', () => {
       };
       saveSettings(consumed);
       const before = localStorage.getItem(NAMESPACED_KEY);
-      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-        throw new Error('storage denied');
+      const originalSetItem = localStorage.setItem.bind(localStorage);
+      const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
+        if (setItem.mock.calls.length === 2) {
+          throw new Error('storage denied');
+        }
+        originalSetItem(key, value);
       });
 
       try {
