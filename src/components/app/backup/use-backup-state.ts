@@ -113,6 +113,8 @@ export interface UseBackupStateResult {
 }
 
 export interface UseBackupStateOptions {
+  /** Self-hosted services do not use Endstate Cloud subscription status. */
+  providerKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
   /**
    * Called when a fetch returns AUTH_REQUIRED, i.e. the engine's session is
    * gone (token revoked, refresh expired, keychain wiped). The hook stops
@@ -240,7 +242,7 @@ export function useBackupState(
       // for `backup list` (read is blocked in the `none` state per contract §10).
       // Skip the call — the subscription banner already prompts the user to
       // subscribe and there is no list to show anyway.
-      if (currentStatus.subscriptionStatus === 'none') {
+      if (options.providerKind !== 'self-hosted' && currentStatus.subscriptionStatus === 'none') {
         if (stillCurrent()) setBackups([]);
         return;
       }
@@ -262,7 +264,7 @@ export function useBackupState(
         handleFetchError(err, silent);
       }
     },
-    [settings, selectedBackupId, handleFetchError],
+    [settings, selectedBackupId, handleFetchError, options.providerKind],
   );
 
   const refresh = useCallback(

@@ -29,6 +29,27 @@ describe('friendlyBackupError', () => {
     expect(f.tone).toBe('warning');
   });
 
+  it('keeps unknown-provider subscription errors neutral and non-commercial', () => {
+    const f = friendlyBackupError({
+      code: 'SUBSCRIPTION_REQUIRED',
+      message: 'access policy rejected request',
+    }, { providerKind: 'unknown' });
+
+    expect(f.headline).toBe('Your backup service rejected this request');
+    expect(f.body).not.toMatch(/subscription|self-hosted|Endstate Cloud/i);
+    expect(f.cta?.action).toBe<FriendlyBackupErrorCtaAction>('retry');
+  });
+
+  it('keeps unknown-provider transport errors neutral', () => {
+    const f = friendlyBackupError({
+      code: 'BACKEND_UNREACHABLE',
+      message: 'connection refused',
+    }, { providerKind: 'unknown' });
+
+    expect(f.headline).toBe("Can't reach your backup service");
+    expect(JSON.stringify(f)).not.toMatch(/Endstate Cloud|self-hosted/i);
+  });
+
   it('maps NOT_FOUND to a dismiss CTA with warning tone', () => {
     const f = friendlyBackupError({
       code: 'NOT_FOUND',

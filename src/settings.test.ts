@@ -3,6 +3,9 @@ import {
   loadSettings,
   saveSettings,
   loadSettingsWithProfileMigration,
+  resetAppSettings,
+  loadCloudInvitationConsumption,
+  saveCloudInvitationConsumption,
   AppSettings,
 } from './settings';
 import { setItem } from './lib/storage';
@@ -16,6 +19,11 @@ const LEGACY_KEY = 'endstate-gui-settings';
 const AUTO_BACKUP_DEFAULTS = {
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
+  // One-time post-capture cloud invitation, defaulted to "never presented,
+  // never answered" so the round-trip assertions keep matching loadSettings().
+  cloudInvitationShownAt: null as string | null,
+  cloudInvitationDismissed: false,
+  cloudInvitationManagedAccountSeen: false,
   profileBackupIds: {} as Record<string, string>,
   scheduleEnabled: false,
   scheduleTime: '09:00',
@@ -169,6 +177,20 @@ describe('settings', () => {
   });
 
   describe('saveSettings', () => {
+    it('returns false when the durable local write fails', () => {
+      const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('quota exceeded');
+      });
+
+      try {
+        expect(saveSettings(loadSettings())).toBe(false);
+      } finally {
+        setItem.mockRestore();
+      }
+    });
+  });
+
+  describe('saveSettings', () => {
     it('persists settings to localStorage with namespace', () => {
       const settings: AppSettings = {
         engineMode: 'path',
@@ -221,6 +243,8 @@ describe('settings', () => {
       showDetails: false,
       autoBackupEnabled: true,
       autoBackupPromptSeen: true,
+      cloudInvitationShownAt: null,
+      cloudInvitationDismissed: false,
       profileBackupIds: { 'my-profile': 'b-123' },
       scheduleEnabled: false,
       scheduleTime: '09:00',
@@ -282,6 +306,156 @@ describe('settings', () => {
       expect(migrated.selectedProfileName).toBe('foo');
       expect(migrated.autoBackupEnabled).toBe(true);
       expect(migrated.profileBackupIds).toEqual({ foo: 'b-9' });
+    });
+  });
+
+  // The post-capture Endstate Cloud invitation is offered at most once in the
+  // product's lifetime, so its two flags are the only thing standing between an
+  // invitation and a nag (PRINCIPLES.md §1). They must default to "never
+  // presented, never answered", survive a round trip, be defaulted for settings
+  // blobs written before they existed, and survive every profile migration path
+  // — a flag lost in migration re-arms the prompt.
+  describe('cloud-invitation fields', () => {
+    it('defaults to never presented and never answered', () => {
+      const loaded = loadSettings();
+      expect(loaded.cloudInvitationShownAt).toBeNull();
+      expect(loaded.cloudInvitationDismissed).toBe(false);
+    });
+
+    it('round-trips the cloud-invitation fields through save/load', () => {
+      saveSettings({
+        ...loadSettings(),
+        cloudInvitationShownAt: '2026-08-08T09:30:00.000Z',
+        cloudInvitationDismissed: true,
+      });
+      const loaded = loadSettings();
+      expect(loaded.cloudInvitationShownAt).toBe('2026-08-08T09:30:00.000Z');
+      expect(loaded.cloudInvitationDismissed).toBe(true);
+    });
+
+    it('defaults the cloud-invitation fields for settings stored before they existed', () => {
+      // A settings blob persisted by an older build — no cloud-invitation keys.
+      setItem(
+        'endstate-gui-settings',
+        JSON.stringify({
+          engineMode: 'bundled',
+          customProfilesDirectory: '',
+          selectedProfileName: 'legacy',
+          dryRunEnabled: true,
+          showDetails: false,
+        }),
+      );
+      const loaded = loadSettings();
+      expect(loaded.cloudInvitationShownAt).toBeNull();
+      expect(loaded.cloudInvitationDismissed).toBe(false);
+      expect(loaded.selectedProfileName).toBe('legacy');
+    });
+
+    it('preserves the cloud-invitation fields through loadSettingsWithProfileMigration', async () => {
+      saveSettings({
+        ...loadSettings(),
+        selectedProfileName: 'my-profile',
+        cloudInvitationShownAt: '2026-08-08T09:30:00.000Z',
+        cloudInvitationDismissed: true,
+      });
+      const migrated = await loadSettingsWithProfileMigration('C:\\profiles');
+      expect(migrated.cloudInvitationShownAt).toBe('2026-08-08T09:30:00.000Z');
+      expect(migrated.cloudInvitationDismissed).toBe(true);
+    });
+
+    it('carries the cloud-invitation fields through the legacy name-based migration path', async () => {
+      // This path rebuilds AppSettings field by field; a field omitted there is
+      // silently reset to the default and the invitation returns.
+      setItem(
+        'endstate-gui-settings',
+        JSON.stringify({
+          engineMode: 'bundled',
+          customProfilesDirectory: '',
+          dryRunEnabled: true,
+          showDetails: false,
+          cloudInvitationShownAt: '2026-08-08T09:30:00.000Z',
+          cloudInvitationDismissed: true,
+          cloudInvitationManagedAccountSeen: true,
+          lastSelectedProfile: 'foo',
+        }),
+      );
+      const migrated = await loadSettingsWithProfileMigration('C:\\profiles');
+      expect(migrated.selectedProfileName).toBe('foo');
+      expect(migrated.cloudInvitationShownAt).toBe('2026-08-08T09:30:00.000Z');
+      expect(migrated.cloudInvitationDismissed).toBe(true);
+      expect(migrated.cloudInvitationManagedAccountSeen).toBe(true);
+    });
+  });
+
+  describe('reset settings', () => {
+    it('clears settings namespaces without rearming a consumed cloud invitation', () => {
+      saveSettings({
+        ...loadSettings(),
+        engineMode: 'path',
+        cloudInvitationShownAt: '2026-08-10T09:00:00.000Z',
+        cloudInvitationDismissed: true,
+        cloudInvitationManagedAccountSeen: true,
+      });
+      localStorage.setItem('tauri:endstate-gui-settings', JSON.stringify({ engineMode: 'path' }));
+      localStorage.setItem(LEGACY_KEY, JSON.stringify({ engineMode: 'path' }));
+
+      const reset = resetAppSettings();
+
+      expect(reset.engineMode).toBe('bundled');
+      expect(reset.cloudInvitationShownAt).toBeNull();
+      expect(reset.cloudInvitationDismissed).toBe(false);
+      expect(reset.cloudInvitationManagedAccountSeen).toBe(false);
+      expect(localStorage.getItem(NAMESPACED_KEY)).not.toBeNull();
+      expect(localStorage.getItem('tauri:endstate-gui-settings')).toBeNull();
+      expect(localStorage.getItem(LEGACY_KEY)).toBeNull();
+      expect(loadCloudInvitationConsumption()).toMatchObject({
+        shownAt: '2026-08-10T09:00:00.000Z', dismissed: true, managedAccountSeen: true,
+      });
+    });
+
+    it('clears ordinary settings across namespaces while retaining dedicated invitation consumption', () => {
+      expect(saveCloudInvitationConsumption({
+        shownAt: '2026-08-10T09:00:00.000Z',
+        dismissed: true,
+        managedAccountSeen: true,
+      })).toBe(true);
+      localStorage.setItem('tauri:endstate-gui-settings', JSON.stringify({ engineMode: 'path' }));
+      localStorage.setItem(LEGACY_KEY, JSON.stringify({ engineMode: 'path' }));
+
+      resetAppSettings();
+
+      expect(localStorage.getItem('tauri:endstate-gui-settings')).toBeNull();
+      expect(localStorage.getItem(LEGACY_KEY)).toBeNull();
+      expect(loadCloudInvitationConsumption()).toMatchObject({
+        shownAt: '2026-08-10T09:00:00.000Z', dismissed: true, managedAccountSeen: true,
+      });
+    });
+
+    it('keeps the durable consumed invitation record when replacement persistence fails', () => {
+      const consumed = {
+        ...loadSettings(),
+        engineMode: 'path' as const,
+        cloudInvitationShownAt: '2026-08-10T09:00:00.000Z',
+        cloudInvitationDismissed: true,
+        cloudInvitationManagedAccountSeen: true,
+      };
+      saveSettings(consumed);
+      const before = localStorage.getItem(NAMESPACED_KEY);
+      const originalSetItem = localStorage.setItem.bind(localStorage);
+      const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
+        if (setItem.mock.calls.length === 2) {
+          throw new Error('storage denied');
+        }
+        originalSetItem(key, value);
+      });
+
+      try {
+        expect(resetAppSettings()).toEqual(consumed);
+      } finally {
+        setItem.mockRestore();
+      }
+
+      expect(localStorage.getItem(NAMESPACED_KEY)).toBe(before);
     });
   });
 

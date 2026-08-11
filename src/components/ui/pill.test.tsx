@@ -4,8 +4,8 @@ import { Pill } from './pill';
 
 describe('Pill', () => {
   it('renders its children as a button', () => {
-    renderWithProviders(<Pill>Hosted Backup · Active</Pill>);
-    expect(screen.getByRole('button', { name: 'Hosted Backup · Active' })).toBeInTheDocument();
+    renderWithProviders(<Pill>Endstate Cloud · Active</Pill>);
+    expect(screen.getByRole('button', { name: 'Endstate Cloud · Active' })).toBeInTheDocument();
   });
 
   it('defaults type to "button"', () => {

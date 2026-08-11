@@ -16,6 +16,12 @@ const nativeWindow = vi.hoisted(() => ({
   }),
 }));
 
+const nativeSaveDialog = vi.hoisted(() => vi.fn());
+
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  save: nativeSaveDialog,
+}));
+
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({
     onDragDropEvent: nativeWindow.onDragDropEvent,
@@ -38,7 +44,7 @@ vi.mock('./lib/engine-exec', async () => {
         data: command === 'capabilities'
           ? {
               commands: ['capture', 'apply', 'verify', 'report'],
-              features: {},
+              features: capabilitiesFeatures,
             }
           : {},
         error: null,
@@ -55,6 +61,7 @@ import App from './App';
 let discoveredProfilePaths: string[];
 let nativeImportCompletion: Promise<string> | null;
 let profileManifestText: string;
+let capabilitiesFeatures: Record<string, unknown>;
 
 async function runSuccessfulPreview<T>(): Promise<RunResult<T>> {
   return {
@@ -144,6 +151,9 @@ describe('App native profile drag ownership', () => {
     discoveredProfilePaths = ['C:\\test\\profiles\\existing-profile.jsonc'];
     nativeImportCompletion = null;
     profileManifestText = JSON.stringify({ apps: [{ id: 'existing-profile' }] });
+    capabilitiesFeatures = {};
+    nativeSaveDialog.mockReset();
+    nativeSaveDialog.mockResolvedValue(null);
 
     Object.defineProperty(window, '__TAURI_INTERNALS__', {
       configurable: true,
@@ -155,6 +165,7 @@ describe('App native profile drag ownership', () => {
         core: {
           invoke: vi.fn(async (command: string, args?: { path?: string }) => {
             if (command === 'get_default_profiles_directory') return 'C:\\test\\profiles';
+            if (command === 'get_capture_cache_directory') return 'C:\\test\\capture-cache';
             if (command === 'list_manifest_files') return discoveredProfilePaths;
             if (command === 'validate_profile') {
               return { valid: true, errors: [], summary: { name: 'profile', version: 1, appCount: 1 } };
@@ -353,4 +364,5 @@ describe('App native profile drag ownership', () => {
     expect(importedCard).toHaveTextContent('Review setup');
     expect(screen.queryByText('Undo settings changes from your last setup')).not.toBeInTheDocument();
   });
+
 });

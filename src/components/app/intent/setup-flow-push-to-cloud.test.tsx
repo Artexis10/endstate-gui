@@ -26,6 +26,7 @@ const baseProps = {
   liveAppEvents: [],
   onPreview: vi.fn(),
   onApply: vi.fn(),
+  hostedBackupProviderKind: 'endstate-cloud' as const,
 };
 
 // Keyed by profileKey (path) — the cloud badge now derives from the id-mapping,

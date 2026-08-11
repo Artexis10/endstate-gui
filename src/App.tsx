@@ -14,7 +14,7 @@ import {
   type ApplyRestoreOptions,
   type RestoreIntent,
 } from './types';
-import { AppSettings, loadSettings, saveSettings, loadSettingsWithProfileMigration } from './settings';
+import { AppSettings, loadCloudInvitationConsumption, loadSettings, resetAppSettings, saveCloudInvitationConsumption, saveSettings, loadSettingsWithProfileMigration } from './settings';
 import { loadDraft, clearDraft } from './lib/draft-store';
 import { resolveDraftContent } from './lib/draft-content-resolver';
 import { isConfigOnlyApp } from './lib/app-event-kind';
@@ -104,17 +104,22 @@ import { AutoBackupConsent } from './components/app/backup/auto-backup-consent';
 import { AutoBackupSetting } from './components/app/settings/auto-backup-setting';
 import { ContinuousProtectionSetting } from './components/app/settings/continuous-protection-setting';
 import { runAutoBackup } from './lib/auto-backup';
-import { engineSupportsIfChanged, engineSupportsRename, autoBackupAvailable } from './lib/backup-capabilities';
+import { autoBackupAvailable, endstateCloudAvailable, engineSupportsIfChanged, engineSupportsRename, hasManagedCloudAccountEvidence, normalizeIssuerUrl } from './lib/backup-capabilities';
+import { open as openExternal } from '@tauri-apps/plugin-shell';
 import {
   scheduleEnable,
   scheduleDisable,
   scheduleStatus,
+  scheduleDiscardUpload,
   engineSupportsSchedule,
   engineSupportsScheduleAutoPush,
+  engineSupportsScheduleBackupId,
+  engineSupportsScheduleBundleManifest,
   driftStateFromStatus,
-  isBundlePath,
   resolveScheduleBaselinePath,
+  scheduleBaselineSupported,
   ScheduleCommandError,
+  ScheduleStatusSequencer,
 } from './lib/schedule-bridge';
 import {
   BUNDLE_DIALOG_EXTENSIONS,
@@ -129,7 +134,7 @@ import { findSynthesizedManualAppIds, loadAuthoredProfileAppIds } from './lib/pr
 import { resolveCloudEntriesByKey, buildProfilePushArgs, pruneProfileBackupIds } from './lib/cloud-hosting';
 import { PushProgressDialog } from './components/app/backup/push-progress-dialog';
 import { isBackupChunkEvent } from './lib/streaming-events';
-import { hasSeenFirstPushFor, markFirstPushFor } from './lib/first-push-flag';
+import { hasRecordedFirstPush, hasSeenFirstPushFor, markFirstPushFor } from './lib/first-push-flag';
 import type { BackupListItem, BackupStatusData, ScheduleStatusData } from './types';
 
 type AppStatus = 'loading' | 'ready' | 'error';
@@ -187,6 +192,11 @@ async function readAuthoredProfileAppIds(profilePath: string): Promise<Set<strin
 function AppContent() {
   const { showToast } = useToast();
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
+  const settingsRef = useRef(settings);
+  const [cloudInvitationConsumption, setCloudInvitationConsumption] = useState(
+    loadCloudInvitationConsumption,
+  );
+  const cloudInvitationConsumptionRef = useRef(cloudInvitationConsumption);
   const [currentPage, setCurrentPage] = useState<PageType>('landing');
   const [previousPage, setPreviousPage] = useState<PageType | null>(null);
   const [activeFlowPage, setActiveFlowPage] = useState<'save' | 'setup' | null>(null);
@@ -275,7 +285,18 @@ function AppContent() {
   // - restoreWizardOpen: triggered after sign-in when remote backups exist but the
   //   local profiles directory is empty (Phase 6 wizard).
   const [hostedBackupSupported, setHostedBackupSupported] = useState<boolean>(false);
+  const [cloudInvitationAvailable, setCloudInvitationAvailable] = useState(false);
+  const cloudInvitationAvailableRef = useRef(false);
   const [backupStatusData, setBackupStatusData] = useState<BackupStatusData | null>(null);
+  const advertisedProviderKind = state.capabilities?.data?.features?.hostedBackup?.providerKind;
+  const backupProviderKind = advertisedProviderKind === 'endstate-cloud' || advertisedProviderKind === 'self-hosted'
+    ? advertisedProviderKind
+    : 'unknown';
+  const managedBackupService = backupProviderKind === 'endstate-cloud';
+  const selfHostedBackupService = backupProviderKind === 'self-hosted';
+  const selfHostedEndpoint = normalizeIssuerUrl(
+    state.capabilities?.data?.features?.hostedBackup?.issuerUrl,
+  );
   const [authSessionTruth, setAuthSessionTruth] = useState(INITIAL_AUTH_SESSION_TRUTH);
   const [claimSessionCheckFailed, setClaimSessionCheckFailed] = useState(false);
   const [claimSessionCheckBusy, setClaimSessionCheckBusy] = useState(false);
@@ -284,6 +305,17 @@ function AppContent() {
     setBackupStatusData(status);
     setAuthSessionTruth((current) => reconcileAuthStatus(current, status.signedIn));
     setClaimSessionCheckFailed(false);
+    if (
+      cloudInvitationAvailableRef.current &&
+      status.signedIn &&
+      !cloudInvitationConsumptionRef.current.managedAccountSeen
+    ) {
+      const updated = { ...cloudInvitationConsumptionRef.current, managedAccountSeen: true };
+      if (saveCloudInvitationConsumption(updated)) {
+        cloudInvitationConsumptionRef.current = updated;
+        setCloudInvitationConsumption(updated);
+      }
+    }
   };
   const invalidateBackupStatusRequests = () => {
     backupStatusSequencerRef.current.invalidate();
@@ -390,13 +422,16 @@ function AppContent() {
   // One auth-failure toast per session (no repeats); a ref so it never re-renders.
   const autoBackupAuthToastShownRef = useRef(false);
 
-  // Continuous protection (scheduled drift check). Capability-gated — the
+  // Scheduled setup checks. Capability-gated — the
   // entire surface stays dark unless the engine advertises
   // `features.schedule.supported` (bundled ≤ 2.21 does not). The GUI renders
   // engine-owned schedule status only; drift truth stays in the CLI.
   const [scheduleSupported, setScheduleSupported] = useState(false);
   const [scheduleAutoPushCapable, setScheduleAutoPushCapable] = useState(false);
+  const [scheduleBackupIdCapable, setScheduleBackupIdCapable] = useState(false);
+  const [scheduleBundleManifestCapable, setScheduleBundleManifestCapable] = useState(false);
   const [scheduleStatusData, setScheduleStatusData] = useState<ScheduleStatusData | null>(null);
+  const scheduleStatusSequencerRef = useRef(new ScheduleStatusSequencer());
   const [scheduleBusy, setScheduleBusy] = useState(false);
 
   // Post-save "Push to hosted backup" — fires the existing backupPush wrapper
@@ -413,9 +448,14 @@ function AppContent() {
   // a cloud badge on profile cards that have a corresponding hosted backup.
   // Fetch is enabled only when hosted backup is supported AND the user is
   // signed in — otherwise the call would just fail with AUTH_REQUIRED.
+  const cloudBackupAccountKey =
+    backupStatusData?.signedIn && backupStatusData.email?.trim()
+      ? backupStatusData.email.trim().toLowerCase()
+      : null;
   const cloudBackupIndex = useBackupNameIndex(
     settings,
-    hostedBackupSupported && !!backupStatusData?.signedIn,
+    hostedBackupSupported && cloudBackupAccountKey !== null,
+    cloudBackupAccountKey,
   );
   // Per-profile cloud state, keyed by profileKey (path). Derived from the
   // local id-mapping (`profileBackupIds`) verified against the live backup list
@@ -426,6 +466,10 @@ function AppContent() {
   const cloudEntryByKey = useMemo(
     () => resolveCloudEntriesByKey(settings.profileBackupIds, cloudBackupIndex.byId),
     [settings.profileBackupIds, cloudBackupIndex.byId],
+  );
+  const cloudInvitationManagedAccountSeen = hasManagedCloudAccountEvidence(
+    { ...settings, cloudInvitationManagedAccountSeen: cloudInvitationConsumption.managedAccountSeen },
+    hasRecordedFirstPush(),
   );
 
   // ProfileMissingModal state — shown only when a saved Capture target cannot
@@ -1293,6 +1337,7 @@ function AppContent() {
         
         // Load settings with profile selection migration
         const migratedSettings = await loadSettingsWithProfileMigration(dir);
+        settingsRef.current = migratedSettings;
         setSettings(migratedSettings);
         
         // Profile selection is per-session on purpose, so nothing is restored
@@ -1300,7 +1345,7 @@ function AppContent() {
         // there is no "selected but not yet applied" state worth persisting.
         // The stored selection was left over from an earlier design, and its
         // only remaining effect was a dialog at launch explaining that a piece
-        // of bookkeeping had gone stale. Continuous Protection is unaffected:
+        // of bookkeeping had gone stale. Scheduled setup checks are unaffected:
         // its baseline is scheduleManifestPath, recorded when a capture is
         // saved.
         setSelectedProfile('');
@@ -1341,10 +1386,22 @@ function AppContent() {
   }, [settings.customProfilesDirectory]);
 
 
-  const updateSettings = (newSettings: Partial<AppSettings>) => {
-    const updated = { ...settings, ...newSettings };
-    setSettings(updated);
-    saveSettings(updated);
+  const updateSettings = (
+    newSettings: Partial<AppSettings> | ((current: AppSettings) => Partial<AppSettings>),
+  ): boolean => {
+    // Settings writes can be triggered by independent async completions (save,
+    // schedule, and backup status). Merge each patch with the most recently
+    // durable value rather than the render that created a stale callback.
+    const patch = typeof newSettings === 'function'
+      ? newSettings(settingsRef.current)
+      : newSettings;
+    const updated = { ...settingsRef.current, ...patch };
+    const persisted = saveSettings(updated);
+    if (persisted) {
+      settingsRef.current = updated;
+      setSettings(updated);
+    }
+    return persisted;
   };
 
   // One-time auto-backup consent decision: persist the choice + mark the prompt seen.
@@ -1354,7 +1411,7 @@ function AppContent() {
   };
 
   // ---------------------------------------------------------------------------
-  // Continuous protection (scheduled drift check) handlers.
+  // Scheduled setup check handlers.
   //
   // The Settings toggle IS the consent — no extra dialog. `schedule enable` is
   // idempotent on the engine side (schtasks /F), so every preference change
@@ -1362,11 +1419,21 @@ function AppContent() {
   // single source of truth (its `schedule status` drives the drift chip).
   // ---------------------------------------------------------------------------
 
-  const refreshScheduleStatus = async () => {
+  const refreshScheduleStatus = async (): Promise<ScheduleStatusData | null> => {
+    const request = scheduleStatusSequencerRef.current.begin();
     try {
-      setScheduleStatusData(await scheduleStatus(settings));
+      const status = await scheduleStatus(settings);
+      return scheduleStatusSequencerRef.current.apply(request, () => {
+        setScheduleStatusData(status);
+      }) ? status : null;
     } catch (err) {
       console.warn('schedule status refresh failed:', err);
+      scheduleStatusSequencerRef.current.apply(request, () => {
+        // A newer failed status check must not leave a prior clean/pushed
+        // result looking current while engine truth is unavailable.
+        setScheduleStatusData(null);
+      });
+      return null;
     }
   };
 
@@ -1375,19 +1442,50 @@ function AppContent() {
     manifest?: string;
     time?: string;
     autoPush?: boolean;
+    backupId?: string;
   } = {}) => {
-    const manifest = opts.manifest ?? settings.scheduleManifestPath;
+    const currentSettings = settingsRef.current;
+    const manifest = opts.manifest ?? currentSettings.scheduleManifestPath;
     if (!manifest) {
       throw new ScheduleCommandError({
         code: 'MANIFEST_NOT_FOUND',
         message: 'No saved capture to verify against. Save this computer first.',
       });
     }
-    await scheduleEnable(settings, {
+    if (!scheduleBaselineSupported(manifest, scheduleBundleManifestCapable)) {
+      throw new ScheduleCommandError({
+        code: 'BUNDLE_MANIFEST_UNSUPPORTED',
+        message: 'This version of Endstate cannot use a saved bundle for scheduled checks.',
+        remediation: 'Save a profile manifest instead, or update Endstate before enabling scheduled checks.',
+      });
+    }
+    await scheduleEnable(currentSettings, {
       manifest,
-      time: opts.time ?? settings.scheduleTime,
-      autoPush: (opts.autoPush ?? settings.scheduleAutoPush) && scheduleAutoPushCapable,
+      time: opts.time ?? currentSettings.scheduleTime,
+      autoPush: (opts.autoPush ?? currentSettings.scheduleAutoPush) && scheduleAutoPushCapable,
+      backupId: scheduleBackupIdCapable
+        ? currentSettings.profileBackupIds[profileKeyFor({ path: manifest })] ?? opts.backupId
+        : undefined,
     });
+  };
+
+  const handleDiscardAmbiguousUpload = async (artifactSha256: string) => {
+    setScheduleBusy(true);
+    try {
+      await scheduleDiscardUpload(settingsRef.current, artifactSha256);
+      await refreshScheduleStatus();
+      showToast(
+        managedBackupService
+          ? 'Ambiguous Endstate Cloud upload discarded. Your local capture was kept.'
+          : 'Ambiguous queued upload discarded. Your local capture was kept.',
+        'info',
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Could not discard the ambiguous upload — ${msg}`, 'error');
+    } finally {
+      setScheduleBusy(false);
+    }
   };
 
   const handleScheduleToggle = async (enabled: boolean) => {
@@ -1395,18 +1493,36 @@ function AppContent() {
     try {
       if (enabled) {
         await assertScheduleEnabled();
-        updateSettings({ scheduleEnabled: true });
-      } else {
-        try {
-          await scheduleDisable(settings);
-        } catch (err) {
-          // Never trap the user in the "on" state: persist the preference off
-          // and surface the engine failure. Status refresh below still shows
-          // engine truth if the task survived.
-          const msg = err instanceof Error ? err.message : String(err);
-          showToast(`Could not remove the scheduled check — ${msg}`, 'error');
+        if (!updateSettings({ scheduleEnabled: true })) {
+          // The task exists but the durable preference did not commit. Remove
+          // it again rather than making the next boot claim it is disabled.
+          try {
+            await scheduleDisable(settingsRef.current);
+            showToast('Could not save scheduled setup check preference. The scheduled check was removed.', 'error');
+          } catch (rollbackErr) {
+            await refreshScheduleStatus();
+            const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+            showToast(`Could not save scheduled setup check preference or remove the scheduled check. Status was refreshed — ${rollbackMessage}`, 'error');
+          }
+          await refreshScheduleStatus();
+          return;
         }
-        updateSettings({ scheduleEnabled: false });
+      } else {
+        await scheduleDisable(settingsRef.current);
+        if (!updateSettings({ scheduleEnabled: false })) {
+          // The engine has disabled the task, so restore the old task config
+          // before leaving durable settings enabled.
+          try {
+            await assertScheduleEnabled();
+            showToast('Could not save scheduled setup check preference. The scheduled check was restored.', 'error');
+          } catch (rollbackErr) {
+            await refreshScheduleStatus();
+            const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+            showToast(`Could not save scheduled setup check preference or restore the scheduled check. Status was refreshed — ${rollbackMessage}`, 'error');
+          }
+          await refreshScheduleStatus();
+          return;
+        }
       }
       await refreshScheduleStatus();
     } catch (err) {
@@ -1416,35 +1532,71 @@ function AppContent() {
           : err instanceof Error
             ? err.message
             : String(err);
-      showToast(`Could not turn on continuous protection — ${msg}`, 'error');
+      showToast(`Could not ${enabled ? 'turn on' : 'turn off'} scheduled setup checks — ${msg}`, 'error');
     } finally {
       setScheduleBusy(false);
     }
   };
 
   const handleScheduleTimeChange = async (time: string) => {
-    updateSettings({ scheduleTime: time });
-    if (!settings.scheduleEnabled) return;
+    const previous = settingsRef.current;
+    if (!previous.scheduleEnabled) {
+      if (!updateSettings({ scheduleTime: time })) {
+        showToast('Could not save scheduled setup check preference. No change was made.', 'error');
+      }
+      return;
+    }
     setScheduleBusy(true);
     try {
       await assertScheduleEnabled({ time });
+      if (!updateSettings({ scheduleTime: time })) {
+        try {
+          await assertScheduleEnabled({ time: previous.scheduleTime });
+          showToast('Could not save scheduled setup check preference. The prior schedule was restored.', 'error');
+        } catch (rollbackErr) {
+          await refreshScheduleStatus();
+          const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+          showToast(`Could not save scheduled setup check preference or restore the prior schedule. Status was refreshed — ${rollbackMessage}`, 'error');
+        }
+        await refreshScheduleStatus();
+        return;
+      }
       await refreshScheduleStatus();
     } catch (err) {
-      console.warn('schedule time re-assert failed:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Could not update scheduled setup check time — ${msg}`, 'error');
     } finally {
       setScheduleBusy(false);
     }
   };
 
   const handleScheduleAutoPushToggle = async (autoPush: boolean) => {
-    updateSettings({ scheduleAutoPush: autoPush });
-    if (!settings.scheduleEnabled) return;
+    const previous = settingsRef.current;
+    if (!previous.scheduleEnabled) {
+      if (!updateSettings({ scheduleAutoPush: autoPush })) {
+        showToast('Could not save scheduled setup check preference. No change was made.', 'error');
+      }
+      return;
+    }
     setScheduleBusy(true);
     try {
       await assertScheduleEnabled({ autoPush });
+      if (!updateSettings({ scheduleAutoPush: autoPush })) {
+        try {
+          await assertScheduleEnabled({ autoPush: previous.scheduleAutoPush });
+          showToast('Could not save scheduled setup check preference. The prior schedule was restored.', 'error');
+        } catch (rollbackErr) {
+          await refreshScheduleStatus();
+          const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+          showToast(`Could not save scheduled setup check preference or restore the prior schedule. Status was refreshed — ${rollbackMessage}`, 'error');
+        }
+        await refreshScheduleStatus();
+        return;
+      }
       await refreshScheduleStatus();
     } catch (err) {
-      console.warn('schedule auto-push re-assert failed:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Could not update scheduled setup check upload setting — ${msg}`, 'error');
     } finally {
       setScheduleBusy(false);
     }
@@ -1464,18 +1616,19 @@ function AppContent() {
       case 'uploaded':
         setAutoBackupAuthPaused(false);
         setAutoBackupChip('backed-up');
-        updateSettings({
-          profileBackupIds: { ...settings.profileBackupIds, [profileKey]: outcome.backupId },
-        });
+        updateSettings((current) => ({
+          profileBackupIds: { ...current.profileBackupIds, [profileKey]: outcome.backupId },
+        }));
         void readAndApplyBackupStatus('background').catch(() => {});
         break;
       case 'skipped':
         setAutoBackupAuthPaused(false);
         setAutoBackupChip('backed-up');
-        if (outcome.backupId && !settings.profileBackupIds[profileKey]) {
-          updateSettings({
-            profileBackupIds: { ...settings.profileBackupIds, [profileKey]: outcome.backupId },
-          });
+        const backupId = outcome.backupId;
+        if (backupId && !settingsRef.current.profileBackupIds[profileKey]) {
+          updateSettings((current) => ({
+            profileBackupIds: { ...current.profileBackupIds, [profileKey]: backupId },
+          }));
         }
         break;
       case 'auth-required':
@@ -1502,9 +1655,12 @@ function AppContent() {
   };
 
   const resetSettings = () => {
-    localStorage.removeItem('endstate-gui-settings');
-    const defaults = loadSettings();
+    const defaults = resetAppSettings();
+    settingsRef.current = defaults;
     setSettings(defaults);
+    const resetConsumption = loadCloudInvitationConsumption();
+    cloudInvitationConsumptionRef.current = resetConsumption;
+    setCloudInvitationConsumption(resetConsumption);
     setSelectedProfile('');
     setSelectedProfilePath('');
     setProfiles([]);
@@ -1607,6 +1763,9 @@ function AppContent() {
       // here on initial boot; subsequent refreshes happen on auth events.
       const supported = capResult.envelope.data?.features?.hostedBackup?.supported === true;
       setHostedBackupSupported(supported);
+      const managedCloudAvailable = endstateCloudAvailable(capResult.envelope.data);
+      cloudInvitationAvailableRef.current = managedCloudAvailable;
+      setCloudInvitationAvailable(managedCloudAvailable);
       // Auto-backup capability gate: stays dark until the engine advertises
       // `backup push --if-changed`. Defaults false when unknown.
       setIfChangedSupported(engineSupportsIfChanged(capResult.envelope.data));
@@ -1617,12 +1776,12 @@ function AppContent() {
       if (supported) {
         try {
           const status = await readAndApplyBackupStatus();
-          // Fire `backup list` in the background once we know we're signed in
-          // with a paid subscription. The Backup pane reads this cached list
-          // on first render so navigation feels instant. `none` is skipped
-          // because the engine returns SUBSCRIPTION_REQUIRED for list in that
-          // state (contract §10 — read is blocked).
-          if (status?.signedIn && status.subscriptionStatus !== 'none') {
+          // Endstate Cloud blocks list reads without an active service state;
+          // self-hosted endpoints own their own policy and must still list.
+          if (
+            status?.signedIn &&
+            (capResult.envelope.data?.features?.hostedBackup?.providerKind === 'self-hosted' || status.subscriptionStatus !== 'none')
+          ) {
             void backupList(settings)
               .then((data) => setBackupListData(data.backups))
               .catch((err) => {
@@ -1657,39 +1816,41 @@ function AppContent() {
         setAuthSessionTruth(sessionSignedOut);
       }
 
-      // Continuous protection handshake: dark unless the engine advertises
+      // Scheduled setup checks handshake: dark unless the engine advertises
       // features.schedule.supported. When supported, fetch engine-owned
       // schedule status (drives the drift chip), and if the user's persisted
       // preference says enabled, re-assert the task — enable is idempotent
       // (schtasks /F), so this self-heals a deleted task or a moved engine exe.
       const schedSupported = engineSupportsSchedule(capResult.envelope.data);
       const schedAutoPushCapable = engineSupportsScheduleAutoPush(capResult.envelope.data);
+      const schedBackupIdCapable = engineSupportsScheduleBackupId(capResult.envelope.data);
+      const schedBundleManifestCapable = engineSupportsScheduleBundleManifest(capResult.envelope.data);
       setScheduleSupported(schedSupported);
       setScheduleAutoPushCapable(schedAutoPushCapable);
+      setScheduleBackupIdCapable(schedBackupIdCapable);
+      setScheduleBundleManifestCapable(schedBundleManifestCapable);
       if (schedSupported) {
         try {
-          const schedStatus = await scheduleStatus(settings);
-          setScheduleStatusData(schedStatus);
+          const schedStatus = await refreshScheduleStatus();
+          if (!schedStatus) return;
           // Manifest preference: the engine's persisted config first (it is
           // what the task actually verifies against), then the last saved
           // capture. No manifest → nothing to self-heal.
           const manifest = schedStatus.manifest || settings.scheduleManifestPath || undefined;
-          if (settings.scheduleEnabled && manifest && isBundlePath(manifest)) {
-            // A bundle baseline (.endstate or the legacy .zip) can never verify
-            // against an engine whose loader parses raw JSONC only, so
-            // re-asserting would just re-register a task that fails every day.
-            // Leave it unregistered; the next manifest-only save (or bundle
-            // save with a successful manifest side-write) re-points the
-            // schedule at a usable baseline.
-            console.warn('schedule self-heal skipped: baseline is a bundle the scheduled verify cannot parse:', manifest);
-          } else if (settings.scheduleEnabled && manifest) {
+          if (
+            settings.scheduleEnabled &&
+            manifest &&
+            scheduleBaselineSupported(manifest, schedBundleManifestCapable)
+          ) {
             void scheduleEnable(settings, {
               manifest,
               time: settings.scheduleTime,
               autoPush: settings.scheduleAutoPush && schedAutoPushCapable,
+              backupId: schedBackupIdCapable
+                ? settings.profileBackupIds[profileKeyFor({ path: manifest })] ?? schedStatus.backupId
+                : undefined,
             })
-              .then(() => scheduleStatus(settings))
-              .then(setScheduleStatusData)
+              .then(() => refreshScheduleStatus())
               .catch((err) => {
                 // Self-heal is best-effort; the Settings toggle still works.
                 console.warn('schedule self-heal failed:', err);
@@ -1701,6 +1862,7 @@ function AppContent() {
           console.warn('schedule status failed:', err);
         }
       } else {
+        scheduleStatusSequencerRef.current.invalidate();
         setScheduleStatusData(null);
       }
     } catch (err) {
@@ -2750,14 +2912,51 @@ function AppContent() {
               captureStage={captureStage}
               liveAppEvents={liveAppEvents}
               hostedBackupSupported={hostedBackupSupported}
+              hostedBackupProviderKind={backupProviderKind}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
               hostedBackupSubscriptionStatus={backupStatusData?.subscriptionStatus}
               autoBackupState={autoBackupChip}
               onOpenHostedBackup={() => handleNavigate('backup')}
+              cloudInvitationShownAt={cloudInvitationConsumption.shownAt}
+              cloudInvitationDismissed={cloudInvitationConsumption.dismissed}
+              endstateCloudAvailable={cloudInvitationAvailable && backupStatusData !== null}
+              cloudInvitationManagedAccountSeen={cloudInvitationManagedAccountSeen}
+              // Pending = the consent dialog is open, or this capture still
+              // owes it (same gate as the capture handler below). Either way
+              // one capture must never produce two prompts.
+              autoBackupConsentPending={
+                autoBackupConsentOpen ||
+                (!settings.autoBackupPromptSeen &&
+                  autoBackupAvailable({
+                    hostedBackupSupported,
+                    ifChangedSupported,
+                    managedService: !selfHostedBackupService,
+                    status: backupStatusData,
+                  }))
+              }
+              // Record before present — persisted ahead of the card rendering.
+              onCloudInvitationShown={() =>
+                (() => {
+                  const updated = { ...cloudInvitationConsumptionRef.current, shownAt: new Date().toISOString() };
+                  if (!saveCloudInvitationConsumption(updated)) return false;
+                  cloudInvitationConsumptionRef.current = updated;
+                  setCloudInvitationConsumption(updated);
+                  return true;
+                })()
+              }
+              onCloudInvitationDismissed={() =>
+                (() => {
+                  const updated = { ...cloudInvitationConsumptionRef.current, dismissed: true };
+                  if (!saveCloudInvitationConsumption(updated)) return false;
+                  cloudInvitationConsumptionRef.current = updated;
+                  setCloudInvitationConsumption(updated);
+                  return true;
+                })()
+              }
               onPushToHostedBackup={
                 hostedBackupSupported
                 && backupStatusData?.signedIn
-                && backupStatusData.subscriptionStatus === 'active'
+                && (selfHostedBackupService || backupStatusData.subscriptionStatus === 'active')
                   ? async (capturedPath: string) => {
                       await guardManualPush({ profile: capturedPath }, async () => {
                         // Reset counters and open the dialog before kicking off
@@ -2780,14 +2979,19 @@ function AppContent() {
                             },
                           });
                           const pushEmail = backupStatusData?.email;
-                          if (!hasSeenFirstPushFor(pushEmail)) {
+                          if (backupProviderKind === 'endstate-cloud' && !hasSeenFirstPushFor(pushEmail)) {
                             showToast(
-                              'First backup saved to the cloud. Your settings are now safe across machines.',
+                              'First Endstate Cloud backup saved. Your Endstate application list and supported non-secret settings are available on another Windows PC.',
                               'success',
                             );
                             markFirstPushFor(pushEmail);
                           } else {
-                            showToast('Pushed to hosted backup.', 'success');
+                            showToast(
+                              backupProviderKind === 'self-hosted'
+                                ? 'Uploaded to your self-hosted backup service.'
+                                : backupProviderKind === 'endstate-cloud' ? 'Pushed to Endstate Cloud.' : 'Uploaded to your backup service.',
+                              'success',
+                            );
                           }
                           // Refresh the cloud index so the new backup gets a
                           // cloud badge in Setup immediately.
@@ -2828,10 +3032,11 @@ function AppContent() {
                   const autoBackupPath = result.envelopeData?.outputPath;
                   if (
                     autoBackupPath &&
-                    autoBackupAvailable({
-                      hostedBackupSupported,
-                      ifChangedSupported,
-                      status: backupStatusData,
+                  autoBackupAvailable({
+                    hostedBackupSupported,
+                    ifChangedSupported,
+                    managedService: !selfHostedBackupService,
+                    status: backupStatusData,
                     })
                   ) {
                     if (!settings.autoBackupPromptSeen) {
@@ -2895,17 +3100,16 @@ function AppContent() {
                   // baseline on its own — no sidecar to write, and nothing to
                   // keep paired with the bundle. If protection is already on,
                   // re-point the task at the fresh snapshot (idempotent).
-                  const baselinePath = resolveScheduleBaselinePath(savePath);
+                  const baselinePath = resolveScheduleBaselinePath(
+                    savePath,
+                    scheduleBundleManifestCapable,
+                  );
                   if (baselinePath) {
-                    updateSettings({ scheduleManifestPath: baselinePath });
-                    if (scheduleSupported && settings.scheduleEnabled) {
-                      void scheduleEnable(settings, {
-                        manifest: baselinePath,
-                        time: settings.scheduleTime,
-                        autoPush: settings.scheduleAutoPush && scheduleAutoPushCapable,
-                      })
-                        .then(() => scheduleStatus(settings))
-                        .then(setScheduleStatusData)
+                    if (!updateSettings({ scheduleManifestPath: baselinePath })) {
+                      showToast('File saved, but Endstate could not remember it for scheduled setup checks.', 'warning');
+                    } else if (scheduleSupported && settingsRef.current.scheduleEnabled) {
+                      void assertScheduleEnabled({ manifest: baselinePath })
+                        .then(() => refreshScheduleStatus())
                         .catch((err) => console.warn('schedule re-point failed:', err));
                     }
                   }
@@ -2960,7 +3164,9 @@ function AppContent() {
               recentlyImportedProfile={recentlyImportedProfile}
               onRecentlyImportedConsumed={() => setRecentlyImportedProfile(null)}
               cloudBackupIndex={cloudEntryByKey}
+              cloudStorageKnown={cloudBackupIndex.authoritative}
               hostedBackupSupported={hostedBackupSupported}
+              hostedBackupProviderKind={backupProviderKind}
               hostedBackupSignedIn={!!backupStatusData?.signedIn}
               hostedBackupSubscriptionStatus={backupStatusData?.subscriptionStatus}
               onOpenHostedBackup={() => handleNavigate('backup')}
@@ -2973,9 +3179,9 @@ function AppContent() {
                 setRestoreWizardOpen(true);
               }}
               onPushProfileToCloud={
-                hostedBackupSupported &&
-                backupStatusData?.signedIn &&
-                backupStatusData.subscriptionStatus === 'active'
+              hostedBackupSupported &&
+              backupStatusData?.signedIn &&
+                (selfHostedBackupService || backupStatusData.subscriptionStatus === 'active')
                   ? async (profilePath: string, profileName: string) => {
                       await guardManualPush({ profile: profilePath }, async () => {
                         setPushTotalChunks(0);
@@ -3003,22 +3209,27 @@ function AppContent() {
                           });
                           // First host (no id passed) → persist the new backup id.
                           if (!pushArgs.backupId && result.backupId) {
-                            updateSettings({
+                            updateSettings((current) => ({
                               profileBackupIds: {
-                                ...settings.profileBackupIds,
+                                ...current.profileBackupIds,
                                 [profileKeyFor({ path: profilePath })]: result.backupId,
                               },
-                            });
+                            }));
                           }
                           const pushEmail = backupStatusData?.email;
-                          if (!hasSeenFirstPushFor(pushEmail)) {
+                          if (backupProviderKind === 'endstate-cloud' && !hasSeenFirstPushFor(pushEmail)) {
                             showToast(
-                              'First backup saved to the cloud. Your settings are now safe across machines.',
+                              'First Endstate Cloud backup saved. Your Endstate application list and supported non-secret settings are available on another Windows PC.',
                               'success',
                             );
                             markFirstPushFor(pushEmail);
                           } else {
-                            showToast(`"${profileName}" backed up to cloud.`, 'success');
+                            showToast(
+                              backupProviderKind === 'self-hosted'
+                                ? `"${profileName}" uploaded to your self-hosted backup service.`
+                                : backupProviderKind === 'endstate-cloud' ? `"${profileName}" backed up to cloud.` : `"${profileName}" uploaded to your backup service.`,
+                              'success',
+                            );
                           }
                           void cloudBackupIndex.refresh();
                         } catch (err) {
@@ -3126,6 +3337,16 @@ function AppContent() {
     // Drift chip state from the engine's `schedule status` (pure mapping —
     // no drift logic client-side). never-run/clean render nothing.
     const scheduleDrift = driftStateFromStatus(scheduleStatusData);
+    const configuredEndpointAction = !cloudInvitationAvailable && selfHostedEndpoint ? (
+      <Button
+        type="button"
+        variant="secondary"
+        className="mb-4"
+        onClick={() => void openExternal(selfHostedEndpoint)}
+      >
+        Open configured endpoint
+      </Button>
+    ) : null;
 
     switch (currentPage) {
       case 'landing':
@@ -3141,6 +3362,22 @@ function AppContent() {
               driftCount={scheduleDrift.kind === 'drift' ? scheduleDrift.count : undefined}
               driftCheckedAt={'checkedAt' in scheduleDrift ? scheduleDrift.checkedAt : undefined}
               driftCheckFailing={scheduleDrift.kind === 'failing'}
+              scheduleAttention={
+                scheduleDrift.kind === 'upload-pending' ||
+                scheduleDrift.kind === 'capture-pending' ||
+                scheduleDrift.kind === 'sign-in-required' ||
+                scheduleDrift.kind === 'subscription-required' ||
+                scheduleDrift.kind === 'setup-required' ||
+                scheduleDrift.kind === 'upload-uncertain' ||
+                scheduleDrift.kind === 'upload-failed' ||
+                scheduleDrift.kind === 'offline' ||
+                scheduleDrift.kind === 'local-only'
+                  ? scheduleDrift.kind
+                  : undefined
+              }
+              pendingUploadCount={scheduleStatusData?.pendingUpload?.count}
+              managedBackupService={backupProviderKind === 'endstate-cloud'}
+              backupProviderKind={backupProviderKind}
             />
           </div>
         );
@@ -3156,26 +3393,32 @@ function AppContent() {
           // somehow, route them home rather than rendering a bare pane.
           return (
             <div className="m-6 text-sm text-muted-foreground">
-              Hosted Backup is not available with the bundled engine. Update Endstate to
-              enable Hosted Backup.
+              Endstate Cloud is not available with the bundled engine. Update Endstate to
+              enable it.
             </div>
           );
         }
         if (backupSessionView === 'checking') {
           return (
-            <HostedBackupSessionCheck
-              failed={claimSessionCheckFailed && !claimOnboarding.sessionCheckPending}
-              busy={claimSessionCheckBusy}
-              onRetry={() => void retryClaimSessionCheck()}
-            />
+            <>
+              {configuredEndpointAction}
+              <HostedBackupSessionCheck
+                providerKind={backupProviderKind}
+                failed={claimSessionCheckFailed && !claimOnboarding.sessionCheckPending}
+                busy={claimSessionCheckBusy}
+                onRetry={() => void retryClaimSessionCheck()}
+              />
+            </>
           );
         }
         return (
           <>
             {errorBanner}
+            {configuredEndpointAction}
             <AuthPane
               key={claimOnboarding.claimSetup?.requestId ?? 'regular-auth'}
               settings={settings}
+              providerKind={backupProviderKind}
               initialTab={authInitialTab}
               initialClaimMode={claimOnboarding.claimSetup !== null}
               initialClaimToken={claimOnboarding.claimSetup?.token ?? ''}
@@ -3199,7 +3442,7 @@ function AppContent() {
                 try {
                   const status = await readAndApplyBackupStatus();
                   // Warm the list cache so the Backup pane lands instantly.
-                  if (status?.signedIn && status.subscriptionStatus !== 'none') {
+                  if (status?.signedIn && (selfHostedBackupService || status.subscriptionStatus !== 'none')) {
                     void backupList(settings)
                       .then((data) => setBackupListData(data.backups))
                       .catch((err) => {
@@ -3238,8 +3481,8 @@ function AppContent() {
         if (!hostedBackupSupported) {
           return (
             <div className="m-6 text-sm text-muted-foreground">
-              Hosted Backup is not available with the bundled engine. Update Endstate to
-              enable Hosted Backup.
+              Endstate Cloud is not available with the bundled engine. Update Endstate to
+              enable it.
             </div>
           );
         }
@@ -3247,35 +3490,45 @@ function AppContent() {
         // creation, and purchase-code entry points.
         if (backupSessionView === 'checking') {
           return (
-            <HostedBackupSessionCheck
-              failed={claimSessionCheckFailed && !claimOnboarding.sessionCheckPending}
-              busy={claimSessionCheckBusy}
-              onRetry={() => void retryClaimSessionCheck()}
-            />
+            <>
+              {configuredEndpointAction}
+              <HostedBackupSessionCheck
+                providerKind={backupProviderKind}
+                failed={claimSessionCheckFailed && !claimOnboarding.sessionCheckPending}
+                busy={claimSessionCheckBusy}
+                onRetry={() => void retryClaimSessionCheck()}
+              />
+            </>
           );
         }
         if (backupSessionView === 'signed-out') {
           return (
-            <HostedBackupSignedOut
-              onSignIn={() => {
+            <>
+              {configuredEndpointAction}
+              <HostedBackupSignedOut
+                providerKind={backupProviderKind}
+                onSignIn={() => {
                 claimOnboarding.clearClaimSetup();
                 setAuthInitialTab('sign-in');
                 handleNavigate('auth');
               }}
-              onCreateAccount={() => {
+                onCreateAccount={() => {
                 claimOnboarding.clearClaimSetup();
                 setAuthInitialTab('sign-up');
                 handleNavigate('auth');
               }}
-              onUsePurchaseCode={claimOnboarding.startManualClaim}
-            />
+                onUsePurchaseCode={claimOnboarding.startManualClaim}
+              />
+            </>
           );
         }
         return (
           <>
             {errorBanner}
+            {configuredEndpointAction}
             <BackupPane
               settings={settings}
+              providerKind={backupProviderKind}
               selectedProfilePath={selectedProfilePath || null}
               selectedProfileName={selectedProfile || null}
               initialStatus={backupStatusData}
@@ -3285,9 +3538,9 @@ function AppContent() {
                 // Drop the local id-mapping for a deleted backup so a later
                 // "Back up to cloud" creates a fresh one instead of pushing to
                 // a dead --backup-id.
-                updateSettings({
-                  profileBackupIds: pruneProfileBackupIds(settings.profileBackupIds, backupId),
-                });
+                updateSettings((current) => ({
+                  profileBackupIds: pruneProfileBackupIds(current.profileBackupIds, backupId),
+                }));
               }}
               isReauthOpen={() => reauthOpenRef.current}
               onAuthLost={() => {
@@ -3313,6 +3566,7 @@ function AppContent() {
             <RestoreWizard
               open={restoreWizardOpen}
               settings={settings}
+              providerKind={backupProviderKind}
               defaultDestination={profilesDirectory}
               onDismiss={() => setRestoreWizardOpen(false)}
               onComplete={(writtenTo, backupId) => {
@@ -3326,12 +3580,12 @@ function AppContent() {
                 // The robust cross-machine identity (move/share-proof) is the
                 // deferred manifest-embedded profile id.
                 if (writtenTo && backupId) {
-                  updateSettings({
+                  updateSettings((current) => ({
                     profileBackupIds: {
-                      ...settings.profileBackupIds,
+                      ...current.profileBackupIds,
                       [profileKeyFor({ path: writtenTo })]: backupId,
                     },
-                  });
+                  }));
                 }
                 // Refresh local profiles list after a wizard restore so the
                 // newly-restored profile appears in the Home overview.
@@ -3341,6 +3595,7 @@ function AppContent() {
             <ReauthDialog
               open={reauthDialogOpen}
               settings={settings}
+              providerKind={backupProviderKind}
               expectedEmail={reauthExpectedEmail}
               onDismiss={() => setReauthDialogOpen(false)}
               onReauthenticated={async () => {
@@ -3352,7 +3607,7 @@ function AppContent() {
                 // and the user can retry manually from the pane's CTA.
                 try {
                   const next = await readAndApplyBackupStatus();
-                  if (next?.signedIn && next.subscriptionStatus !== 'none') {
+                  if (next?.signedIn && (selfHostedBackupService || next.subscriptionStatus !== 'none')) {
                     const list = await backupList(settings);
                     setBackupListData(list.backups);
                   }
@@ -3967,6 +4222,8 @@ function AppContent() {
               <AccountSection
                 settings={settings}
                 status={backupStatusData}
+                managedService={managedBackupService}
+                providerKind={backupProviderKind}
                 onSignedOut={async () => {
                   // Refresh status + route to auth pane. Drop the prefetched
                   // list — it's per-user data and would leak across accounts.
@@ -4009,7 +4266,7 @@ function AppContent() {
                 <CardHeader>
                   <CardTitle>Automatic backup</CardTitle>
                   <CardDescription>
-                    Keep your saved setup backed up to your cloud automatically.
+                    Keep your saved setup backed up to your configured backup service automatically.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -4021,20 +4278,21 @@ function AppContent() {
               </Card>
             )}
 
-            {/* Continuous protection (scheduled drift check) — dark unless the
+            {/* Scheduled setup checks — dark unless the
                 engine advertises features.schedule.supported. The auto-push
                 sub-toggle additionally requires the auto-backup runtime
                 conditions AND features.schedule.autoPush. */}
             {scheduleSupported && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Continuous protection</CardTitle>
+                  <CardTitle>Scheduled setup checks</CardTitle>
                   <CardDescription>
-                    Check this computer against your last saved snapshot every day.
+                    Check this computer against the setup you last saved, on a daily schedule.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ContinuousProtectionSetting
+                    providerKind={backupProviderKind}
                     enabled={settings.scheduleEnabled}
                     time={settings.scheduleTime}
                     autoPush={settings.scheduleAutoPush}
@@ -4043,11 +4301,22 @@ function AppContent() {
                       autoBackupAvailable({
                         hostedBackupSupported,
                         ifChangedSupported,
+                        managedService: !selfHostedBackupService,
                         status: backupStatusData,
                       })
                     }
                     manifestAvailable={!!settings.scheduleManifestPath}
                     busy={scheduleBusy}
+                    uploadUncertainArtifactSha256={
+                      scheduleDrift.kind === 'upload-uncertain'
+                        ? scheduleStatusData?.pendingUpload?.artifactSha256
+                        : undefined
+                    }
+                    onDiscardAmbiguousUpload={
+                      scheduleDrift.kind === 'upload-uncertain' && scheduleStatusData?.pendingUpload?.artifactSha256
+                        ? () => void handleDiscardAmbiguousUpload(scheduleStatusData.pendingUpload!.artifactSha256!)
+                        : undefined
+                    }
                     onToggle={(v) => void handleScheduleToggle(v)}
                     onTimeChange={(t) => void handleScheduleTimeChange(t)}
                     onAutoPushToggle={(v) => void handleScheduleAutoPushToggle(v)}
@@ -4098,8 +4367,8 @@ function AppContent() {
       case 'setup': return '';
       case 'report': return 'Reports';
       case 'settings': return 'Settings';
-      case 'auth': return 'Hosted Backup';
-      case 'backup': return 'Hosted Backup';
+      case 'auth': return backupProviderKind === 'self-hosted' ? 'Self-hosted backup' : backupProviderKind === 'endstate-cloud' ? 'Endstate Cloud' : 'Backup service';
+      case 'backup': return backupProviderKind === 'self-hosted' ? 'Self-hosted backup' : backupProviderKind === 'endstate-cloud' ? 'Endstate Cloud' : 'Backup service';
       default: return '';
     }
   };

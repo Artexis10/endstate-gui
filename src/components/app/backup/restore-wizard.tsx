@@ -54,6 +54,7 @@ import { Loader2, FolderOpen } from 'lucide-react';
 export interface RestoreWizardProps {
   open: boolean;
   settings: AppSettings;
+  providerKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
   /** Suggested default destination (typically the user's profiles directory). */
   defaultDestination: string;
   onDismiss: () => void;
@@ -68,6 +69,7 @@ type Step = 'choose' | 'progress' | 'done';
 export function RestoreWizard({
   open,
   settings,
+  providerKind = 'endstate-cloud',
   defaultDestination,
   onDismiss,
   onComplete,
@@ -137,7 +139,7 @@ export function RestoreWizard({
       } catch (err) {
         if (cancelled) return;
         if (err instanceof BackupCommandError) {
-          const f = friendlyBackupError(err);
+          const f = friendlyBackupError(err, { providerKind });
           showToast(f.headline, f.tone);
         } else {
           showToast(err instanceof Error ? err.message : String(err), 'error');
@@ -165,7 +167,7 @@ export function RestoreWizard({
         setSelectedVersionId(data.versions[0]?.versionId ?? null);
       } catch (err) {
         if (err instanceof BackupCommandError) {
-          const f = friendlyBackupError(err);
+          const f = friendlyBackupError(err, { providerKind });
           showToast(f.headline, f.tone);
         } else {
           showToast(err instanceof Error ? err.message : String(err), 'error');
@@ -258,7 +260,7 @@ export function RestoreWizard({
       setStep('done');
     } catch (err) {
       if (err instanceof BackupCommandError) {
-        const f = friendlyBackupError(err);
+        const f = friendlyBackupError(err, { providerKind });
         showToast(f.headline, f.tone);
       } else {
         showToast(err instanceof Error ? err.message : String(err), 'error');

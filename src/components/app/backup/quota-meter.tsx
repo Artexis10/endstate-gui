@@ -11,6 +11,7 @@
 import { formatBytes } from '@/lib/format-bytes';
 
 export interface QuotaMeterProps {
+  providerKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
   quotaUsedBytes?: number;
   quotaTotalBytes?: number;
   versionCount?: number;
@@ -19,6 +20,7 @@ export interface QuotaMeterProps {
 }
 
 export function QuotaMeter({
+  providerKind = 'endstate-cloud',
   quotaUsedBytes,
   quotaTotalBytes,
   versionCount,
@@ -62,7 +64,7 @@ export function QuotaMeter({
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label="Hosted Backup storage used"
+        aria-label={providerKind === 'self-hosted' ? 'Self-hosted backup storage used' : providerKind === 'endstate-cloud' ? 'Endstate Cloud storage used' : 'Backup service storage used'}
       >
         <div
           className={`h-full ${barColor} transition-[width]`}

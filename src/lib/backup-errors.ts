@@ -49,7 +49,14 @@ export function isNetworkErrorCode(code?: string): boolean {
 
 export function friendlyBackupError(
   err: BackupCommandError | { code?: string; message: string; remediation?: string },
+  options: { providerKind?: 'endstate-cloud' | 'self-hosted' | 'unknown' } = {},
 ): FriendlyBackupError {
+  const providerKind = options.providerKind ?? 'endstate-cloud';
+  const managedService = providerKind === 'endstate-cloud';
+  const selfHostedService = providerKind === 'self-hosted';
+  const serviceName = managedService
+    ? 'Endstate Cloud'
+    : selfHostedService ? 'your self-hosted backup service' : 'your backup service';
   switch (err.code) {
     case 'AUTH_REQUIRED':
       return {
@@ -60,9 +67,17 @@ export function friendlyBackupError(
       };
     case 'SUBSCRIPTION_REQUIRED':
       return {
-        headline: 'Hosted Backup needs an active subscription',
-        body: 'Subscribe to push and restore your backups.',
-        cta: { label: 'Manage subscription', action: 'manage-billing' },
+        headline: managedService
+          ? 'Endstate Cloud needs an active subscription'
+          : selfHostedService
+            ? 'Your self-hosted backup service rejected this request'
+            : 'Your backup service rejected this request',
+        body: managedService
+          ? 'Subscribe to push and restore your backups.'
+          : 'Check the service configuration and access policy, then try again.',
+        cta: managedService
+          ? { label: 'Manage subscription', action: 'manage-billing' }
+          : { label: 'Try again', action: 'retry' },
         tone: 'warning',
       };
     case 'NOT_FOUND':
@@ -81,28 +96,28 @@ export function friendlyBackupError(
       };
     case 'RATE_LIMITED':
       return {
-        headline: 'Hosted Backup is busy right now',
+        headline: `${serviceName} is busy right now`,
         body: 'Wait a moment, then try again.',
         cta: { label: 'Try again', action: 'retry' },
         tone: 'warning',
       };
     case 'BACKEND_ERROR':
       return {
-        headline: 'Hosted Backup ran into a problem',
+        headline: `${serviceName} ran into a problem`,
         body: 'Try again in a few moments.',
         cta: { label: 'Try again', action: 'retry' },
         tone: 'error',
       };
     case 'BACKEND_UNREACHABLE':
       return {
-        headline: "Can't reach Hosted Backup",
+        headline: `Can't reach ${serviceName}`,
         body: 'Check your internet connection, then try again.',
         cta: { label: 'Try again', action: 'retry' },
         tone: 'error',
       };
     case 'BACKEND_INCOMPATIBLE':
       return {
-        headline: "Your app version isn't compatible with Hosted Backup",
+        headline: `Your app version isn't compatible with ${serviceName}`,
         body: 'Update Endstate to the latest version.',
         tone: 'error',
       };
@@ -135,7 +150,11 @@ export function friendlyBackupError(
     case 'CLAIM_TOKEN_EXPIRED':
       return {
         headline: 'This claim link has expired',
-        body: 'Email founder@substratesystems.io to request a fresh link.',
+        body: managedService
+          ? 'Email founder@substratesystems.io to request a fresh link.'
+          : selfHostedService
+            ? 'Ask the service administrator for a fresh link.'
+            : 'Ask your backup service administrator for a fresh link.',
         tone: 'error',
       };
     case 'CLAIM_TOKEN_CONSUMED':

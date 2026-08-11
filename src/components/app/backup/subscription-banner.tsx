@@ -18,6 +18,8 @@ import type { SubscriptionStatus } from '@/types';
 import { CheckCircle2, AlertTriangle, OctagonX, Sparkles } from 'lucide-react';
 
 export interface SubscriptionBannerProps {
+  /** Subscription billing is a managed Endstate Cloud concern only. */
+  managedService?: boolean;
   status?: SubscriptionStatus;
   /**
    * ISO 8601 timestamp marking the end of the 30-day grace window. When set
@@ -59,6 +61,7 @@ function formatGraceDeadline(iso: string | undefined): string | null {
 }
 
 export function SubscriptionBanner({
+  managedService = true,
   status,
   graceEndsAt,
   onCheckout,
@@ -66,6 +69,7 @@ export function SubscriptionBanner({
   onManage,
   managePending = false,
 }: SubscriptionBannerProps) {
+  if (!managedService) return null;
   const effective = status ?? 'none';
 
   if (effective === 'active') {
@@ -73,8 +77,8 @@ export function SubscriptionBanner({
       <BannerShell
         tone="success"
         icon={<CheckCircle2 className="h-5 w-5" />}
-        title="Hosted Backup active"
-        description="Your backups are up to date."
+        title="Endstate Cloud active"
+        description="Your Endstate Cloud account is active."
         action={
           <Button
             type="button"
@@ -144,8 +148,8 @@ export function SubscriptionBanner({
     <BannerShell
       tone="info"
       icon={<Sparkles className="h-5 w-5" />}
-      title="Subscribe to enable hosted backup"
-      description="Encrypted backups in the cloud. Restore on any machine."
+      title="Subscribe to enable Endstate Cloud"
+      description="Encrypted Endstate application lists and supported non-secret settings, ready for another Windows PC."
       action={
         <Button
           type="button"

@@ -22,7 +22,7 @@ function renderSetting(
   );
 }
 
-describe('ContinuousProtectionSetting', () => {
+describe('Scheduled setup checks setting', () => {
   it('reflects the enabled state on the main toggle', () => {
     renderSetting({ enabled: true });
     expect(
@@ -71,7 +71,7 @@ describe('ContinuousProtectionSetting', () => {
   it('hides the auto-push sub-toggle when unavailable', () => {
     renderSetting({ autoPushAvailable: false });
     expect(
-      screen.queryByRole('switch', { name: /back up automatically/i }),
+      screen.queryByRole('switch', { name: /upload the saved setup to endstate cloud/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -79,11 +79,18 @@ describe('ContinuousProtectionSetting', () => {
     const onAutoPushToggle = vi.fn();
     renderSetting({ autoPushAvailable: true, onAutoPushToggle });
     const sub = screen.getByRole('switch', {
-      name: /back up automatically when changes are found/i,
+      name: /upload the saved setup to endstate cloud/i,
     });
     expect(sub).not.toBeChecked();
     await userEvent.click(sub);
     expect(onAutoPushToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('explains that changed setups get a fresh local version before upload', () => {
+    renderSetting({ autoPushAvailable: true });
+
+    expect(screen.getByText(/captures a fresh local version when changes are found/i)).toBeInTheDocument();
+    expect(screen.getByText(/then uploads it to Endstate Cloud/i)).toBeInTheDocument();
   });
 
   it('disables controls while busy', () => {
@@ -92,7 +99,21 @@ describe('ContinuousProtectionSetting', () => {
       screen.getByRole('switch', { name: /check this computer for drift daily/i }),
     ).toBeDisabled();
     expect(
-      screen.getByRole('switch', { name: /back up automatically/i }),
+      screen.getByRole('switch', { name: /upload the saved setup to endstate cloud/i }),
     ).toBeDisabled();
+  });
+
+  it('requires confirmation before discarding an ambiguous queued upload', async () => {
+    const onDiscardAmbiguousUpload = vi.fn();
+    renderSetting({
+      uploadUncertainArtifactSha256: 'sha256:ambiguous',
+      onDiscardAmbiguousUpload,
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /discard ambiguous upload/i }));
+    expect(onDiscardAmbiguousUpload).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toHaveTextContent(/local capture and scheduled baseline are kept/i);
+    await userEvent.click(screen.getByRole('button', { name: /^discard upload$/i }));
+    expect(onDiscardAmbiguousUpload).toHaveBeenCalledOnce();
   });
 });

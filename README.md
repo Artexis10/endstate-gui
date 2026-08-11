@@ -173,16 +173,21 @@ See `docs/ai/PROJECT_RULES.md` in the endstate repository for the authoritative 
 
 ---
 
-## Hosted Backup
+## Endstate Cloud
 
-Endstate GUI surfaces the hosted-backup capability of the bundled engine
-(`endstate backup *`, available from engine v2.0.0). All cryptography, HTTP,
-JWT validation, and keychain access live in the engine — the GUI is a thin
-presentation layer per the [Hosted Backup contract](https://github.com/Artexis10/endstate/blob/main/docs/contracts/hosted-backup-contract.md).
+Endstate Cloud is the public name of the managed backup service. Endstate GUI
+surfaces the hosted-backup capability of the bundled engine (`endstate backup *`,
+available from engine v2.0.0). All cryptography, HTTP, JWT validation, and
+keychain access live in the engine — the GUI is a thin presentation layer per
+the [Hosted Backup contract](https://github.com/Artexis10/endstate/blob/main/docs/contracts/hosted-backup-contract.md).
+
+The `hostedBackup` capability key, the `EndstateHostedBackupCapability` type,
+and the contract document's filename are unchanged: the rename is public
+terminology only, and the wire contract with the Go engine is untouched.
 
 ### Surfaces
 
-- **Hosted Backup pane** — listed in the sidebar when the bundled engine
+- **Endstate Cloud pane** — listed in the sidebar when the bundled engine
   advertises `features.hostedBackup.supported = true`. Hidden otherwise.
 - **Sign-in / Sign-up / Recover** — three-tab auth pane. Sign-up generates a
   24-word recovery key; the user must save it via at least two of three
@@ -212,8 +217,8 @@ Both open via Tauri's shell plugin (`@tauri-apps/plugin-shell`).
 On boot, the GUI reads `endstate capabilities --json` and checks
 `features.hostedBackup.supported`. If absent or `false`, the auth pane,
 Backup nav entry, and Account section are all hidden, and the user sees
-"Update Endstate to enable Hosted Backup." Local provisioning continues to
-work.
+"Endstate Cloud is not available with the bundled engine. Update Endstate to
+enable it." Local provisioning continues to work.
 
 ### Smoke-test plan (manual)
 

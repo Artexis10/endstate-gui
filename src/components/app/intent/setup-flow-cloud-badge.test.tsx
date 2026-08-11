@@ -94,6 +94,19 @@ describe('SetupFlow — cloud-backed badge', () => {
     }
   });
 
+  it('withholds cloud badges and storage details until the account index is authoritative', () => {
+    renderWithProviders(
+      <SetupFlow
+        {...baseProps}
+        cloudBackupIndex={makeIndex(['work-laptop'])}
+        cloudStorageKnown={false}
+      />,
+    );
+
+    expect(screen.queryByTestId('profile-card-work-laptop-cloud-badge')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('profile-card-work-laptop-storage-chip')).not.toBeInTheDocument();
+  });
+
   it('does NOT render a badge when only the name (not the path key) is in the index', () => {
     // Regression guard: a name match must no longer flip the badge.
     renderWithProviders(

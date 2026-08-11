@@ -30,6 +30,12 @@ describe('ProfileStorageChip', () => {
     expect(chip).not.toHaveTextContent(/^Cloud$/);
   });
 
+  it('withholds a local-only claim until the cloud index is authoritative', () => {
+    renderWithProviders(<ProfileStorageChip cloudEntry={undefined} cloudStateKnown={false} />);
+
+    expect(screen.queryByTestId('profile-storage-chip')).not.toBeInTheDocument();
+  });
+
   it('always renders something (never null) so list rows align', () => {
     const { container: a } = renderWithProviders(
       <ProfileStorageChip cloudEntry={ENTRY} />,

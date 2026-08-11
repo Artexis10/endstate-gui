@@ -7,6 +7,23 @@ import type { AppSettings } from '@/settings';
 const SETTINGS = {} as AppSettings;
 
 describe('AuthPane claim setup', () => {
+  it('keeps self-hosted sign-in free of managed account-creation and purchase-code routes', () => {
+    renderWithProviders(
+      <AuthPane
+        settings={SETTINGS}
+        providerKind="self-hosted"
+        initialTab="sign-up"
+        initialClaimMode
+        onAuthenticated={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Sign in to Endstate' })).toBeInTheDocument();
+    expect(screen.getByText('Access your self-hosted backups.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /create an account/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/purchase code/i)).not.toBeInTheDocument();
+  });
+
   it('uses the claim heading and supports an explicit empty manual token', () => {
     renderWithProviders(
       <AuthPane

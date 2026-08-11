@@ -329,7 +329,7 @@ Artifact visibility is required (the produced artifact is always surfaced).
 
 ---
 
-## Scheduled Drift Check Chip (Continuous Protection)
+## Scheduled Setup Checks Chip
 
 The landing screen's "Save this computer" card renders **at most one** chip,
 derived purely from the engine's `schedule status` last-run document. The
@@ -342,19 +342,30 @@ computation happens client-side (CLI is source of truth).
 |-------------|-----------------------------------|-----------|-------|
 | `drift` | last run verified with `fail > 0` | "N apps drifted since your snapshot" (pluralised) | warn (amber) |
 | `failing` | last run recorded a hard `error` | "Drift check failing" | muted (gray) |
-| `clean` | last run verified with zero failures | *(no chip)* | — |
-| `never-run` | schedule disabled, or no last-run document | *(no chip)* | — |
+| `capture-pending` | additive `lastRun.status` is `running` or an unknown non-empty value | "Setup check in progress" | muted (gray) |
+| `upload-pending` | pending upload with no more specific outcome | "Upload pending" | muted (gray) |
+| `sign-in-required` | upload outcome `auth_required` | "Sign in required to upload" | warn (amber) |
+| `subscription-required` | upload outcome `subscription_required` | "Subscription required to upload" for Endstate Cloud; neutral configured-service restriction otherwise | warn (amber) |
+| `setup-required` | upload outcome `setup_required` | "Open Endstate Cloud and save your first Cloud version" for managed accounts; neutral initial-version guidance otherwise | warn (amber) |
+| `upload-uncertain` | upload outcome `upload_uncertain` | The service may have saved the version; check it or save a new version manually. Automatic retry is paused to avoid duplicates. | warn (amber) |
+| `upload-failed` | upload outcome `error` | "Upload failed" | muted (gray) |
+| `offline` | upload outcome `offline` | "Offline — local version saved; uploads will retry" | muted (gray) |
+| `local-only` | older engine omits upload truth | "Saved locally only" | muted (gray) |
+| `clean` | last run verified with zero failures | *(no chip)* | No chip is not a claim that protection is current; it only means no actionable schedule result is available. |
+| `never-run` | schedule disabled, or no last-run document | *(no chip)* | No chip is not a healthy-state claim. |
 
 ### Precedence
 
 **MUST rule:** one chip slot, resolved in this order:
 
-1. **Drift** (amber) — engine-reported drift always wins
-2. **Drift check failing** (muted)
-3. **Scan complete** (transient blue session chip, unrelated to scheduling)
+1. **Setup check in progress** — a running or unknown engine run marker invalidates all retained prior results
+2. **Setup required / upload uncertain** — terminal transfer truth from the capture triggered by drift wins over the retained drift count
+3. **Drift** (amber) — engine-reported drift wins over ordinary retryable upload attention
+4. **Drift check failing** (muted)
+5. **Scan complete** (transient blue session chip, unrelated to scheduling)
 
-Clean and never-run states render nothing — absence of a chip **is** the
-healthy state; there is no "all good" badge.
+Clean and never-run states render nothing. Absence of a chip is deliberately
+not a healthy or current-protection claim; there is no "all good" badge.
 
 ### Rationale
 

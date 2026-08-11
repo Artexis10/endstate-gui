@@ -19,6 +19,8 @@ import type { AppSettings } from '@/settings';
 
 export interface AuthPaneProps {
   settings: AppSettings;
+  /** Engine-owned provider identity; only the managed service uses its name. */
+  providerKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
   /** Initial view: 'sign-in' (default), 'sign-up', or 'recover'. The
    *  signed-out Backup pane sets this to 'sign-up' when the user clicks
    *  "Create account" so they don't have to switch tabs after arriving. */
@@ -43,35 +45,39 @@ export interface AuthPaneProps {
 }
 
 const HEADINGS = {
-  'sign-in': { title: 'Sign in to Endstate', description: 'Access your hosted backups.' },
+  'sign-in': { title: 'Sign in to Endstate', description: 'Access your backup service.' },
   'sign-up': { title: 'Create your account', description: 'You\'ll get a recovery key in the next step.' },
   'recover': { title: 'Recover your account', description: 'You\'ll need the 24-word recovery key you saved at sign-up.' },
 } as const;
 
 export function AuthPane({
   settings,
+  providerKind = 'endstate-cloud',
   initialTab = 'sign-in',
   initialClaimMode = false,
   initialClaimToken = '',
   onRecoveryPendingChange,
   onAuthenticated,
 }: AuthPaneProps) {
+  const allowAccountCreation = providerKind === 'endstate-cloud';
   const { activeTab, setActiveTab } = useAuthState(
-    initialClaimMode ? 'sign-up' : initialTab,
+    allowAccountCreation && initialClaimMode ? 'sign-up' :
+      allowAccountCreation ? initialTab : 'sign-in',
   );
   const [claimState, setClaimState] = useState({
-    mode: initialClaimMode,
-    token: initialClaimToken,
-    prefilled: initialClaimMode && initialClaimToken.length > 0,
+    mode: allowAccountCreation && initialClaimMode,
+    token: allowAccountCreation ? initialClaimToken : '',
+    prefilled: allowAccountCreation && initialClaimMode && initialClaimToken.length > 0,
   });
   const [pendingSignup, setPendingSignup] = useState<BackupSignupData | null>(null);
 
   const handleSwitchTab = useCallback((tab: AuthTab) => {
+    if (!allowAccountCreation && tab === 'sign-up') return;
     if (tab !== 'sign-up') {
       setClaimState({ mode: false, token: '', prefilled: false });
     }
     setActiveTab(tab);
-  }, [setActiveTab]);
+  }, [allowAccountCreation, setActiveTab]);
 
   const handleClaimModeChange = useCallback((mode: boolean) => {
     setClaimState((current) => ({
@@ -110,7 +116,14 @@ export function AuthPane({
         title: 'Finish account setup',
         description: 'Choose a password, then save your recovery key.',
       }
-    : HEADINGS[activeTab];
+    : activeTab === 'sign-in'
+      ? {
+          ...HEADINGS['sign-in'],
+          description: providerKind === 'self-hosted'
+            ? 'Access your self-hosted backups.'
+            : providerKind === 'endstate-cloud' ? 'Access your Endstate Cloud backups.' : 'Access your backup service.',
+        }
+      : HEADINGS[activeTab];
 
   return (
     <div className="flex w-full justify-center p-6">
@@ -125,6 +138,7 @@ export function AuthPane({
               settings={settings}
               onSignedIn={handleSignedIn}
               onSwitchTab={handleSwitchTab}
+              allowAccountCreation={allowAccountCreation}
             />
           )}
           {activeTab === 'sign-up' && (

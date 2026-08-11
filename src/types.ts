@@ -136,6 +136,12 @@ export interface CommandWarning {
 
 export interface EndstateHostedBackupCapability {
   supported: boolean;
+  /**
+   * Engine-normalized identity of the effective backup provider. This is the
+   * only signal the GUI may use for Endstate Cloud eligibility; absent or
+   * unknown values keep the invitation dark for older engines.
+   */
+  providerKind?: 'endstate-cloud' | 'self-hosted' | 'unknown';
   minSchemaVersion?: string;
   issuerUrl?: string;
   audience?: string;
@@ -160,7 +166,7 @@ export interface EndstateCapabilitiesData {
     min: string;
     max: string;
   };
-  commands?: string[];
+  commands?: string[] | Record<string, { flags?: string[] }>;
   features?: {
     streaming?: boolean;
     parallelInstall?: boolean;
@@ -171,7 +177,7 @@ export interface EndstateCapabilitiesData {
     manualApps?: boolean;
     hostedBackup?: EndstateHostedBackupCapability;
     /**
-     * Scheduled drift-check capability ("Continuous protection"). Additive in
+     * Scheduled setup-check capability. Additive in
      * schema 1.x; absent on engines that predate the `schedule` command family
      * (≤ 2.21) → the entire feature stays dark. `supported` is true only on
      * Windows where schtasks.exe is available; `autoPush` advertises that
@@ -180,6 +186,8 @@ export interface EndstateCapabilitiesData {
     schedule?: {
       supported: boolean;
       autoPush: boolean;
+      /** Engine can read a manifest directly from .endstate and legacy .zip bundles. */
+      bundleManifestSupported?: boolean;
     };
   };
   platform?: {
@@ -257,7 +265,7 @@ export interface ProfileInspectionData {
 }
 
 // -----------------------------------------------------------------------------
-// Scheduled drift check ("Continuous protection")
+// Scheduled setup checks
 //
 // Response shapes for the `endstate schedule *` subcommand family, per the
 // engine's cli-json-contract.md "Command: schedule". The GUI renders these
@@ -287,9 +295,18 @@ export interface ScheduleLastRunVerify {
 
 /** Outcome of the optional auto-backup step of a scheduled run. */
 export interface ScheduleLastRunBackup {
-  outcome: 'pushed' | 'skipped' | 'auth_required' | 'error';
+  outcome: 'pushed' | 'skipped' | 'auth_required' | 'subscription_required' | 'setup_required' | 'upload_uncertain' | 'error';
   backupId?: string;
   versionId?: string;
+}
+
+/** Engine-owned upload truth for the saved baseline after scheduled checks. */
+export interface SchedulePendingUpload {
+  pending: boolean;
+  /** Number of queued fresh captures; absent engines imply one when pending. */
+  count?: number;
+  artifactSha256?: string;
+  lastOutcome?: 'pushed' | 'skipped' | 'auth_required' | 'subscription_required' | 'setup_required' | 'upload_uncertain' | 'error' | 'offline';
 }
 
 /** Hard failure that prevented a scheduled run from completing. */
@@ -303,6 +320,9 @@ export interface ScheduleLastRun {
   schemaVersion: string;
   runId: string;
   timestampUtc: string;
+  /** Additive run marker. `running` is written before scheduled work starts;
+   * `completed`/`failed` are terminal, and unknown non-empty values fail closed. */
+  status?: string;
   verify?: ScheduleLastRunVerify | null;
   autoBackup?: ScheduleLastRunBackup | null;
   error?: ScheduleLastRunError | null;
@@ -316,6 +336,10 @@ export interface ScheduleStatusData {
   time?: string;
   autoPush: boolean;
   taskName?: string;
+  /** Additive pinned backup target for scheduled Cloud uploads. */
+  backupId?: string;
+  /** Absent on older engines: upload state is then unknown, never healthy. */
+  pendingUpload?: SchedulePendingUpload;
   /** Null/absent when the schedule has never run. */
   lastRun?: ScheduleLastRun | null;
 }
@@ -329,6 +353,7 @@ export interface ScheduleEnableData {
   autoPush: boolean;
   taskName: string;
   root: string;
+  backupId?: string;
 }
 
 /** Response shape for `endstate schedule disable --json`. */

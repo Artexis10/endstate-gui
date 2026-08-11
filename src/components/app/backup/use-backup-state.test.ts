@@ -6,7 +6,7 @@
  * trivially testable and the dialog rendering depends on it.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useBackupState } from './use-backup-state';
 import type { AppSettings } from '@/settings';
@@ -38,6 +38,10 @@ vi.mock('@/lib/backup-bridge', () => {
 import { backupList } from '@/lib/backup-bridge';
 const mockBackupList = vi.mocked(backupList);
 
+beforeEach(() => {
+  mockBackupList.mockClear();
+});
+
 const SETTINGS: AppSettings = {
   engineMode: 'bundled',
   customProfilesDirectory: '',
@@ -46,6 +50,8 @@ const SETTINGS: AppSettings = {
   showDetails: false,
   autoBackupEnabled: false,
   autoBackupPromptSeen: false,
+  cloudInvitationShownAt: null,
+  cloudInvitationDismissed: false,
   profileBackupIds: {},
   scheduleEnabled: false,
   scheduleTime: '09:00',
@@ -146,6 +152,26 @@ describe('useBackupState progress reducers', () => {
     expect(mockBackupList).not.toHaveBeenCalled();
     expect(result.current.backups).toEqual([]);
     expect(result.current.error).toBeNull();
+  });
+
+  it('lists self-hosted backups even when managed subscription status is none', async () => {
+    const initialStatus: BackupStatusData = {
+      signedIn: true,
+      email: 'user@example.com',
+      userId: 'u-1',
+      subscriptionStatus: 'none',
+      issuerUrl: 'https://backup.example.test',
+    };
+    mockBackupList.mockResolvedValueOnce({ backups: [] });
+    mockBackupList.mockClear();
+
+    const { result } = renderHook(() => useBackupState(SETTINGS, {
+      initialStatus,
+      providerKind: 'self-hosted',
+    }));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(mockBackupList).toHaveBeenCalledOnce();
   });
 
   it('seeds backups from initialBackups and renders without loading flash', async () => {
