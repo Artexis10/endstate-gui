@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.11.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.10.0...gui-v3.11.0) (2026-09-02)
+
+
+### Features
+
+* **cloud:** add trustworthy capture and service states ([#223](https://github.com/Artexis10/endstate-gui/issues/223)) ([ffd500c](https://github.com/Artexis10/endstate-gui/commit/ffd500c9a18092787e11e429bf669961d8c544ed))
+
 ## [3.10.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.9.0...gui-v3.10.0) (2026-08-01)
 
 
