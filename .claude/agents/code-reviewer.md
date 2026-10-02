@@ -25,9 +25,8 @@ Review code changes for project-specific patterns and invariants.
 
 ### Protected Files
 Flag if any of these were modified without explicit instruction:
-- `docs/ai/*`
-- `docs/ux-guardrails.md`, `docs/ux-principles.md`
-- `src/engine-bridge.ts`
+- `docs/ux-guardrails.md`, `docs/ux-principles.md`, `docs/profile-contract.md`
+- `src/cli-bridge.ts`, `src/engine-bridge.ts`
 - `src-tauri/src/engine_adapter.rs`
 
 ### Test Quality

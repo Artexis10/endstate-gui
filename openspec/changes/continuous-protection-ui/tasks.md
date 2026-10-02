@@ -46,7 +46,7 @@
 - [x] `src/components/app/intent/intent-landing.drift-chip.test.tsx` — chip states + precedence
 - [x] `src/settings.test.ts` — schedule field defaults, round-trip, legacy-blob defaulting, migration preservation
 
-### Task 8: Contract-guard review fixes (bundle baseline)
+### Task 8: Contract review fixes (bundle baseline)
 - [x] `src/lib/schedule-bridge.ts` — direct bundle baselines require the additive `features.schedule.bundleManifestSupported` capability
 - [x] `src/App.tsx` — bundle save/re-pointing and boot self-heal fail closed against schedule-capable engines that lack that capability
 - [x] `src/lib/schedule-bridge.test.ts` — old schedule-capable and current bundle-capable baseline invariants

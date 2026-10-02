@@ -130,6 +130,4 @@ Use bypass (see above), but document why in your commit message.
 
 ## References
 
-- `docs/ai/AI_CONTRACT.md` - OpenSpec enforcement levels and policy
-- `docs/ai/PROJECT_RULES.md` - Operational enforcement details
 - `lefthook.yml` - Hook configuration (tracked)
