@@ -62,7 +62,7 @@ npm run hooks:install    # Install lefthook pre-push hook
 
 ### Core Design: GUI is a Thin Presentation Layer
 
-All business logic lives in the **Endstate CLI**. The GUI contains no provisioning logic. Every operation executes by spawning the CLI with `--json` and consuming structured JSON output. The GUI never fabricates or infers state. A non-zero CLI exit code is a failure even if JSON is returned, and stdout that cannot be parsed as JSON fails the run; stderr is diagnostics only and never affects state.
+All business logic lives in the **Endstate CLI**. The GUI contains no provisioning logic. Every operation executes by spawning the CLI with `--json` and consuming structured JSON output. The GUI never fabricates or infers state. Final state and operation outcome come from the result envelope's `success` (`openspec/specs/final-state-from-envelope`); NDJSON events are transient progress only; non-JSON output is opaque diagnostics (`openspec/specs/json-contract`).
 
 ### Data Flow
 
@@ -111,6 +111,8 @@ Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstat
 - Smallest change that satisfies acceptance criteria; no unrelated refactors, formatting sweeps, or dependency bumps. Preserve public APIs and integration contracts unless explicitly changing them.
 - **Protected files** (require explicit instruction to modify): `docs/ux-guardrails.md`, `docs/ux-principles.md`, `docs/profile-contract.md`, `src/cli-bridge.ts`, `src/engine-bridge.ts`, `src-tauri/src/engine_adapter.rs`.
 - Invariants and behavior specifications live in `openspec/specs/` (see OpenSpec below).
+- Never bypass git hooks (`--no-verify`) unless explicitly instructed.
+- Commits are Conventional; `feat`/`fix` trigger a release-please release, `chore`/`docs`/`ci`/`test` do not; never hand-edit versions or tags.
 
 ## Testing Conventions
 
@@ -120,7 +122,7 @@ Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstat
 - Query priority: `getByRole` → `getByLabelText` → `getByText` → avoid `getByTestId`. No snapshot tests.
 - Coverage thresholds enforced in CI: 70% lines/statements, 60% branches, 55% functions
 - `vitest.setup.ts` mocks framer-motion and localStorage
-- GUI tests must not install software, modify the host, or depend on machine-specific state; integration tests use mocked CLI responses
+- Unit and mocked e2e tests must not install software, modify the host, or depend on machine-specific state; real-engine coverage lives only in the dedicated real-engine CI lanes (`playwright.real-engine.config.ts`, `engine-real-apply`)
 
 ## Critical Landmines
 
