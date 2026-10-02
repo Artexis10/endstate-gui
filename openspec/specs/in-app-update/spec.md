@@ -1,7 +1,8 @@
 # in-app-update Specification
 
 ## Purpose
-TBD - created by archiving change add-in-app-updater-gui. Update Purpose after archive.
+Defines how the desktop app updates itself: a silent check at launch, a manual check in Settings, a single-gesture signed download, install and restart, a session-long defer, configuration kept in the Tauri updater settings, and a runbook for the manual steps.
+
 ## Requirements
 ### Requirement: Automatic update check on app launch
 

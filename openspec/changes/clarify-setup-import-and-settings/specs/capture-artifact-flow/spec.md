@@ -48,7 +48,7 @@ The GUI SHALL report a ZIP or bare-manifest import as successful only after safe
 
 The GUI SHALL have a fast deterministic Playwright regression that exercises mocked capture progress through Save, transactional version 2 ZIP import, explicit setup review, both restore intents, live restore Apply, and Undo without mutating the host machine. Focused tests SHALL separately cover the native Tauri drag lifecycle. Release verification SHALL audit both Windows installer formats and smoke-test the packaged engine boundary.
 
-#### Scenario: Pull request connected journey
+#### Scenario: Pull request regression test
 - **WHEN** the semantic Playwright suite runs in CI
 - **THEN** it verifies a successful capture event renders `DETECTED` and Save reaches the explicit completion state
 - **AND** a version 2 ZIP import becomes visible without issuing preview

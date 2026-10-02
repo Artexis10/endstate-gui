@@ -36,6 +36,12 @@ The backup pane SHALL render a subscription-state banner reflecting `status.subs
 - **WHEN** the click handler catches the error
 - **THEN** it does NOT call `openExternal`
 
+#### Scenario: Manage handoff backend failure
+- **GIVEN** the engine returns a non-AUTH_REQUIRED error from `backup browser-session` (BACKEND_UNREACHABLE, SUBSCRIPTION_REQUIRED, etc.)
+- **WHEN** the click handler catches the error
+- **THEN** it shows a friendly toast via `friendlyBackupError` — no raw CLI jargon
+- **AND** no URL is opened
+
 ### Requirement: Friendly engine-error rendering
 
 The backup pane and restore wizard SHALL map every engine error to GUI-appropriate copy via a shared `friendlyBackupError()` helper before rendering. The helper SHALL produce a `headline` and optional `body`, `cta`, and `tone`, and SHALL strip CLI-jargon (e.g., `` Run `endstate ...` ``) from the engine's `remediation` field. Raw `error.message` or unfiltered `error.remediation` SHALL NOT be surfaced in any toast, dialog, or inline error. Headlines that name the managed service SHALL name it Endstate Cloud.

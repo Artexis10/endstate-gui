@@ -1,7 +1,8 @@
 # flow-selector-entry Specification
 
 ## Purpose
-TBD - created by archiving change flow-selector-dual-entry. Update Purpose after archive.
+Defines the GUI's entry point: two side-by-side flows, Save this computer and Set up this machine, when no profile is selected, and afterwards three equal Capture, Setup and Check actions instead of a locked linear sequence.
+
 ## Requirements
 ### Requirement: Dual-flow entry screen
 When no profile is selected, the GUI SHALL present two entry flows side by side: "Save this computer" (Capture) and "Set up this machine" (Apply).

@@ -32,7 +32,7 @@ The GUI SHALL NOT include restore operations in the default setup preview or app
 - **AND** clears restore consent and keeps Apply unavailable until that install-only preview completes
 - **AND** does not resurrect the earlier install-only result
 
-#### Scenario: Selected settings are explicitly restored
+#### Scenario: User explicitly enables restore
 - **GIVEN** a restore-enabled preview completed and the user selected one or more settings modules
 - **WHEN** the user initiates Apply
 - **THEN** the CLI invocation includes `--enable-restore` and the selected `--restore-filter`

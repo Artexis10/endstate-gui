@@ -1,7 +1,8 @@
 # automatic-backup Specification
 
 ## Purpose
-TBD - created by archiving change add-automatic-hosted-backup. Update Purpose after archive.
+Defines when and how the GUI backs up a profile to hosted storage without the user asking: a one-time consent prompt, a background push after each successful capture that the engine skips when nothing changed, handling of background auth and other failures without interrupting the user, and a Settings opt-out.
+
 ## Requirements
 ### Requirement: Auto-backup eligibility
 

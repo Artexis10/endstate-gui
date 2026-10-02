@@ -37,7 +37,7 @@ When the user selects **Install apps and restore settings**, the GUI SHALL reque
 - **WHEN** restore intent is **Install apps and restore settings**
 - **THEN** ConfigModuleSelector is not rendered
 
-#### Scenario: Display names from restoreModulesAvailable
+#### Scenario: Display names from configModuleMap
 - **GIVEN** the matching restore-enabled preview contains `restoreModulesAvailable[].displayName` values
 - **WHEN** ConfigModuleSelector renders
 - **THEN** those human-readable display names are shown

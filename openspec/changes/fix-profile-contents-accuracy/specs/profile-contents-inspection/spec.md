@@ -36,7 +36,7 @@ The contents summary SHALL present **Apps** and **App settings** as separate tab
 
 Opening the contents summary SHALL be read-only. The GUI MAY invoke the engine's dedicated profile-inspection command, but SHALL NOT select the profile, request a machine preview, run app or settings detection, or modify the machine as a result of inspection.
 
-#### Scenario: Inspection does not start a setup run
+#### Scenario: Inspection does not start a run
 - **WHEN** the user activates **What's inside** on a profile card
 - **THEN** the profile is not selected
 - **AND** no apply preview is requested
@@ -52,13 +52,13 @@ Opening the contents summary SHALL be read-only. The GUI MAY invoke the engine's
 
 The summary SHALL report the capture timestamp when the profile records one, the number of applications in its Apps inventory, and the distinct verified applications for which the profile carries settings. The default UI SHALL describe the latter as **Settings for N apps**, SHALL ensure every profile-owned settings module contributes to an app-settings row, and SHALL NOT describe captured files or restore entries as individual settings. Multiple owned modules SHALL be grouped only when they share the same verified application owner. Ambiguous or unresolved rows SHALL remain visible but SHALL be reported separately as unidentified instead of inflating the application count.
 
-#### Scenario: Apps and app settings are counted semantically
+#### Scenario: Apps and settings are counted
 - **WHEN** a profile contains 72 app entries and settings modules associated with 8 distinct apps
 - **THEN** the summary reports **72 apps**
 - **AND** it reports **Settings for 8 apps**
 - **AND** the **App settings** inventory contains 8 rows
 
-#### Scenario: Application is named
+#### Scenario: Applications are named
 - **WHEN** the inspection result carries an application display name
 - **THEN** the **Apps** inventory lists the application by that display name
 - **AND** its package identifier remains searchable
@@ -112,7 +112,7 @@ A profile carrying no settings, or no applications, SHALL be described in calm, 
 
 The default summary SHALL NOT use a module id, capture id, config-set id, or file path as user-facing label text. Every profile-owned settings module SHALL remain represented even when no friendly name or unique application association resolves; such a module SHALL use neutral unidentified-app copy rather than disappearing from the list. Exact identifiers, ambiguous candidates, and the manifest path SHALL be exposed only through **Configuration details**, consistent with `config-generation-presentation`.
 
-#### Scenario: Unresolvable module remains a visible row
+#### Scenario: Unresolvable module stays unnamed
 - **WHEN** a profile-owned settings module has no friendly label resolvable from profile evidence or the module catalog
 - **THEN** the module still contributes one row to the **App settings** tab total
 - **AND** the row uses neutral unidentified-app copy
@@ -136,7 +136,7 @@ The GUI SHALL consume a structured result from the engine's dedicated profile-in
 - **WHEN** the current engine catalog contains a settings module that the profile did not capture
 - **THEN** that module does not appear in the app-settings inventory
 
-#### Scenario: Bundled module display name is used
+#### Scenario: Module display names come from the bundle snapshot
 - **WHEN** a manifest-v2 config capture references a readable module snapshot inside the bundle
 - **THEN** the settings row uses the display name recorded in that snapshot
 
@@ -167,10 +167,19 @@ The GUI SHALL consume a structured result from the engine's dedicated profile-in
 - **THEN** the GUI does not fabricate app-settings names or associations
 - **AND** it explains that Endstate must be updated to inspect app settings accurately
 
-#### Scenario: Unreadable profile is surfaced
+#### Scenario: Unreadable manifest is surfaced
 - **WHEN** the profile manifest cannot be read or parsed
 - **THEN** the summary reports that the profile could not be read
 - **AND** does not present an empty profile as a valid summary
+
+#### Scenario: Missing snapshot degrades without failing
+- **WHEN** a referenced module snapshot cannot be read
+- **THEN** the summary still renders
+- **AND** the settings module falls back to the owning application's name or its capture package ref
+
+#### Scenario: Unsafe snapshot path is refused
+- **WHEN** a manifest records a module snapshot path outside `provenance/modules/`
+- **THEN** that path is not read
 
 ## RENAMED Requirements
 
