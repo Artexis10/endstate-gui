@@ -1,6 +1,6 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: Per-module restore selection during Apply
+### Requirement: Per-module restore selection requires a matching restore-enabled preview
 
 When the user selects **Install apps and restore settings**, the GUI SHALL request a fresh restore-enabled preview before presenting module approval. When that matching preview reports modules, the GUI SHALL display per-module checkboxes and pass explicit selections as `--restore-filter`. Every module SHALL remain unchecked until the user explicitly selects it. When a selected module has an engine-reported `legacy_unverified` resolution, that same unchecked module selection SHALL be the explicit consent to use the legacy restore lane, and the GUI SHALL display the engine-authored compatibility warning before execution. The GUI SHALL NOT reuse module, target, or compatibility state from an install-only or different-profile preview, require an additional expert flag, or silently exclude legacy modules.
 
@@ -60,3 +60,11 @@ When the user selects **Install apps and restore settings**, the GUI SHALL reque
 - **WHEN** the user selects **Install apps only** or loads another profile
 - **THEN** selected modules and restore targets are cleared
 - **AND** a later restore-enabled preview begins with every module unchecked
+
+## REMOVED Requirements
+
+### Requirement: Per-module restore selection during Apply
+
+**Reason**: Module approval now follows a fresh restore-enabled preview, and display names come from `restoreModulesAvailable[].displayName` rather than `configModuleMap`, so the earlier scenarios no longer describe the behavior.
+
+**Migration**: Use **Per-module restore selection requires a matching restore-enabled preview**.

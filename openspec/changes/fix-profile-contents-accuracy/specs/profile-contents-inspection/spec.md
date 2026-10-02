@@ -30,13 +30,57 @@ The contents summary SHALL present **Apps** and **App settings** as separate tab
 - **THEN** the user can move between **Apps** and **App settings** using standard tab keyboard behavior
 - **AND** focus and selected-state semantics are exposed to assistive technology
 
+### Requirement: The summary uses read-only engine profile inspection
+
+The GUI SHALL consume a structured result from the engine's dedicated profile-inspection command. The saved profile SHALL remain authoritative for application membership, settings ownership, and entry counts; bundle snapshots, captured metadata, and the engine module catalog MAY enrich labels and associations but MUST NOT add settings that the profile does not own. Every association SHALL be classified as uniquely included, known but absent from the Apps inventory, ambiguous, or unresolved. The command SHALL NOT inspect current-machine installation or settings state.
+
+#### Scenario: Profile evidence determines ownership
+- **WHEN** the current engine catalog contains a settings module that the profile did not capture
+- **THEN** that module does not appear in the app-settings inventory
+
+#### Scenario: Bundled module display name is used
+- **WHEN** a manifest-v2 config capture references a readable module snapshot inside the bundle
+- **THEN** the settings row uses the display name recorded in that snapshot
+
+#### Scenario: Legacy profile label is enriched from the catalog
+- **WHEN** a legacy profile owns a known settings module but lacks a bundled display name
+- **THEN** the engine resolves its friendly label from captured metadata or the matching module catalog entry
+- **AND** catalog membership does not change the settings total
+
+#### Scenario: Unique association marks both inventories consistently
+- **WHEN** one owned settings row is uniquely associated with an application in the Apps inventory
+- **THEN** the row identifies that application with association state `included`
+- **AND** that application's Apps row reports that settings are included
+
+#### Scenario: Ambiguous association marks no application
+- **WHEN** an owned settings module plausibly matches more than one application in the Apps inventory
+- **THEN** the settings row remains visible with association state `ambiguous`
+- **AND** none of the candidate Apps rows is marked as carrying those settings
+- **AND** the row is excluded from the verified app-settings count
+
+#### Scenario: Presentation-affecting warning remains visible
+- **WHEN** the inspection result carries an engine-authored warning that says inventory completeness is degraded
+- **THEN** the normal dialog shows that engine-authored warning
+- **AND** the GUI does not present the inventory as unconditionally complete
+- **AND** it does not derive warning impact by parsing warning text
+
+#### Scenario: Older engine lacks inspection capability
+- **WHEN** the active engine does not advertise dedicated profile inspection
+- **THEN** the GUI does not fabricate app-settings names or associations
+- **AND** it explains that Endstate must be updated to inspect app settings accurately
+
+#### Scenario: Unreadable profile is surfaced
+- **WHEN** the profile manifest cannot be read or parsed
+- **THEN** the summary reports that the profile could not be read
+- **AND** does not present an empty profile as a valid summary
+
 ## MODIFIED Requirements
 
 ### Requirement: Inspecting a profile changes nothing
 
 Opening the contents summary SHALL be read-only. The GUI MAY invoke the engine's dedicated profile-inspection command, but SHALL NOT select the profile, request a machine preview, run app or settings detection, or modify the machine as a result of inspection.
 
-#### Scenario: Inspection does not start a setup run
+#### Scenario: Inspection does not start a run
 - **WHEN** the user activates **What's inside** on a profile card
 - **THEN** the profile is not selected
 - **AND** no apply preview is requested
@@ -52,13 +96,13 @@ Opening the contents summary SHALL be read-only. The GUI MAY invoke the engine's
 
 The summary SHALL report the capture timestamp when the profile records one, the number of applications in its Apps inventory, and the distinct verified applications for which the profile carries settings. The default UI SHALL describe the latter as **Settings for N apps**, SHALL ensure every profile-owned settings module contributes to an app-settings row, and SHALL NOT describe captured files or restore entries as individual settings. Multiple owned modules SHALL be grouped only when they share the same verified application owner. Ambiguous or unresolved rows SHALL remain visible but SHALL be reported separately as unidentified instead of inflating the application count.
 
-#### Scenario: Apps and app settings are counted semantically
+#### Scenario: Apps and settings are counted
 - **WHEN** a profile contains 72 app entries and settings modules associated with 8 distinct apps
 - **THEN** the summary reports **72 apps**
 - **AND** it reports **Settings for 8 apps**
 - **AND** the **App settings** inventory contains 8 rows
 
-#### Scenario: Application is named
+#### Scenario: Applications are named
 - **WHEN** the inspection result carries an application display name
 - **THEN** the **Apps** inventory lists the application by that display name
 - **AND** its package identifier remains searchable
@@ -112,7 +156,7 @@ A profile carrying no settings, or no applications, SHALL be described in calm, 
 
 The default summary SHALL NOT use a module id, capture id, config-set id, or file path as user-facing label text. Every profile-owned settings module SHALL remain represented even when no friendly name or unique application association resolves; such a module SHALL use neutral unidentified-app copy rather than disappearing from the list. Exact identifiers, ambiguous candidates, and the manifest path SHALL be exposed only through **Configuration details**, consistent with `config-generation-presentation`.
 
-#### Scenario: Unresolvable module remains a visible row
+#### Scenario: Unresolvable module stays unnamed
 - **WHEN** a profile-owned settings module has no friendly label resolvable from profile evidence or the module catalog
 - **THEN** the module still contributes one row to the **App settings** tab total
 - **AND** the row uses neutral unidentified-app copy
@@ -128,51 +172,10 @@ The default summary SHALL NOT use a module id, capture id, config-set id, or fil
 - **THEN** no **Configuration details** disclosure is offered
 - **AND** no module id or file path appears anywhere in the summary
 
-### Requirement: The summary uses read-only engine profile inspection
+## REMOVED Requirements
 
-The GUI SHALL consume a structured result from the engine's dedicated profile-inspection command. The saved profile SHALL remain authoritative for application membership, settings ownership, and entry counts; bundle snapshots, captured metadata, and the engine module catalog MAY enrich labels and associations but MUST NOT add settings that the profile does not own. Every association SHALL be classified as uniquely included, known but absent from the Apps inventory, ambiguous, or unresolved. The command SHALL NOT inspect current-machine installation or settings state.
+### Requirement: The summary reads only extracted profile files
 
-#### Scenario: Profile evidence determines ownership
-- **WHEN** the current engine catalog contains a settings module that the profile did not capture
-- **THEN** that module does not appear in the app-settings inventory
+**Reason**: The summary is no longer built by the GUI reading the extracted `manifest.jsonc` and module snapshots; it consumes the engine's read-only profile-inspection result, so the GUI-side file-reading rules and their scenarios no longer apply.
 
-#### Scenario: Bundled module display name is used
-- **WHEN** a manifest-v2 config capture references a readable module snapshot inside the bundle
-- **THEN** the settings row uses the display name recorded in that snapshot
-
-#### Scenario: Legacy profile label is enriched from the catalog
-- **WHEN** a legacy profile owns a known settings module but lacks a bundled display name
-- **THEN** the engine resolves its friendly label from captured metadata or the matching module catalog entry
-- **AND** catalog membership does not change the settings total
-
-#### Scenario: Unique association marks both inventories consistently
-- **WHEN** one owned settings row is uniquely associated with an application in the Apps inventory
-- **THEN** the row identifies that application with association state `included`
-- **AND** that application's Apps row reports that settings are included
-
-#### Scenario: Ambiguous association marks no application
-- **WHEN** an owned settings module plausibly matches more than one application in the Apps inventory
-- **THEN** the settings row remains visible with association state `ambiguous`
-- **AND** none of the candidate Apps rows is marked as carrying those settings
-- **AND** the row is excluded from the verified app-settings count
-
-#### Scenario: Presentation-affecting warning remains visible
-- **WHEN** the inspection result carries an engine-authored warning that says inventory completeness is degraded
-- **THEN** the normal dialog shows that engine-authored warning
-- **AND** the GUI does not present the inventory as unconditionally complete
-- **AND** it does not derive warning impact by parsing warning text
-
-#### Scenario: Older engine lacks inspection capability
-- **WHEN** the active engine does not advertise dedicated profile inspection
-- **THEN** the GUI does not fabricate app-settings names or associations
-- **AND** it explains that Endstate must be updated to inspect app settings accurately
-
-#### Scenario: Unreadable profile is surfaced
-- **WHEN** the profile manifest cannot be read or parsed
-- **THEN** the summary reports that the profile could not be read
-- **AND** does not present an empty profile as a valid summary
-
-## RENAMED Requirements
-
-- FROM: `### Requirement: The summary reads only extracted profile files`
-- TO: `### Requirement: The summary uses read-only engine profile inspection`
+**Migration**: Use **The summary uses read-only engine profile inspection**.

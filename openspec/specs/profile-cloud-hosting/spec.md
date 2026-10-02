@@ -1,7 +1,8 @@
 # profile-cloud-hosting Specification
 
 ## Purpose
-TBD - created by archiving change unified-per-profile-backups. Update Purpose after archive.
+Defines how a local profile is hosted as its own id-addressed cloud backup: the profile-to-backup mapping, its cleanup on delete, the Backed up or Local only badge derived from it, and migration that leaves existing backups intact.
+
 ## Requirements
 ### Requirement: Profiles are hosted as id-addressed cloud backups
 

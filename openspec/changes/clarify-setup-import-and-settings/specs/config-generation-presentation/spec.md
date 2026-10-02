@@ -4,7 +4,7 @@
 
 When the current preview or completed apply invocation includes configuration restore and its envelope contains `configResolutions[]`, the GUI SHALL render each resolution's engine-authored `label`, `message`, nullable `remediation`, and terminal `status` without mapping or rewriting them. A restore-disabled preview SHALL NOT present its per-module restore-disabled rows as compatibility outcomes; it SHALL use only an availability summary backed by engine-provided module data. A preview result SHALL be presented only when its profile, restore intent, and monotonically increasing request generation match the active request. The GUI SHALL NOT derive compatibility from application versions, generations, target candidates, migration paths, module definitions, or reason codes. When the envelope omits configuration fields, the existing config-free presentation SHALL remain unchanged.
 
-#### Scenario: Four distilled states are rendered from the restore-enabled engine result
+#### Scenario: Four distilled states are rendered from the engine
 - **GIVEN** the active restore-enabled preview supplies direct, migrate, unknown or legacy-unverified, and incompatible rows with the labels Compatible, Will be upgraded, Compatibility unknown, and Not supported
 - **WHEN** that matching preview result renders
 - **THEN** the GUI displays those supplied labels and messages verbatim
@@ -36,3 +36,9 @@ When the current preview or completed apply invocation includes configuration re
 - **WHEN** an apply envelope omits configuration-resolution fields
 - **THEN** the GUI does not render an empty configuration-resolution section
 - **AND** existing application preview and result behavior remains available
+
+#### Scenario: Install-only apply presents no configuration cards
+
+- **WHEN** a completed apply envelope carries `configResolutions[]` but the restore intent is "apps-only"
+- **THEN** the GUI does not present any configuration resolution cards
+- **AND** the application result summary remains available

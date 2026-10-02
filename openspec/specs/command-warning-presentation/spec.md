@@ -1,7 +1,8 @@
 # command-warning-presentation Specification
 
 ## Purpose
-TBD - created by archiving change render-command-warnings. Update Purpose after archive.
+Makes the GUI show the advisory warnings the engine returns with setup previews and live applies. Warnings are rendered verbatim and in order, never alter selection, counts or availability, and belong only to the result currently on screen.
+
 ## Requirements
 ### Requirement: Visible command results present final-envelope warnings
 
