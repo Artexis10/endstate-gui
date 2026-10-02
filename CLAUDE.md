@@ -112,7 +112,7 @@ Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstat
 - **Protected files** (require explicit instruction to modify): `docs/ux-guardrails.md`, `docs/ux-principles.md`, `docs/profile-contract.md`, `src/cli-bridge.ts`, `src/engine-bridge.ts`, `src-tauri/src/engine_adapter.rs`.
 - Invariants and behavior specifications live in `openspec/specs/` (see OpenSpec below).
 - Never bypass git hooks (`--no-verify`) unless explicitly instructed.
-- Commits are Conventional; `feat`/`fix` trigger a release-please release, `chore`/`docs`/`ci`/`test` do not; never hand-edit versions or tags.
+- Commits are Conventional; `feat`/`fix`/`perf` (and reverts) trigger a release-please release, `chore`/`docs`/`ci`/`test` do not; never hand-edit versions or tags.
 
 ## Testing Conventions
 
