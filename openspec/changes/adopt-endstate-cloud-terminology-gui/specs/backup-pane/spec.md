@@ -35,6 +35,7 @@ The backup pane SHALL render a subscription-state banner reflecting `status.subs
 - **GIVEN** the user is signed in but the engine reports `AUTH_REQUIRED` from the `backup browser-session` call (e.g. session expired between status fetch and click)
 - **WHEN** the click handler catches the error
 - **THEN** it does NOT call `openExternal`
+- **AND** it invokes `onAuthLost`, which routes to the inline re-auth dialog without unmounting the pane (preserves Wave 6 D3 behaviour)
 
 #### Scenario: Manage handoff backend failure
 - **GIVEN** the engine returns a non-AUTH_REQUIRED error from `backup browser-session` (BACKEND_UNREACHABLE, SUBSCRIPTION_REQUIRED, etc.)

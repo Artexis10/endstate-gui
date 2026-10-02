@@ -10,7 +10,7 @@ When the current preview or completed apply invocation includes configuration re
 - **THEN** the GUI displays those supplied labels and messages verbatim
 - **AND** does not reconstruct them from each row's resolution value
 
-#### Scenario: Install-only apply presents no configuration cards
+#### Scenario: Restore-disabled rows use progressive disclosure
 - **GIVEN** an install-only preview contains configuration rows whose engine message says restore is not enabled
 - **WHEN** the install-only result renders
 - **THEN** the GUI shows one settings-available-but-off summary instead of individual configuration-resolution cards
@@ -36,3 +36,9 @@ When the current preview or completed apply invocation includes configuration re
 - **WHEN** an apply envelope omits configuration-resolution fields
 - **THEN** the GUI does not render an empty configuration-resolution section
 - **AND** existing application preview and result behavior remains available
+
+#### Scenario: Install-only apply presents no configuration cards
+
+- **WHEN** a completed apply envelope carries `configResolutions[]` but the restore intent is "apps-only"
+- **THEN** the GUI does not present any configuration resolution cards
+- **AND** the application result summary remains available
