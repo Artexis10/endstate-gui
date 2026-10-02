@@ -19,7 +19,7 @@ Key elements relevant to the GUI:
 
 1. **Trust model** — Endstate cannot decrypt user data. Structural property, not policy. The GUI never sees user passphrases or raw key material.
 
-2. **Engine boundary** — All cryptographic operations (Argon2id KDF, AES-256-GCM, JWT validation, R2 upload/download) happen in the Go engine, not the GUI. The GUI calls engine commands and renders status. Per the thin-GUI invariant in `PROJECT_SHADOW.md`, this is enforced.
+2. **Engine boundary** — All cryptographic operations (Argon2id KDF, AES-256-GCM, JWT validation, R2 upload/download) happen in the Go engine, not the GUI. The GUI calls engine commands and renders status. Per the thin-GUI invariant (`openspec/specs/gui-thin-layer`), this is enforced.
 
 3. **GUI responsibility** — The GUI implements the user-facing surfaces required by the contract:
    - Sign-in / sign-up forms

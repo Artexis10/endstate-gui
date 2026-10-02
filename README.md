@@ -153,7 +153,7 @@ All CLI commands with `--json` flag return a standardized envelope:
 }
 ```
 
-See `docs/ai/PROJECT_RULES.md` in the endstate repository for the authoritative contract rules.
+See the contract documents in the endstate repository's `docs/contracts/` for the authoritative contract rules.
 
 ### Supported Commands
 

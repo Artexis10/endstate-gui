@@ -15,6 +15,5 @@ This OpenSpec project tracks behavior specifications for the GUI layer:
 
 ## References
 
-- `docs/ai/AI_CONTRACT.md` - Governance and OpenSpec enforcement policy
-- `docs/ai/PROJECT_SHADOW.md` - Architectural truth
+- `CLAUDE.md` - Architecture context, commands, and landmines
 - `docs/runbooks/OPENSPEC_ENFORCEMENT.md` - Enforcement runbook

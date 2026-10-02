@@ -81,7 +81,7 @@ pub struct ProfileSummary {
 /// can find modules/ and payload/.
 ///
 /// All engine process spawn sites MUST use this helper instead of Command::new(exe)
-/// directly. See PROJECT_SHADOW.md Section 6 (Landmines).
+/// directly. See CLAUDE.md (Rust Backend).
 pub fn build_engine_command(exe: &str, args: &[String]) -> Command {
     let mut cmd = Command::new(exe);
     cmd.args(args);

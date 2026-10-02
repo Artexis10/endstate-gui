@@ -62,7 +62,7 @@ npm run hooks:install    # Install lefthook pre-push hook
 
 ### Core Design: GUI is a Thin Presentation Layer
 
-All business logic lives in the **Endstate CLI**. The GUI contains no provisioning logic. Every operation executes by spawning the CLI with `--json` and consuming structured JSON output. The GUI never fabricates or infers state.
+All business logic lives in the **Endstate CLI**. The GUI contains no provisioning logic. Every operation executes by spawning the CLI with `--json` and consuming structured JSON output. The GUI never fabricates or infers state. A non-zero CLI exit code is a failure even if JSON is returned, and stdout that cannot be parsed as JSON fails the run; stderr is diagnostics only and never affects state.
 
 ### Data Flow
 
@@ -104,23 +104,13 @@ User Action → React Component → Tauri invoke()
 
 ### localStorage Namespacing
 
-Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstate-gui-settings`). Playwright tests use `VITE_STORAGE_NS=test` for isolation.
+Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstate-gui-settings`). Playwright tests use `VITE_STORAGE_NS=test` for isolation. The Tauri runtime never reads legacy un-namespaced keys; web/test fall back to them and migrate; Reset Settings clears all namespaces plus legacy keys.
 
-## Authority Documents
+## Working Rules
 
-These govern AI behavior in this repo, in precedence order:
-
-1. `docs/ai/AI_CONTRACT.md` — AI behavior contract (highest authority)
-2. `docs/ai/PROJECT_RULES.md` — Operational policy
-3. `CLAUDE.md` — Architecture context, commands, landmines (this file, auto-loaded by Claude Code)
-4. `openspec/specs/` — Invariants and behavior specifications (lazy-loaded on demand)
-
-### Key Rules from These Documents
-
-- **Smallest change** that satisfies acceptance criteria. No unrelated refactors, formatting sweeps, or dependency bumps.
-- **Preserve public APIs** and integration contracts unless explicitly changing them.
-- **Run only minimum targeted verification** — not full test suites unless requested.
-- **Protected files** (require explicit instruction to modify): `docs/ai/*`, `docs/ux-guardrails.md`, `docs/ux-principles.md`, `src/engine-bridge.ts`, `src-tauri/src/engine_adapter.rs`
+- Smallest change that satisfies acceptance criteria; no unrelated refactors, formatting sweeps, or dependency bumps. Preserve public APIs and integration contracts unless explicitly changing them.
+- **Protected files** (require explicit instruction to modify): `docs/ux-guardrails.md`, `docs/ux-principles.md`, `docs/profile-contract.md`, `src/cli-bridge.ts`, `src/engine-bridge.ts`, `src-tauri/src/engine_adapter.rs`.
+- Invariants and behavior specifications live in `openspec/specs/` (see OpenSpec below).
 
 ## Testing Conventions
 
@@ -130,6 +120,7 @@ These govern AI behavior in this repo, in precedence order:
 - Query priority: `getByRole` → `getByLabelText` → `getByText` → avoid `getByTestId`. No snapshot tests.
 - Coverage thresholds enforced in CI: 70% lines/statements, 60% branches, 55% functions
 - `vitest.setup.ts` mocks framer-motion and localStorage
+- GUI tests must not install software, modify the host, or depend on machine-specific state; integration tests use mocked CLI responses
 
 ## Critical Landmines
 
