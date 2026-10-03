@@ -1,22 +1,3 @@
-<!-- OPENSPEC:START -->
-# OpenSpec Instructions
-
-These instructions are for AI assistants working in this project.
-
-Always open `@/openspec/AGENTS.md` when the request:
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
-
-Use `@/openspec/AGENTS.md` to learn:
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
-
-Keep this managed block so 'openspec update' can refresh the instructions.
-
-<!-- OPENSPEC:END -->
-
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -133,11 +114,10 @@ Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstat
 - **Stale engine binary mitigated by predev auto-rebuild** — The `predev` script (`scripts/rebuild-engine.cjs`) rebuilds the Go engine binary on every `npm run dev` / `tauri dev`. If the Go toolchain is unavailable, it falls back to the existing binary with a warning. Set `SKIP_ENGINE_BUILD=1` to skip for rapid frontend iteration. Manual testing or Tauri dev without `npm run` still requires a manual rebuild.
 - **Config-only app display names from module catalog** — Config-only apps (synthesized from pathExists matchers) get their display names from the engine's module catalog `displayName` field. If missing, the app ID is used as-is.
 - **Scan cooldown** — The "Scan again" button has a 5-second debounce to prevent winget database lock contention from rapid successive captures.
-- **Tidewave Windows path bug** — `patches/tidewave+0.6.0.patch` fixes `eval_worker.js` where `import()` with bare Windows paths (`C:\...` or `C:/...`) causes `ERR_UNSUPPORTED_ESM_URL_SCHEME` because Node's ESM loader interprets `C:` as a URL protocol. The upstream code has no Windows path handling at all. The patch adds two layers: (1) a `module.register()` ESM resolve hook that intercepts **all** dynamic imports (including `import(path.join(cwd, ...))` where the path is computed at runtime), converting Windows paths to `file:///` URLs; (2) a regex-based `fixWindowsImportPaths()` that rewrites string-literal paths in eval code text as a belt-and-suspenders fallback. **When upgrading tidewave**, check if the upstream `eval_worker.js` has Windows path handling; if so, remove the patch. If not, regenerate: copy the patch's `import { register }` block and `fixWindowsImportPaths` function into `node_modules/tidewave/dist/evaluation/eval_worker.js`, then run `npx patch-package tidewave`.
 
 ## Patches
 
-- **`patches/tidewave+0.6.0.patch`** — Windows ESM path fix for `eval_worker.js` (used by both Vite plugin and Tidewave CLI). Applied automatically via `postinstall: "patch-package"`. See Critical Landmines above.
+See `patches/README.md`.
 
 ## OpenSpec
 

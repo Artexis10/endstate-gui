@@ -88,3 +88,4 @@ tmp.json
 
 # Nested engine repo clone (sibling work, not part of GUI tree)
 /endstate/
+.claude/settings.local.json
