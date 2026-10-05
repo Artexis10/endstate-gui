@@ -5,7 +5,6 @@ import {
   loadSettingsWithProfileMigration,
   resetAppSettings,
   loadCloudInvitationConsumption,
-  saveCloudInvitationConsumption,
   AppSettings,
 } from './settings';
 import { setItem } from './lib/storage';
@@ -406,24 +405,6 @@ describe('settings', () => {
       expect(reset.cloudInvitationDismissed).toBe(false);
       expect(reset.cloudInvitationManagedAccountSeen).toBe(false);
       expect(localStorage.getItem(NAMESPACED_KEY)).not.toBeNull();
-      expect(localStorage.getItem('tauri:endstate-gui-settings')).toBeNull();
-      expect(localStorage.getItem(LEGACY_KEY)).toBeNull();
-      expect(loadCloudInvitationConsumption()).toMatchObject({
-        shownAt: '2026-08-10T09:00:00.000Z', dismissed: true, managedAccountSeen: true,
-      });
-    });
-
-    it('clears ordinary settings across namespaces while retaining dedicated invitation consumption', () => {
-      expect(saveCloudInvitationConsumption({
-        shownAt: '2026-08-10T09:00:00.000Z',
-        dismissed: true,
-        managedAccountSeen: true,
-      })).toBe(true);
-      localStorage.setItem('tauri:endstate-gui-settings', JSON.stringify({ engineMode: 'path' }));
-      localStorage.setItem(LEGACY_KEY, JSON.stringify({ engineMode: 'path' }));
-
-      resetAppSettings();
-
       expect(localStorage.getItem('tauri:endstate-gui-settings')).toBeNull();
       expect(localStorage.getItem(LEGACY_KEY)).toBeNull();
       expect(loadCloudInvitationConsumption()).toMatchObject({

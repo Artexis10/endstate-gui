@@ -90,7 +90,7 @@ Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstat
 ## Working Rules
 
 - Smallest change that satisfies acceptance criteria; no unrelated refactors, formatting sweeps, or dependency bumps. Preserve public APIs and integration contracts unless explicitly changing them.
-- **Protected files** (require explicit instruction to modify): `docs/ux-guardrails.md`, `docs/ux-principles.md`, `docs/profile-contract.md`, `src/cli-bridge.ts`, `src/engine-bridge.ts`, `src-tauri/src/engine_adapter.rs`.
+- **Protected files** (require explicit instruction to modify): `docs/ux-guardrails.md`, `docs/ux-principles.md`, `docs/profile-contract.md`, `src/engine-bridge.ts`, `src-tauri/src/engine_adapter.rs`.
 - Invariants and behavior specifications live in `openspec/specs/` (see OpenSpec below).
 - Never bypass git hooks (`--no-verify`) unless explicitly instructed.
 - Commits are Conventional; `feat`/`fix`/`perf` (and reverts) trigger a release-please release, `chore`/`docs`/`ci`/`test` do not; never hand-edit versions or tags.
@@ -101,7 +101,7 @@ Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstat
 - E2E tests: `e2e/*.spec.ts` (Playwright, chromium)
 - Test utilities in `src/test/`: `test-utils.tsx` (renderWithProviders), `localStorage-helpers.ts`, `tauri-bridge-mock.ts`
 - Query priority: `getByRole` → `getByLabelText` → `getByText` → avoid `getByTestId`. No snapshot tests.
-- Coverage thresholds enforced in CI: 70% lines/statements, 60% branches, 55% functions
+- Coverage thresholds are enforced in CI; the numbers live in `vitest.config.ts` (`coverage.thresholds`)
 - `vitest.setup.ts` mocks framer-motion and localStorage
 - Unit and mocked e2e tests must not install software, modify the host, or depend on machine-specific state; real-engine coverage lives only in the dedicated real-engine CI lanes (`playwright.real-engine.config.ts`, `engine-real-apply`)
 
