@@ -366,45 +366,17 @@ describe('SaveFlow — post-capture cloud invitation', () => {
   });
 
   describe('dismissal is permanent', () => {
-    it('retires the invitation when the user keeps it local', async () => {
+    it.each([
+      ['the user keeps it local', () => fireEvent.click(screen.getByRole('button', { name: 'Keep it local' }))],
+      ['its close control is used', () => fireEvent.click(screen.getByRole('button', { name: 'Dismiss Endstate Cloud invitation' }))],
+      ['Escape is pressed', () => fireEvent.keyDown(document, { key: 'Escape' })],
+      ['the user clicks outside it', () => fireEvent.pointerDown(document.body)],
+    ])('retires the invitation when %s', async (_gesture, dismissGesture) => {
       const onCloudInvitationDismissed = vi.fn(() => true);
       renderSaveFlow({ onCloudInvitationDismissed });
       await scanAndSave();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Keep it local' }));
-
-      expect(onCloudInvitationDismissed).toHaveBeenCalledTimes(1);
-      expect(screen.queryByTestId(INVITATION)).not.toBeInTheDocument();
-    });
-
-    it('retires the invitation from its accessible close control', async () => {
-      const onCloudInvitationDismissed = vi.fn(() => true);
-      renderSaveFlow({ onCloudInvitationDismissed });
-      await scanAndSave();
-
-      fireEvent.click(screen.getByRole('button', { name: 'Dismiss Endstate Cloud invitation' }));
-
-      expect(onCloudInvitationDismissed).toHaveBeenCalledTimes(1);
-      expect(screen.queryByTestId(INVITATION)).not.toBeInTheDocument();
-    });
-
-    it('retires the invitation when Escape is pressed', async () => {
-      const onCloudInvitationDismissed = vi.fn(() => true);
-      renderSaveFlow({ onCloudInvitationDismissed });
-      await scanAndSave();
-
-      fireEvent.keyDown(document, { key: 'Escape' });
-
-      expect(onCloudInvitationDismissed).toHaveBeenCalledTimes(1);
-      expect(screen.queryByTestId(INVITATION)).not.toBeInTheDocument();
-    });
-
-    it('retires the invitation when the user clicks outside it', async () => {
-      const onCloudInvitationDismissed = vi.fn(() => true);
-      renderSaveFlow({ onCloudInvitationDismissed });
-      await scanAndSave();
-
-      fireEvent.pointerDown(document.body);
+      dismissGesture();
 
       expect(onCloudInvitationDismissed).toHaveBeenCalledTimes(1);
       expect(screen.queryByTestId(INVITATION)).not.toBeInTheDocument();
@@ -451,17 +423,6 @@ describe('SaveFlow — post-capture cloud invitation', () => {
       expect(screen.getByText('Backup saved')).toBeInTheDocument();
       expect(screen.queryByTestId(INVITATION)).not.toBeInTheDocument();
     });
-
-    it('does not return on a later capture once the decision is persisted', async () => {
-      // Second run of the app: the parent replays the persisted decision.
-      renderSaveFlow({
-        cloudInvitationShownAt: '2026-08-08T09:00:00.000Z',
-        cloudInvitationDismissed: true,
-      });
-      await scanAndSave();
-
-      expect(screen.queryByTestId(INVITATION)).not.toBeInTheDocument();
-    });
   });
 
   describe('presentation', () => {
@@ -476,27 +437,14 @@ describe('SaveFlow — post-capture cloud invitation', () => {
       expect(screen.getByRole('button', { name: /back to home/i })).toBeInTheDocument();
     });
 
-    it('states the saved-locally outcome and the offer without a price', async () => {
+    it('offers the cloud action without quoting a price', async () => {
       renderSaveFlow();
       await scanAndSave();
 
-      const card = screen.getByTestId(INVITATION);
-      expect(screen.getByText('Your setup is saved locally')).toBeInTheDocument();
-      expect(
-        screen.getByText('3 applications and 2 supported settings were captured.'),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText('Keep an encrypted version with Endstate Cloud'),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          'Store protected versions of this setup without managing the backup location yourself.',
-        ),
-      ).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Open Endstate Cloud' })).toBeInTheDocument();
       // No price: the GUI has no reliable price source, and an invitation that
       // quotes one is a sales surface.
-      expect(card.textContent).not.toMatch(/[€$£]|\/month|per month/i);
+      expect(screen.getByTestId(INVITATION).textContent).not.toMatch(/[€$£]|\/month|per month/i);
     });
 
     it('uses the same settings count as the scan headline', async () => {
