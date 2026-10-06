@@ -20,6 +20,7 @@ npm run test:e2e         # Playwright E2E tests
 npm run test:contract    # CLI envelope contract tests (Node.js)
 npm run test:all         # Full pipeline: openspec validate + unit + contract + e2e
 cd src-tauri && cargo test  # Rust unit tests
+cd src-tauri && cargo fmt --all  # Rust formatting (CI runs cargo fmt --all --check)
 
 # Run a single test file
 npx vitest run src/lib/apply-utils.test.ts
