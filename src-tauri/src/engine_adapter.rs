@@ -69,7 +69,10 @@ pub fn build_bundled_command(
                 .collect();
             return Err(EngineError {
                 code: "BUNDLED_ENGINE_NOT_FOUND".to_string(),
-                message: format!("Bundled engine not found. Searched: {}", searched.join(", ")),
+                message: format!(
+                    "Bundled engine not found. Searched: {}",
+                    searched.join(", ")
+                ),
             });
         }
     };
@@ -128,7 +131,8 @@ pub fn run_engine(
         if state.run_id.is_some() {
             return Err(EngineError {
                 code: "RUN_IN_PROGRESS".to_string(),
-                message: "Another run is already in progress. Please wait or cancel it.".to_string(),
+                message: "Another run is already in progress. Please wait or cancel it."
+                    .to_string(),
             });
         }
         state.run_id = Some(run_id.clone());

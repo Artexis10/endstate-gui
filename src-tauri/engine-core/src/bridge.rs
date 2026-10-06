@@ -347,10 +347,8 @@ async fn handle_invoke(
     match req.cmd.as_str() {
         "engine_is_running" => {
             let run_state = state.run_state.clone();
-            match tokio::task::spawn_blocking(move || {
-                crate::engine::is_run_active(&run_state)
-            })
-            .await
+            match tokio::task::spawn_blocking(move || crate::engine::is_run_active(&run_state))
+                .await
             {
                 Ok(result) => ok_response(serde_json::json!(result)),
                 Err(e) => err_response(format!("Task error: {}", e)),
@@ -358,10 +356,8 @@ async fn handle_invoke(
         }
         "engine_get_run_id" => {
             let run_state = state.run_state.clone();
-            match tokio::task::spawn_blocking(move || {
-                crate::engine::get_current_run_id(&run_state)
-            })
-            .await
+            match tokio::task::spawn_blocking(move || crate::engine::get_current_run_id(&run_state))
+                .await
             {
                 Ok(result) => ok_response(serde_json::json!(result)),
                 Err(e) => err_response(format!("Task error: {}", e)),
@@ -401,10 +397,8 @@ async fn handle_invoke(
         "engine_cancel" => {
             let run_state = state.run_state.clone();
             let broadcaster = state.broadcaster.clone();
-            match tokio::task::spawn_blocking(move || {
-                cancel_engine_http(&run_state, &broadcaster)
-            })
-            .await
+            match tokio::task::spawn_blocking(move || cancel_engine_http(&run_state, &broadcaster))
+                .await
             {
                 Ok(Ok(())) => ok_response(serde_json::json!(null)),
                 Ok(Err(e)) => err_response(e),
@@ -510,9 +504,7 @@ async fn handle_invoke(
             })
             .await
             {
-                Ok(Ok(result)) => {
-                    ok_response(serde_json::to_value(result).unwrap_or_default())
-                }
+                Ok(Ok(result)) => ok_response(serde_json::to_value(result).unwrap_or_default()),
                 Ok(Err(e)) => err_response(format!("{}: {}", e.code, e.message)),
                 Err(e) => err_response(format!("Task error: {}", e)),
             }
@@ -792,7 +784,7 @@ async fn handle_invoke(
             } else {
                 match std::fs::read(file_path) {
                     Ok(bytes) => {
-                        use base64::{Engine as _, engine::general_purpose::STANDARD};
+                        use base64::{engine::general_purpose::STANDARD, Engine as _};
                         ok_response(serde_json::json!(STANDARD.encode(&bytes)))
                     }
                     Err(e) => err_response(format!("Failed to read file: {}", e)),
@@ -825,8 +817,11 @@ async fn handle_events(
     State(state): State<AppState>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<sse::Event, Infallible>>> {
     let rx = state.broadcaster.subscribe();
-    let stream =
-        BroadcastStream::new(rx).filter_map(|result: Result<String, _>| result.ok().map(|data| Ok::<_, Infallible>(sse::Event::default().data(data))));
+    let stream = BroadcastStream::new(rx).filter_map(|result: Result<String, _>| {
+        result
+            .ok()
+            .map(|data| Ok::<_, Infallible>(sse::Event::default().data(data)))
+    });
     Sse::new(stream)
 }
 
