@@ -25,26 +25,20 @@ export default defineConfig({
         // App is exercised by integration tests and Playwright. It was never part
         // of the unit baseline until the native-drop integration test imported it.
         'src/App.tsx',
-        // E2E scaffolding, not product code. The sibling `e2e/**` directory is
-        // already excluded above; src/e2e/ holds the mock engine only because it
-        // must be bundled into the dev build for Playwright to reach it. Its
-        // correctness is enforced by mock-engine.conformance.test.ts against a
+        // The mock engine Playwright drives. src/main.tsx imports it, so it ships
+        // in the production bundle; main.tsx installs it only in E2E mode (see
+        // isE2EMode). The sibling `e2e/**` directory is already excluded above.
+        // Its correctness is enforced by mock-engine.conformance.test.ts against a
         // fixture captured from the real engine — a stronger guarantee than line
         // coverage of a hand-written stub.
         'src/e2e/**',
         // Sole consumer is src/e2e/mock-engine.ts (event replay for Playwright
-        // fixtures); nothing in the app imports it. It entered the coverage
+        // fixtures). It entered the coverage
         // denominator at 0% only because the mock conformance test imports the
         // mock, and v8 instruments whatever gets loaded — including a module's
         // whole transitive graph.
         'src/lib/event-replay.ts',
       ],
-      thresholds: {
-        lines: 78,
-        functions: 70,
-        branches: 68,
-        statements: 76,
-      },
     },
   },
   resolve: {

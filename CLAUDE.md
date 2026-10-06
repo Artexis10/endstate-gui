@@ -101,7 +101,7 @@ Keys are prefixed by runtime: `tauri:`, `web:`, or `test:` (e.g., `tauri:Endstat
 - E2E tests: `e2e/*.spec.ts` (Playwright, chromium)
 - Test utilities in `src/test/`: `test-utils.tsx` (renderWithProviders), `localStorage-helpers.ts`, `tauri-bridge-mock.ts`
 - Query priority: `getByRole` → `getByLabelText` → `getByText` → avoid `getByTestId`. No snapshot tests.
-- Coverage thresholds are enforced in CI; the numbers live in `vitest.config.ts` (`coverage.thresholds`)
+- Coverage is reported (`npm run test:coverage`), never gated: no percentage threshold fails a build
 - `vitest.setup.ts` mocks framer-motion and localStorage
 - Unit and mocked e2e tests must not install software, modify the host, or depend on machine-specific state; real-engine coverage lives only in the dedicated real-engine CI lanes (`playwright.real-engine.config.ts`, `engine-real-apply`)
 

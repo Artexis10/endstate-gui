@@ -498,3 +498,25 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  # Engineering practices quality check: fails a pull request that adds dead code
+  # and posts a Quality report. Configured by .github/quality.yml; see
+  # https://github.com/Artexis10/engineering-practices
+  quality:
+    if: ${{ github.event_name == 'pull_request' && !cancelled() }}
+    needs: [test, engine-contract, engine-real-apply, gui-real-engine, dev-bridge-no-gui-deps, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: quality-${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write # the sticky comment
+      actions: read # test-job runtimes
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the merge base must be present
+          persist-credentials: false
+      - uses: Artexis10/engineering-practices@v1
