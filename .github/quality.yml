@@ -1,9 +1,12 @@
 # Configuration for the engineering practices quality job (.github/workflows/ci.yml).
 # Schema and behaviour: https://github.com/Artexis10/engineering-practices
 
-# Proof weight. A file takes the first class whose pattern matches; `*` also
-# matches `/`. package-lock.json and Cargo.lock are left unclassified on purpose:
-# lockfile churn is neither product nor proof.
+# Proof weight. A file is product if it runs in a build, a deploy, an image, a
+# scheduled job or a runtime import, or ships in a bundle; it is proof (tests,
+# tooling, ci, scripts and the rest) only if it never does. A file takes the first
+# class whose pattern matches; `*` also matches `/`. package-lock.json and
+# Cargo.lock are left unclassified on purpose: lockfile churn is neither product
+# nor proof.
 classes:
   fixtures: ["tests/fixtures/*", "e2e/fixtures/*"]
   tests:
@@ -13,20 +16,23 @@ classes:
     - "*.test.mjs"
     - "e2e/*"
     - "src/test/*"
-    - "src/e2e/*" # the mock engine Playwright drives; bundled only into the dev build
     - "vitest.*"
     - "playwright*.config.ts"
-  scripts: ["scripts/*", "src/screenshots-harness.tsx"]
   tooling:
-    - ".github/*"
+    # The standalone dev bridge: its own crate, and the engine-core module behind
+    # the "bridge" feature that only the dev bridge enables.
+    - "src-tauri/dev-bridge/*"
+    - "src-tauri/engine-core/src/bridge.rs"
+    # Nothing imports it: the version-sync pre-push hook reads it and
+    # scripts/bump-version.mjs rewrites it.
+    - "src/lib/compat.ts"
     - ".claude/*"
-    - ".git*"
+    - ".gitignore"
     - "lefthook.yml"
     - "eslint.config.js"
-    - "release-please-config.json"
-    - ".release-please-manifest.json"
-  specs: ["openspec/*"]
   product:
+    # Includes src/e2e/ (the mock engine) and src/screenshots-harness.tsx:
+    # src/main.tsx imports both, so they ship in the production bundle.
     - "src/*"
     - "src-tauri/*.rs"
     - "src-tauri/*.toml"
@@ -42,18 +48,40 @@ classes:
     - "tailwind.config.js"
     - "postcss.config.cjs"
     - "tsconfig*.json"
+    # Run by the release build: the prebuild engine rebuild, resource staging, and
+    # the installer audit and smoke test.
+    - "scripts/rebuild-engine.cjs"
+    - "scripts/engine-resources.mjs"
+    - "scripts/audit-windows-installer.mjs"
+    - "scripts/smoke-packaged-engine.mjs"
+    # Build and publish releases.
+    - ".github/workflows/release-please.yml"
+    - ".github/workflows/winget.yml"
+    - "release-please-config.json"
+    - ".release-please-manifest.json"
+  ci: [".github/*"]
+  # Version, dev bridge, screenshot and CI policy scripts.
+  scripts: ["scripts/*"]
+  specs: ["openspec/*"]
   docs: ["*.md", "docs/*", "screenshots/*"]
 
 # The dead-code gate. knip's Vite, Vitest, Playwright, Node test runner, Tauri and
 # GitHub Actions plugins already find index.html's entry (src/main.tsx), the unit
 # and e2e tests, both Playwright configs, tests/contract.test.js and the scripts
-# package.json runs. Tauri commands are Rust; the TypeScript `invoke()` callers are
-# ordinary code. The one entry they miss:
+# that package.json and the workflows run. Tauri commands are Rust; the TypeScript
+# `invoke()` callers are ordinary code.
 javascript:
   knip:
     entry:
-      # Release, engine and screenshot scripts, run by hand or from CI with `node scripts/<name>.mjs`.
-      - "scripts/*.mjs"
+      # Screenshot and demo recorders, run by hand (`node scripts/<name>.mjs`).
+      - "scripts/capture-screenshots.mjs"
+      - "scripts/capture-extras.mjs"
+      - "scripts/record-demo.mjs"
+    ignore:
+      # Not dead, though nothing imports it: scripts/check-version-sync.mjs (the
+      # version-sync pre-push hook) reads it, scripts/bump-version.mjs rewrites it,
+      # and openspec/specs/schema-version-compat requires it.
+      - "src/lib/compat.ts"
 
 # Exact token clones, on code only: OpenSpec deltas repeat requirement text by design.
 duplicates:
