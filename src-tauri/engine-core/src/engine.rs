@@ -22,10 +22,7 @@ use std::os::windows::process::CommandExt;
 /// Candidate sidecar filenames in priority order.
 /// Tauri's externalBin installs with target-triple suffix in production; the
 /// predev rebuild script copies as plain endstate.exe for dev.
-pub const SIDECAR_CANDIDATES: &[&str] = &[
-    "endstate-x86_64-pc-windows-msvc.exe",
-    "endstate.exe",
-];
+pub const SIDECAR_CANDIDATES: &[&str] = &["endstate-x86_64-pc-windows-msvc.exe", "endstate.exe"];
 
 /// Event channel name for all engine events
 pub const EVENT_CHANNEL: &str = "endstate://event";
@@ -106,7 +103,10 @@ pub fn resolve_engine_path() -> Result<(std::path::PathBuf, std::path::PathBuf),
                     .collect();
                 EngineError {
                     code: "BUNDLED_ENGINE_NOT_FOUND".to_string(),
-                    message: format!("Bundled engine not found. Searched: {}", searched.join(", ")),
+                    message: format!(
+                        "Bundled engine not found. Searched: {}",
+                        searched.join(", ")
+                    ),
                 }
             })?
     };
@@ -309,7 +309,10 @@ mod tests {
     fn test_parse_line_plain_text_becomes_log() {
         let result = parse_line("plain text", false);
         assert_eq!(result.get("level").unwrap().as_str().unwrap(), "info");
-        assert_eq!(result.get("message").unwrap().as_str().unwrap(), "plain text");
+        assert_eq!(
+            result.get("message").unwrap().as_str().unwrap(),
+            "plain text"
+        );
     }
 
     #[test]
@@ -320,8 +323,12 @@ mod tests {
 
     #[test]
     fn test_is_result_event_envelope_and_type() {
-        assert!(is_result_event(&serde_json::json!({"success": true, "command": "apply"})));
-        assert!(is_result_event(&serde_json::json!({"type": "result", "ok": true})));
+        assert!(is_result_event(
+            &serde_json::json!({"success": true, "command": "apply"})
+        ));
+        assert!(is_result_event(
+            &serde_json::json!({"type": "result", "ok": true})
+        ));
         assert!(!is_result_event(&serde_json::json!({"type": "log"})));
     }
 
@@ -337,12 +344,23 @@ mod tests {
         let f = create_fallback_result(0, "r", "apply");
         assert_eq!(f.get("ok").unwrap().as_bool().unwrap(), true);
         let c = create_cancelled_result("r", "apply", Some(-1));
-        assert_eq!(c.get("summary").unwrap().get("cancelled").unwrap().as_bool().unwrap(), true);
+        assert_eq!(
+            c.get("summary")
+                .unwrap()
+                .get("cancelled")
+                .unwrap()
+                .as_bool()
+                .unwrap(),
+            true
+        );
     }
 
     #[test]
     fn test_extract_command_name() {
-        assert_eq!(extract_command_name(&["apply".into(), "-Json".into()]), "apply");
+        assert_eq!(
+            extract_command_name(&["apply".into(), "-Json".into()]),
+            "apply"
+        );
         assert_eq!(extract_command_name(&["-Json".into()]), "unknown");
         assert_eq!(extract_command_name(&[]), "unknown");
     }

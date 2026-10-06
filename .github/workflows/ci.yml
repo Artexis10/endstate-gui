@@ -456,6 +456,13 @@ jobs:
           fi
           echo "OK — no tao/wry/webview2-com/tauri in the dev bridge."
 
+      # The whole Rust workspace (the app crate, engine-core and the dev bridge),
+      # with the runner's preinstalled toolchain, like the cargo steps above. It
+      # runs even when an earlier step failed, so one push reports both.
+      - name: Check Rust formatting
+        if: ${{ !cancelled() }}
+        run: cargo fmt --all --check --manifest-path src-tauri/Cargo.toml
+
   e2e:
     runs-on: ubuntu-latest
 
