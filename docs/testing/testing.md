@@ -157,23 +157,9 @@ This philosophy ensures the UI remains predictable and prevents recurring regres
 - **Contract tests** - Update if JSON envelope contract changes
 - **E2E test** - Update if core UI flow changes (settings → profile → action)
 
-## Coverage Thresholds
+## Coverage
 
-Coverage is tracked to catch regressions early without blocking progress.
-
-**Current Thresholds (Meaningful Guardrails):**
-- Statements: 70%
-- Lines: 70%
-- Branches: 60%
-- Functions: 55%
-
-These thresholds are aligned with actual coverage (77.62% statements, 79.44% lines, 76.16% branches, 67.7% functions) and provide meaningful protection against regressions.
-
-**Ratcheting Strategy:**
-- Thresholds are increased as coverage improves organically through new tests
-- Never decrease thresholds (only increase)
-- Increases are small and achievable (5-10% increments)
-- Goal: Maintain quality without blocking development
+Coverage is a report for finding untested code, not a gate: no coverage percentage fails a build or a pull request ([practice T8](https://github.com/Artexis10/engineering-practices/blob/v1/PRACTICES.md)). Whether a change is tested well enough is judged in review, by the failures its tests catch.
 
 **Coverage Reports:**
 ```bash

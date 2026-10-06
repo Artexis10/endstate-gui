@@ -1,0 +1,68 @@
+# Configuration for the engineering practices quality job (.github/workflows/ci.yml).
+# Schema and behaviour: https://github.com/Artexis10/engineering-practices
+
+# Proof weight. A file takes the first class whose pattern matches; `*` also
+# matches `/`. package-lock.json and Cargo.lock are left unclassified on purpose:
+# lockfile churn is neither product nor proof.
+classes:
+  fixtures: ["tests/fixtures/*", "e2e/fixtures/*"]
+  tests:
+    - "*.test.ts"
+    - "*.test.tsx"
+    - "*.test.js"
+    - "*.test.mjs"
+    - "e2e/*"
+    - "src/test/*"
+    - "src/e2e/*" # the mock engine Playwright drives; bundled only into the dev build
+    - "vitest.*"
+    - "playwright*.config.ts"
+  scripts: ["scripts/*", "src/screenshots-harness.tsx"]
+  tooling:
+    - ".github/*"
+    - ".claude/*"
+    - ".git*"
+    - "lefthook.yml"
+    - "eslint.config.js"
+    - "release-please-config.json"
+    - ".release-please-manifest.json"
+  specs: ["openspec/*"]
+  product:
+    - "src/*"
+    - "src-tauri/*.rs"
+    - "src-tauri/*.toml"
+    - "src-tauri/*.json"
+    - "src-tauri/icons/*"
+    - "src-tauri/windows/*"
+    - "assets/*"
+    - "patches/*"
+    - "index.html"
+    - "package.json"
+    - "ENGINE_VERSION"
+    - "vite.config.ts"
+    - "tailwind.config.js"
+    - "postcss.config.cjs"
+    - "tsconfig*.json"
+  docs: ["*.md", "docs/*", "screenshots/*"]
+
+# The dead-code gate. knip's Vite, Vitest, Playwright, Node test runner, Tauri and
+# GitHub Actions plugins already find index.html's entry (src/main.tsx), the unit
+# and e2e tests, both Playwright configs, tests/contract.test.js and the scripts
+# package.json runs. Tauri commands are Rust; the TypeScript `invoke()` callers are
+# ordinary code. The one entry they miss:
+javascript:
+  knip:
+    entry:
+      # Release, engine and screenshot scripts, run by hand or from CI with `node scripts/<name>.mjs`.
+      - "scripts/*.mjs"
+
+# Exact token clones, on code only: OpenSpec deltas repeat requirement text by design.
+duplicates:
+  paths: ["src", "scripts", "e2e", "tests", "src-tauri/src", "src-tauri/engine-core", "src-tauri/dev-bridge"]
+
+test_jobs:
+  - test
+  - engine-contract
+  - engine-real-apply
+  - gui-real-engine
+  - dev-bridge-no-gui-deps
+  - e2e

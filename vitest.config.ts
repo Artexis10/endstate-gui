@@ -39,12 +39,6 @@ export default defineConfig({
         // whole transitive graph.
         'src/lib/event-replay.ts',
       ],
-      thresholds: {
-        lines: 78,
-        functions: 70,
-        branches: 68,
-        statements: 76,
-      },
     },
   },
   resolve: {
