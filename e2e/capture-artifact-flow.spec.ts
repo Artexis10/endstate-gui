@@ -405,7 +405,7 @@ test.describe('capture artifact flow regression', () => {
     await expect(page.getByText('DETECTED', { exact: true })).toBeVisible();
     await expect(page.getByText('EXCLUDED')).toHaveCount(0);
     await expect(page.getByText('1 setting captured')).toBeVisible();
-    await expect(page.getByRole('button', { name: '1 settings' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '1 setting', exact: true })).toBeVisible();
 
     await page.getByTestId('save-flow-save-file').click();
     await expect(page.getByText('Backup saved')).toBeVisible();

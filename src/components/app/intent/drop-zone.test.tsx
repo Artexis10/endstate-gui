@@ -10,6 +10,7 @@ function createFile(name: string): File {
 describe('DropZone', () => {
   const defaultProps = {
     onFileDrop: vi.fn(),
+    onUnsupportedFiles: vi.fn(),
   };
 
   it('renders the drop zone region', () => {
@@ -20,7 +21,7 @@ describe('DropZone', () => {
   it('shows idle text when not dragging', () => {
     renderWithProviders(<DropZone {...defaultProps} />);
     expect(screen.getByText(/click to browse or drop a file/i)).toBeInTheDocument();
-    expect(screen.getByText(/accepts .endstate bundles \(.zip also works\) or .jsonc manifest files/i)).toBeInTheDocument();
+    expect(screen.getByText('Accepts .endstate bundles (.zip also works) or .json, .jsonc or .json5 manifest files')).toBeInTheDocument();
   });
 
   it('shows drag-over text during drag', () => {
@@ -85,7 +86,7 @@ describe('DropZone', () => {
 
   it('calls onFileDrop with accepted files on drop', () => {
     const onFileDrop = vi.fn();
-    renderWithProviders(<DropZone onFileDrop={onFileDrop} />);
+    renderWithProviders(<DropZone onFileDrop={onFileDrop} onUnsupportedFiles={vi.fn()} />);
     const zone = screen.getByTestId('drop-zone');
 
     const zipFile = createFile('profile.zip');
@@ -102,7 +103,7 @@ describe('DropZone', () => {
 
   it('filters out non-accepted file types on drop', () => {
     const onFileDrop = vi.fn();
-    renderWithProviders(<DropZone onFileDrop={onFileDrop} />);
+    renderWithProviders(<DropZone onFileDrop={onFileDrop} onUnsupportedFiles={vi.fn()} />);
     const zone = screen.getByTestId('drop-zone');
 
     const txtFile = createFile('readme.txt');
@@ -117,9 +118,12 @@ describe('DropZone', () => {
     expect(droppedFiles[0].name).toBe('profile.jsonc');
   });
 
-  it('does not call onFileDrop when all files are rejected', () => {
+  // A drop of only unsupported files used to do nothing at all, so the user
+  // could not tell whether Endstate had seen the file.
+  it('reports rejected files by name instead of ignoring the drop', () => {
     const onFileDrop = vi.fn();
-    renderWithProviders(<DropZone onFileDrop={onFileDrop} />);
+    const onUnsupportedFiles = vi.fn();
+    renderWithProviders(<DropZone onFileDrop={onFileDrop} onUnsupportedFiles={onUnsupportedFiles} />);
     const zone = screen.getByTestId('drop-zone');
 
     const txtFile = createFile('readme.txt');
@@ -128,11 +132,12 @@ describe('DropZone', () => {
     });
 
     expect(onFileDrop).not.toHaveBeenCalled();
+    expect(onUnsupportedFiles).toHaveBeenCalledWith(['readme.txt']);
   });
 
   it('accepts .json, .jsonc, .json5, .zip, and .endstate extensions', () => {
     const onFileDrop = vi.fn();
-    renderWithProviders(<DropZone onFileDrop={onFileDrop} />);
+    renderWithProviders(<DropZone onFileDrop={onFileDrop} onUnsupportedFiles={vi.fn()} />);
     const zone = screen.getByTestId('drop-zone');
 
     const files = [
@@ -159,7 +164,7 @@ describe('DropZone', () => {
 
   it('does not call onFileDrop on drop when disabled', () => {
     const onFileDrop = vi.fn();
-    renderWithProviders(<DropZone onFileDrop={onFileDrop} disabled />);
+    renderWithProviders(<DropZone onFileDrop={onFileDrop} onUnsupportedFiles={vi.fn()} disabled />);
     const zone = screen.getByTestId('drop-zone');
 
     fireEvent.drop(zone, {

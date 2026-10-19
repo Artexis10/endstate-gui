@@ -14,7 +14,7 @@ Endstate is governed by a set of public principles documented in the engine repo
 [![Latest release](https://img.shields.io/github/v/release/Artexis10/endstate-gui?display_name=tag&label=release)](https://github.com/Artexis10/endstate-gui/releases/latest)
 ![engine pin](https://img.shields.io/badge/engine-v2.32.0-blue)
 
-Endstate GUI is released and actively maintained. Download the latest signed installer from [Releases](https://github.com/Artexis10/endstate-gui/releases/latest).
+Endstate GUI is released and actively maintained. Download the latest signed installer from [Releases](https://github.com/Artexis10/endstate-gui/releases/latest). The installer is the only download: it bundles the Endstate engine, so you do not install the CLI separately.
 
 ## Development Prerequisites
 
@@ -46,8 +46,9 @@ npm run tauri icon app-icon.png
 
 ## Relationship to Endstate
 
-Endstate GUI relies on the Endstate CLI being installed and available on the system PATH.  
-All operations are executed by invoking the CLI and consuming its structured output.
+The GUI installer bundles the Endstate engine next to the app, and the app runs that bundled engine by default.
+All operations are executed by invoking the engine's CLI and consuming its structured output.
+For development, Settings → Engine Configuration can switch to an `endstate` found on the system PATH.
 
 Both Endstate (the core engine) and Endstate GUI are open source, licensed under the Apache License 2.0.
 
@@ -98,23 +99,17 @@ All exceptions should be documented in code comments.
 
 ### Execution Model
 
-#### Development Mode
+#### Bundled engine (default)
 
-During development, Endstate GUI resolves the CLI from the system PATH:
+Every build ships the Endstate engine as a Tauri sidecar (`externalBin` in `src-tauri/tauri.conf.json`):
 
-- **CLI Resolution:** `endstate` command resolved from PATH
-- **Execution:** Node.js `child_process.spawn`
-- **Validation:** Capabilities handshake on startup
-
-#### Production Mode
-
-Production builds of Endstate GUI will bundle the Endstate engine as Tauri resources:
-
-- **CLI Resolution:** Bundled engine scripts at known resource path
+- **CLI Resolution:** The bundled `endstate` binary next to the app executable (engine mode "Bundled", the default)
 - **Execution:** Tauri/Rust Command API
 - **Validation:** Capabilities handshake on startup
 
-> **Note:** Engine bundling is in progress. Currently requires Endstate CLI on system PATH.
+#### System PATH engine (development)
+
+When Settings → Engine Configuration is set to "System PATH (development)", the GUI runs the `endstate` command found on PATH instead.
 
 ### Compatibility Check Flow
 

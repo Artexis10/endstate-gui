@@ -73,7 +73,7 @@ describe('NDJSON Streaming Consolidation', () => {
     it('UI_STATUS_MAP has correct labels per contract', () => {
       // Required mapping from task:
       // UI Status       | Live Label   | Details Label    | Color
-      // present         | PRESENT      | Already present  | green
+      // present         | PRESENT      | Already present  | muted
       // to_install      | TO INSTALL   | To install       | blue
       // installing      | INSTALLING   | Installing…      | blue
       // installed       | INSTALLED    | Installed        | green
@@ -83,7 +83,7 @@ describe('NDJSON Streaming Consolidation', () => {
       expect(UI_STATUS_MAP.present).toEqual({
         shortLabel: 'PRESENT',
         longLabel: 'Already present',
-        color: 'success',
+        color: 'muted',
       });
 
       expect(UI_STATUS_MAP.to_install).toEqual({

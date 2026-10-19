@@ -223,6 +223,7 @@ describe('SaveFlow — post-capture cloud invitation', () => {
           onOpenProfilesFolder={vi.fn()}
           onRefreshProfiles={vi.fn().mockResolvedValue(undefined)}
           onFileDrop={vi.fn()}
+          onUnsupportedFiles={vi.fn()}
           onDeleteProfile={vi.fn()}
           isRunning={false}
           setupProgress={null}
@@ -458,7 +459,7 @@ describe('SaveFlow — post-capture cloud invitation', () => {
       fireEvent.click(screen.getByRole('button', { name: /save file/i }));
       await screen.findByText('Backup saved');
       expect(
-        screen.getByText('3 applications and 2 supported settings were captured.'),
+        screen.getByText('3 applications and 2 settings were captured.'),
       ).toBeInTheDocument();
     });
 
@@ -472,7 +473,7 @@ describe('SaveFlow — post-capture cloud invitation', () => {
       await scanAndSave();
 
       expect(
-        screen.getByText('3 applications and 3 supported settings were captured.'),
+        screen.getByText('3 applications and 3 settings were captured.'),
       ).toBeInTheDocument();
     });
   });

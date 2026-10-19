@@ -25,7 +25,7 @@ describe('Phase-aware status mapping for filters', () => {
     });
     
     expect(result.longLabel).toBe('Already present');
-    expect(result.color).toBe('success');
+    expect(result.color).toBe('muted');
   });
 
   it('Apply phase: to_install -> "To install"', () => {
@@ -46,7 +46,7 @@ describe('Phase-aware status mapping for filters', () => {
     });
     
     expect(result.longLabel).toBe('Already present');
-    expect(result.color).toBe('success');
+    expect(result.color).toBe('muted');
   });
 
   it('Apply phase: skipped with reason "filtered" -> "Skipped"', () => {

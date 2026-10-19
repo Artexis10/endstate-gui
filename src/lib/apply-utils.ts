@@ -1,5 +1,6 @@
-import type { ApplyAction, ApplyItem } from '../types';
+import type { ApplyAction, ApplyItem, RestoreResultStatus } from '../types';
 import type { EngineItemStatus, ItemEvent, EnginePhase } from './streaming-events';
+import type { SettingsKind } from './settings-kind';
 
 /**
  * Canonical status keys used for filtering and internal logic.
@@ -31,6 +32,8 @@ export interface UiStatusConfig {
   shortLabel: string;   // For live activity (compact)
   longLabel: string;    // For modals/summaries
   color: SemanticColor; // Semantic color token
+  /** The person must act on this outcome (e.g. install the app by hand). */
+  needsAction?: boolean;
 }
 
 /**
@@ -38,10 +41,12 @@ export interface UiStatusConfig {
  * Both Live Activity and Setup Details MUST consume this mapping.
  */
 export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
+  // Nothing changed, so it is muted like a restore row's UP TO DATE: colour
+  // marks a change or a problem (docs/ux-language.md, "Apply Phase").
   present: {
     shortLabel: 'PRESENT',
     longLabel: 'Already present',
-    color: 'success',
+    color: 'muted',
   },
   to_install: {
     shortLabel: 'TO INSTALL',
@@ -82,6 +87,7 @@ export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
     shortLabel: 'MANUAL',
     longLabel: 'Manual installation required',
     color: 'warn',
+    needsAction: true,
   },
 } as const;
 
@@ -97,6 +103,8 @@ export interface PhaseAwareStatusConfig {
   shortLabel: string;
   longLabel: string;
   color: SemanticColor;
+  /** The person must act on this outcome (e.g. install the app by hand). */
+  needsAction?: boolean;
 }
 
 /**
@@ -106,7 +114,7 @@ export interface PhaseAwareStatusConfig {
  * Key semantic rules:
  * - Capture: "Skipped" with reason "already_installed" → "Detected" (green)
  * - Capture: Never shows "Skipped" - only "Detected" or "Not found"
- * - Apply: "present" → "Already present" (green, success - no action needed)
+ * - Apply: "present" → "Already present" (muted - nothing changed, no action needed)
  * - Verify: "present" → "Confirmed" (green)
  * - Verify: "to_install" → "Missing" (red - needs attention)
  */
@@ -122,24 +130,24 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
   },
   preview: {
-    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
+    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'muted' },
     to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
     installing: { shortLabel: 'EVALUATING', longLabel: 'Evaluating…', color: 'info' },
     installed: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'muted' },
     failed: { shortLabel: 'FAILED', longLabel: 'Failed', color: 'error' },
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
-    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn' },
+    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn', needsAction: true },
   },
   apply: {
-    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
+    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'muted' },
     to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
     installing: { shortLabel: 'INSTALLING', longLabel: 'Installing…', color: 'info' },
     installed: { shortLabel: 'INSTALLED', longLabel: 'Installed', color: 'success' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },
     failed: { shortLabel: 'FAILED', longLabel: 'Failed', color: 'error' },
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
-    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn' },
+    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn', needsAction: true },
   },
   verify: {
     present: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
@@ -186,8 +194,8 @@ export interface PhaseAwareStatusArgs {
  * APPLY PHASE:
  * - (apply, installing, *)           -> installing   | INSTALLING      | info
  * - (apply, installed, *)            -> installed    | INSTALLED       | success
- * - (apply, present, *)              -> present      | PRESENT         | success
- * - (apply, skipped, already_installed) -> present   | PRESENT         | success  ← NOT "Skipped"
+ * - (apply, present, *)              -> present      | PRESENT         | muted
+ * - (apply, skipped, already_installed) -> present   | PRESENT         | muted    ← NOT "Skipped"
  * - (apply, skipped, user_denied)    -> cancelled    | CANCELLED       | warn     ← User cancelled, NOT failed
  * - (apply, skipped, *)              -> skipped      | SKIPPED         | warn
  * - (apply, failed, install_failed)  -> failed       | FAILED          | error    ← Real install failure
@@ -212,7 +220,7 @@ export interface PhaseAwareStatusArgs {
  * Key semantic distinctions:
  * 1. User denial (apply, skipped, user_denied) -> CANCELLED (warn), NOT FAILED (error)
  * 2. Missing apps (verify, failed, missing) -> MISSING (warn), NOT FAILED (error)
- * 3. Already installed (apply, skipped, already_installed) -> PRESENT (success), NOT SKIPPED
+ * 3. Already installed (apply, skipped, already_installed) -> PRESENT (muted), NOT SKIPPED
  * 
  * @param args - Status key, phase, and optional reason
  * @returns UI status configuration with labels and color
@@ -243,9 +251,9 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
 
   // Apply phase: reason-aware discrimination
   if (phase === 'apply') {
-    // skipped + already_installed -> PRESENT (success), NOT "Skipped"
+    // skipped + already_installed -> PRESENT, NOT "Skipped"
     if (statusKey === 'skipped' && (reasonLower === 'already_installed' || reasonLower === 'already_present')) {
-      return { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' };
+      return PHASE_STATUS_MAP.apply.present!;
     }
     // skipped + user_denied -> CANCELLED (warn) - user cancelled, not a failure
     if (statusKey === 'skipped' && reasonLower === 'user_denied') {
@@ -253,7 +261,7 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
     }
     // skipped + manual_required -> MANUAL (warn) - requires manual installation
     if (statusKey === 'skipped' && reasonLower === 'manual_required') {
-      return { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn' };
+      return PHASE_STATUS_MAP.apply.manual!;
     }
     // manual status key (already resolved) -> MANUAL (warn)
     if (statusKey === 'manual') {
@@ -375,6 +383,35 @@ export function engineStatusToStatusKey(engineStatus: EngineItemStatus, phase?: 
 }
 
 /**
+ * A failed app row's secondary text, by what the run tried to do. The engine's
+ * message can name installer paths, so the row shows this plain line and the
+ * hover title keeps the message, as on registry restore rows (docs/ux-language.md).
+ * A preview or dry run installs nothing, so its failure says the check failed.
+ */
+const APP_FAILED_TEXT = {
+  install: "Couldn't install this app",
+  check: "Couldn't check this app",
+  verify: "Couldn't verify this app",
+  capture: "Couldn't capture this app",
+} as const;
+
+type AppFailureKind = keyof typeof APP_FAILED_TEXT;
+
+function failureKindForPhase(phase: EnginePhase | undefined): AppFailureKind {
+  return phase === 'plan' ? 'check' : phase === 'verify' ? 'verify' : phase === 'capture' ? 'capture' : 'install';
+}
+
+/** Secondary text and hover title for a failed app row. */
+function appFailureText(name: string, message: string | null | undefined, kind: AppFailureKind): Pick<AppEvent, 'secondary' | 'title'> {
+  const text = APP_FAILED_TEXT[kind];
+  const detail = message?.trim();
+  return {
+    secondary: text,
+    title: detail ? `${name} · ${text}\n${detail}` : undefined,
+  };
+}
+
+/**
  * Convert an ItemEvent from streaming to an AppEvent for UI display.
  * Uses EnginePhase which includes 'plan' | 'apply' | 'verify' | 'capture'.
  * Note: 'plan' phase maps to 'apply' for UI purposes (preview behaves like apply).
@@ -405,6 +442,7 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     reason: event.reason,
     name: event.name,
     driver: event.driver,
+    ...(statusKey === 'failed' ? appFailureText(event.name || event.id, event.message, failureKindForPhase(phase)) : {}),
   };
 }
 
@@ -556,6 +594,11 @@ export interface AppEvent {
   /** Engine driver (e.g., "winget", "manual"). Manual rows may be authored apps or engine-synthesized settings rows. */
   driver?: string;
   /**
+   * The package ref (e.g. winget `Git.Git`) of a row rebuilt from an envelope
+   * action, whose `app` is the manifest id. Streamed rows are keyed by the ref.
+   */
+  ref?: string;
+  /**
    * Row kind. Undefined/'app' is an installable app row (default). 'restore' is
    * a config-restore row (RESTORING/RESTORED verbs, engine-named); 'artifact' is
    * a produced-artifact completion line (e.g. the saved profile bundle). These
@@ -565,7 +608,19 @@ export interface AppEvent {
   kind?: 'app' | 'restore' | 'artifact';
   /** Terminal/transitional restore status, when kind === 'restore'. */
   restoreStatus?: RestoreStatusKey;
-  /** Friendly muted secondary line (skip reason, artifact name). */
+  /** Whether a restore row's setting belongs to an app or to no app (e.g. Windows). */
+  settingsKind?: SettingsKind;
+  /**
+   * True when a restore row came from a dry run. Set from the run's dry-run
+   * flag; the engine reports `restored` for an item a preview would restore.
+   */
+  preview?: boolean;
+  /**
+   * The engine's name for one restore item (e.g. "Keyboard repeat delay").
+   * Under a group heading it stands alone; elsewhere `name` keeps the module.
+   */
+  label?: string;
+  /** Friendly muted secondary line (a failure's reason, artifact name). */
   secondary?: string;
   /** Full raw detail for a hover title / disclosure only (never inline text). */
   title?: string;
@@ -1039,7 +1094,8 @@ export function reasonToActionString(item: ApplyItem): string {
  */
 export function reconcileLiveActivity(
   liveEvents: AppEvent[],
-  envelopeActions: ApplyAction[]
+  envelopeActions: ApplyAction[],
+  dryRun = false
 ): AppEvent[] {
   // Streaming-only runs (cancel/crash with no terminal envelope) keep their live
   // rows untouched — there is no authoritative list to reconcile against.
@@ -1076,6 +1132,14 @@ export function reconcileLiveActivity(
       reason: action.reason ?? existing?.reason,
       name: action.name ?? existing?.name,
       driver: action.driver ?? existing?.driver,
+      ref: action.ref ?? existing?.ref,
+      // The envelope's message wins; a streamed failure keeps its own.
+      ...(statusKey === 'failed'
+        ? {
+            ...appFailureText(action.name ?? existing?.name ?? action.id, action.message, dryRun ? 'check' : 'install'),
+            ...(!action.message?.trim() && existing?.title ? { title: existing.title } : {}),
+          }
+        : {}),
     };
   };
 
@@ -1119,6 +1183,18 @@ export function reconcileLiveActivity(
 }
 
 /**
+ * Whether an app row carries settings in the engine's `configModuleMap`. The
+ * engine keys the map by package ref (or by app id for a module with no
+ * package), while a results row rebuilt from an envelope action is keyed by
+ * the manifest id and carries the ref beside it. Every settings lookup for an
+ * app row goes through here, so preview and results rows match the same way.
+ */
+export function appRowHasSettings(event: AppEvent, configMap: Record<string, string>): boolean {
+  const has = (key: string | undefined) => key !== undefined && Object.prototype.hasOwnProperty.call(configMap, key);
+  return has(event.ref) || has(event.app);
+}
+
+/**
  * Get a user-friendly message for a failed item.
  * If the item has no message, returns a fallback.
  */
@@ -1140,40 +1216,102 @@ export type RestoreStatusKey =
   | 'skipped_missing_source'
   | 'failed';
 
-/** Restore status UI mapping */
-export const RESTORE_STATUS_MAP: Record<RestoreStatusKey, UiStatusConfig> = {
+/** Restore outcomes in the order every count summary lists them. */
+export const RESTORE_OUTCOME_ORDER: readonly RestoreResultStatus[] = [
+  'restored',
+  'skipped_up_to_date',
+  'skipped_missing_source',
+  'failed',
+];
+
+/**
+ * Restore status labels. `countLabel` is the phrase after a number in a count
+ * summary ("2 restored"). See docs/ux-language.md, "RESTORE rows".
+ */
+export interface RestoreUiStatusConfig extends UiStatusConfig {
+  countLabel: string;
+}
+
+/** Restore status UI mapping for a run that changes the machine. */
+export const RESTORE_STATUS_MAP: Record<RestoreStatusKey, RestoreUiStatusConfig> = {
   restoring: {
     shortLabel: 'RESTORING',
     longLabel: 'Restoring\u2026',
+    countLabel: 'restoring',
     color: 'info',
   },
   restored: {
     shortLabel: 'RESTORED',
     longLabel: 'Restored',
+    countLabel: 'restored',
     color: 'success',
   },
   skipped_up_to_date: {
     shortLabel: 'UP TO DATE',
     longLabel: 'Already up to date',
+    countLabel: 'already up to date',
     color: 'muted',
   },
+  // The engine reports this only for an optional settings file the saved setup
+  // does not contain. Absence of configuration is not a failure, so it is muted.
   skipped_missing_source: {
-    shortLabel: 'MISSING',
-    longLabel: 'Source missing',
-    color: 'warn',
+    shortLabel: 'NOT IN SETUP',
+    longLabel: 'Not included in the saved setup',
+    countLabel: 'not in saved setup',
+    color: 'muted',
   },
   failed: {
     shortLabel: 'FAILED',
     longLabel: 'Failed',
+    countLabel: 'failed',
     color: 'error',
   },
 } as const;
 
 /**
- * Get UI status config for a restore status key.
+ * Preview (dry-run) overrides. The engine reports `restored` for an item a
+ * preview would restore, so a preview row must say so in preview language.
  */
-export function getRestoreUiStatus(status: RestoreStatusKey): UiStatusConfig {
-  return RESTORE_STATUS_MAP[status] ?? RESTORE_STATUS_MAP.failed;
+const RESTORE_PREVIEW_STATUS_MAP: Partial<Record<RestoreStatusKey, RestoreUiStatusConfig>> = {
+  restoring: {
+    shortLabel: 'CHECKING',
+    longLabel: 'Checking\u2026',
+    countLabel: 'checking',
+    color: 'info',
+  },
+  restored: {
+    shortLabel: 'TO RESTORE',
+    longLabel: 'Would restore',
+    countLabel: 'would be restored',
+    color: 'action',
+  },
+};
+
+/**
+ * Get UI status config for a restore status key. `preview` comes from the
+ * run's dry-run flag, never from the item.
+ */
+export function getRestoreUiStatus(
+  status: RestoreStatusKey,
+  options: { preview?: boolean } = {},
+): RestoreUiStatusConfig {
+  const base = RESTORE_STATUS_MAP[status] ?? RESTORE_STATUS_MAP.failed;
+  if (!options.preview) return base;
+  return RESTORE_PREVIEW_STATUS_MAP[status] ?? base;
+}
+
+/**
+ * Plain-language count summary, e.g. "2 restored, 1 not in saved setup".
+ * Lists only non-zero outcomes; returns '' when every count is zero.
+ */
+export function formatRestoreCounts(
+  counts: Readonly<Record<RestoreResultStatus, number>>,
+  options: { preview?: boolean } = {},
+): string {
+  return RESTORE_OUTCOME_ORDER
+    .filter((status) => counts[status] > 0)
+    .map((status) => `${counts[status]} ${getRestoreUiStatus(status, options).countLabel}`)
+    .join(', ');
 }
 
 /**
@@ -1197,8 +1335,9 @@ function deriveStatusKey(event: AppEvent): StatusKey {
 /**
  * Single source of truth for an activity row's short status label + color.
  *
- * Restore rows use the RESTORING/RESTORED/UP TO DATE/MISSING/FAILED vocabulary
- * (never the app "INSTALLING" verb); artifact rows render a muted SAVED
+ * Restore rows use the restore vocabulary in RESTORE_STATUS_MAP, in preview
+ * language when the row came from a dry run (never the app "INSTALLING" verb
+ * and never RESTORED for a preview); artifact rows render a muted SAVED
  * completion marker; app rows fall through to the phase-aware app mapping. The
  * optional `phaseOverride` lets a render site pin the phase for app rows (e.g. a
  * results list that always reads as "apply") while restore/artifact rows ignore
@@ -1207,9 +1346,9 @@ function deriveStatusKey(event: AppEvent): StatusKey {
 export function getActivityRowLabel(
   event: AppEvent,
   phaseOverride?: UiPhase,
-): { shortLabel: string; color: SemanticColor } {
+): { shortLabel: string; color: SemanticColor; needsAction?: boolean } {
   if (event.kind === 'restore') {
-    const cfg = getRestoreUiStatus(event.restoreStatus ?? 'failed');
+    const cfg = getRestoreUiStatus(event.restoreStatus ?? 'failed', { preview: event.preview });
     return { shortLabel: cfg.shortLabel, color: cfg.color };
   }
   if (event.kind === 'artifact') {
@@ -1220,7 +1359,7 @@ export function getActivityRowLabel(
     phase: phaseOverride ?? event.phase,
     reason: event.reason,
   });
-  return { shortLabel: cfg.shortLabel, color: cfg.color };
+  return { shortLabel: cfg.shortLabel, color: cfg.color, needsAction: cfg.needsAction };
 }
 
 /**

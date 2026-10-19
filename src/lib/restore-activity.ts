@@ -15,9 +15,10 @@
  */
 
 import type { AppEvent, RestoreStatusKey, StatusKey } from './apply-utils';
-import { getRestoreUiStatus } from './apply-utils';
+import { getRestoreUiStatus, RESTORE_OUTCOME_ORDER } from './apply-utils';
 import type { ArtifactEvent, RestoreItemEvent } from './streaming-events';
-import type { RestoreModuleRef } from '../types';
+import type { RestoreModuleRef, RestoreResultStatus } from '../types';
+import { appModuleKey, settingsKind } from './settings-kind';
 
 /**
  * Resolution context sourced from the preview/apply envelope. Both fields are
@@ -29,11 +30,6 @@ export interface RestoreRowContext {
   configModuleMap?: Record<string, string>;
   /** Enriched module refs carrying engine display names. */
   restoreModulesAvailable?: RestoreModuleRef[];
-}
-
-/** Strip the engine's `apps.` module-id qualifier for cross-source matching. */
-function unqualifyModuleId(moduleId: string): string {
-  return moduleId.startsWith('apps.') ? moduleId.slice('apps.'.length) : moduleId;
 }
 
 /**
@@ -55,14 +51,14 @@ export function restoreTargetBasename(pathLike: string): string {
  */
 export function deriveRestoreModuleId(event: RestoreItemEvent): string | undefined {
   if (event.module && event.module.trim()) {
-    return unqualifyModuleId(event.module.trim());
+    return appModuleKey(event.module.trim());
   }
   const fromSource = event.source?.match(/(?:^|[\\/])configs[\\/]([^\\/]+)[\\/]/i);
   if (fromSource) {
-    return unqualifyModuleId(fromSource[1]);
+    return appModuleKey(fromSource[1]);
   }
   if (event.configSetId && event.configSetId.trim() && event.configSetId !== 'legacy') {
-    return unqualifyModuleId(event.configSetId.trim());
+    return appModuleKey(event.configSetId.trim());
   }
   return undefined;
 }
@@ -72,22 +68,44 @@ export function resolveRestoreModuleDisplayName(
   moduleId: string,
   context: RestoreRowContext,
 ): string | undefined {
-  const target = unqualifyModuleId(moduleId);
+  const target = appModuleKey(moduleId);
   const match = context.restoreModulesAvailable?.find(
-    (m) => unqualifyModuleId(m.id) === target,
+    (m) => appModuleKey(m.id) === target,
   );
   return match?.displayName;
 }
 
 /**
- * The primary row label: `<display name or module id> · <file basename>`.
- * Never returns the raw copy-spec.
+ * `registry-set` and `registry-import` (engine restore types, protocol tokens)
+ * write registry values. Their targets and engine messages name registry
+ * internals, which the default UI never shows (docs/ux-guardrails.md, "Jargon
+ * in Default UX").
+ */
+function isRegistryRestore(event: RestoreItemEvent): boolean {
+  return event.restorer === 'registry-set' || event.restorer === 'registry-import';
+}
+
+/**
+ * What tells one restore item of a module from another: the engine's label
+ * when it sends one, otherwise the target file name. A registry key or value
+ * name is never shown inline; the hover title keeps it.
+ */
+function restoreRowDisambiguator(event: RestoreItemEvent): string | undefined {
+  const label = event.label?.trim();
+  if (label) return label;
+  if (isRegistryRestore(event)) return undefined;
+  return restoreTargetBasename(event.target || event.source || event.id);
+}
+
+/**
+ * The primary row label: `<display name or module id> · <label or file
+ * basename>`. Never returns the raw copy-spec or a registry key or value name.
  */
 export function restoreRowPrimary(event: RestoreItemEvent, context: RestoreRowContext): string {
-  const basename = restoreTargetBasename(event.target || event.source || event.id);
   const moduleId = deriveRestoreModuleId(event);
-  const label = moduleId ? resolveRestoreModuleDisplayName(moduleId, context) ?? moduleId : undefined;
-  return label ? `${label} · ${basename}` : basename;
+  const moduleName = moduleId ? resolveRestoreModuleDisplayName(moduleId, context) ?? moduleId : undefined;
+  const parts = [moduleName, restoreRowDisambiguator(event)].filter((part): part is string => !!part);
+  return parts.length > 0 ? parts.join(' · ') : 'Setting';
 }
 
 /**
@@ -99,32 +117,27 @@ function isCleanRestoreText(text: string): boolean {
 }
 
 /**
- * Friendly, jargon-free secondary line. Terminal skip/failure reasons become
- * plain-language copy; the engine-authored message is preferred when present
- * and clean. See docs/ux-language.md for the canonical strings.
+ * Friendly, jargon-free secondary line: a failure's reason, and nothing else.
+ * Every other status label already says what happened ("UP TO DATE", "NOT IN
+ * SETUP"), so a restatement only adds noise. The engine-authored message is
+ * preferred when present and clean. A preview restores nothing, so its
+ * canonical failure says the check failed. See docs/ux-language.md.
  */
-export function restoreRowSecondary(event: RestoreItemEvent): string | undefined {
+function restoreRowSecondary(event: RestoreItemEvent, preview = false): string | undefined {
+  if (event.status !== 'failed') return undefined;
   const message = event.message?.trim();
-  const cleanMessage = message && isCleanRestoreText(message) ? message : undefined;
-
-  switch (event.status) {
-    case 'restoring':
-    case 'restored':
-      return undefined;
-    case 'skipped_up_to_date':
-      return cleanMessage ?? 'Already matches your saved settings';
-    case 'skipped_missing_source':
-      return cleanMessage ?? "The saved copy wasn't found, so nothing changed";
-    case 'failed':
-      return cleanMessage ?? "Couldn't restore this file";
-    default:
-      return cleanMessage;
-  }
+  // A registry restore's engine message names registry internals, so its row
+  // uses the canonical string and the hover title keeps the message.
+  const cleanMessage = message && !isRegistryRestore(event) && isCleanRestoreText(message) ? message : undefined;
+  return cleanMessage ?? `Couldn't ${preview ? 'check' : 'restore'} this ${isRegistryRestore(event) ? 'setting' : 'file'}`;
 }
 
 /** Full raw source→target detail, for a hover title / disclosure only. */
 export function restoreRowTitle(event: RestoreItemEvent): string {
-  return `${event.source} → ${event.target}`;
+  // A restore type with no source file (such as `registry-set`) has only a target.
+  const detail = event.source ? `${event.source} → ${event.target}` : event.target;
+  const message = event.message?.trim();
+  return isRegistryRestore(event) && message ? `${detail}\n${message}` : detail;
 }
 
 /**
@@ -152,24 +165,55 @@ export function restoreStatusToStatusKey(status: RestoreStatusKey): StatusKey {
   }
 }
 
-/** Map a `restore-item` event to a friendly, reconcilable activity row. */
+/**
+ * Map a `restore-item` event to a friendly, reconcilable activity row.
+ * `preview` is the run's dry-run flag: a preview row never reads RESTORED.
+ */
 export function restoreEventToAppEvent(
   event: RestoreItemEvent,
   context: RestoreRowContext,
+  options: { preview?: boolean } = {},
 ): AppEvent {
+  const preview = options.preview === true;
+  const moduleId = deriveRestoreModuleId(event);
+  const name = restoreRowPrimary(event, context);
+  const secondary = restoreRowSecondary(event, preview);
   return {
     app: restoreRowKey(event),
     kind: 'restore',
     restoreStatus: event.status,
-    name: restoreRowPrimary(event, context),
-    secondary: restoreRowSecondary(event),
-    title: restoreRowTitle(event),
-    action: getRestoreUiStatus(event.status).shortLabel,
+    settingsKind: moduleId ? settingsKind(moduleId) : 'app',
+    preview,
+    name,
+    label: event.label?.trim() || undefined,
+    secondary,
+    // A long row truncates, so the hover title starts with its full text.
+    title: `${[name, secondary].filter(Boolean).join(' · ')}\n${restoreRowTitle(event)}`,
+    action: getRestoreUiStatus(event.status, { preview }).shortLabel,
     statusKey: restoreStatusToStatusKey(event.status),
     phase: 'apply',
     timestamp: Date.now(),
     reason: event.reason ?? null,
   };
+}
+
+/**
+ * Count settings-restore outcomes from the activity rows. Rows reconcile to
+ * one per restore target, so these counts always equal the rows shown. This is
+ * the only restore counting source: the apply envelope carries no restore
+ * summary. An in-progress (`restoring`) row is not an outcome.
+ */
+export function countRestoreOutcomes(
+  events: readonly AppEvent[],
+): Record<RestoreResultStatus, number> {
+  const counts = Object.fromEntries(
+    RESTORE_OUTCOME_ORDER.map((status) => [status, 0]),
+  ) as Record<RestoreResultStatus, number>;
+  for (const event of events) {
+    const status = event.kind === 'restore' ? event.restoreStatus : undefined;
+    if (status && status !== 'restoring') counts[status] += 1;
+  }
+  return counts;
 }
 
 /**

@@ -36,6 +36,15 @@ export interface ProfileImportDependencies {
 
 export interface NativeProfileDropDependencies extends ProfileImportDependencies {
   setDragAccepted?: (accepted: boolean) => void;
+  /**
+   * Called on a drop that held no paths, or held files the import surface does
+   * not accept, with the refused file names. A drop never fails silently.
+   */
+  onUnsupportedFiles: (fileNames: string[]) => void;
+}
+
+function fileNameOf(path: string): string {
+  return path.split(/[/\\]/).pop() || path;
 }
 
 /**
@@ -128,6 +137,11 @@ export function createNativeProfileDropHandler(
 
     if (eventType !== 'drop') return;
     setAccepted(false);
+    const droppedPaths = event.payload.paths ?? [];
+    const refused = droppedPaths.filter((path) => !isSupportedProfilePath(path));
+    if (droppedPaths.length === 0 || refused.length > 0) {
+      dependencies.onUnsupportedFiles(refused.map(fileNameOf));
+    }
     beginProfileImport(dependencies, acceptedPaths);
   }) as NativeProfileDropHandler;
 

@@ -40,6 +40,13 @@ export const PROFILE_DIALOG_EXTENSIONS = PROFILE_EXTENSIONS.map(stripDot);
 /** The extension capture writes by default. */
 export const DEFAULT_BUNDLE_EXTENSION = BUNDLE_EXTENSIONS[0];
 
+/** ".a, .b or .c": extensions for user-facing copy, in list order. */
+export function extensionListPhrase(extensions: readonly string[]): string {
+  const types = [...extensions];
+  const last = types.pop() ?? '';
+  return types.length > 0 ? `${types.join(', ')} or ${last}` : last;
+}
+
 function stripDot(ext: string): string {
   return ext.replace(/^\./, '');
 }

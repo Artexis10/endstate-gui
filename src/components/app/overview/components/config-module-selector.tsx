@@ -2,15 +2,23 @@
  * ConfigModuleSelector - Per-module checkboxes for selecting which settings to restore
  */
 
+import { useId } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import type { ConfigModuleInfo } from '@/types';
 
 interface ConfigModuleSelectorProps {
   modules: ConfigModuleInfo[];
+  /** The whole selection, which may include modules another selector shows. */
   selectedModules: string[];
   onSelectionChange: (moduleIds: string[]) => void;
   disabled?: boolean;
+  title?: string;
+  /** Muted line under the title. */
+  description?: string;
+  /** What one of a module's entries is, for its count. */
+  entryNoun?: { singular: string; plural: string };
+  testId?: string;
 }
 
 export function ConfigModuleSelector({
@@ -18,7 +26,13 @@ export function ConfigModuleSelector({
   selectedModules,
   onSelectionChange,
   disabled = false,
+  title = 'Settings to restore:',
+  description,
+  entryNoun = { singular: 'file', plural: 'files' },
+  testId = 'config-module-selector',
 }: ConfigModuleSelectorProps) {
+  const titleId = useId();
+  const toggleId = useId();
   if (modules.length === 0) return null;
 
   const allSelected = modules.every((m) => selectedModules.includes(m.id));
@@ -31,23 +45,30 @@ export function ConfigModuleSelector({
     }
   };
 
+  // Select all and Deselect all change only this selector's modules, so a
+  // selection made in another selector stays as the user left it.
   const handleToggleAll = () => {
-    if (allSelected) {
-      onSelectionChange([]);
-    } else {
-      onSelectionChange(modules.map((m) => m.id));
-    }
+    const ownIds = new Set(modules.map((m) => m.id));
+    const others = selectedModules.filter((id) => !ownIds.has(id));
+    onSelectionChange(allSelected ? others : [...others, ...ownIds]);
   };
 
   return (
     <div
+      role="group"
+      aria-labelledby={titleId}
       className="rounded-lg border border-border bg-muted/20 p-4 space-y-3"
-      data-testid="config-module-selector"
+      data-testid={testId}
     >
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground">
-          Settings to restore:
-        </p>
+        <div>
+          <p id={titleId} className="text-xs font-medium text-muted-foreground">
+            {title}
+          </p>
+          {description && (
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{description}</p>
+          )}
+        </div>
         <Button
           variant="ghost"
           size="sm"
@@ -55,6 +76,9 @@ export function ConfigModuleSelector({
           onClick={handleToggleAll}
           disabled={disabled}
           data-testid="config-module-toggle-all"
+          // Two selectors can show at once; the name says which one it acts on.
+          id={toggleId}
+          aria-labelledby={`${toggleId} ${titleId}`}
         >
           {allSelected ? 'Deselect all' : 'Select all'}
         </Button>
@@ -78,7 +102,7 @@ export function ConfigModuleSelector({
                 <span>{mod.displayName}</span>
                 {mod.entries > 0 && (
                   <span className="text-xs text-muted-foreground tabular-nums">
-                    {mod.entries} file{mod.entries !== 1 ? 's' : ''}
+                    {mod.entries} {mod.entries === 1 ? entryNoun.singular : entryNoun.plural}
                   </span>
                 )}
               </label>

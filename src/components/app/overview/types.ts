@@ -5,7 +5,7 @@
 import type { UiPhase, AppEvent } from '@/lib/apply-utils';
 import type { LifecycleState } from '@/lib/lifecycle-state';
 import type { DiscoveredProfile } from '@/file-discovery';
-import type { RestoreResult, RestoreSummary, RestoreIntent, CaptureConfigModule } from '@/types';
+import type { RestoreResult, RestoreIntent, CaptureConfigModule } from '@/types';
 
 export type ActionType = 'capture' | 'setup' | 'check' | null;
 export type ActionStatus = 'idle' | 'running' | 'success' | 'error';
@@ -57,8 +57,6 @@ export interface ActionResult {
   configsCaptureErrors?: string[];
   /** Restore items from apply envelope (when --EnableRestore was active) */
   restoreItems?: RestoreResult[];
-  /** Restore summary from apply envelope */
-  restoreSummary?: RestoreSummary;
   /** Path to restore journal file for revert */
   restoreJournalFile?: string;
   /** Available config modules in the profile */

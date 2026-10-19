@@ -62,12 +62,12 @@ test.describe('real-engine setup dry-run disclosure', () => {
     await expect(
       page.getByText('Preview complete — nothing was installed'),
     ).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/would be installed/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /^\d+ to install$/ })).toBeVisible();
 
     // The defect: presenting a dry run as a finished install. That claim must
     // not appear anywhere on the results screen.
     await expect(page.getByText('Setup complete', { exact: true })).toHaveCount(0);
-    // And it must not have reported real installs ("1 installed, ...").
-    await expect(page.getByText(/^\d+ installed,/)).toHaveCount(0);
+    // And it must not have reported real installs (a "1 installed" chip).
+    await expect(page.getByRole('button', { name: /^\d+ installed$/ })).toHaveCount(0);
   });
 });

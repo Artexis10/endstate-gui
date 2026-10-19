@@ -17,6 +17,7 @@ const baseProps = {
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),
+  onUnsupportedFiles: vi.fn(),
   onDeleteProfile: vi.fn(),
   isRunning: false,
   setupProgress: null,
@@ -179,7 +180,7 @@ describe('SetupFlow — Config-only (manual) app distinction', () => {
     // to the "Settings only" section and must not move any app counter.
     expect(screen.getByText('2 apps')).toBeInTheDocument();
     expect(screen.getByText('2 present')).toBeInTheDocument();
-    expect(screen.getByText(/0 installed, 2 already present/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /installed$/ })).not.toBeInTheDocument();
   });
 
   it('shows manual apps in a section that says app installation is not included', async () => {
@@ -240,7 +241,8 @@ describe('SetupFlow — Config-only (manual) app distinction', () => {
   it('counts user-authored manual install entries as apps rather than settings-only rows', async () => {
     await navigateToPreview(makePreviewWithUserAuthoredManualApps());
 
-    expect(screen.getByText('3 to install, 3 already present')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '3 to install' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '3 present' })).toBeInTheDocument();
     expect(screen.getByText('6 apps')).toBeInTheDocument();
     expect(screen.queryByText('Settings only — app installation not included')).not.toBeInTheDocument();
   });

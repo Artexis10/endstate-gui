@@ -37,6 +37,7 @@ describe('native profile drop handling', () => {
       openSetup: vi.fn(),
       importPaths: vi.fn().mockResolvedValue(undefined),
       onBlocked: vi.fn(),
+      onUnsupportedFiles: vi.fn(),
       setDragAccepted,
     } as Parameters<typeof createNativeProfileDropHandler>[0] & {
       setDragAccepted: (accepted: boolean) => void;
@@ -68,6 +69,7 @@ describe('native profile drop handling', () => {
       openSetup: vi.fn(),
       importPaths: vi.fn().mockResolvedValue(undefined),
       onBlocked: vi.fn(),
+      onUnsupportedFiles: vi.fn(),
       setDragAccepted,
     });
 
@@ -87,6 +89,7 @@ describe('native profile drop handling', () => {
       openSetup: vi.fn(),
       importPaths,
       onBlocked: vi.fn(),
+      onUnsupportedFiles: vi.fn(),
       setDragAccepted,
     } as Parameters<typeof createNativeProfileDropHandler>[0] & {
       setDragAccepted: (accepted: boolean) => void;
@@ -100,6 +103,11 @@ describe('native profile drop handling', () => {
     expect(setDragAccepted).toHaveBeenLastCalledWith(false);
     expect(dependencies.openSetup).not.toHaveBeenCalled();
     expect(importPaths).not.toHaveBeenCalled();
+    // The refusal is reported by file name instead of the drop doing nothing.
+    expect(dependencies.onUnsupportedFiles).toHaveBeenCalledWith(['notes.txt']);
+
+    handleDrag({ payload: { type: 'drop', paths: [] } });
+    expect(dependencies.onUnsupportedFiles).toHaveBeenLastCalledWith([]);
   });
 
   it('opens Setup before importing and rejects a concurrent native drop', async () => {
@@ -117,6 +125,7 @@ describe('native profile drop handling', () => {
       openSetup: () => order.push('setup'),
       importPaths,
       onBlocked,
+      onUnsupportedFiles: vi.fn(),
     });
 
     handleDrop({
@@ -160,6 +169,7 @@ describe('native profile drop handling', () => {
       openSetup,
       importPaths,
       onBlocked,
+      onUnsupportedFiles: vi.fn(),
       setDragAccepted,
     } as Parameters<typeof createNativeProfileDropHandler>[0] & {
       setDragAccepted: (accepted: boolean) => void;

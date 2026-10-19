@@ -70,7 +70,7 @@ describe('Status/Phase Contract (UX_LANGUAGE.md)', () => {
   });
 
   describe('Critical Semantic Rule 3: PRESENT vs CONFIRMED', () => {
-    it('apply + present → PRESENT (success)', () => {
+    it('apply + present → PRESENT (muted)', () => {
       const statusKey: StatusKey = engineStatusToStatusKey('present');
       const result = getPhaseAwareStatusForEvent({
         statusKey,
@@ -80,7 +80,7 @@ describe('Status/Phase Contract (UX_LANGUAGE.md)', () => {
 
       expect(result.shortLabel).toBe('PRESENT');
       expect(result.longLabel).toBe('Already present');
-      expect(result.color).toBe('success');
+      expect(result.color).toBe('muted');
     });
 
     it('verify + present → CONFIRMED (success)', () => {
@@ -126,7 +126,7 @@ describe('Status/Phase Contract (UX_LANGUAGE.md)', () => {
   });
 
   describe('Apply Phase: skipped + already_installed → PRESENT (not SKIPPED)', () => {
-    it('apply + (skipped, already_installed) → PRESENT (success)', () => {
+    it('apply + (skipped, already_installed) → PRESENT (muted)', () => {
       const statusKey: StatusKey = engineStatusToStatusKey('skipped');
       const result = getPhaseAwareStatusForEvent({
         statusKey,
@@ -136,7 +136,7 @@ describe('Status/Phase Contract (UX_LANGUAGE.md)', () => {
 
       expect(result.shortLabel).toBe('PRESENT');
       expect(result.longLabel).toBe('Already present');
-      expect(result.color).toBe('success');
+      expect(result.color).toBe('muted');
     });
   });
 

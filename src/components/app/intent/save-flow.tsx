@@ -21,6 +21,16 @@ import {
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { CaptureConfigModule, CaptureWarning, SubscriptionStatus } from '@/types';
+import { DetailsDisclosure } from '@/components/ui/details-disclosure';
+import { CommandWarningDetails } from '@/components/app/command-warning-list';
+import {
+  NON_APP_SETTINGS_KINDS,
+  SETTINGS_GROUP_COPY,
+  joinPhrases,
+  settingsKind,
+  settingsModulesParts,
+  settingsModulesPhrase,
+} from '@/lib/settings-kind';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 import { CaptureProgress } from './capture-progress';
 import type { CaptureStage } from '@/lib/streaming-events';
@@ -50,7 +60,8 @@ interface CaptureResult {
   warnings?: CaptureWarning[];
 }
 
-function captureWarningText(warning: CaptureWarning): string {
+// `code` is the engine's documented warning enum (cli-json-contract.md, "Command Warnings").
+function captureWarningText(warning: CaptureWarning, configModules: readonly CaptureConfigModule[]): string {
   switch (warning.code) {
     case 'store_source_unavailable':
       return 'Microsoft Store apps could not be included in this capture.';
@@ -58,6 +69,14 @@ function captureWarningText(warning: CaptureWarning): string {
       return 'Community-repository apps could not be included in this capture.';
     case 'store_version_unpinned':
       return 'Affected Microsoft Store apps will restore to the latest available version rather than the exact captured version.';
+    case 'config_secret_scope_conflict': {
+      // The engine message names a registry location, which the default UI
+      // never shows; Details keeps the code and the module ID.
+      const name = configModules.find((mod) => mod.id === warning.moduleId)?.displayName;
+      return name
+        ? `Some ${name} settings were not captured because they may hold private data. Its other settings were captured.`
+        : 'Some settings were not captured because they may hold private data. The other settings were captured.';
+    }
     default:
       return warning.message;
   }
@@ -416,6 +435,7 @@ export function SaveFlow({
       ? capturedConfigs
       : (result?.configsIncluded ?? []).map(id => ({ id, displayName: id }));
   const settingsCount = settingsToShow.length;
+  const capturedSettingsPhrase = settingsModulesPhrase(settingsToShow.map((mod) => mod.id));
 
   // Build lookup: winget ID → has captured settings (for inline icon on app row)
   const settingsByApp = new Set<string>();
@@ -424,6 +444,8 @@ export function SaveFlow({
       settingsByApp.add(ref);
     }
   }
+  // The settings chip counts the app rows its filter shows.
+  const appsWithSettingsCount = (result?.apps ?? []).filter((app) => settingsByApp.has(app.id)).length;
 
   // Build name lookup: winget ID → friendly display name
   // Sources: configModules (all, not just captured) provide displayName via wingetRefs
@@ -434,13 +456,19 @@ export function SaveFlow({
     }
   }
 
-  // Config-only modules: captured settings with no winget match in the app list
+  // Config-only modules: captured app settings with no winget match in the app
+  // list. Settings that belong to no app (e.g. Windows settings) have their own
+  // section: they are not an app whose installer is missing.
   const appIds = new Set((result?.apps ?? []).map(a => a.id.toLowerCase()));
   const configOnlyModules = capturedConfigs.filter(mod => {
+    if (settingsKind(mod.id) !== 'app') return false;
     const refs = mod.wingetRefs ?? [];
     if (refs.length === 0) return true;
     return !refs.some(ref => appIds.has(ref.toLowerCase()));
   });
+  const nonAppSettingsGroups = NON_APP_SETTINGS_KINDS
+    .map((kind) => ({ kind, modules: capturedConfigs.filter((mod) => settingsKind(mod.id) === kind) }))
+    .filter((group) => group.modules.length > 0);
   const visibleWarnings = (result?.warnings ?? []).filter(
     warning => warning.code !== 'optional_driver_unavailable',
   );
@@ -582,16 +610,14 @@ export function SaveFlow({
                     <p className="text-sm font-medium">Scan complete</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Found {result.count} {result.count === 1 ? 'app' : 'apps'}
-                      {/* One settings number for the whole flow. This headline
-                          used to read `configsIncluded.length` while the chips,
-                          the app rows, and now the cloud invitation all read
-                          `settingsCount` — two counts for one fact, which the
-                          UX guardrails forbid ("must never compute counts
-                          differently across UI components"). `settingsCount`
-                          still falls back to `configsIncluded` when the engine
-                          omits structured `configModules`. */}
+                      {/* The headline and the cloud invitation count the same
+                          captured modules (`settingsToShow`), one number per
+                          settings group. `settingsToShow` falls back to
+                          `configsIncluded` when the engine omits structured
+                          `configModules`. The settings chip counts the app rows
+                          its filter shows. */}
                       {settingsCount > 0 && (
-                        <> &middot; {settingsCount} {settingsCount === 1 ? 'setting' : 'settings'} captured</>
+                        <> &middot; {capturedSettingsPhrase} captured</>
                       )}
                     </p>
                   </div>
@@ -628,7 +654,10 @@ export function SaveFlow({
                           className="flex items-start gap-2 text-xs text-warning"
                         >
                           <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" aria-hidden="true" />
-                          <span>{captureWarningText(warning)}</span>
+                          <div className="min-w-0">
+                            <span>{captureWarningText(warning, result.configModules ?? [])}</span>
+                            <CommandWarningDetails warning={warning} />
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -651,9 +680,9 @@ export function SaveFlow({
                         dimmed={activeFilters.size > 0}
                         className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                       >
-                        {result.apps.length} apps
+                        {result.apps.length} {result.apps.length === 1 ? 'app' : 'apps'}
                       </FilterChip>
-                      {settingsCount > 0 && (
+                      {appsWithSettingsCount > 0 && (
                         <>
                           <FilterChip
                             onClick={() => toggleFilter('settings')}
@@ -661,7 +690,7 @@ export function SaveFlow({
                             dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
                             className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                           >
-                            {settingsCount} settings
+                            {appsWithSettingsCount} {appsWithSettingsCount === 1 ? 'setting' : 'settings'}
                           </FilterChip>
                           <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                             <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} aria-hidden="true" />
@@ -735,6 +764,39 @@ export function SaveFlow({
                     </div>
                   </div>
                 )}
+
+                {nonAppSettingsGroups.map(({ kind, modules }) => {
+                  // Engine notes per module (e.g. a value not set on this PC)
+                  // name registry values, so they stay behind Details.
+                  const notes = modules.flatMap((mod) => mod.warnings ?? []);
+                  return (
+                    <div key={kind} className="mt-3 border-t pt-3" data-testid={`captured-settings-${kind}`}>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {SETTINGS_GROUP_COPY[kind].heading}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 mb-2">
+                        Saved with this setup. On the new PC, you choose whether to restore them.
+                      </p>
+                      <div className="space-y-1">
+                        {modules.map(mod => (
+                          <div key={mod.id} className="flex items-center gap-2 text-xs">
+                            <Settings2 className={`h-3 w-3 flex-shrink-0 ${getColorClasses('success').text}`} />
+                            <span className="truncate">{mod.displayName}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {notes.length > 0 && (
+                        <DetailsDisclosure className="mt-2">
+                          <ul className="space-y-1 text-xs text-muted-foreground">
+                            {notes.map((note, index) => (
+                              <li key={`${kind}-note-${index}`}>{note}</li>
+                            ))}
+                          </ul>
+                        </DetailsDisclosure>
+                      )}
+                    </div>
+                  );
+                })}
 
                 <div className="flex items-center gap-3 mt-6">
                   <Button
@@ -856,7 +918,10 @@ export function SaveFlow({
                           <div className="min-w-0">
                             <p className="text-sm font-medium">Your setup is saved locally</p>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              {result.count} applications and {settingsCount} supported settings were captured.
+                              {joinPhrases([
+                                `${result.count} ${result.count === 1 ? 'application' : 'applications'}`,
+                                ...settingsModulesParts(settingsToShow.map((mod) => mod.id)),
+                              ])} were captured.
                             </p>
                             <p className="text-sm font-medium mt-4">
                               Keep an encrypted version with Endstate Cloud

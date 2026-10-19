@@ -5,11 +5,15 @@
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Shield } from 'lucide-react';
 import type { RestoreIntent } from '@/types';
+import { NON_APP_SETTINGS_KINDS, countSettingsPhrase, joinPhrases, type SettingsKind } from '@/lib/settings-kind';
 
 interface RestoreIntentToggleProps {
   restoreIntent: RestoreIntent;
   onRestoreIntentChange: (intent: RestoreIntent) => void;
+  /** Every settings module the profile offers, of any kind. */
   configModuleCount: number;
+  /** How many of those modules belong to no app, by kind. */
+  nonAppSettingsCounts?: Partial<Record<Exclude<SettingsKind, 'app'>, number>>;
   disabled?: boolean;
 }
 
@@ -17,9 +21,18 @@ export function RestoreIntentToggle({
   restoreIntent,
   onRestoreIntentChange,
   configModuleCount,
+  nonAppSettingsCounts = {},
   disabled = false,
 }: RestoreIntentToggleProps) {
   if (configModuleCount <= 0) return null;
+
+  const nonAppKinds = NON_APP_SETTINGS_KINDS.filter((kind) => (nonAppSettingsCounts[kind] ?? 0) > 0);
+  const appSettingsCount = configModuleCount
+    - nonAppKinds.reduce((sum, kind) => sum + (nonAppSettingsCounts[kind] ?? 0), 0);
+  const parts = [
+    ...(appSettingsCount > 0 ? [`settings for ${appSettingsCount} app${appSettingsCount !== 1 ? 's' : ''}`] : []),
+    ...nonAppKinds.map((kind) => countSettingsPhrase(kind, nonAppSettingsCounts[kind] ?? 0)),
+  ];
 
   return (
     <div
@@ -27,7 +40,7 @@ export function RestoreIntentToggle({
       data-testid="restore-intent-toggle"
     >
       <p className="text-sm text-muted-foreground">
-        This profile includes settings for {configModuleCount} app{configModuleCount !== 1 ? 's' : ''}
+        This profile includes {joinPhrases(parts)}
       </p>
 
       <RadioGroup

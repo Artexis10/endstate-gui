@@ -182,6 +182,42 @@ describe("ProfileContentsModal", () => {
     expect(screen.getByText("App not included")).not.toBeVisible();
   });
 
+  it("lists Windows settings in their own tab, not as unidentified app settings", async () => {
+    const user = userEvent.setup();
+    const base = inspection();
+    const windowsRow = {
+      id: "settings:module:windows-settings.personalization",
+      displayName: "Windows theme: light or dark mode",
+      associationStatus: "unresolved" as const,
+      ownerId: null,
+      appId: null,
+      appIncluded: false,
+      packageRefs: [],
+      moduleIds: ["windows-settings.personalization"],
+      candidateAppIds: [],
+      capturedEntryCount: 2,
+    };
+    renderModal(
+      inspection({
+        settingsApps: [...base.settingsApps, windowsRow],
+        summary: { ...base.summary, settingsRowCount: 4, unidentifiedSettingsRowCount: 2 },
+      }),
+    );
+
+    expect(await screen.findByText("3 app settings")).toBeVisible();
+    expect(screen.getByText("1 Windows setting")).toBeVisible();
+    expect(screen.getByText("1 unidentified app settings row")).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: "App settings (3)" }));
+    expect(screen.queryByText("Windows theme: light or dark mode")).not.toBeVisible();
+
+    const windowsTab = screen.getByRole("tab", { name: "Windows settings (1)" });
+    await user.click(windowsTab);
+    const panel = document.getElementById(windowsTab.getAttribute("aria-controls")!)!;
+    expect(within(panel).getByText("Windows theme: light or dark mode")).toBeVisible();
+    expect(within(panel).queryByText("Association could not be identified.")).not.toBeInTheDocument();
+  });
+
   it("uses App settings as the default tab for a settings-only profile", async () => {
     const data = inspection({
       apps: [],

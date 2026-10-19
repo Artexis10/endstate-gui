@@ -61,13 +61,15 @@ Emitted during apply with `--EnableRestore` and during standalone restore. Phase
   "reason": null,
   "backupPath": "C:/endstate/state/backups/20260222-143052/settings.json",
   "targetExisted": true,
-  "message": "Restored successfully"
+  "message": "Settings restored"
 }
 ```
 
 **Status values:** `restoring`, `restored`, `skipped_up_to_date`, `skipped_missing_source`, `failed`
 
-**Restorer values:** `copy`, `merge-json`, `merge-ini`, `append`
+**Restorer values:** `copy`, `merge-json`, `merge-ini`, `append`, `delete-glob`, `registry-import`, `registry-set`
+
+**Optional `label`:** the restore entry's authored `reason` text, for example `"Keyboard repeat delay"`. The engine sends it on the `restoring` and terminal events when the entry declares a reason. The GUI shows it after the module name in place of the target file name.
 
 ### Phase Events
 

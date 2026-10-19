@@ -1,0 +1,80 @@
+name: WinGet publication watch
+
+# Fails loudly when WinGet publication stalls. The publish workflow has gone
+# quiet twice: a release published with GITHUB_TOKEN never fired
+# `release: released`, and an expired WINGET_TOKEN failed without notice.
+# This daily check fails when the newest published GUI release is more than
+# 3 days old and still missing from microsoft/winget-pkgs, or when
+# WINGET_TOKEN is rejected or expires within 14 days.
+
+on:
+  schedule:
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-on-winget:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check the newest release reached microsoft/winget-pkgs
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" --jq \
+            '[.[] | select((.draft | not) and (.prerelease | not) and (.tag_name | startswith("gui-v")))][0] // empty | "\(.tag_name) \(.published_at)"')
+          if [ -z "$latest" ]; then
+            echo "::error::No published gui-v release found in $GITHUB_REPOSITORY."
+            exit 1
+          fi
+          tag=${latest%% *}
+          published=${latest#* }
+          version=${tag#gui-v}
+          age_days=$(( ($(date -u +%s) - $(date -u -d "$published" +%s)) / 86400 ))
+          manifest_dir="repos/microsoft/winget-pkgs/contents/manifests/s/SubstrateSystems/Endstate/$version"
+          if result=$(gh api "$manifest_dir" --silent 2>&1); then
+            echo "Endstate $version is on WinGet."
+          elif [[ "$result" != *"HTTP 404"* ]]; then
+            echo "::error::Could not check microsoft/winget-pkgs for Endstate $version: $result"
+            exit 1
+          elif [ "$age_days" -gt 3 ]; then
+            echo "::error::Endstate $version was released $age_days days ago and is still missing from microsoft/winget-pkgs. Check the 'Publish to WinGet' runs and the open winget-pkgs pull requests."
+            exit 1
+          else
+            echo "Endstate $version is $age_days days old and not on WinGet yet; the 3-day window is still open."
+          fi
+
+  winget-token:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check WINGET_TOKEN is accepted and not about to expire
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$WINGET_TOKEN" ]; then
+            echo "::error::The WINGET_TOKEN secret is empty."
+            exit 1
+          fi
+          # Only the status and the expiry header are written; the token never is.
+          response=$(curl -sS -o /dev/null -H "Authorization: Bearer $WINGET_TOKEN" \
+            -w '%{http_code} %header{github-authentication-token-expiration}' https://api.github.com/user)
+          status=${response%% *}
+          expiry=${response#* }
+          if [ "$status" != "200" ]; then
+            echo "::error::GitHub rejected WINGET_TOKEN (HTTP $status). Replace the WINGET_TOKEN secret."
+            exit 1
+          fi
+          if [ -z "$expiry" ]; then
+            echo "WINGET_TOKEN has no expiry date."
+            exit 0
+          fi
+          days_left=$(( ($(date -u -d "$expiry" +%s) - $(date -u +%s)) / 86400 ))
+          if [ "$days_left" -lt 14 ]; then
+            echo "::error::WINGET_TOKEN expires on $expiry, in $days_left days. Replace the WINGET_TOKEN secret now."
+            exit 1
+          fi
+          echo "WINGET_TOKEN expires on $expiry, in $days_left days."

@@ -4,13 +4,18 @@ import { CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon
 
 type ToastType = "info" | "success" | "warning" | "error"
 
-export function showToast(message: string, type: ToastType = "info") {
+/**
+ * `id` makes repeat reports of one problem update a single toast instead of
+ * stacking copies (Sonner replaces a toast that has the same id).
+ */
+export function showToast(message: string, type: ToastType = "info", options: { id?: string } = {}) {
   const duration = type === "warning" || type === "error" ? 5000 : 3000
   
   // Use Sonner's dismissible pattern: pass a function that receives the toast ID
   const toastOptions = {
     duration,
     dismissible: true,
+    ...(options.id ? { id: options.id } : {}),
   }
 
   let toastId: string | number

@@ -50,6 +50,7 @@ const baseProps = {
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),
+  onUnsupportedFiles: vi.fn(),
   onDeleteProfile: vi.fn(),
   isRunning: false,
   setupProgress: null,
@@ -98,7 +99,8 @@ describe('SetupFlow command warnings', () => {
     expect(warningMessages()).toEqual([
       expect.stringContaining(previewWarning.message),
     ]);
-    expect(screen.getByText('2 to install, 1 already present')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2 to install' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 present' })).toBeInTheDocument();
     expect(screen.getByText('Git (winget)')).toBeInTheDocument();
     expect(screen.getByText('Git (Chocolatey)')).toBeInTheDocument();
     expect(screen.getAllByText('TO INSTALL')).toHaveLength(2);
@@ -109,7 +111,8 @@ describe('SetupFlow command warnings', () => {
     await userEvent.click(screen.getByTestId('app-picker-checkbox-git-choco'));
 
     expect(warningMessages()).toEqual(warningsBeforeSubsetChange);
-    expect(screen.getByText('1 to install, 1 already present')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 to install' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 present' })).toBeInTheDocument();
     expect(screen.getByText('Git (Chocolatey)')).toBeInTheDocument();
     expect(screen.getByTestId('app-picker-count')).toHaveTextContent('2 of 3 selected');
 
@@ -215,7 +218,9 @@ describe('SetupFlow command warnings', () => {
     await userEvent.click(screen.getByTestId('setup-flow-apply'));
 
     expect(await screen.findByText('Setup completed with errors')).toBeInTheDocument();
-    expect(screen.getByText('1 installed, 1 already present, 1 failed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 installed' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 present' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 failed' })).toBeInTheDocument();
     expect(screen.getByText('Git (Chocolatey)')).toBeInTheDocument();
     expect(screen.getByText('FAILED')).toBeInTheDocument();
     expect(screen.getByText(partialWarning.message, { exact: true })).toBeInTheDocument();

@@ -43,10 +43,22 @@ import { EngineEnvelopeError } from '@/lib/engine-envelope-error';
 import {
   type AppEvent,
   type StatusKey,
+  type SemanticColor,
   getColorClasses,
+  getPhaseAwareStatus,
   getPhaseAwareStatusForEvent,
   getActivityRowLabel,
+  getRestoreUiStatus,
+  appRowHasSettings,
 } from '@/lib/apply-utils';
+import { countRestoreOutcomes } from '@/lib/restore-activity';
+import {
+  NON_APP_SETTINGS_KINDS,
+  SETTINGS_GROUP_COPY,
+  appModuleKey,
+  settingsKind,
+  settingsModulesPhrase,
+} from '@/lib/settings-kind';
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { ConfigModuleInfo, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
@@ -57,6 +69,16 @@ import { CommandWarningList } from '@/components/app/command-warning-list';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
+
+/**
+ * A filter chip's classes for a row status colour, so a chip matches the rows
+ * it filters. The muted token's 10% fill does not show, so a muted chip takes
+ * a half-strength muted surface to keep its shape.
+ */
+function chipColorClasses(color: SemanticColor): string {
+  const colors = getColorClasses(color);
+  return `${color === 'muted' ? 'bg-muted/50' : colors.bg} ${colors.text}`;
+}
 
 function appIdSet(appIds: string[] | undefined): Set<string> {
   return new Set(appIds ?? []);
@@ -117,10 +139,6 @@ function countSynthesizedApplyEvents(
   return { total: synthesizedRows.length, installed, present, skipped, failed };
 }
 
-function normalizeConfigModuleId(moduleId: string): string {
-  return moduleId.startsWith('apps.') ? moduleId.slice('apps.'.length) : moduleId;
-}
-
 /**
  * The engine's config map is catalog metadata. Only restore modules explicitly
  * advertised for this profile are evidence that the profile carries settings.
@@ -130,13 +148,13 @@ function profileConfigModuleMap(
   restoreModules: RestoreModuleRef[] | undefined,
 ): Record<string, string> {
   const availableModuleIds = new Set(
-    (restoreModules ?? []).map((moduleRef) => normalizeConfigModuleId(moduleRef.id)),
+    (restoreModules ?? []).map((moduleRef) => appModuleKey(moduleRef.id)),
   );
   if (availableModuleIds.size === 0) return {};
 
   return Object.fromEntries(
     Object.entries(configMap ?? {}).filter(([, moduleId]) =>
-      availableModuleIds.has(normalizeConfigModuleId(moduleId))),
+      availableModuleIds.has(appModuleKey(moduleId))),
   );
 }
 
@@ -201,13 +219,8 @@ function hasUnmappableInstallable(actions: EndstateApplyData['actions']): boolea
 }
 
 function isSelectedConfigModule(moduleId: string, selectedModules: string[]): boolean {
-  const selectionKey = moduleId.startsWith('apps.') ? moduleId.slice('apps.'.length) : moduleId;
-  return selectedModules.some((selectedModule) => {
-    const selectedKey = selectedModule.startsWith('apps.')
-      ? selectedModule.slice('apps.'.length)
-      : selectedModule;
-    return selectedModule === moduleId || selectedKey === selectionKey;
-  });
+  const selectionKey = appModuleKey(moduleId);
+  return selectedModules.some((selectedModule) => appModuleKey(selectedModule) === selectionKey);
 }
 
 function selectedCaptureIds(
@@ -229,20 +242,20 @@ function moduleDisplayNameMap(
     const displayName = moduleRef.displayName?.trim();
     if (!displayName) continue;
 
-    const shortId = moduleRef.id.startsWith('apps.')
-      ? moduleRef.id.slice('apps.'.length)
-      : moduleRef.id;
-    const qualifiedId = `apps.${shortId}`;
+    // An app module is named with and without its `apps.` qualifier across
+    // engine sources; a module of any other tier only by its full ID.
+    const shortId = appModuleKey(moduleRef.id);
+    const aliases = settingsKind(moduleRef.id) === 'app'
+      ? [moduleRef.id, shortId, `apps.${shortId}`]
+      : [moduleRef.id];
 
     // A fallback displayName equal to an engine ID is provenance, not friendly
     // copy. Keep that value in Details instead of leaking it into the distilled row.
-    if (displayName === moduleRef.id || displayName === shortId || displayName === qualifiedId) {
+    if (aliases.includes(displayName)) {
       continue;
     }
 
-    displayNames[moduleRef.id] = displayName;
-    displayNames[shortId] = displayName;
-    displayNames[qualifiedId] = displayName;
+    for (const alias of aliases) displayNames[alias] = displayName;
   }
   return displayNames;
 }
@@ -292,9 +305,6 @@ interface ApplyResult {
   /** Maps winget ID → config module name for apps with settings */
   configModuleMap?: Record<string, string>;
   restoreModulesAvailable?: RestoreModuleRef[];
-  configsRestored?: number;
-  configsSkipped?: number;
-  configsFailed?: number;
   configResolutions?: ConfigResolution[];
   configResolutionSummary?: ConfigResolutionSummary;
   warnings?: CommandWarning[];
@@ -310,7 +320,11 @@ export interface SetupFlowProps {
   onBack: () => void;
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
+  /** Why the profiles folder could not be read; an empty list then is not "no profiles". */
+  profilesReadError?: string | null;
   onFileDrop: (files: File[]) => void;
+  /** Names of dropped or picked files the import does not accept. */
+  onUnsupportedFiles: (fileNames: string[]) => void;
   /** Import is staging/validating and must remain on the visible profile list. */
   profileImportActive?: boolean;
   /** Native Tauri drag acceptance owned by App. */
@@ -394,7 +408,9 @@ export function SetupFlow({
   onBack,
   onOpenProfilesFolder,
   onRefreshProfiles,
+  profilesReadError = null,
   onFileDrop,
+  onUnsupportedFiles,
   profileImportActive = false,
   nativeDragAccepted = false,
   onBrowse,
@@ -507,6 +523,16 @@ export function SetupFlow({
     skipped: fallbackSkipped,
     failed: fallbackFailed,
   };
+  // Settings counts come from the restore rows the results list shows, so the
+  // header, the chip and the rows always agree.
+  const applyRestoreCounts = countRestoreOutcomes(applyResult?.appEvents ?? []);
+  const applyRestoreTotal = Object.values(applyRestoreCounts).reduce((sum, count) => sum + count, 0);
+  const applyHasErrors = !!applyResult && (
+    applyResult.success === false
+    || applyDisplayAppCounts.failed > 0
+    || !!applyResult.error
+    || applyRestoreCounts.failed > 0
+  );
   const reduced = prefersReducedMotion();
   const transition = reduced
     ? { duration: 0.01 }
@@ -562,7 +588,44 @@ export function SetupFlow({
   const isDisplayableEvent = (e: AppEvent) =>
     e.app !== '── APPLY ──' && e.app !== '── VERIFY ──' && !e.app.startsWith('copy:');
 
-  /** Winget apps carrying no settings — the complement of the `settings` filter. */
+  /** Restore rows are settings, never apps: app chips and app filters skip them. */
+  const isAppRow = (e: AppEvent) => !e.kind || e.kind === 'app';
+
+  /** An app row that carries settings: it has a settings module, or it exists only for its settings. */
+  const carriesSettings = (
+    e: AppEvent,
+    configMap: Record<string, string>,
+    synthesizedAppIds: Set<string>,
+  ) => appRowHasSettings(e, configMap) || isConfigOnlyApp(e, synthesizedAppIds);
+
+  /**
+   * The rows the `settings` filter shows. A run that restored settings lists
+   * each setting as its own row, so those are the settings rows; otherwise (a
+   * preview, or a run with no restore rows) they are the app rows that carry
+   * settings. The chip counts with this same test, so the chip always equals
+   * the rows a click on it shows.
+   */
+  const settingsRowTest = (
+    events: AppEvent[],
+    configMap: Record<string, string>,
+    synthesizedAppIds: Set<string>,
+  ) => {
+    const hasSettingRows = events.some((e) => isDisplayableEvent(e) && !isAppRow(e));
+    return (e: AppEvent) => (hasSettingRows
+      ? !isAppRow(e)
+      : isAppRow(e) && carriesSettings(e, configMap, synthesizedAppIds));
+  };
+
+  const settingsRowCount = (
+    events: AppEvent[],
+    configMap: Record<string, string>,
+    synthesizedAppIds: Set<string>,
+  ) => {
+    const isSettingsRow = settingsRowTest(events, configMap, synthesizedAppIds);
+    return events.filter((e) => isDisplayableEvent(e) && isSettingsRow(e)).length;
+  };
+
+  /** Winget apps carrying no settings — the `apps_only` filter's rows. */
   const appsOnlyCount = (
     events: AppEvent[],
     configMap: Record<string, string>,
@@ -571,8 +634,8 @@ export function SetupFlow({
     events.filter(
       (e) =>
         isDisplayableEvent(e)
-        && !isConfigOnlyApp(e, synthesizedAppIds)
-        && !(e.app in configMap),
+        && isAppRow(e)
+        && !carriesSettings(e, configMap, synthesizedAppIds),
     ).length;
 
   const filterEvents = (
@@ -582,15 +645,20 @@ export function SetupFlow({
   ) => {
     const filtered = events.filter(isDisplayableEvent);
     if (activeFilters.size === 0) return filtered;
+    const isSettingsRow = settingsRowTest(filtered, configMap, synthesizedAppIds);
     return filtered.filter(event => {
+      if (activeFilters.has('settings') && isSettingsRow(event)) return true;
+      if (!isAppRow(event)) return false;
       const statusKey: StatusKey = event.statusKey || 'skipped';
       for (const f of activeFilters) {
-        if (f === 'settings' && (event.app in configMap || isConfigOnlyApp(event, synthesizedAppIds))) return true;
-        // Complement of `settings`. The filter set had a positive "has settings"
-        // filter but no way to ask the opposite question — "which of these are
-        // just app installs?" — which is the more common one when reviewing a
-        // plan.
-        if (f === 'apps_only' && !(event.app in configMap || isConfigOnlyApp(event, synthesizedAppIds))) return true;
+        // The filter set had a positive "has settings" filter but no way to ask
+        // the opposite question — "which of these are just app installs?" —
+        // which is the more common one when reviewing a plan.
+        if (f === 'apps_only' && !carriesSettings(event, configMap, synthesizedAppIds)) return true;
+        // The "skipped" chip counts every app outcome that is not installed,
+        // present or failed (countApplyActions), so it shows that same set,
+        // MANUAL and CANCELLED rows included. These are the GUI StatusKey enum.
+        if (f === 'skipped' && !(['installed', 'to_install', 'present', 'failed'] as StatusKey[]).includes(statusKey)) return true;
         if (f === statusKey) return true;
       }
       return false;
@@ -939,6 +1007,7 @@ export function SetupFlow({
               )}
               <DropZone
                 onFileDrop={onFileDrop}
+                onUnsupportedFiles={onUnsupportedFiles}
                 onBrowse={onBrowse}
                 disabled={interactionBlocked}
                 nativeDragAccepted={nativeDragAccepted}
@@ -951,7 +1020,9 @@ export function SetupFlow({
                 <h3 className="text-base font-medium">
                   {profiles.length > 0
                     ? `${profiles.length} ${profiles.length === 1 ? 'profile' : 'profiles'} available`
-                    : 'No profiles found'}
+                    : profilesReadError
+                      ? "Couldn't read your profiles folder"
+                      : 'No profiles found'}
                 </h3>
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" onClick={onOpenProfilesFolder}>
@@ -1138,10 +1209,16 @@ export function SetupFlow({
               ) : (
                 <Card className="border-dashed">
                   <CardContent className="py-8 px-6 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Drop a zip bundle or manifest file above, or place profile files
-                      in your Profiles folder.
-                    </p>
+                    {profilesReadError ? (
+                      <p className="text-sm text-muted-foreground" role="alert" data-testid="profiles-read-error">
+                        {profilesReadError}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Drop a zip bundle or manifest file above, or place profile files
+                        in your Profiles folder.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -1197,7 +1274,7 @@ export function SetupFlow({
                           key={`${event.app}-${event.timestamp}-${i}`}
                           className="flex items-center gap-2 text-xs pt-0.5"
                         >
-                          <span className={`w-16 text-right font-medium ${colors.text}`}>
+                          <span className={`w-24 text-right font-medium ${colors.text}`}>
                             {uiStatus.shortLabel}
                           </span>
                           <span className="truncate flex-1">
@@ -1226,10 +1303,11 @@ export function SetupFlow({
         {/* Preview done: Show results + Apply button */}
         {phase === 'preview-done' && previewResult && (() => {
           const configMap = previewProfileConfigMap;
-          const hasConfigMap = Object.keys(configMap).length > 0;
-          const settingsCount = previewResult.restoreModulesAvailable?.length ?? 0;
-          // Active settings count reflects user's restore selection
-          const activeSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
+          const availableModuleIds = (previewResult.restoreModulesAvailable ?? []).map((ref) => ref.id);
+          const settingsCount = availableModuleIds.length;
+          // Active settings reflect the user's restore selection
+          const activeModuleIds = restoreIntent === 'apps-and-settings' ? selectedModules : [];
+          const activeSettingsCount = activeModuleIds.length;
           // Separate config-only synthesized apps from winget apps
           const configOnlyPresent = previewResult.appEvents.filter(e => isConfigOnlyApp(e, previewSynthesizedAppIds) && (e.statusKey === 'present' || !e.statusKey)).length;
           const configOnlyToInstall = previewResult.appEvents.filter(e => isConfigOnlyApp(e, previewSynthesizedAppIds) && e.statusKey === 'to_install').length;
@@ -1266,6 +1344,11 @@ export function SetupFlow({
             configMap,
             previewSynthesizedAppIds,
           );
+          const previewSettingsRowCount = settingsRowCount(
+            previewResult.appEvents,
+            configMap,
+            previewSynthesizedAppIds,
+          );
           const allFilteredEvents = filterEvents(previewResult.appEvents, configMap, previewSynthesizedAppIds);
           const wingetEvents = allFilteredEvents.filter(e => !isConfigOnlyApp(e, previewSynthesizedAppIds));
           const configOnlyEvents = allFilteredEvents.filter(e => isConfigOnlyApp(e, previewSynthesizedAppIds));
@@ -1281,25 +1364,31 @@ export function SetupFlow({
           >
             <Card className={`border-l-2 ${previewResult.success === false ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
               <CardContent className="py-6 px-6">
+                {/* The app counts live in the filter chips below; a preview
+                    with no rows has no chips, so its header keeps them. The
+                    header keeps the settings line, because the settings
+                    choice sits below a long list. */}
                 <div className="flex items-center gap-3 mb-4">
                   {previewResult.success === false ? (
-                    <XCircle className="h-5 w-5 text-amber-500" />
+                    <XCircle className="h-5 w-5 flex-shrink-0 text-amber-500" />
                   ) : (
-                    <Eye className="h-5 w-5 text-green-500" />
+                    <Eye className="h-5 w-5 flex-shrink-0 text-green-500" />
                   )}
                   <div>
                     <p className="text-sm font-medium">
                       {previewResult.success === false ? 'Preview completed with errors' : 'Preview complete'}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {displayInstalled > 0
-                        ? `${displayInstalled} to install, ${displayPresent} already present`
-                        : pickerEnabled && pickerSelectedCount === 0
-                        ? 'No apps selected'
-                        : `All ${displayTotal} apps already present`}
-                      {activeSettingsCount > 0 && ` · ${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'} selected`}
-                      {activeSettingsCount === 0 && settingsCount > 0 && ` · ${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'} available`}
-                    </p>
+                    {(settingsCount > 0 || previewResult.appEvents.length === 0) && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {previewResult.appEvents.length === 0 && (displayInstalled > 0
+                          ? `${displayInstalled} to install, ${displayPresent} already present`
+                          : `All ${displayTotal} apps already present`)}
+                        {previewResult.appEvents.length === 0 && settingsCount > 0 && ' · '}
+                        {settingsCount > 0 && (activeSettingsCount > 0
+                          ? `${settingsModulesPhrase(activeModuleIds)} selected`
+                          : `${settingsModulesPhrase(availableModuleIds)} available`)}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1319,7 +1408,7 @@ export function SetupFlow({
                 {/* Activity summary */}
                 {previewResult.appEvents.length > 0 && (
                   <div className="mt-3 border-t pt-3">
-                    <div className="flex items-center gap-1.5 mb-2">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
                       {displayTotal > 0 && (
                         <FilterChip
                           onClick={clearFilters}
@@ -1345,28 +1434,22 @@ export function SetupFlow({
                           onClick={() => toggleFilter('present')}
                           pressed={activeFilters.has('present')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('present')}
-                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                          className={chipColorClasses(getPhaseAwareStatus('present', 'preview').color)}
                         >
                           {displayPresent} present
                         </FilterChip>
                       )}
-                      {settingsCount > 0 && (
-                        hasConfigMap ? (
-                          <FilterChip
-                            onClick={() => toggleFilter('settings')}
-                            pressed={activeFilters.has('settings')}
-                            dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
-                            className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
-                          >
-                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'}`}
-                          </FilterChip>
-                        ) : (
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
-                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'}`}
-                          </span>
-                        )
+                      {previewSettingsRowCount > 0 && (
+                        <FilterChip
+                          onClick={() => toggleFilter('settings')}
+                          pressed={activeFilters.has('settings')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
+                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                        >
+                          {previewSettingsRowCount} {previewSettingsRowCount === 1 ? 'setting' : 'settings'}
+                        </FilterChip>
                       )}
-                      {previewAppsOnlyCount > 0 && settingsCount > 0 && (
+                      {previewAppsOnlyCount > 0 && previewSettingsRowCount > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('apps_only')}
                           pressed={activeFilters.has('apps_only')}
@@ -1406,24 +1489,37 @@ export function SetupFlow({
                         </div>
                       </div>
                     )}
-                    <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {wingetEvents.map((event, i) => {
+                    {(() => {
+                      // The same rule as the results list: a failed row, or one
+                      // the person must act on, leads outside the scroll box.
+                      const previewRowStatus = (event: AppEvent) => {
+                        if (isConfigOnlyApp(event, previewSynthesizedAppIds)) {
+                          return getPhaseAwareStatusForEvent({ statusKey: event.statusKey || 'present', phase: 'apply', reason: event.reason });
+                        }
                         const statusKey: StatusKey = event.statusKey || (
                           event.action === 'OK' ? 'present' :
                           event.action === 'To install' ? 'to_install' :
                           'skipped'
                         );
-                        const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'preview', reason: event.reason });
-                        const colors = getColorClasses(uiStatus.color);
-                        const hasSettings = event.app in configMap;
+                        return getPhaseAwareStatusForEvent({ statusKey, phase: 'preview', reason: event.reason });
+                      };
+                      const needsPreviewAttention = (event: AppEvent) => {
+                        const status = previewRowStatus(event);
+                        return status.color === 'error' || status.needsAction === true;
+                      };
+                      const renderPreviewRow = (event: AppEvent, i: number, wrap = false) => {
+                        const uiStatus = previewRowStatus(event);
+                        const isConfigOnly = isConfigOnlyApp(event, previewSynthesizedAppIds);
+                        // A config-only row exists for its settings, so it always carries them.
+                        const hasSettings = isConfigOnly || appRowHasSettings(event, configMap);
                         // Manifest app id for --only (streamed events are keyed
                         // by winget ref; the envelope actions map ref → id).
-                        const appId = pickerEnabled ? manifestIdByEventKey.get(event.app) : undefined;
+                        const appId = pickerEnabled && !isConfigOnly ? manifestIdByEventKey.get(event.app) : undefined;
                         const isSelected = appId ? selectedAppIds.has(appId) : true;
                         return (
-                          <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                            {pickerEnabled && (
-                              <span className="w-4 flex-shrink-0 flex justify-center">
+                          <div key={`${isConfigOnly ? 'config-' : ''}${event.app}-${i}`} className="flex items-baseline gap-2 text-xs pt-0.5" title={event.title}>
+                            {pickerEnabled && !isConfigOnly && (
+                              <span className="w-4 flex-shrink-0 flex justify-center self-center">
                                 {appId && (
                                   <Checkbox
                                     checked={isSelected}
@@ -1441,48 +1537,59 @@ export function SetupFlow({
                                 )}
                               </span>
                             )}
-                            <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
-                            <span className="w-4 flex-shrink-0 flex justify-center">
+                            <span className={`w-24 flex-shrink-0 text-right font-medium ${getColorClasses(uiStatus.color).text}`}>{uiStatus.shortLabel}</span>
+                            <span className="w-4 flex-shrink-0 flex justify-center self-center">
                               {hasSettings && (
-                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
+                                <Settings2 className={`h-3 w-3 ${getColorClasses(uiStatus.color === 'error' ? 'error' : 'success').text}`} />
                               )}
                             </span>
-                            <span className={`truncate ${pickerEnabled && !isSelected ? 'text-muted-foreground' : ''}`}>
+                            <span className={`min-w-0 ${wrap ? 'break-words' : 'truncate'} ${pickerEnabled && !isSelected ? 'text-muted-foreground' : ''}`}>
                               {event.name || formatAppIdentity(event.app)}
+                              {event.secondary && (
+                                <span className="text-muted-foreground"> · {event.secondary}</span>
+                              )}
                             </span>
                           </div>
                         );
-                      })}
-                      {/* Config-only apps (detected via settings, not winget) */}
-                      {showConfigOnlySection && (
+                      };
+                      const previewFailures = [...wingetEvents, ...(showConfigOnlySection ? configOnlyEvents : [])].filter(needsPreviewAttention);
+                      const listWingetEvents = wingetEvents.filter((event) => !needsPreviewAttention(event));
+                      const listConfigOnlyEvents = configOnlyEvents.filter((event) => !needsPreviewAttention(event));
+                      return (
                         <>
-                          <div className="border-t mt-2 pt-2">
-                            <p className="text-[10px] font-medium text-muted-foreground">
-                              Settings only — app installation not included
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 mb-1">
-                              Endstate can restore these settings, but this profile cannot install the accompanying app.
-                            </p>
-                          </div>
-                          {configOnlyEvents.map((event, i) => {
-                            const cfgStatusKey: StatusKey = event.statusKey || 'present';
-                            const cfgUiStatus = getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason });
-                            const cfgColors = getColorClasses(cfgUiStatus.color);
-                            return (
-                              <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                                <span className={`w-16 flex-shrink-0 text-right font-medium ${cfgColors.text}`}>{cfgUiStatus.shortLabel}</span>
-                                <span className="w-4 flex-shrink-0 flex justify-center">
-                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : getColorClasses('success').text}`} />
-                                </span>
-                                <span className="truncate">
-                                  {event.name || formatAppIdentity(event.app)}
-                                </span>
-                              </div>
-                            );
-                          })}
+                          {previewFailures.length > 0 && (
+                            <div
+                              role="group"
+                              aria-label="Needs attention"
+                              className={`-mx-2 mb-2 space-y-1 rounded-md border px-2 py-1.5 ${getColorClasses('error').border}`}
+                              data-testid="preview-needs-attention"
+                            >
+                              <p className="text-[10px] font-medium text-muted-foreground">Needs attention</p>
+                              {previewFailures.map((event, i) => renderPreviewRow(event, i, true))}
+                            </div>
+                          )}
+                          {(listWingetEvents.length > 0 || (showConfigOnlySection && listConfigOnlyEvents.length > 0)) && (
+                            <div className="space-y-1 max-h-64 overflow-y-auto">
+                              {listWingetEvents.map((event, i) => renderPreviewRow(event, i))}
+                              {/* Config-only apps (detected via settings, not winget) */}
+                              {showConfigOnlySection && listConfigOnlyEvents.length > 0 && (
+                                <>
+                                  <div className="border-t mt-2 pt-2">
+                                    <p className="text-[10px] font-medium text-muted-foreground">
+                                      Settings only — app installation not included
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5 mb-1">
+                                      Endstate can restore these settings, but this profile cannot install the accompanying app.
+                                    </p>
+                                  </div>
+                                  {listConfigOnlyEvents.map((event, i) => renderPreviewRow(event, i))}
+                                </>
+                              )}
+                            </div>
+                          )}
                         </>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -1493,7 +1600,7 @@ export function SetupFlow({
                         className="rounded-lg border border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground"
                         data-testid="settings-restore-off-summary"
                       >
-                        {settingsCount} {settingsCount === 1 ? 'setting is' : 'settings are'} available but won&apos;t be restored
+                        {settingsModulesPhrase(availableModuleIds)} {settingsCount === 1 ? 'is' : 'are'} available but won&apos;t be restored
                       </div>
                     )}
                     <RestoreIntentToggle
@@ -1506,11 +1613,18 @@ export function SetupFlow({
                         void handlePreview(selectedProfile, intent);
                       }}
                       configModuleCount={settingsCount}
+                      nonAppSettingsCounts={Object.fromEntries(
+                        NON_APP_SETTINGS_KINDS.map((kind) => [
+                          kind,
+                          (previewResult.restoreModulesAvailable ?? [])
+                            .filter((ref) => settingsKind(ref.id) === kind).length,
+                        ]),
+                      )}
                     />
                     {restoreIntent === 'apps-and-settings' && (() => {
                       const moduleRefs = previewResult.restoreModulesAvailable;
                       if (!moduleRefs?.length) return null;
-                      const modules: ConfigModuleInfo[] = moduleRefs.map(ref => ({
+                      const toModuleInfo = (ref: RestoreModuleRef): ConfigModuleInfo => ({
                         id: ref.id,
                         displayName: ref.displayName,
                         // How many restore entries the profile carries for this
@@ -1521,38 +1635,64 @@ export function SetupFlow({
                         // than asserting a count we do not have.
                         entries: ref.entryCount ?? 0,
                         files: [],
-                      }));
+                      });
+                      const handleSelectionChange = (moduleIds: string[]) => {
+                        setSelectedModules(moduleIds);
+                        const allowedCaptureIds = selectedCaptureIds(
+                          previewResult.configResolutions,
+                          moduleIds,
+                        );
+                        setRestoreTargets((current) => current.filter(
+                          (mapping) => allowedCaptureIds.has(mapping.captureId),
+                        ));
+                      };
+                      // Settings that belong to no app get their own group, so
+                      // choosing app settings never also changes Windows itself.
+                      const appModules = moduleRefs.filter((ref) => settingsKind(ref.id) === 'app');
                       return (
-                        <ConfigModuleSelector
-                          modules={modules}
-                          selectedModules={selectedModules}
-                          onSelectionChange={(moduleIds) => {
-                            setSelectedModules(moduleIds);
-                            const allowedCaptureIds = selectedCaptureIds(
-                              previewResult.configResolutions,
-                              moduleIds,
+                        <>
+                          <ConfigModuleSelector
+                            modules={appModules.map(toModuleInfo)}
+                            selectedModules={selectedModules}
+                            onSelectionChange={handleSelectionChange}
+                            {...(appModules.length < moduleRefs.length
+                              ? { title: 'App settings to restore:' }
+                              : {})}
+                          />
+                          {NON_APP_SETTINGS_KINDS.map((kind) => {
+                            const kindModules = moduleRefs.filter((ref) => settingsKind(ref.id) === kind);
+                            if (kindModules.length === 0) return null;
+                            return (
+                              <ConfigModuleSelector
+                                key={kind}
+                                modules={kindModules.map(toModuleInfo)}
+                                selectedModules={selectedModules}
+                                onSelectionChange={handleSelectionChange}
+                                title={`${SETTINGS_GROUP_COPY[kind].heading} to restore:`}
+                                description={kind === 'windows'
+                                  ? "Changes this PC's Windows preferences to match your saved setup."
+                                  : undefined}
+                                entryNoun={SETTINGS_GROUP_COPY[kind].entry}
+                                testId={`config-module-selector-${kind}`}
+                              />
                             );
-                            setRestoreTargets((current) => current.filter(
-                              (mapping) => allowedCaptureIds.has(mapping.captureId),
-                            ));
-                          }}
-                        />
+                          })}
+                        </>
                       );
                     })()}
                     {/* Choosing "apps and settings" but checking nothing sends
                         no --enable-restore at all, so the run silently becomes
                         apps-only. Say so rather than letting the label imply
-                        settings will transfer. */}
+                        settings will transfer. A skipped selection is a normal
+                        outcome, so the note is neutral, never a warning
+                        (docs/ux-guardrails.md). */}
                     {restoreIntent === 'apps-and-settings'
                       && (previewResult.restoreModulesAvailable?.length ?? 0) > 0
                       && selectedModules.length === 0 && (
-                      <p className="text-xs text-amber-600 dark:text-amber-500" data-testid="no-settings-selected-notice">
+                      <p className="text-xs text-muted-foreground" data-testid="no-settings-selected-notice">
                         No settings selected — this will set up apps only.
                       </p>
                     )}
-                    {(() => {
-                      return null;
-                    })()}
                   </div>
                 )}
 
@@ -1646,7 +1786,7 @@ export function SetupFlow({
                           className="flex items-center gap-2 text-xs pt-0.5"
                           title={event.title}
                         >
-                          <span className={`w-16 text-right font-medium ${colors.text}`}>
+                          <span className={`w-24 text-right font-medium ${colors.text}`}>
                             {shortLabel}
                           </span>
                           <span className="truncate flex-1">
@@ -1677,41 +1817,35 @@ export function SetupFlow({
             exit={{ opacity: 0, y: -8 }}
             transition={transition}
           >
-            <Card className={`border-l-2 ${applyResult.success === false || applyDisplayAppCounts.failed > 0 || applyResult.error ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
+            <Card className={`border-l-2 ${applyHasErrors ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
               <CardContent className="py-6 px-6">
+                {/* The verdict only: the filter chips below are the one place
+                    for the counts. A run with no rows has no chips, so its
+                    header keeps the app counts. */}
                 <div className="flex items-center gap-3 mb-4">
-                  {applyResult.success === false || applyDisplayAppCounts.failed > 0 || applyResult.error ? (
-                    <XCircle className="h-5 w-5 text-amber-500" />
+                  {applyHasErrors ? (
+                    <XCircle className="h-5 w-5 flex-shrink-0 text-amber-500" />
                   ) : (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-500" />
                   )}
                   <div>
                     <p className="text-sm font-medium">
-                      {applyResult.success === false || applyDisplayAppCounts.failed > 0 || applyResult.error
-                        ? 'Setup completed with errors'
+                      {applyHasErrors
+                        ? applyResult.dryRun
+                          ? 'Preview completed with errors — nothing was installed'
+                          : 'Setup completed with errors'
                         : applyResult.dryRun
                           ? 'Preview complete — nothing was installed'
                           : 'Setup complete'}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {applyResult.dryRun
-                        ? `${applyDisplayAppCounts.installed} would be installed, ${applyDisplayAppCounts.present} already present`
-                        : `${applyDisplayAppCounts.installed} installed, ${applyDisplayAppCounts.present} already present`}
-                      {applyDisplayAppCounts.failed > 0 ? `, ${applyDisplayAppCounts.failed} failed` : ''}
-                      {(() => {
-                        const restored = applyResult.configsRestored ?? 0;
-                        const settingsFailed = applyResult.configsFailed ?? 0;
-                        if (restored > 0 && settingsFailed === 0) return <> &middot; {restored} {restored === 1 ? 'setting' : 'settings'} restored</>;
-                        if (restored > 0 && settingsFailed > 0) return <> &middot; {restored} {restored === 1 ? 'setting' : 'settings'} restored, {settingsFailed} failed</>;
-                        if (settingsFailed > 0) return <> &middot; {settingsFailed} {settingsFailed === 1 ? 'setting' : 'settings'} failed</>;
-                        // Fallback: show selected settings count (only when restore was requested)
-                        if (restoreIntent === 'apps-and-settings' && selectedModules.length > 0) {
-                          const count = selectedModules.length;
-                          return <> &middot; {count} {count === 1 ? 'setting' : 'settings'} included</>;
-                        }
-                        return null;
-                      })()}
-                    </p>
+                    {applyResult.appEvents.length === 0 && applyDisplayAppCounts.total > 0 && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {applyResult.dryRun
+                          ? `${applyDisplayAppCounts.installed} would be installed, ${applyDisplayAppCounts.present} already present`
+                          : `${applyDisplayAppCounts.installed} installed, ${applyDisplayAppCounts.present} already present`}
+                        {applyDisplayAppCounts.failed > 0 ? `, ${applyDisplayAppCounts.failed} failed` : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1739,16 +1873,16 @@ export function SetupFlow({
                   const fullConfigMap = applyProfileConfigMap;
                   // Filter config map to only include entries for modules the user selected
                   const applyConfigMap = selectedModules.length > 0
-                    ? Object.fromEntries(Object.entries(fullConfigMap).filter(([, qualifiedId]) => {
-                        const shortId = qualifiedId.includes('.') ? qualifiedId.split('.').pop()! : qualifiedId;
-                        return selectedModules.includes(shortId) || selectedModules.includes(qualifiedId);
-                      }))
+                    ? Object.fromEntries(Object.entries(fullConfigMap).filter(([, qualifiedId]) =>
+                        isSelectedConfigModule(qualifiedId, selectedModules)))
                     : (restoreIntent === 'apps-and-settings' ? fullConfigMap : {});
-                  const applySettingsRestored = applyResult.configsRestored ?? 0;
-                  const applySettingsFailed = applyResult.configsFailed ?? 0;
-                  const applySettingsProcessed = applySettingsRestored + (applyResult.configsSkipped ?? 0) + applySettingsFailed;
-                  // Fall back to selected modules count when restore counters are empty (only when restore was requested)
-                  const configMapSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
+                  const applySettingsFailed = applyRestoreCounts.failed;
+                  const applySettingsProcessed = applyRestoreTotal;
+                  // With no restore rows, the chip counts the app rows its
+                  // filter shows (only when restore was requested).
+                  const configMapSettingsCount = restoreIntent === 'apps-and-settings'
+                    ? settingsRowCount(applyResult.appEvents, applyConfigMap, applySynthesizedAppIds)
+                    : 0;
                   const applySettingsTotal = applySettingsProcessed > 0 ? applySettingsProcessed : configMapSettingsCount;
                   // Partition filtered events
                   const applyAppsOnlyCount = appsOnlyCount(
@@ -1757,12 +1891,72 @@ export function SetupFlow({
                     applySynthesizedAppIds,
                   );
                   const allApplyEvents = filterEvents(applyResult.appEvents, applyConfigMap, applySynthesizedAppIds);
-                  const applyWingetEvents = allApplyEvents.filter(e => !isConfigOnlyApp(e, applySynthesizedAppIds));
-                  const applyConfigOnlyEvents = allApplyEvents.filter(e => isConfigOnlyApp(e, applySynthesizedAppIds));
+                  // A row's status word and colour. Restore rows read
+                  // RESTORING/RESTORED; app rows stay phase-aware ("apply").
+                  const applyRowStatus = (event: AppEvent) => {
+                    if (!isConfigOnlyApp(event, applySynthesizedAppIds)) {
+                      return { ...getActivityRowLabel(event, 'apply'), excluded: false };
+                    }
+                    // Settings the user chose not to restore are not a
+                    // problem, so they must not borrow the warning
+                    // vocabulary. An orange SKIPPED beside every setting
+                    // reads as a run that half-failed when the user simply
+                    // picked "Install apps only". A genuine engine skip —
+                    // selected, then skipped — keeps its warning styling.
+                    const moduleId = fullConfigMap[event.app];
+                    const wasSelected = restoreIntent === 'apps-and-settings'
+                      && selectedModules.length > 0
+                      && moduleId !== undefined
+                      && isSelectedConfigModule(moduleId, selectedModules);
+                    if (!wasSelected) return { shortLabel: 'EXCLUDED', color: 'muted' as const, excluded: true };
+                    const status = getPhaseAwareStatusForEvent({ statusKey: event.statusKey || 'present', phase: 'apply', reason: event.reason });
+                    return { shortLabel: status.shortLabel, color: status.color, needsAction: status.needsAction, excluded: false };
+                  };
+                  // A failure (docs/ux-principles.md, "UX Failure States") and
+                  // an outcome the status map marks as needing the person
+                  // (MANUAL) lead the list with their reason, outside the
+                  // scroll box. Each row shows once, so every chip still
+                  // equals the rows its click shows.
+                  const needsAttention = (event: AppEvent) => {
+                    const status = applyRowStatus(event);
+                    return status.color === 'error' || status.needsAction === true;
+                  };
+                  const attentionEvents = allApplyEvents.filter(needsAttention);
+                  const listEvents = allApplyEvents.filter((event) => !needsAttention(event));
+                  const applyWingetEvents = listEvents.filter(e => !isConfigOnlyApp(e, applySynthesizedAppIds));
+                  const applyConfigOnlyEvents = listEvents.filter(e => isConfigOnlyApp(e, applySynthesizedAppIds));
                   const showApplyConfigOnlySection = applyConfigOnlyEvents.length > 0 && (activeFilters.size === 0 || activeFilters.has('settings'));
+                  // Restore rows for settings that belong to no app list under
+                  // their own heading, after the app rows.
+                  const isNonAppSettingsRow = (event: AppEvent) =>
+                    event.kind === 'restore' && !!event.settingsKind && event.settingsKind !== 'app';
+                  const renderApplyRow = (
+                    event: AppEvent,
+                    i: number,
+                    options: { underGroupHeading?: boolean; wrap?: boolean } = {},
+                  ) => {
+                    const { shortLabel, color, excluded } = applyRowStatus(event);
+                    // Under a group heading the engine's item label names the
+                    // setting on its own; elsewhere the name keeps the module.
+                    const primary = (options.underGroupHeading && event.label)
+                      || event.name
+                      || formatAppIdentity(event.app);
+                    return (
+                      <div key={`${event.app}-${i}`} className="flex items-baseline gap-2 text-xs pt-0.5" title={event.title}>
+                        <span className={`w-24 flex-shrink-0 text-right font-medium ${getColorClasses(color).text}`}>{shortLabel}</span>
+                        <span className={`min-w-0 ${options.wrap ? 'break-words' : 'truncate'} ${excluded ? 'text-muted-foreground' : ''}`}>
+                          {primary}
+                          {event.secondary && (
+                            <span className="text-muted-foreground"> · {event.secondary}</span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  };
+                  const showListBox = applyWingetEvents.length > 0 || showApplyConfigOnlySection;
                   return (
                   <div className="mt-3 border-t pt-3">
-                    <div className="flex items-center gap-1.5 mb-2">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
                       {applyDisplayAppCounts.total > 0 && (
                         <FilterChip
                           onClick={clearFilters}
@@ -1773,22 +1967,27 @@ export function SetupFlow({
                           {applyDisplayAppCounts.total} {applyDisplayAppCounts.total === 1 ? 'app' : 'apps'}
                         </FilterChip>
                       )}
-                      {applyDisplayAppCounts.installed > 0 && (
-                        <FilterChip
-                          onClick={() => toggleFilter('installed')}
-                          pressed={activeFilters.has('installed')}
-                          dimmed={activeFilters.size > 0 && !activeFilters.has('installed')}
-                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
-                        >
-                          {applyDisplayAppCounts.installed} installed
-                        </FilterChip>
-                      )}
+                      {applyDisplayAppCounts.installed > 0 && (() => {
+                        // A preview's rows are still `to_install`; filter and word them so.
+                        const installedKey = applyResult.dryRun ? 'to_install' : 'installed';
+                        const installedColor = getColorClasses(applyResult.dryRun ? 'action' : 'success');
+                        return (
+                          <FilterChip
+                            onClick={() => toggleFilter(installedKey)}
+                            pressed={activeFilters.has(installedKey)}
+                            dimmed={activeFilters.size > 0 && !activeFilters.has(installedKey)}
+                            className={`${installedColor.bg} ${installedColor.text}`}
+                          >
+                            {applyDisplayAppCounts.installed} {applyResult.dryRun ? 'to install' : 'installed'}
+                          </FilterChip>
+                        );
+                      })()}
                       {applyDisplayAppCounts.present > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('present')}
                           pressed={activeFilters.has('present')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('present')}
-                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                          className={chipColorClasses(getPhaseAwareStatus('present', 'apply').color)}
                         >
                           {applyDisplayAppCounts.present} present
                         </FilterChip>
@@ -1821,10 +2020,10 @@ export function SetupFlow({
                             dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
                             className={applySettingsFailed > 0 ? `${getColorClasses('warn').bg} ${getColorClasses('warn').text}` : `${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                           >
-                            {applySettingsRestored > 0 && applySettingsFailed === 0
-                              ? `${applySettingsRestored} ${applySettingsRestored === 1 ? 'setting' : 'settings'} restored`
-                              : applySettingsFailed > 0
+                            {applySettingsFailed > 0
                               ? `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'} (${applySettingsFailed} failed)`
+                              : applyRestoreCounts.restored === applySettingsProcessed
+                              ? `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'} ${getRestoreUiStatus('restored', { preview: applyResult.dryRun }).countLabel}`
                               : `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'}`
                             }
                           </FilterChip>
@@ -1850,73 +2049,52 @@ export function SetupFlow({
                         </FilterChip>
                       )}
                     </div>
+                    {attentionEvents.length > 0 && (
+                      <div
+                        role="group"
+                        aria-label="Needs attention"
+                        className={`-mx-2 mb-2 space-y-1 rounded-md border px-2 py-1.5 ${getColorClasses('error').border}`}
+                        data-testid="results-needs-attention"
+                      >
+                        <p className="text-[10px] font-medium text-muted-foreground">Needs attention</p>
+                        {attentionEvents.map((event, i) => renderApplyRow(event, i, { wrap: true }))}
+                      </div>
+                    )}
+                    {showListBox && (
                     <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {applyWingetEvents.map((event, i) => {
-                        // Restore rows read RESTORING/RESTORED and carry the
-                        // engine display name; app rows stay phase-aware ("apply").
-                        const { shortLabel, color } = getActivityRowLabel(event, 'apply');
-                        const colors = getColorClasses(color);
-                        const hasSettings = (restoreIntent === 'apps-and-settings' && event.app in applyConfigMap) || event.kind === 'restore' || event.app.startsWith('\u2699');
-                        const settingsOk = color !== 'error';
-                        return (
-                          <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5" title={event.title}>
-                            <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{shortLabel}</span>
-                            <span className="w-4 flex-shrink-0 flex justify-center">
-                              {hasSettings && (
-                                <Settings2 className={`h-3 w-3 ${settingsOk ? getColorClasses('success').text : getColorClasses('error').text} ${!settingsOk ? 'opacity-50' : ''}`} />
-                              )}
-                            </span>
-                            <span className="truncate">
-                              {event.name || formatAppIdentity(event.app)}
-                              {event.secondary && (
-                                <span className="text-muted-foreground"> \u00b7 {event.secondary}</span>
-                              )}
-                            </span>
-                          </div>
-                        );
-                      })}
+                      {applyWingetEvents.filter((event) => !isNonAppSettingsRow(event)).map((event, i) => renderApplyRow(event, i))}
                       {/* Config-only apps (detected via settings, not winget) */}
                       {showApplyConfigOnlySection && (
                         <>
                           <div className="border-t mt-2 pt-2">
                             <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings only</p>
                           </div>
-                          {applyConfigOnlyEvents.map((event, i) => {
-                            // Check if this config-only module was selected for restore
-                            const moduleId = fullConfigMap[event.app];
-                            const shortId = moduleId?.includes('.') ? moduleId.split('.').pop()! : moduleId;
-                            const wasSelected = restoreIntent === 'apps-and-settings' &&
-                              selectedModules.length > 0 &&
-                              (selectedModules.includes(shortId ?? '') || selectedModules.includes(moduleId ?? ''));
-                            // Settings the user chose not to restore are not a
-                            // problem, so they must not borrow the warning
-                            // vocabulary. An orange SKIPPED beside every setting
-                            // reads as a run that half-failed when the user
-                            // simply picked "Install apps only". A genuine
-                            // engine skip — selected, then skipped — keeps its
-                            // warning styling below.
-                            const cfgStatusKey: StatusKey = wasSelected ? (event.statusKey || 'present') : 'skipped';
-                            const cfgLabel = wasSelected
-                              ? getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason }).shortLabel
-                              : 'EXCLUDED';
-                            const cfgColor = wasSelected
-                              ? getColorClasses(getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason }).color)
-                              : { text: 'text-muted-foreground' };
-                            return (
-                              <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                                <span className={`w-16 flex-shrink-0 text-right font-medium ${cfgColor.text}`}>{cfgLabel}</span>
-                                <span className="w-4 flex-shrink-0 flex justify-center">
-                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : wasSelected ? getColorClasses('success').text : 'text-muted-foreground'}`} />
-                                </span>
-                                <span className={`truncate ${!wasSelected ? 'text-muted-foreground' : ''}`}>
-                                  {event.name || formatAppIdentity(event.app)}
-                                </span>
-                              </div>
-                            );
-                          })}
+                          {applyConfigOnlyEvents.map((event, i) => renderApplyRow(event, i))}
                         </>
                       )}
+                      {NON_APP_SETTINGS_KINDS.map((kind) => {
+                        const rows = applyWingetEvents.filter((event) =>
+                          isNonAppSettingsRow(event) && event.settingsKind === kind);
+                        if (rows.length === 0) return null;
+                        return (
+                          <div
+                            key={kind}
+                            role="group"
+                            aria-label={SETTINGS_GROUP_COPY[kind].heading}
+                            className="space-y-1"
+                            data-testid={`restore-group-${kind}`}
+                          >
+                            <div className="border-t mt-2 pt-2">
+                              <p className="text-[10px] font-medium text-muted-foreground mb-1">
+                                {SETTINGS_GROUP_COPY[kind].heading}
+                              </p>
+                            </div>
+                            {rows.map((event, i) => renderApplyRow(event, i, { underGroupHeading: true }))}
+                          </div>
+                        );
+                      })}
                     </div>
+                    )}
                   </div>
                   );
                 })()}
@@ -1925,7 +2103,7 @@ export function SetupFlow({
                   <Button variant="ghost" onClick={handleBackToProfiles}>
                     Back to profiles
                   </Button>
-                  {onUndoDryRun && restoreIntent === 'apps-and-settings' && ((applyResult.configsRestored ?? 0) > 0 || Object.keys(applyProfileConfigMap).length > 0) && (
+                  {onUndoDryRun && !applyResult.dryRun && restoreIntent === 'apps-and-settings' && (applyRestoreCounts.restored > 0 || Object.keys(applyProfileConfigMap).length > 0) && (
                     <Button
                       variant="ghost"
                       size="sm"

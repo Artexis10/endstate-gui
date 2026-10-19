@@ -28,7 +28,7 @@ The GUI SHALL derive the active capture stage only from supported engine `progre
 #### Scenario: Settings stage arrives
 
 - **WHEN** the GUI receives a capture progress event with stage `settings`
-- **THEN** it displays “Collecting app settings…”
+- **THEN** it displays “Collecting settings…”
 
 #### Scenario: Packaging stage arrives
 

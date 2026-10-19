@@ -127,11 +127,16 @@ export interface ApplyRestoreOptions {
 }
 
 /** Engine-authored advisory attached to a completed command result. */
+/** An engine warning (`data.warnings`) from capture, plan, apply or verify. */
 export interface CommandWarning {
   code: string;
   message: string;
   driver?: string;
+  /** WinGet source the warning concerns (`winget` or `msstore`). */
+  source?: string;
   ref?: string;
+  /** Config module the warning concerns, e.g. for `config_secret_scope_conflict`. */
+  moduleId?: string;
 }
 
 export interface EndstateHostedBackupCapability {
@@ -637,8 +642,6 @@ export interface EndstateApplyData {
   logFile?: string;
   eventsFile?: string;
   configModuleMap?: Record<string, string>;
-  /** Restore summary when --enable-restore is active. */
-  restoreSummary?: RestoreSummary;
   restoreItems?: RestoreResult[];
   restoreJournalFile?: string;
   restoreFilter?: string[];
@@ -673,13 +676,8 @@ export interface CapturedApp {
   name?: string;
 }
 
-export interface CaptureWarning {
-  code: string;
-  message: string;
-  driver?: string;
-  source?: string;
-  ref?: string;
-}
+/** Capture warnings share the engine's one warning shape. */
+export type CaptureWarning = CommandWarning;
 
 export interface CaptureCounts {
   totalFound: number;
@@ -779,6 +777,8 @@ export interface RestoreResult {
   error?: string;
   warnings?: string[];
   restoreType?: string;
+  /** Human name of this restore entry, from its manifest `reason` (engine 2.32.0+). */
+  label?: string;
   captureId?: string;
   configSetId?: string;
   targetInstanceId?: string;
@@ -792,14 +792,13 @@ export type RestoreResultStatus =
   | 'skipped_missing_source'
   | 'failed';
 
-/** Restore summary from JSON envelope */
-export interface RestoreSummary {
-  total: number;
-  restored: number;
-  skipped: number;
-  failed: number;
-  backupLocation: string | null;
-}
+/**
+ * Settings-restore outcome counts for one run, keyed by engine restore status.
+ * The apply envelope carries no restore summary: these counts come from the
+ * reconciled restore rows (`countRestoreOutcomes`), so each equals the rows
+ * shown. See docs/ux-language.md, "RESTORE rows".
+ */
+export type RestoreOutcomeCounts = Record<RestoreResultStatus, number>;
 
 /** Individual result item from revert command */
 export interface RevertResultItem {

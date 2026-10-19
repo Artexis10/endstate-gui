@@ -31,6 +31,8 @@ If engine output changes, this document MUST be updated to match.
 | `data.configsIncluded` | Treat as empty array | No config count in summary |
 | `data.configsSkipped` | Treat as empty array | No skipped section |
 | `data.configsCaptureErrors` | Treat as empty array | No errors section |
+| `data.warnings` | Treat as empty array | No capture warnings region |
+| `data.configModules[].warnings` | Treat as empty array | No module notes behind Details |
 
 ## Engine Envelope Shape {#envelope-shape}
 
@@ -59,7 +61,25 @@ If engine output changes, this document MUST be updated to match.
       { "id": "Git.Git", "source": "winget" },
       { "id": "Docker.DockerDesktop", "source": "winget" }
     ],
-    "captureWarnings": ["WINGET_EXPORT_FAILED_FALLBACK_USED"]
+    "configModules": [
+      {
+        "id": "apps.example-editor",
+        "appId": "example-editor",
+        "displayName": "Example Editor",
+        "status": "captured",
+        "filesCaptured": 1,
+        "wingetRefs": ["Vendor.ExampleEditor"],
+        "warnings": ["Some Example Editor settings were not captured because the module marks the same registry location as private. The rest of its settings were captured."]
+      }
+    ],
+    "captureWarnings": ["WINGET_EXPORT_FAILED_FALLBACK_USED"],
+    "warnings": [
+      {
+        "code": "config_secret_scope_conflict",
+        "message": "Some Example Editor settings were not captured because the module marks the same registry location as private. The rest of its settings were captured.",
+        "moduleId": "apps.example-editor"
+      }
+    ]
   },
   "error": null
 }
@@ -82,6 +102,11 @@ If engine output changes, this document MUST be updated to match.
   }
 }
 ```
+
+### Counts and Module Notes
+
+- `counts.sensitiveExcludedCount` counts the secret files and the secret registry keys and values that capture removed; a value inside a removed key counts only as part of that key. The GUI does not display it.
+- `configModules[].warnings` is an optional array of plain-language notes for one module, for example a skipped registry entry or a setting that is not set on this PC. The GUI shows the notes of a settings group that belongs to no app (for example Windows settings) behind Details.
 
 ## Canonical Sources {#canonical-source}
 
@@ -168,6 +193,12 @@ The GUI explicitly does NOT:
 | Code | Description | UI Action |
 |------|-------------|-----------|
 | `WINGET_EXPORT_FAILED_FALLBACK_USED` | winget export failed, used fallback | Info toast only |
+
+Structured warnings in `data.warnings` share the engine's `CommandWarning` shape: `code`, `message`, and the optional `driver`, `source`, `ref` and `moduleId`. The save flow lists them under "Capture warnings" and keeps every field except the message behind Details.
+
+| Code | Description | UI Action |
+|------|-------------|-----------|
+| `config_secret_scope_conflict` | A module's registry capture entry overlaps the module's own secret declaration, so capture skipped that entry and captured the module's other settings. One warning per module; `moduleId` names it, and the same message appears in that module's `configModules[].warnings`. | Show "Some <module display name> settings were not captured because they may hold private data. Its other settings were captured.", with the name resolved from `configModules`. Without a match, show the same sentence without a name. Never show the engine message, which names a registry location. |
 
 ## TypeScript Types
 

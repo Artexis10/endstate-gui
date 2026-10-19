@@ -36,6 +36,7 @@ function makeProps(overrides: Partial<SetupFlowProps> = {}): SetupFlowProps {
     onOpenProfilesFolder: vi.fn(),
     onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
     onFileDrop: vi.fn(),
+    onUnsupportedFiles: vi.fn(),
     onDeleteProfile: vi.fn(),
     isRunning: false,
     setupProgress: null,
@@ -172,5 +173,21 @@ describe('SetupFlow imported profile handoff', () => {
     await user.click(screen.getByTestId('setup-flow-back'));
     expect(screen.getByTestId('profile-card-captured-bundle')).toBeVisible();
     expect(screen.queryByText('Imported')).not.toBeInTheDocument();
+  });
+});
+
+describe('SetupFlow profile list', () => {
+  it('keeps saying why the list is empty when the profiles folder could not be read', () => {
+    // The read failure used to show only as a toast; once it faded the list
+    // claimed "No profiles found" about a folder it never read.
+    renderWithProviders(setupFlow(makeProps({
+      profiles: [],
+      recentlyImportedProfile: null,
+      profilesReadError: "Couldn't read your profiles folder: Access is denied.",
+    })));
+
+    expect(screen.getByRole('heading', { name: "Couldn't read your profiles folder" })).toBeInTheDocument();
+    expect(screen.getByText("Couldn't read your profiles folder: Access is denied.")).toBeInTheDocument();
+    expect(screen.queryByText('No profiles found')).not.toBeInTheDocument();
   });
 });

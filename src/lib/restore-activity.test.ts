@@ -101,12 +101,31 @@ describe('restore-activity row mapping', () => {
     expect(row.name).not.toContain(row.title ?? '@@');
   });
 
-  it('surfaces a friendly, jargon-free secondary line for skips', () => {
-    const skip: RestoreItemEvent = { ...legacyRestored, status: 'skipped_up_to_date', message: '' };
-    const row = restoreEventToAppEvent(skip, ctx);
-    expect(row.secondary).toBeTruthy();
-    expect(row.secondary!).not.toContain('/copy:');
-    expect(row.secondary!).not.toContain('->');
+  it('gives only a failure secondary text: a skip is said by its status label', () => {
+    const skip: RestoreItemEvent = { ...legacyRestored, status: 'skipped_up_to_date', message: 'target settings are already current' };
+    expect(restoreEventToAppEvent(skip, ctx).secondary).toBeUndefined();
+    const failed: RestoreItemEvent = { ...legacyRestored, status: 'failed', message: 'The file is in use by another program' };
+    expect(restoreEventToAppEvent(failed, ctx).secondary).toBe('The file is in use by another program');
+  });
+
+  it('keeps the registry key of a registry-import row out of the row text', () => {
+    const failed: RestoreItemEvent = {
+      ...base,
+      restorer: 'registry-import',
+      id: 'registry-import:./configs/7zip/7zip.reg',
+      module: 'apps.7zip',
+      source: './configs/7zip/7zip.reg',
+      target: 'HKCU\\Software\\7-Zip\\Options',
+      status: 'failed',
+      message: 'reg import exited with code 1',
+    };
+    const row = restoreEventToAppEvent(failed, { restoreModulesAvailable: [{ id: 'apps.7zip', displayName: '7-Zip' }] });
+    expect(row.name).toBe('7-Zip');
+    expect(row.secondary).toBe("Couldn't restore this setting");
+    expect(row.title).toContain('HKCU\\Software\\7-Zip\\Options');
+    // A dry run restores nothing, so its failure never claims a restore attempt.
+    const previewRow = restoreEventToAppEvent(failed, { restoreModulesAvailable: [{ id: 'apps.7zip', displayName: '7-Zip' }] }, { preview: true });
+    expect(previewRow.secondary).toBe("Couldn't check this setting");
   });
 
   it('extracts the basename from Windows-style and %VAR% targets', () => {

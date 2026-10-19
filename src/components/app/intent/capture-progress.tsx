@@ -4,7 +4,7 @@ import type { CaptureStage } from '@/lib/streaming-events';
 
 const STAGE_COPY: Record<CaptureStage, string> = {
   inventory: 'Checking installed apps…',
-  settings: 'Collecting app settings…',
+  settings: 'Collecting settings…',
   packaging: 'Packaging your setup…',
 };
 
