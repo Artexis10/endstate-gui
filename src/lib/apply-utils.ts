@@ -388,7 +388,7 @@ export function engineStatusToStatusKey(engineStatus: EngineItemStatus, phase?: 
  * hover title keeps the message, as on registry restore rows (docs/ux-language.md).
  * A preview or dry run installs nothing, so its failure says the check failed.
  */
-export const APP_FAILED_TEXT = {
+const APP_FAILED_TEXT = {
   install: "Couldn't install this app",
   check: "Couldn't check this app",
   verify: "Couldn't verify this app",
