@@ -202,6 +202,9 @@ test.describe('Setup activity feed — restore & app row presentation', () => {
     // A missing optional file is neutral; a real failure stays an error.
     await expect(page.getByText('NOT IN SETUP', { exact: true })).toHaveClass(/text-muted-foreground/);
     await expect(page.getByText('FAILED', { exact: true })).toHaveClass(/text-danger/);
+
+    // A run that restored a setting offers to undo it (the dry-run case below relies on this).
+    await expect(page.getByRole('button', { name: 'Undo settings' })).toBeVisible();
   });
 
   // The engine reports `restored` per item in a dry run, so a row labelled from
@@ -217,5 +220,8 @@ test.describe('Setup activity feed — restore & app row presentation', () => {
     await expect(page.getByText('RESTORED', { exact: true })).toHaveCount(0);
     await expect(page.getByText('1 would be restored')).toBeVisible();
     await expect(page.getByText(/\b\d+ restored\b/)).toHaveCount(0);
+
+    // A preview changed nothing, so there is nothing to undo.
+    await expect(page.getByRole('button', { name: 'Undo settings' })).toHaveCount(0);
   });
 });

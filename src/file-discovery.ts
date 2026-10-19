@@ -83,6 +83,19 @@ function isMetaFile(filename: string): boolean {
 }
 
 /**
+ * A capture bundle's root holds `manifest.jsonc` beside `metadata.json`
+ * (engine docs/contracts/capture-artifact-contract.md, INV-CAPTURE-5), so the
+ * metadata of an extracted bundle is bundle data, not a profile.
+ */
+function isBundleMetadata(path: string, listed: readonly string[]): boolean {
+  if (fileNameOf(path).toLowerCase() !== 'metadata.json') return false;
+  const folder = path.slice(0, path.length - fileNameOf(path).length);
+  return listed.some((other) =>
+    other.slice(0, other.length - fileNameOf(other).length) === folder
+    && fileNameOf(other).toLowerCase() === 'manifest.jsonc');
+}
+
+/**
  * Get the metadata path for a setup file
  */
 export function getMetaPath(setupPath: string): string {
@@ -116,7 +129,7 @@ export async function validateProfile(path: string): Promise<ValidationResult> {
   } catch (err) {
     return {
       valid: false,
-      errors: [{ code: 'VALIDATION_ERROR', message: String(err) }],
+      errors: [{ code: 'VALIDATION_ERROR', message: backendErrorMessage(err) }],
     };
   }
 }
@@ -142,11 +155,11 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
       return { descriptors: [], skipped: [], error: null };
     }
 
-    // Filter out .meta.json files - they are implementation details
+    // Filter out .meta.json files and bundle metadata - they are not profiles
     const candidateFiles = files.filter(path => {
       if (!path || typeof path !== 'string') return false;
       const filename = path.split(/[/\\]/).pop() || '';
-      return !isMetaFile(filename);
+      return !isMetaFile(filename) && !isBundleMetadata(path, files);
     });
     
     // Validate each candidate and only include valid profiles

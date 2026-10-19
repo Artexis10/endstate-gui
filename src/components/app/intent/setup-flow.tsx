@@ -398,7 +398,7 @@ export function SetupFlow({
   onRefreshProfiles,
   onFileDrop,
   onUnsupportedFiles,
-profileImportActive = false,
+  profileImportActive = false,
   nativeDragAccepted = false,
   onBrowse,
   onDeleteProfile,
@@ -1794,12 +1794,13 @@ profileImportActive = false,
                       {applyDisplayAppCounts.installed > 0 && (() => {
                         // A preview's rows are still `to_install`; filter and word them so.
                         const installedKey = applyResult.dryRun ? 'to_install' : 'installed';
+                        const installedColor = getColorClasses(applyResult.dryRun ? 'action' : 'success');
                         return (
                           <FilterChip
                             onClick={() => toggleFilter(installedKey)}
                             pressed={activeFilters.has(installedKey)}
                             dimmed={activeFilters.size > 0 && !activeFilters.has(installedKey)}
-                            className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                            className={`${installedColor.bg} ${installedColor.text}`}
                           >
                             {applyDisplayAppCounts.installed} {applyResult.dryRun ? 'to install' : 'installed'}
                           </FilterChip>
