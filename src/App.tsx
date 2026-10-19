@@ -2175,8 +2175,9 @@ function AppContent() {
 
     // Track preview live activity via NDJSON events
     const previewAppEvents: AppEvent[] = [];
-    let previewPhase: EnginePhase = 'apply';
-    
+    // A preview is always a dry run, so its rows start in the plan phase.
+    let previewPhase: EnginePhase = 'plan';
+
     const previewArgs = ['--profile', profilePath, '--dry-run'];
     if (restoreIntent === 'apps-and-settings') {
       previewArgs.push('--enable-restore');
