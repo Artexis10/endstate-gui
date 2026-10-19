@@ -71,11 +71,10 @@ fn endstate_exec(
     use std::process::Stdio;
 
     let mut cmd = if exe == "__bundled__" {
-        engine_adapter::build_bundled_command(&app, &args)
-            .map_err(|e| ExecError {
-                code: e.code,
-                message: e.message,
-            })?
+        engine_adapter::build_bundled_command(&app, &args).map_err(|e| ExecError {
+            code: e.code,
+            message: e.message,
+        })?
     } else {
         cmd_impl::build_engine_command(&exe, &args)
     };
@@ -203,7 +202,7 @@ fn engine_get_run_id(run_state: State<'_, SharedRunState>) -> Option<String> {
 #[tauri::command]
 fn check_file_exists(path: String) -> Result<bool, String> {
     use std::path::Path;
-    
+
     let file_path = Path::new(&path);
     Ok(file_path.exists() && file_path.is_file())
 }
@@ -220,12 +219,12 @@ fn check_file_exists(path: String) -> Result<bool, String> {
 fn get_default_profiles_directory() -> Result<String, String> {
     let home_dir = dirs::document_dir()
         .ok_or_else(|| "Failed to determine Documents directory".to_string())?;
-    
+
     let profiles_dir = home_dir.join("Endstate").join("Setups");
-    
+
     fs::create_dir_all(&profiles_dir)
         .map_err(|e| format!("Failed to create setups directory: {}", e))?;
-    
+
     profiles_dir
         .to_str()
         .ok_or_else(|| "Invalid path encoding".to_string())
@@ -245,12 +244,12 @@ fn get_default_profiles_directory() -> Result<String, String> {
 fn get_capture_cache_directory() -> Result<String, String> {
     let local_data = dirs::data_local_dir()
         .ok_or_else(|| "Failed to determine LocalAppData directory".to_string())?;
-    
+
     let cache_dir = local_data.join("Endstate").join("cache").join("captures");
-    
+
     fs::create_dir_all(&cache_dir)
         .map_err(|e| format!("Failed to create capture cache directory: {}", e))?;
-    
+
     cache_dir
         .to_str()
         .ok_or_else(|| "Invalid path encoding".to_string())
@@ -269,23 +268,22 @@ fn get_capture_cache_directory() -> Result<String, String> {
 #[tauri::command]
 fn copy_file(source_path: String, dest_path: String) -> Result<(), String> {
     use std::path::Path;
-    
+
     let source = Path::new(&source_path);
     let dest = Path::new(&dest_path);
-    
+
     if !source.exists() || !source.is_file() {
         return Err(format!("Source file does not exist: {}", source_path));
     }
-    
+
     // Ensure destination directory exists
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create destination directory: {}", e))?;
     }
-    
-    fs::copy(source, dest)
-        .map_err(|e| format!("Failed to copy file: {}", e))?;
-    
+
+    fs::copy(source, dest).map_err(|e| format!("Failed to copy file: {}", e))?;
+
     Ok(())
 }
 
@@ -300,7 +298,7 @@ fn copy_file(source_path: String, dest_path: String) -> Result<(), String> {
 #[tauri::command]
 fn delete_file_silent(path: String) -> Result<(), String> {
     use std::path::Path;
-    
+
     let file_path = Path::new(&path);
     if !file_path.exists() {
         return Ok(()); // Already gone, success
@@ -308,9 +306,8 @@ fn delete_file_silent(path: String) -> Result<(), String> {
     if !file_path.is_file() {
         return Ok(()); // Not a file, ignore
     }
-    
-    fs::remove_file(file_path)
-        .map_err(|e| format!("Failed to delete file: {}", e))
+
+    fs::remove_file(file_path).map_err(|e| format!("Failed to delete file: {}", e))
 }
 
 /// Clean up all files in the capture cache directory.
@@ -324,13 +321,13 @@ fn cleanup_capture_cache() -> Result<(), String> {
         Some(d) => d,
         None => return Ok(()), // Can't determine dir, skip cleanup
     };
-    
+
     let cache_dir = local_data.join("Endstate").join("cache").join("captures");
-    
+
     if !cache_dir.exists() {
         return Ok(()); // Nothing to clean
     }
-    
+
     // Delete all files in the cache directory
     if let Ok(entries) = fs::read_dir(&cache_dir) {
         for entry in entries.flatten() {
@@ -340,7 +337,7 @@ fn cleanup_capture_cache() -> Result<(), String> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -357,10 +354,9 @@ fn ensure_dir(path: String) -> Result<(), String> {
     if path.is_empty() {
         return Err("Directory path cannot be empty".to_string());
     }
-    
-    fs::create_dir_all(&path)
-        .map_err(|e| format!("Failed to create directory: {}", e))?;
-    
+
+    fs::create_dir_all(&path).map_err(|e| format!("Failed to create directory: {}", e))?;
+
     Ok(())
 }
 
@@ -372,7 +368,11 @@ fn extract_zip_profile(zip_path: String, profiles_dir: String) -> Result<String,
 
 /// Decode and import a browser-provided ZIP through the shared core importer.
 #[tauri::command]
-fn import_zip_from_base64(data: String, file_name: String, profiles_dir: String) -> Result<String, String> {
+fn import_zip_from_base64(
+    data: String,
+    file_name: String,
+    profiles_dir: String,
+) -> Result<String, String> {
     endstate_engine_core::cmd::import_zip_from_base64(&data, &file_name, &profiles_dir)
 }
 
@@ -400,7 +400,7 @@ fn import_profile_text(
 #[tauri::command]
 fn show_file_dialog() -> Result<Option<String>, String> {
     use std::process::Command;
-    
+
     let output = Command::new("powershell")
         .args(&[
             "-NoProfile",
@@ -409,9 +409,9 @@ fn show_file_dialog() -> Result<Option<String>, String> {
         ])
         .output()
         .map_err(|e| format!("Failed to show file dialog: {}", e))?;
-    
+
     let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    
+
     if path.is_empty() {
         Ok(None)
     } else {
@@ -445,14 +445,13 @@ fn list_manifest_files(directory: String) -> Result<Vec<String>, String> {
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
     use std::path::Path;
-    
+
     let file_path = Path::new(&path);
     if !file_path.exists() || !file_path.is_file() {
         return Err("File does not exist".to_string());
     }
-    
-    fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))
+
+    fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))
 }
 
 /// Write base64-encoded bytes to a file (binary).
@@ -461,7 +460,7 @@ fn read_text_file(path: String) -> Result<String, String> {
 /// `@tauri-apps/plugin-fs`. Decodes base64 in Rust and writes the raw bytes.
 #[tauri::command]
 fn write_file_base64(path: String, data_base64: String) -> Result<(), String> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     let bytes = STANDARD
         .decode(&data_base64)
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
@@ -477,13 +476,12 @@ fn write_file_base64(path: String, data_base64: String) -> Result<(), String> {
 /// Read a binary file and return its contents as base64.
 #[tauri::command]
 fn read_file_base64(path: String) -> Result<String, String> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     let file_path = std::path::Path::new(&path);
     if !file_path.exists() || !file_path.is_file() {
         return Err("File does not exist".to_string());
     }
-    let bytes = fs::read(file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let bytes = fs::read(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
     Ok(STANDARD.encode(&bytes))
 }
 
@@ -498,8 +496,7 @@ fn read_file_base64(path: String) -> Result<String, String> {
 /// * `Err(String)` - Failed to write file
 #[tauri::command]
 fn write_text_file(path: String, content: String) -> Result<(), String> {
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write file: {}", e))
+    fs::write(&path, content).map_err(|e| format!("Failed to write file: {}", e))
 }
 
 /// Delete a file from disk.
@@ -513,7 +510,7 @@ fn write_text_file(path: String, content: String) -> Result<(), String> {
 #[tauri::command]
 fn delete_file(path: String) -> Result<(), String> {
     use std::path::Path;
-    
+
     let file_path = Path::new(&path);
     if !file_path.exists() {
         return Err("File does not exist".to_string());
@@ -521,9 +518,8 @@ fn delete_file(path: String) -> Result<(), String> {
     if !file_path.is_file() {
         return Err("Path is not a file".to_string());
     }
-    
-    fs::remove_file(file_path)
-        .map_err(|e| format!("Failed to delete file: {}", e))
+
+    fs::remove_file(file_path).map_err(|e| format!("Failed to delete file: {}", e))
 }
 
 /// Rename a file on disk.
@@ -538,10 +534,10 @@ fn delete_file(path: String) -> Result<(), String> {
 #[tauri::command]
 fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
     use std::path::Path;
-    
+
     let old_file = Path::new(&old_path);
     let new_file = Path::new(&new_path);
-    
+
     if !old_file.exists() {
         return Err("Source file does not exist".to_string());
     }
@@ -551,9 +547,8 @@ fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
     if new_file.exists() {
         return Err("Target file already exists".to_string());
     }
-    
-    fs::rename(old_file, new_file)
-        .map_err(|e| format!("Failed to rename file: {}", e))
+
+    fs::rename(old_file, new_file).map_err(|e| format!("Failed to rename file: {}", e))
 }
 
 /// Validate a profile manifest against the Endstate profile contract.
@@ -568,9 +563,7 @@ fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
 /// * `Ok(ValidationResult)` - Validation completed (check valid field)
 /// * `Err(String)` - Failed to read/parse file
 #[tauri::command]
-fn validate_profile(
-    path: String,
-) -> Result<endstate_engine_core::cmd::ValidationResult, String> {
+fn validate_profile(path: String) -> Result<endstate_engine_core::cmd::ValidationResult, String> {
     endstate_engine_core::cmd::validate_profile(&path)
 }
 
@@ -594,14 +587,14 @@ fn write_text_file_debug(filename: String, content: String) -> Result<String, St
             .join("debug");
         std::fs::create_dir_all(&debug_dir)
             .map_err(|e| format!("Failed to create debug dir: {}", e))?;
-        
+
         let path = debug_dir.join(&filename);
         std::fs::write(&path, &content)
             .map_err(|e| format!("Failed to write debug file: {}", e))?;
-        
+
         Ok(path.display().to_string())
     }
-    
+
     #[cfg(not(debug_assertions))]
     {
         // In release builds, do nothing
@@ -621,7 +614,7 @@ fn write_text_file_debug(filename: String, content: String) -> Result<String, St
 #[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
     use std::process::Command;
-    
+
     #[cfg(target_os = "windows")]
     {
         Command::new("explorer")
@@ -629,7 +622,7 @@ fn open_folder(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         Command::new("open")
@@ -637,7 +630,7 @@ fn open_folder(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         Command::new("xdg-open")
@@ -645,7 +638,7 @@ fn open_folder(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open folder: {}", e))?;
     }
-    
+
     Ok(())
 }
 
@@ -672,19 +665,22 @@ async fn run_endstate_streaming(
     args: Vec<String>,
     event_channel: String,
 ) -> Result<(), String> {
-    use std::process::Stdio;
-    use std::io::{BufRead, BufReader};
+    use serde_json::json;
     #[cfg(debug_assertions)]
     use std::io::Write;
-    use serde_json::json;
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
 
     let result = tauri::async_runtime::spawn_blocking(move || {
         // Generate run_id for debug artifacts
-        let _run_id = format!("{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0));
-        
+        let _run_id = format!(
+            "{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        );
+
         // DEV-ONLY: Setup debug artifact files
         #[cfg(debug_assertions)]
         let debug_dir = {
@@ -696,17 +692,23 @@ async fn run_endstate_streaming(
             std::fs::create_dir_all(&dir).ok();
             dir
         };
-        
+
         #[cfg(debug_assertions)]
         let stdout_log_path = debug_dir.join("stdout.log");
         #[cfg(debug_assertions)]
         let stderr_log_path = debug_dir.join("stderr.log");
         #[cfg(debug_assertions)]
         let meta_path = debug_dir.join("meta.json");
-        
-        let _cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_else(|_| "unknown".to_string());
-        let _mode = if exe == "endstate" || exe == "__bundled__" { "bundled/path" } else { "unknown" };
-        
+
+        let _cwd = std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+        let _mode = if exe == "endstate" || exe == "__bundled__" {
+            "bundled/path"
+        } else {
+            "unknown"
+        };
+
         // Resolve absolute path of executable for bundled/path mode
         let _resolved_exe = if exe == "endstate" {
             which::which("endstate")
@@ -715,7 +717,7 @@ async fn run_endstate_streaming(
         } else {
             exe.clone()
         };
-        
+
         // DEV-ONLY: Log engine invocation details for debugging
         #[cfg(debug_assertions)]
         {
@@ -729,9 +731,9 @@ async fn run_endstate_streaming(
             eprintln!("  debug_dir: {}", debug_dir.display());
             eprintln!("================================");
         }
-        
+
         let start_time = std::time::Instant::now();
-        
+
         let mut cmd = if exe == "__bundled__" {
             match crate::engine_adapter::build_bundled_command(&app, &args) {
                 Ok(c) => c,
@@ -742,10 +744,10 @@ async fn run_endstate_streaming(
         } else {
             crate::cmd_impl::build_engine_command(&exe, &args)
         };
-        cmd.stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-        let mut child = cmd.spawn()
+        let mut child = cmd
+            .spawn()
             .map_err(|e| format!("Failed to spawn process: {}", e))?;
 
         let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
@@ -754,13 +756,13 @@ async fn run_endstate_streaming(
         // DEV-ONLY: Create debug log files
         #[cfg(debug_assertions)]
         let stdout_log_file = std::sync::Arc::new(std::sync::Mutex::new(
-            std::fs::File::create(&stdout_log_path).ok()
+            std::fs::File::create(&stdout_log_path).ok(),
         ));
         #[cfg(debug_assertions)]
         let stderr_log_file = std::sync::Arc::new(std::sync::Mutex::new(
-            std::fs::File::create(&stderr_log_path).ok()
+            std::fs::File::create(&stderr_log_path).ok(),
         ));
-        
+
         #[cfg(debug_assertions)]
         let stdout_bytes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         #[cfg(debug_assertions)]
@@ -778,7 +780,7 @@ async fn run_endstate_streaming(
         let stdout_bytes_clone = stdout_bytes.clone();
         #[cfg(debug_assertions)]
         let stdout_lines_clone = stdout_lines.clone();
-        
+
         let stdout_thread = std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
@@ -791,14 +793,18 @@ async fn run_endstate_streaming(
                                 let _ = writeln!(file, "LEN={} | {}", line.len(), &line);
                             }
                         }
-                        stdout_bytes_clone.fetch_add(line.len(), std::sync::atomic::Ordering::Relaxed);
+                        stdout_bytes_clone
+                            .fetch_add(line.len(), std::sync::atomic::Ordering::Relaxed);
                         stdout_lines_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
-                    
-                    let _ = app_clone.emit(&channel_clone, json!({
-                        "type": "stdout",
-                        "data": line + "\n"
-                    }));
+
+                    let _ = app_clone.emit(
+                        &channel_clone,
+                        json!({
+                            "type": "stdout",
+                            "data": line + "\n"
+                        }),
+                    );
                 }
             }
         });
@@ -811,7 +817,7 @@ async fn run_endstate_streaming(
         let stderr_bytes_clone = stderr_bytes.clone();
         #[cfg(debug_assertions)]
         let stderr_lines_clone = stderr_lines.clone();
-        
+
         let stderr_thread = std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
@@ -824,24 +830,30 @@ async fn run_endstate_streaming(
                                 let _ = writeln!(file, "LEN={} | {}", line.len(), &line);
                             }
                         }
-                        stderr_bytes_clone.fetch_add(line.len(), std::sync::atomic::Ordering::Relaxed);
+                        stderr_bytes_clone
+                            .fetch_add(line.len(), std::sync::atomic::Ordering::Relaxed);
                         stderr_lines_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
-                    
-                    let _ = app_clone.emit(&channel_clone, json!({
-                        "type": "stderr",
-                        "data": line + "\n"
-                    }));
+
+                    let _ = app_clone.emit(
+                        &channel_clone,
+                        json!({
+                            "type": "stderr",
+                            "data": line + "\n"
+                        }),
+                    );
                 }
             }
         });
 
-        let status = child.wait().map_err(|e| format!("Failed to wait for process: {}", e))?;
+        let status = child
+            .wait()
+            .map_err(|e| format!("Failed to wait for process: {}", e))?;
         let exit_code = status.code().unwrap_or(-1);
 
         stdout_thread.join().ok();
         stderr_thread.join().ok();
-        
+
         let _elapsed = start_time.elapsed();
 
         // DEV-ONLY: Write meta.json with run details
@@ -866,12 +878,18 @@ async fn run_endstate_streaming(
             if let Ok(meta_str) = serde_json::to_string_pretty(&meta) {
                 let _ = std::fs::write(&meta_path, meta_str);
             }
-            
+
             eprintln!("=== ENGINE COMPLETE (DEV) ===");
             eprintln!("  run_id: {}", &_run_id);
             eprintln!("  exit_code: {}", exit_code);
-            eprintln!("  stdout_lines: {}", stdout_lines.load(std::sync::atomic::Ordering::Relaxed));
-            eprintln!("  stderr_lines: {}", stderr_lines.load(std::sync::atomic::Ordering::Relaxed));
+            eprintln!(
+                "  stdout_lines: {}",
+                stdout_lines.load(std::sync::atomic::Ordering::Relaxed)
+            );
+            eprintln!(
+                "  stderr_lines: {}",
+                stderr_lines.load(std::sync::atomic::Ordering::Relaxed)
+            );
             eprintln!("  debug files:");
             eprintln!("    stdout: {}", stdout_log_path.display());
             eprintln!("    stderr: {}", stderr_log_path.display());
@@ -879,10 +897,13 @@ async fn run_endstate_streaming(
             eprintln!("=============================");
         }
 
-        let _ = app.emit(&event_channel, json!({
-            "type": "exit",
-            "exitCode": exit_code
-        }));
+        let _ = app.emit(
+            &event_channel,
+            json!({
+                "type": "exit",
+                "exitCode": exit_code
+            }),
+        );
 
         Ok::<(), String>(())
     })
@@ -1031,4 +1052,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
