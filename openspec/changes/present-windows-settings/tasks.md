@@ -14,6 +14,7 @@
 - [x] 2.7 Setup preview: count each group apart in module counts; the settings chip counts the rows its filter shows.
 - [x] 2.8 Restore rows: use the engine `label` (engine 2.32.0+) after the module name; a `registry-set` row shows no value name and no engine message inline.
 - [x] 2.9 Capture results and setup results fallbacks: count each group apart; list three groups as "a, b and c"; the capture settings chip counts its rows.
+- [x] 2.10 Results rows: find an app row's settings through its package ref, as in the preview; treat `registry-import` rows like `registry-set` rows; start the hover title with the full row text.
 
 ## 3. Proof
 

@@ -667,7 +667,7 @@ export function SaveFlow({
                         dimmed={activeFilters.size > 0}
                         className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                       >
-                        {result.apps.length} apps
+                        {result.apps.length} {result.apps.length === 1 ? 'app' : 'apps'}
                       </FilterChip>
                       {appsWithSettingsCount > 0 && (
                         <>

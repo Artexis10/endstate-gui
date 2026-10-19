@@ -76,18 +76,19 @@ export function resolveRestoreModuleDisplayName(
 }
 
 /**
- * `registry-set` (an engine restore type) writes one registry value. Its
- * target and engine messages name registry internals, which the default UI
- * never shows (docs/ux-guardrails.md, "Jargon in Default UX").
+ * `registry-set` and `registry-import` (engine restore types, protocol tokens)
+ * write registry values. Their targets and engine messages name registry
+ * internals, which the default UI never shows (docs/ux-guardrails.md, "Jargon
+ * in Default UX").
  */
 function isRegistryRestore(event: RestoreItemEvent): boolean {
-  return event.restorer === 'registry-set';
+  return event.restorer === 'registry-set' || event.restorer === 'registry-import';
 }
 
 /**
  * What tells one restore item of a module from another: the engine's label
- * when it sends one, otherwise the target file name. A registry value name is
- * never shown inline; the hover title keeps it.
+ * when it sends one, otherwise the target file name. A registry key or value
+ * name is never shown inline; the hover title keeps it.
  */
 function restoreRowDisambiguator(event: RestoreItemEvent): string | undefined {
   const label = event.label?.trim();
@@ -98,7 +99,7 @@ function restoreRowDisambiguator(event: RestoreItemEvent): string | undefined {
 
 /**
  * The primary row label: `<display name or module id> · <label or file
- * basename>`. Never returns the raw copy-spec or a registry value name.
+ * basename>`. Never returns the raw copy-spec or a registry key or value name.
  */
 export function restoreRowPrimary(event: RestoreItemEvent, context: RestoreRowContext): string {
   const moduleId = deriveRestoreModuleId(event);
@@ -186,15 +187,18 @@ export function restoreEventToAppEvent(
 ): AppEvent {
   const preview = options.preview === true;
   const moduleId = deriveRestoreModuleId(event);
+  const name = restoreRowPrimary(event, context);
+  const secondary = restoreRowSecondary(event);
   return {
     app: restoreRowKey(event),
     kind: 'restore',
     restoreStatus: event.status,
     settingsKind: moduleId ? settingsKind(moduleId) : 'app',
     preview,
-    name: restoreRowPrimary(event, context),
-    secondary: restoreRowSecondary(event),
-    title: restoreRowTitle(event),
+    name,
+    secondary,
+    // A long row truncates, so the hover title starts with its full text.
+    title: `${[name, secondary].filter(Boolean).join(' · ')}\n${restoreRowTitle(event)}`,
     action: getRestoreUiStatus(event.status, { preview }).shortLabel,
     statusKey: restoreStatusToStatusKey(event.status),
     phase: 'apply',

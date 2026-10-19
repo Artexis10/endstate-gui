@@ -243,9 +243,9 @@ was installed”, so it never claims a completed setup.
 - When the engine sends a `label` (the manifest restore entry's human `reason`,
   engine 2.32.0 and later), the label replaces the file basename, for example
   `Windows keyboard: repeat delay and rate · Delay before a held key starts
-  repeating`. A `registry-set` row without a label shows only the module
-  name: its target names a registry value, and the default UI never shows
-  registry references.
+  repeating`. A registry row (`registry-set` or `registry-import`) without a
+  label shows only the module name: its target names a registry key or value,
+  and the default UI never shows registry references.
 - **Secondary text** (muted) surfaces a friendly, jargon-free reason. The
   engine-authored `message` is used when present and clean; otherwise the
   canonical strings are:
@@ -253,14 +253,15 @@ was installed”, so it never claims a completed setup.
   - `skipped_missing_source` → “Your saved setup doesn’t include this file, so nothing changed”
   - `failed` → “Couldn’t restore this file”
 
-  A `registry-set` row restores one setting, not a file, so its two file
-  strings read “setting”: “Your saved setup doesn’t include this setting, so
-  nothing changed” and “Couldn’t restore this setting”. A `registry-set` row
-  always uses these canonical strings, because its engine message names
-  registry internals.
-- **Full raw source→target detail** may appear only in a hover title /
-  disclosure, never as inline row text. A row with no source (`registry-set`)
-  shows only its target there, followed by the engine message.
+  A registry row restores settings, not a file, so its two file strings read
+  “setting”: “Your saved setup doesn’t include this setting, so nothing
+  changed” and “Couldn’t restore this setting”. A registry row always uses
+  these canonical strings, because its engine message names registry
+  internals.
+- **Hover title:** the row's full visible text comes first, because a long row
+  truncates. The raw source→target detail follows; it never appears as inline
+  row text. A row with no source (`registry-set`) shows only its target. A
+  registry row adds the engine message.
 - **One row per item across its lifecycle:** the transitional (`restoring`) and
   terminal (`restored`/`skipped_*`/`failed`) events share a stable identity
   (target path) and **update one row in place** — they never append a duplicate.
@@ -288,8 +289,10 @@ reads the tier only through `src/lib/settings-kind.ts` and shows these groups:
   count of settings modules names each group apart, for example “40 app
   settings and 7 Windows settings available”; three groups read “a, b and c”.
   A profile with app settings only keeps “40 settings available”. An
-  “N settings” filter chip counts the rows that its filter shows, which are
-  app rows only.
+  “N settings” filter chip counts the rows that its filter shows: the restore
+  rows when the run has any, otherwise the app rows that carry settings. An
+  app row carries settings when `configModuleMap` names its package ref, so a
+  results row rebuilt under its manifest id still matches.
 - **Results:** the group's restore rows list under the group heading, after the
   app rows. The settings counts still come from all restore rows together.
 - **Capture results:** the group lists under its own heading, never under

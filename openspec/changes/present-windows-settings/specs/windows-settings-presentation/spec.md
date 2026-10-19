@@ -44,7 +44,7 @@ The restore choice SHALL count app settings and settings that belong to no app s
 
 ### Requirement: Settings counts never mix the groups
 
-Each count of settings modules in the setup preview, the setup results header and the capture results SHALL count app settings and settings that belong to no app separately, listed as "a, b and c". A settings filter chip SHALL count the rows that its filter shows.
+Each count of settings modules in the setup preview, the setup results header and the capture results SHALL count app settings and settings that belong to no app separately, listed as "a, b and c". A settings filter chip SHALL count the rows that its filter shows: the restore rows when the run has any, otherwise the app rows that carry settings.
 
 #### Scenario: Preview with Windows settings
 - **WHEN** a profile offers 40 app settings modules and 7 Windows settings modules, and 40 preview app rows carry settings
@@ -55,6 +55,11 @@ Each count of settings modules in the setup preview, the setup results header an
 - **WHEN** a capture includes 1 app settings module for a listed app and 2 Windows settings modules
 - **THEN** the capture headline reads "1 app setting and 2 Windows settings captured"
 - **AND** the settings filter chip reads "1 setting"
+
+#### Scenario: Results rows keyed by manifest id
+- **WHEN** a results app row is rebuilt from an envelope action whose manifest id `git-git` differs from its package ref `Git.Git`, and `configModuleMap` names `Git.Git`
+- **THEN** the row carries settings, exactly as its preview row did
+- **AND** the settings chip and the "without settings" chip count it on the settings side
 
 ### Requirement: Setup results list Windows settings under their own heading
 
@@ -69,7 +74,7 @@ The setup results SHALL list the restore rows of settings that belong to no app 
 
 ### Requirement: Restore rows never show registry internals
 
-A restore row SHALL use the engine's `label` for the restore entry, when present, after the module name. A `registry-set` row without a label SHALL show only the module name. A `registry-set` row SHALL NOT show its registry value name or its engine message inline; its hover title SHALL keep both.
+A restore row SHALL use the engine's `label` for the restore entry, when present, after the module name. A registry row (`registry-set` or `registry-import`) without a label SHALL show only the module name. A registry row SHALL NOT show its registry key, its value name or its engine message inline, and SHALL use "setting" in its fallback text. A restore row's hover title SHALL start with the row's full visible text and SHALL keep the raw detail and, for a registry row, the engine message.
 
 #### Scenario: Labelled Windows setting
 - **WHEN** a `registry-set` restore item for `windows-settings.keyboard` carries the label "Delay before a held key starts repeating"
@@ -79,6 +84,10 @@ A restore row SHALL use the engine's `label` for the restore entry, when present
 - **WHEN** a `registry-set` restore item for `windows-settings.personalization` has no label and fails with an engine message that names a registry value type
 - **THEN** its row reads "Windows theme: light or dark mode · Couldn't restore this setting"
 - **AND** neither the registry value name nor the engine message appears as row text
+
+#### Scenario: App setting restored by registry import
+- **WHEN** a `registry-import` restore item for the 7-Zip module targets a registry key named `Options` and fails
+- **THEN** its row reads "7-Zip · Couldn't restore this setting"
 
 ### Requirement: Capture results list Windows settings under their own heading
 

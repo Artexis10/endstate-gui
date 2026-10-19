@@ -557,6 +557,11 @@ export interface AppEvent {
   /** Engine driver (e.g., "winget", "manual"). Manual rows may be authored apps or engine-synthesized settings rows. */
   driver?: string;
   /**
+   * The package ref (e.g. winget `Git.Git`) of a row rebuilt from an envelope
+   * action, whose `app` is the manifest id. Streamed rows are keyed by the ref.
+   */
+  ref?: string;
+  /**
    * Row kind. Undefined/'app' is an installable app row (default). 'restore' is
    * a config-restore row (RESTORING/RESTORED verbs, engine-named); 'artifact' is
    * a produced-artifact completion line (e.g. the saved profile bundle). These
@@ -1084,6 +1089,7 @@ export function reconcileLiveActivity(
       reason: action.reason ?? existing?.reason,
       name: action.name ?? existing?.name,
       driver: action.driver ?? existing?.driver,
+      ref: action.ref ?? existing?.ref,
     };
   };
 
@@ -1124,6 +1130,18 @@ export function reconcileLiveActivity(
   }
 
   return result;
+}
+
+/**
+ * Whether an app row carries settings in the engine's `configModuleMap`. The
+ * engine keys the map by package ref (or by app id for a module with no
+ * package), while a results row rebuilt from an envelope action is keyed by
+ * the manifest id and carries the ref beside it. Every settings lookup for an
+ * app row goes through here, so preview and results rows match the same way.
+ */
+export function appRowHasSettings(event: AppEvent, configMap: Record<string, string>): boolean {
+  const has = (key: string | undefined) => key !== undefined && Object.prototype.hasOwnProperty.call(configMap, key);
+  return has(event.ref) || has(event.app);
 }
 
 /**

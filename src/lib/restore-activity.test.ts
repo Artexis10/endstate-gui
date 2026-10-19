@@ -109,6 +109,23 @@ describe('restore-activity row mapping', () => {
     expect(row.secondary!).not.toContain('->');
   });
 
+  it('keeps the registry key of a registry-import row out of the row text', () => {
+    const failed: RestoreItemEvent = {
+      ...base,
+      restorer: 'registry-import',
+      id: 'registry-import:./configs/7zip/7zip.reg',
+      module: 'apps.7zip',
+      source: './configs/7zip/7zip.reg',
+      target: 'HKCU\\Software\\7-Zip\\Options',
+      status: 'failed',
+      message: 'reg import exited with code 1',
+    };
+    const row = restoreEventToAppEvent(failed, { restoreModulesAvailable: [{ id: 'apps.7zip', displayName: '7-Zip' }] });
+    expect(row.name).toBe('7-Zip');
+    expect(row.secondary).toBe("Couldn't restore this setting");
+    expect(row.title).toContain('HKCU\\Software\\7-Zip\\Options');
+  });
+
   it('extracts the basename from Windows-style and %VAR% targets', () => {
     expect(restoreTargetBasename('%APPDATA%/Notepad++/contextMenu.xml')).toBe('contextMenu.xml');
     expect(restoreTargetBasename('C:\\Users\\me\\AppData\\Roaming\\Code\\User\\settings.json')).toBe('settings.json');

@@ -48,6 +48,7 @@ import {
   getActivityRowLabel,
   getRestoreUiStatus,
   formatRestoreCounts,
+  appRowHasSettings,
 } from '@/lib/apply-utils';
 import { countRestoreOutcomes } from '@/lib/restore-activity';
 import {
@@ -576,27 +577,41 @@ export function SetupFlow({
   /** Restore rows are settings, never apps: app chips and app filters skip them. */
   const isAppRow = (e: AppEvent) => !e.kind || e.kind === 'app';
 
-  /**
-   * The rows the `settings` filter shows: settings rows, and app rows that
-   * carry settings. Its chip counts with this same test, so the chip always
-   * equals the rows a click on it shows.
-   */
-  const showsUnderSettings = (
+  /** An app row that carries settings: it has a settings module, or it exists only for its settings. */
+  const carriesSettings = (
     e: AppEvent,
     configMap: Record<string, string>,
     synthesizedAppIds: Set<string>,
-  ) => !isAppRow(e) || e.app in configMap || isConfigOnlyApp(e, synthesizedAppIds);
+  ) => appRowHasSettings(e, configMap) || isConfigOnlyApp(e, synthesizedAppIds);
+
+  /**
+   * The rows the `settings` filter shows. A run that restored settings lists
+   * each setting as its own row, so those are the settings rows; otherwise (a
+   * preview, or a run with no restore rows) they are the app rows that carry
+   * settings. The chip counts with this same test, so the chip always equals
+   * the rows a click on it shows.
+   */
+  const settingsRowTest = (
+    events: AppEvent[],
+    configMap: Record<string, string>,
+    synthesizedAppIds: Set<string>,
+  ) => {
+    const hasSettingRows = events.some((e) => isDisplayableEvent(e) && !isAppRow(e));
+    return (e: AppEvent) => (hasSettingRows
+      ? !isAppRow(e)
+      : isAppRow(e) && carriesSettings(e, configMap, synthesizedAppIds));
+  };
 
   const settingsRowCount = (
     events: AppEvent[],
     configMap: Record<string, string>,
     synthesizedAppIds: Set<string>,
-  ) =>
-    events.filter(
-      (e) => isDisplayableEvent(e) && showsUnderSettings(e, configMap, synthesizedAppIds),
-    ).length;
+  ) => {
+    const isSettingsRow = settingsRowTest(events, configMap, synthesizedAppIds);
+    return events.filter((e) => isDisplayableEvent(e) && isSettingsRow(e)).length;
+  };
 
-  /** Winget apps carrying no settings — the complement of the `settings` filter. */
+  /** Winget apps carrying no settings — the `apps_only` filter's rows. */
   const appsOnlyCount = (
     events: AppEvent[],
     configMap: Record<string, string>,
@@ -606,7 +621,7 @@ export function SetupFlow({
       (e) =>
         isDisplayableEvent(e)
         && isAppRow(e)
-        && !showsUnderSettings(e, configMap, synthesizedAppIds),
+        && !carriesSettings(e, configMap, synthesizedAppIds),
     ).length;
 
   const filterEvents = (
@@ -616,16 +631,16 @@ export function SetupFlow({
   ) => {
     const filtered = events.filter(isDisplayableEvent);
     if (activeFilters.size === 0) return filtered;
+    const isSettingsRow = settingsRowTest(filtered, configMap, synthesizedAppIds);
     return filtered.filter(event => {
-      if (!isAppRow(event)) return activeFilters.has('settings');
+      if (activeFilters.has('settings') && isSettingsRow(event)) return true;
+      if (!isAppRow(event)) return false;
       const statusKey: StatusKey = event.statusKey || 'skipped';
       for (const f of activeFilters) {
-        if (f === 'settings' && showsUnderSettings(event, configMap, synthesizedAppIds)) return true;
-        // Complement of `settings`. The filter set had a positive "has settings"
-        // filter but no way to ask the opposite question — "which of these are
-        // just app installs?" — which is the more common one when reviewing a
-        // plan.
-        if (f === 'apps_only' && !showsUnderSettings(event, configMap, synthesizedAppIds)) return true;
+        // The filter set had a positive "has settings" filter but no way to ask
+        // the opposite question — "which of these are just app installs?" —
+        // which is the more common one when reviewing a plan.
+        if (f === 'apps_only' && !carriesSettings(event, configMap, synthesizedAppIds)) return true;
         if (f === statusKey) return true;
       }
       return false;
@@ -1451,7 +1466,7 @@ export function SetupFlow({
                         );
                         const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'preview', reason: event.reason });
                         const colors = getColorClasses(uiStatus.color);
-                        const hasSettings = event.app in configMap;
+                        const hasSettings = appRowHasSettings(event, configMap);
                         // Manifest app id for --only (streamed events are keyed
                         // by winget ref; the envelope actions map ref → id).
                         const appId = pickerEnabled ? manifestIdByEventKey.get(event.app) : undefined;
@@ -1838,7 +1853,7 @@ export function SetupFlow({
                     // engine display name; app rows stay phase-aware ("apply").
                     const { shortLabel, color } = getActivityRowLabel(event, 'apply');
                     const colors = getColorClasses(color);
-                    const hasSettings = (restoreIntent === 'apps-and-settings' && event.app in applyConfigMap) || event.kind === 'restore' || event.app.startsWith('\u2699');
+                    const hasSettings = (restoreIntent === 'apps-and-settings' && appRowHasSettings(event, applyConfigMap)) || event.kind === 'restore' || event.app.startsWith('\u2699');
                     const settingsOk = color !== 'error';
                     // A restore row's icon takes the row's outcome colour; an
                     // app row's icon only marks that it carries settings.

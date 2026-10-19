@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProviders, screen, waitFor, within } from '../../../test/test-utils';
 import userEvent from '@testing-library/user-event';
 import { SetupFlow } from './setup-flow';
+import { reconcileLiveActivity } from '../../../lib/apply-utils';
+import { restoreEventToAppEvent } from '../../../lib/restore-activity';
 
 const mockProfile = {
   name: 'test-profile',
@@ -170,6 +172,75 @@ describe('SetupFlow — Restore module selection', () => {
         selectedModules: ['vscode'],
       }),
     );
+  });
+
+  it('keeps settings on result rows whose manifest id differs from the package ref', async () => {
+    // The engine streams rows by package ref and keys configModuleMap by ref,
+    // but the results rows are rebuilt from the envelope actions' manifest ids.
+    const preview = makePreviewWithModules();
+    const actions = [
+      { id: 'vscode', ref: 'Microsoft.VisualStudioCode', name: 'Visual Studio Code', status: 'installed' },
+      { id: 'git-git', ref: 'Git.Git', name: 'Git', status: 'installed' },
+      { id: 'firefox', ref: 'Mozilla.Firefox', name: 'Firefox', status: 'installed' },
+    ];
+    const liveRows = preview.appEvents.map((event) => ({ ...event, action: 'Installed', statusKey: 'installed' as const }));
+    const onPreview = vi.fn().mockResolvedValue(preview);
+    const onApply = vi.fn().mockResolvedValue({
+      installed: 3, alreadyPresent: 0, failed: 0, skipped: 0,
+      appEvents: reconcileLiveActivity(liveRows, actions),
+      actions,
+      configModuleMap: preview.configModuleMap,
+    });
+
+    renderWithProviders(<SetupFlow {...baseProps} onPreview={onPreview} onApply={onApply} />);
+
+    await userEvent.click(screen.getByText('test-profile'));
+    await waitFor(() => {
+      expect(screen.getByTestId('setup-flow-apply')).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('radio', { name: /settings/i }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /^Git/ }));
+    await userEvent.click(screen.getByTestId('setup-flow-apply'));
+
+    expect(await screen.findByRole('button', { name: '1 setting' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2 without settings' })).toBeInTheDocument();
+  });
+
+  it('shows only the restore rows under the results settings chip it counts', async () => {
+    const preview = makePreviewWithModules();
+    const actions = [
+      { id: 'vscode', ref: 'Microsoft.VisualStudioCode', name: 'Visual Studio Code', status: 'installed' },
+      { id: 'git-git', ref: 'Git.Git', name: 'Git', status: 'installed' },
+      { id: 'firefox', ref: 'Mozilla.Firefox', name: 'Firefox', status: 'installed' },
+    ];
+    const liveRows = preview.appEvents.map((event) => ({ ...event, action: 'Installed', statusKey: 'installed' as const }));
+    const restoreRow = restoreEventToAppEvent({
+      event: 'restore-item', version: 1, runId: 'apply', timestamp: '2025-01-01T00:00:00.000Z',
+      id: 'copy:./configs/git/.gitconfig', module: 'apps.git', restorer: 'copy',
+      source: './configs/git/.gitconfig', target: '%USERPROFILE%/.gitconfig',
+      status: 'restored', reason: null, backupPath: null, targetExisted: true,
+    }, { restoreModulesAvailable: preview.restoreModulesAvailable });
+    const onPreview = vi.fn().mockResolvedValue(preview);
+    const onApply = vi.fn().mockResolvedValue({
+      installed: 3, alreadyPresent: 0, failed: 0, skipped: 0,
+      appEvents: reconcileLiveActivity([...liveRows, restoreRow], actions),
+      actions,
+      configModuleMap: preview.configModuleMap,
+    });
+
+    renderWithProviders(<SetupFlow {...baseProps} onPreview={onPreview} onApply={onApply} />);
+
+    await userEvent.click(screen.getByText('test-profile'));
+    await waitFor(() => {
+      expect(screen.getByTestId('setup-flow-apply')).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('radio', { name: /settings/i }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /^Git/ }));
+    await userEvent.click(screen.getByTestId('setup-flow-apply'));
+
+    await userEvent.click(await screen.findByRole('button', { name: '1 setting restored' }));
+    expect(screen.getByText('Git · .gitconfig')).toBeInTheDocument();
+    expect(screen.queryByText('Git')).not.toBeInTheDocument();
   });
 
   it('offers a Windows setting in its own group and passes its full module ID to apply', async () => {
