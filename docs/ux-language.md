@@ -263,7 +263,8 @@ was installed”, so it never claims a completed setup.
   canonical string is “Couldn’t restore this file”. A registry row restores a
   setting, not a file, so it reads “Couldn’t restore this setting”; it always
   uses this canonical string, because its engine message names registry
-  internals.
+  internals. A preview or dry run restores nothing, so there the canonical
+  string reads “Couldn’t check this file” or “Couldn’t check this setting”.
 - **Hover title:** the row's full visible text comes first, because a long row
   truncates. The raw source→target detail follows; it never appears as inline
   row text. A row with no source (`registry-set`) shows only its target. A

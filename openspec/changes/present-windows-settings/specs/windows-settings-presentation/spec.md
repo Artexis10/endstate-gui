@@ -90,6 +90,10 @@ A restore row SHALL use the engine's `label` for the restore entry, when present
 - **WHEN** a `registry-import` restore item for the 7-Zip module targets a registry key named `Options` and fails
 - **THEN** its row reads "7-Zip · Couldn't restore this setting"
 
+#### Scenario: Setting failure in a dry run
+- **WHEN** the same `registry-import` item fails in a dry run
+- **THEN** its row reads "7-Zip · Couldn't check this setting", because a dry run restores nothing
+
 ### Requirement: Capture results list Windows settings under their own heading
 
 The capture results SHALL list captured settings that belong to no app under the group heading, not under "Settings only — app installation not included". Per-module engine notes SHALL appear only behind the Details disclosure.

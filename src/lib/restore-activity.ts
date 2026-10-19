@@ -120,15 +120,16 @@ function isCleanRestoreText(text: string): boolean {
  * Friendly, jargon-free secondary line: a failure's reason, and nothing else.
  * Every other status label already says what happened ("UP TO DATE", "NOT IN
  * SETUP"), so a restatement only adds noise. The engine-authored message is
- * preferred when present and clean. See docs/ux-language.md.
+ * preferred when present and clean. A preview restores nothing, so its
+ * canonical failure says the check failed. See docs/ux-language.md.
  */
-export function restoreRowSecondary(event: RestoreItemEvent): string | undefined {
+export function restoreRowSecondary(event: RestoreItemEvent, preview = false): string | undefined {
   if (event.status !== 'failed') return undefined;
   const message = event.message?.trim();
   // A registry restore's engine message names registry internals, so its row
   // uses the canonical string and the hover title keeps the message.
   const cleanMessage = message && !isRegistryRestore(event) && isCleanRestoreText(message) ? message : undefined;
-  return cleanMessage ?? `Couldn't restore this ${isRegistryRestore(event) ? 'setting' : 'file'}`;
+  return cleanMessage ?? `Couldn't ${preview ? 'check' : 'restore'} this ${isRegistryRestore(event) ? 'setting' : 'file'}`;
 }
 
 /** Full raw source→target detail, for a hover title / disclosure only. */
@@ -176,7 +177,7 @@ export function restoreEventToAppEvent(
   const preview = options.preview === true;
   const moduleId = deriveRestoreModuleId(event);
   const name = restoreRowPrimary(event, context);
-  const secondary = restoreRowSecondary(event);
+  const secondary = restoreRowSecondary(event, preview);
   return {
     app: restoreRowKey(event),
     kind: 'restore',

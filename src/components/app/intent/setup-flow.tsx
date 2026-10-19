@@ -1561,7 +1561,7 @@ export function SetupFlow({
                             <div
                               role="group"
                               aria-label="Needs attention"
-                              className={`-mx-2 mb-2 space-y-1 rounded-md border px-2 py-1.5 ${getColorClasses('error').border} ${getColorClasses('error').bg}`}
+                              className={`-mx-2 mb-2 space-y-1 rounded-md border px-2 py-1.5 ${getColorClasses('error').border}`}
                               data-testid="preview-needs-attention"
                             >
                               <p className="text-[10px] font-medium text-muted-foreground">Needs attention</p>
@@ -2053,7 +2053,7 @@ export function SetupFlow({
                       <div
                         role="group"
                         aria-label="Needs attention"
-                        className={`-mx-2 mb-2 space-y-1 rounded-md border px-2 py-1.5 ${getColorClasses('error').border} ${getColorClasses('error').bg}`}
+                        className={`-mx-2 mb-2 space-y-1 rounded-md border px-2 py-1.5 ${getColorClasses('error').border}`}
                         data-testid="results-needs-attention"
                       >
                         <p className="text-[10px] font-medium text-muted-foreground">Needs attention</p>

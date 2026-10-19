@@ -256,6 +256,23 @@ describe('engineStatusToStatusKey - Streaming Status Mapping', () => {
 });
 
 describe('itemEventToAppEvent - Streaming Event Conversion', () => {
+  it('says a failure in the plan phase was a check, because a preview installs nothing', () => {
+    const failed = {
+      version: 1,
+      runId: 'preview-fail',
+      event: 'item',
+      id: 'Git.Git',
+      driver: 'winget',
+      status: 'failed',
+      reason: 'install_failed',
+      message: 'No package found',
+      name: 'Git',
+    } as unknown as ItemEvent;
+
+    expect(itemEventToAppEvent(failed, 'plan').secondary).toBe("Couldn't check this app");
+    expect(itemEventToAppEvent(failed, 'apply').secondary).toBe("Couldn't install this app");
+  });
+
   it('maps the engine 2.24.1 captured compatibility status to detected during capture', () => {
     const itemEvent = {
       version: 1,

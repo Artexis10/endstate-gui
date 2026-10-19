@@ -123,6 +123,9 @@ describe('restore-activity row mapping', () => {
     expect(row.name).toBe('7-Zip');
     expect(row.secondary).toBe("Couldn't restore this setting");
     expect(row.title).toContain('HKCU\\Software\\7-Zip\\Options');
+    // A dry run restores nothing, so its failure never claims a restore attempt.
+    const previewRow = restoreEventToAppEvent(failed, { restoreModulesAvailable: [{ id: 'apps.7zip', displayName: '7-Zip' }] }, { preview: true });
+    expect(previewRow.secondary).toBe("Couldn't check this setting");
   });
 
   it('extracts the basename from Windows-style and %VAR% targets', () => {
