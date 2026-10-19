@@ -90,11 +90,9 @@ classes:
     - "scripts/engine-resources.mjs"
     - "scripts/audit-windows-installer.mjs"
     - "scripts/smoke-packaged-engine.mjs"
-    # Build and publish releases; the bootstrap watch is a scheduled job that
-    # dispatches the WinGet publish.
+    # Build and publish releases.
     - ".github/workflows/release-please.yml"
     - ".github/workflows/winget.yml"
-    - ".github/workflows/winget-bootstrap-watch.yml"
     - "release-please-config.json"
     - ".release-please-manifest.json"
 
