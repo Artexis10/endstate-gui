@@ -39,6 +39,7 @@ const baseProps = {
   onOpenProfilesFolder: vi.fn(),
   onRefreshProfiles: vi.fn().mockResolvedValue(undefined),
   onFileDrop: vi.fn(),
+  onUnsupportedFiles: vi.fn(),
   onDeleteProfile: vi.fn(),
   isRunning: false,
   setupProgress: null,
@@ -109,6 +110,10 @@ describe('SetupFlow dry-run disclosure', () => {
   it('still reports errors ahead of dry-run copy', async () => {
     await runApply(applyResult({ dryRun: true, failed: 1, success: false }));
 
-    expect(await screen.findByText('Setup completed with errors')).toBeInTheDocument();
+    // Errors win over the plain preview title, and a preview never claims a
+    // completed setup.
+    expect(await screen.findByText('Preview completed with errors — nothing was installed')).toBeInTheDocument();
+    expect(screen.queryByText('Preview complete — nothing was installed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Setup completed with errors')).not.toBeInTheDocument();
   });
 });

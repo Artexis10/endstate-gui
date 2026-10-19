@@ -223,6 +223,7 @@ describe('SaveFlow — post-capture cloud invitation', () => {
           onOpenProfilesFolder={vi.fn()}
           onRefreshProfiles={vi.fn().mockResolvedValue(undefined)}
           onFileDrop={vi.fn()}
+          onUnsupportedFiles={vi.fn()}
           onDeleteProfile={vi.fn()}
           isRunning={false}
           setupProgress={null}

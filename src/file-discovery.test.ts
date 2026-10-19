@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { discoverProfiles, discoverProfileDescriptors, getMetaPath, validateProfile } from './file-discovery';
+import { describeSkippedProfiles, describeUnreadableProfilesFolder, discoverProfiles, discoverProfileDescriptors, getMetaPath, validateProfile } from './file-discovery';
 import { invoke } from './lib/tauri-bridge';
 
 vi.mock('./lib/tauri-bridge', () => ({
@@ -26,14 +26,14 @@ describe('file-discovery', () => {
 
   describe('discoverProfiles', () => {
     it('returns empty array when directory is empty string', async () => {
-      const profiles = await discoverProfiles('');
+      const { profiles } = await discoverProfiles('');
       
       expect(profiles).toEqual([]);
       expect(invoke).not.toHaveBeenCalled();
     });
 
     it('returns empty array when directory is whitespace', async () => {
-      const profiles = await discoverProfiles('   ');
+      const { profiles } = await discoverProfiles('   ');
       
       expect(profiles).toEqual([]);
       expect(invoke).not.toHaveBeenCalled();
@@ -52,7 +52,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const profiles = await discoverProfiles('C:\\manifests');
+      const { profiles } = await discoverProfiles('C:\\manifests');
 
       expect(profiles).toHaveLength(3);
       expect(profiles.map(p => p.name)).toEqual(['My-Laptop', 'Test-Profile', 'Another']);
@@ -71,7 +71,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const profiles = await discoverProfiles('/home/user/manifests');
+      const { profiles } = await discoverProfiles('/home/user/manifests');
 
       expect(profiles).toHaveLength(2);
       expect(profiles.map(p => p.name)).toEqual(['Profile1', 'Profile2']);
@@ -86,7 +86,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const profiles = await discoverProfiles('C:\\test');
+      const { profiles } = await discoverProfiles('C:\\test');
 
       expect(profiles[0].name).toBe('MyProfile');
     });
@@ -100,7 +100,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const profiles = await discoverProfiles('C:\\test');
+      const { profiles } = await discoverProfiles('C:\\test');
 
       expect(profiles[0].name).toBe('MyProfile');
     });
@@ -114,23 +114,46 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const profiles = await discoverProfiles('C:\\test');
+      const { profiles } = await discoverProfiles('C:\\test');
 
       expect(profiles[0].name).toBe('MyProfile');
     });
 
-    it('returns empty array on invoke error', async () => {
-      vi.mocked(invoke).mockRejectedValue(new Error('Directory not found'));
+    // A folder read failure used to look exactly like an empty folder.
+    it('reports why the folder could not be read instead of returning an empty list', async () => {
+      vi.mocked(invoke).mockRejectedValue(new Error("Tauri invoke failed for 'list_manifest_files': Access is denied. (os error 5)"));
 
-      const profiles = await discoverProfiles('C:\\invalid');
+      const discovery = await discoverProfiles('C:\\invalid');
 
-      expect(profiles).toEqual([]);
+      expect(discovery.profiles).toEqual([]);
+      expect(discovery.error).toBe('Access is denied. (os error 5)');
+    });
+
+    // The backend repeats the folder path in its reason; default UX shows no paths.
+    it('describes an unreadable folder with its reason but without its path', async () => {
+      const folder = 'C:\\Users\\someone\\Documents\\Old Profiles';
+      vi.mocked(invoke).mockRejectedValue(new Error(`Directory does not exist: ${folder}`));
+
+      const discovery = await discoverProfiles(folder);
+      const message = describeUnreadableProfilesFolder(folder, discovery.error!);
+
+      expect(message).toBe("Couldn't read your profiles folder: Directory does not exist: the folder");
+      expect(message).not.toContain('Users');
+    });
+
+    // The validator's "File does not exist: <path>" reason would leak the path.
+    it('names a skipped file without repeating its path', () => {
+      const file = 'C:\\Users\\someone\\Documents\\Endstate\\Setups\\gone.jsonc';
+
+      const message = describeSkippedProfiles([{ path: file, reason: `File does not exist: ${file}` }]);
+
+      expect(message).toBe("gone.jsonc in your profiles folder isn't a profile Endstate can use, so it isn't listed (File does not exist: gone.jsonc).");
     });
 
     it('handles empty result from invoke', async () => {
       vi.mocked(invoke).mockResolvedValue([]);
 
-      const profiles = await discoverProfiles('C:\\empty');
+      const { profiles } = await discoverProfiles('C:\\empty');
 
       expect(profiles).toEqual([]);
     });
@@ -149,7 +172,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const profiles = await discoverProfiles('C:\\manifests');
+      const { profiles } = await discoverProfiles('C:\\manifests');
 
       // Should only include setup files, not .meta.json files
       expect(profiles).toHaveLength(2);
@@ -173,7 +196,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+      const { descriptors } = await discoverProfileDescriptors('C:\\manifests');
 
       expect(descriptors).toHaveLength(2);
       expect(descriptors[0]).toMatchObject({
@@ -200,7 +223,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+      const { descriptors } = await discoverProfileDescriptors('C:\\manifests');
 
       expect(descriptors).toHaveLength(1);
       expect(descriptors[0].displayName).toBe('My Laptop');
@@ -216,7 +239,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+      const { descriptors } = await discoverProfileDescriptors('C:\\manifests');
 
       expect(descriptors).toHaveLength(1);
       expect(descriptors[0].displayName).toBeUndefined();
@@ -238,7 +261,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+      const { descriptors } = await discoverProfileDescriptors('C:\\manifests');
 
       // Only setup_work.json should be included
       expect(descriptors).toHaveLength(1);
@@ -268,11 +291,16 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+      const { descriptors, skipped } = await discoverProfileDescriptors('C:\\manifests');
 
       // Only valid_profile.json should be included
       expect(descriptors).toHaveLength(1);
       expect(descriptors[0].id).toBe('valid_profile');
+      // The invalid files are reported with the validator's reason, not dropped.
+      expect(skipped).toEqual([
+        { path: 'C:\\manifests\\invalid_no_version.json', reason: 'No version field' },
+        { path: 'C:\\manifests\\invalid_no_apps.json', reason: 'No version field' },
+      ]);
     });
 
     it('includes summary from validation result', async () => {
@@ -284,7 +312,7 @@ describe('file-discovery', () => {
           return null;
         });
 
-      const descriptors = await discoverProfileDescriptors('C:\\manifests');
+      const { descriptors } = await discoverProfileDescriptors('C:\\manifests');
 
       expect(descriptors).toHaveLength(1);
       expect(descriptors[0].summary).toEqual({

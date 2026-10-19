@@ -15,9 +15,9 @@
  */
 
 import type { AppEvent, RestoreStatusKey, StatusKey } from './apply-utils';
-import { getRestoreUiStatus } from './apply-utils';
+import { getRestoreUiStatus, RESTORE_OUTCOME_ORDER } from './apply-utils';
 import type { ArtifactEvent, RestoreItemEvent } from './streaming-events';
-import type { RestoreModuleRef } from '../types';
+import type { RestoreModuleRef, RestoreResultStatus } from '../types';
 
 /**
  * Resolution context sourced from the preview/apply envelope. Both fields are
@@ -114,7 +114,7 @@ export function restoreRowSecondary(event: RestoreItemEvent): string | undefined
     case 'skipped_up_to_date':
       return cleanMessage ?? 'Already matches your saved settings';
     case 'skipped_missing_source':
-      return cleanMessage ?? "The saved copy wasn't found, so nothing changed";
+      return cleanMessage ?? "Your saved setup doesn't include this file, so nothing changed";
     case 'failed':
       return cleanMessage ?? "Couldn't restore this file";
     default:
@@ -152,24 +152,49 @@ export function restoreStatusToStatusKey(status: RestoreStatusKey): StatusKey {
   }
 }
 
-/** Map a `restore-item` event to a friendly, reconcilable activity row. */
+/**
+ * Map a `restore-item` event to a friendly, reconcilable activity row.
+ * `preview` is the run's dry-run flag: a preview row never reads RESTORED.
+ */
 export function restoreEventToAppEvent(
   event: RestoreItemEvent,
   context: RestoreRowContext,
+  options: { preview?: boolean } = {},
 ): AppEvent {
+  const preview = options.preview === true;
   return {
     app: restoreRowKey(event),
     kind: 'restore',
     restoreStatus: event.status,
+    preview,
     name: restoreRowPrimary(event, context),
     secondary: restoreRowSecondary(event),
     title: restoreRowTitle(event),
-    action: getRestoreUiStatus(event.status).shortLabel,
+    action: getRestoreUiStatus(event.status, { preview }).shortLabel,
     statusKey: restoreStatusToStatusKey(event.status),
     phase: 'apply',
     timestamp: Date.now(),
     reason: event.reason ?? null,
   };
+}
+
+/**
+ * Count settings-restore outcomes from the activity rows. Rows reconcile to
+ * one per restore target, so these counts always equal the rows shown. This is
+ * the only restore counting source: the apply envelope carries no restore
+ * summary. An in-progress (`restoring`) row is not an outcome.
+ */
+export function countRestoreOutcomes(
+  events: readonly AppEvent[],
+): Record<RestoreResultStatus, number> {
+  const counts = Object.fromEntries(
+    RESTORE_OUTCOME_ORDER.map((status) => [status, 0]),
+  ) as Record<RestoreResultStatus, number>;
+  for (const event of events) {
+    const status = event.kind === 'restore' ? event.restoreStatus : undefined;
+    if (status && status !== 'restoring') counts[status] += 1;
+  }
+  return counts;
 }
 
 /**

@@ -2600,6 +2600,70 @@ mod profile_validation_tests {
         assert_eq!(directory_names(&profiles), vec!["escaped"]);
     }
 
+    /// A capture bundle with app-settings payloads runs to several MB. A size
+    /// cap or a fixed buffer in the zip import would reject it while every
+    /// small fixture still passes: a 2.7 MB bundle once imported with no row
+    /// and no error. This drives the dev-bridge transport (base64) end to end.
+    #[test]
+    fn base64_zip_import_commits_a_bundle_over_three_megabytes() {
+        let temp = TestDir::new("large-zip");
+        let profiles = temp.path().join("profiles");
+
+        // Settings payloads such as app databases barely compress, so use
+        // pseudo-random bytes to keep the archive itself over 3 MB.
+        let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+        let payload: Vec<u8> = (0..3 * 1024 * 1024 + 4096)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                (state >> 24) as u8
+            })
+            .collect();
+
+        let mut archive_bytes = Vec::new();
+        {
+            let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut archive_bytes));
+            writer
+                .start_file("manifest.jsonc", SimpleFileOptions::default())
+                .expect("start manifest");
+            writer
+                .write_all(VALID_V1.as_bytes())
+                .expect("write manifest");
+            writer
+                .start_file(
+                    "configs/obsidian/workspace-cache.db",
+                    SimpleFileOptions::default(),
+                )
+                .expect("start payload");
+            writer.write_all(&payload).expect("write payload");
+            writer.finish().expect("finish zip");
+        }
+        assert!(
+            archive_bytes.len() >= 3 * 1024 * 1024,
+            "fixture archive is only {} bytes",
+            archive_bytes.len()
+        );
+
+        let committed = import_zip_from_base64(
+            &STANDARD.encode(&archive_bytes),
+            "old-pc.endstate",
+            profiles.to_str().expect("profiles path"),
+        )
+        .expect("import a bundle over 3 MB");
+
+        let bundle_dir = profiles.join("old-pc");
+        assert_eq!(PathBuf::from(committed), bundle_dir.join("manifest.jsonc"));
+        let restored_payload = fs::read(
+            bundle_dir
+                .join("configs")
+                .join("obsidian")
+                .join("workspace-cache.db"),
+        )
+        .expect("read imported payload");
+        assert_eq!(restored_payload, payload);
+    }
+
     #[test]
     fn user_provided_final_names_sanitize_windows_devices() {
         let temp = TestDir::new("device-name");

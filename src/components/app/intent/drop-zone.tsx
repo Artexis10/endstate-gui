@@ -15,6 +15,8 @@ const ACCEPTED_INPUT = PROFILE_EXTENSIONS.join(',');
 
 interface DropZoneProps {
   onFileDrop: (files: File[]) => void;
+  /** Called with the names of dropped or picked files the import does not accept. */
+  onUnsupportedFiles: (fileNames: string[]) => void;
   /** In Tauri mode, use a native dialog instead of HTML file input */
   onBrowse?: () => void;
   disabled?: boolean;
@@ -45,6 +47,7 @@ export function NativeProfileDropFeedback({ visible }: NativeProfileDropFeedback
 
 export function DropZone({
   onFileDrop,
+  onUnsupportedFiles,
   onBrowse,
   disabled = false,
   nativeDragAccepted = false,
@@ -97,11 +100,16 @@ export function DropZone({
 
     if (disabled) return;
 
-    const files = Array.from(e.dataTransfer.files).filter(isAcceptedFile);
+    const dropped = Array.from(e.dataTransfer.files);
+    const files = dropped.filter(isAcceptedFile);
+    const refused = dropped.filter((file) => !isAcceptedFile(file));
+    if (dropped.length === 0 || refused.length > 0) {
+      onUnsupportedFiles(refused.map((file) => file.name));
+    }
     if (files.length > 0) {
       onFileDrop(files);
     }
-  }, [disabled, isAcceptedFile, onFileDrop]);
+  }, [disabled, isAcceptedFile, onFileDrop, onUnsupportedFiles]);
 
   const handleClick = useCallback(() => {
     if (disabled) return;
@@ -113,13 +121,18 @@ export function DropZone({
   }, [disabled, onBrowse]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter(isAcceptedFile);
+    const picked = Array.from(e.target.files || []);
+    const files = picked.filter(isAcceptedFile);
+    const refused = picked.filter((file) => !isAcceptedFile(file));
+    if (refused.length > 0) {
+      onUnsupportedFiles(refused.map((file) => file.name));
+    }
     if (files.length > 0) {
       onFileDrop(files);
     }
     // Reset so the same file can be selected again
     e.target.value = '';
-  }, [isAcceptedFile, onFileDrop]);
+  }, [isAcceptedFile, onFileDrop, onUnsupportedFiles]);
 
   return (
     <motion.div

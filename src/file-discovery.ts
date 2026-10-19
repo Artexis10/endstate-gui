@@ -1,4 +1,5 @@
 import { invoke } from './lib/tauri-bridge';
+import { backendErrorMessage } from './lib/import-errors';
 
 /**
  * ProfileDescriptor: First-class profile object.
@@ -50,6 +51,30 @@ interface ProfileMetadata {
   displayName?: string;
 }
 
+/** A file in the profiles folder that is not a usable profile, with the validator's reason. */
+export interface SkippedProfileFile {
+  path: string;
+  reason: string;
+}
+
+/**
+ * Discovery result. A file left out of the list and a folder that could not be
+ * read are reported here, never dropped, so the UI can say why a profile is
+ * missing.
+ */
+export interface ProfileDescriptorDiscovery {
+  descriptors: ProfileDescriptor[];
+  skipped: SkippedProfileFile[];
+  /** Why the folder could not be read; null when it was read. */
+  error: string | null;
+}
+
+export interface ProfileDiscovery {
+  profiles: DiscoveredProfile[];
+  skipped: SkippedProfileFile[];
+  error: string | null;
+}
+
 /**
  * Check if a filename is a metadata file (*.meta.json)
  */
@@ -99,23 +124,24 @@ export async function validateProfile(path: string): Promise<ValidationResult> {
 /**
  * Discover all profiles in a directory.
  * Returns ProfileDescriptor objects with merged metadata.
- * Excludes .meta.json files and invalid manifests from the list.
- * 
+ * Excludes .meta.json files from the list, and reports each invalid manifest
+ * in `skipped` with the validator's reason.
+ *
  * Profile validity is determined by the engine's profile contract:
  * - Must have version field (number, supported values 1 or 2)
  * - Must have apps field (array)
  */
-export async function discoverProfileDescriptors(directory: string): Promise<ProfileDescriptor[]> {
+export async function discoverProfileDescriptors(directory: string): Promise<ProfileDescriptorDiscovery> {
   if (!directory || !directory.trim()) {
-    return [];
+    return { descriptors: [], skipped: [], error: null };
   }
 
   try {
     const files = await invoke<string[]>('list_manifest_files', { directory });
     if (!files || !Array.isArray(files) || files.length === 0) {
-      return [];
+      return { descriptors: [], skipped: [], error: null };
     }
-    
+
     // Filter out .meta.json files - they are implementation details
     const candidateFiles = files.filter(path => {
       if (!path || typeof path !== 'string') return false;
@@ -125,7 +151,7 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
     
     // Validate each candidate and only include valid profiles
     const profileResults = await Promise.all(
-      candidateFiles.map(async (setupPath) => {
+      candidateFiles.map(async (setupPath): Promise<{ descriptor: ProfileDescriptor } | { skipped: SkippedProfileFile }> => {
         const segments = setupPath.split(/[/\\]/);
         const filename = segments.pop() || '';
         const parentDir = segments.pop() || '';
@@ -140,16 +166,18 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
         // Validate against profile contract
         const validation = await validateProfile(setupPath);
         if (!validation.valid) {
-          // Skip invalid profiles (debug logging only)
-          console.debug(`Skipping invalid profile: ${setupPath}`, validation.errors);
-          return null;
+          const reason = validation.errors
+            ?.map((error) => error.message)
+            .filter(Boolean)
+            .join('; ');
+          return { skipped: { path: setupPath, reason: reason || 'Not a valid Endstate profile' } };
         }
-        
+
         // Load metadata for display name
         const metadata = await readProfileMetadata(setupPath);
         const displayName = metadata?.displayName;
         
-        return {
+        const descriptor: ProfileDescriptor = {
           id,
           setupPath,
           metaPath,
@@ -157,20 +185,19 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
           label: displayName || id,
           summary: validation.summary,
         };
+        return { descriptor };
       })
     );
-    
-    // Filter out null entries (invalid profiles)
-    const validProfiles: ProfileDescriptor[] = [];
-    for (const p of profileResults) {
-      if (p !== null) {
-        validProfiles.push(p);
-      }
+
+    const descriptors: ProfileDescriptor[] = [];
+    const skipped: SkippedProfileFile[] = [];
+    for (const result of profileResults) {
+      if ('descriptor' in result) descriptors.push(result.descriptor);
+      else skipped.push(result.skipped);
     }
-    return validProfiles;
+    return { descriptors, skipped, error: null };
   } catch (err) {
-    console.error('Failed to discover profiles:', err);
-    return [];
+    return { descriptors: [], skipped: [], error: backendErrorMessage(err) };
   }
 }
 
@@ -178,11 +205,53 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
  * @deprecated Use discoverProfileDescriptors instead.
  * Legacy function for backward compatibility.
  */
-export async function discoverProfiles(directory: string): Promise<DiscoveredProfile[]> {
-  const descriptors = await discoverProfileDescriptors(directory);
-  return descriptors.map(d => ({
-    name: d.id,
-    path: d.setupPath,
-    displayName: d.displayName,
-  }));
+export async function discoverProfiles(directory: string): Promise<ProfileDiscovery> {
+  const { descriptors, skipped, error } = await discoverProfileDescriptors(directory);
+  return {
+    profiles: descriptors.map(d => ({
+      name: d.id,
+      path: d.setupPath,
+      displayName: d.displayName,
+    })),
+    skipped,
+    error,
+  };
+}
+
+/** Basename of a profile path, for messages. */
+function fileNameOf(path: string): string {
+  return path.split(/[/\\]/).pop() || path;
+}
+
+/**
+ * Default UX shows no file paths, so a backend reason that repeats a path the
+ * GUI itself passed gets that exact value swapped for a generic name. This is
+ * an exact-value replacement of a known string, not a reading of the reason.
+ */
+function withoutKnownPath(reason: string, path: string, name: string): string {
+  return path ? reason.split(path).join(name) : reason;
+}
+
+/**
+ * Plain-language notice for a profiles folder discovery could not read. Keeps
+ * the backend reason (e.g. the folder does not exist) without its path.
+ */
+export function describeUnreadableProfilesFolder(directory: string, reason: string): string {
+  return `Couldn't read your profiles folder: ${withoutKnownPath(reason, directory, 'the folder')}`;
+}
+
+/**
+ * Plain-language notice for files discovery left out of the profile list.
+ * Names the file and the validator's reason for one file; names the files for
+ * several. Returns null when nothing was left out.
+ */
+export function describeSkippedProfiles(skipped: readonly SkippedProfileFile[]): string | null {
+  if (skipped.length === 0) return null;
+  if (skipped.length === 1) {
+    const [only] = skipped;
+    const name = fileNameOf(only.path);
+    return `${name} in your profiles folder isn't a profile Endstate can use, so it isn't listed (${withoutKnownPath(only.reason, only.path, name)}).`;
+  }
+  const names = skipped.map((file) => fileNameOf(file.path)).join(', ');
+  return `${skipped.length} files in your profiles folder aren't profiles Endstate can use, so they aren't listed: ${names}.`;
 }

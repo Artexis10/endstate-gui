@@ -12,6 +12,27 @@
  * that never echoes the raw transport message.
  */
 
+import { PROFILE_EXTENSIONS } from './profile-extensions';
+
+/** ".endstate, .zip, .json, .jsonc or .json5", from the one extension list. */
+function acceptedProfileTypes(): string {
+  const types = [...PROFILE_EXTENSIONS];
+  const last = types.pop();
+  return types.length > 0 ? `${types.join(', ')} or ${last}` : `${last}`;
+}
+
+/**
+ * Message for a drop or pick that holds no file Endstate can import, naming
+ * the files it refused and the types it accepts.
+ */
+export function unsupportedProfileFilesMessage(fileNames: readonly string[]): string {
+  const accepted = `Use a ${acceptedProfileTypes()} file.`;
+  if (fileNames.length === 0) {
+    return `That drop didn't include a file Endstate can import. ${accepted}`;
+  }
+  return `Endstate can't import ${fileNames.join(', ')}. ${accepted}`;
+}
+
 /** Substrings that indicate the bundle was rejected for being too large. */
 const OVERSIZE_PATTERNS: readonly RegExp[] = [
   /payload too large/i,
@@ -64,6 +85,14 @@ function unwrapTransport(raw: string): string {
     if (message === before) break;
   }
   return message;
+}
+
+/**
+ * The backend's own message for a failed bridge command, without the transport
+ * prefix (`Tauri invoke failed for '<cmd>': …`). Use it to show the real reason.
+ */
+export function backendErrorMessage(err: unknown): string {
+  return unwrapTransport(messageOf(err));
 }
 
 /**

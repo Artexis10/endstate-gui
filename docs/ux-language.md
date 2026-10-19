@@ -1,7 +1,7 @@
 # Endstate UX Language & Status Contract
 
 **Status:** Locked  
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-10-19
 
 This document is the **single source of truth** for status/phase semantics across Endstate GUI and engine. It defines:
 - How engine events map to UI labels and colors
@@ -196,13 +196,41 @@ Config-restore progress arrives as engine `restore-item` events (see
 `../endstate/docs/event-contract.md`, "Restore-Item Event"). These are **settings
 rows**, not app rows: they use restore verbs, never the app "INSTALLING" verb.
 
-| Engine restore status | UI Label | Color | Meaning |
-|-----------------------|----------|-------|----------|
-| `restoring` | RESTORING | info (blue) | In progress (transitional) |
-| `restored` | RESTORED | success (green) | Setting file restored |
-| `skipped_up_to_date` | UP TO DATE | muted (gray) | Target already matches the saved copy |
-| `skipped_missing_source` | MISSING | warn (yellow) | Saved copy not found; nothing changed |
-| `failed` | FAILED | error (red) | Restore failed |
+| Engine restore status | UI Label | Long label | Count phrase | Color | Meaning |
+|-----------------------|----------|------------|--------------|-------|---------|
+| `restoring` | RESTORING | Restoring… | — | info (blue) | In progress (transitional) |
+| `restored` | RESTORED | Restored | restored | success (green) | Setting file restored |
+| `skipped_up_to_date` | UP TO DATE | Already up to date | already up to date | muted (gray) | Target already matches the saved copy |
+| `skipped_missing_source` | NOT IN SETUP | Not included in the saved setup | not in saved setup | muted (gray) | An optional settings file the saved setup does not contain; nothing changed |
+| `failed` | FAILED | Failed | failed | error (red) | Restore failed |
+
+`skipped_missing_source` is neutral: the engine emits it only for an optional
+entry whose source the saved setup does not contain (a required entry with a
+missing source fails instead). Absence of configuration is not a failure. It is
+a different meaning from verify **MISSING** (an app that is not installed),
+which keeps its warn mapping.
+
+**Preview (dry run).** The engine keeps the per-item status `restored` in a
+preview; `dryRun` is a run-level flag. The GUI takes the run's flag (the
+envelope's `data.dryRun` once the run ends) and shows preview language, never
+RESTORED:
+
+| Engine restore status (dry run) | UI Label | Long label | Count phrase | Color |
+|---------------------------------|----------|------------|--------------|-------|
+| `restoring` | CHECKING | Checking… | — | info (blue) |
+| `restored` | TO RESTORE | Would restore | would be restored | action (blue) |
+| other statuses | as above | as above | as above | as above |
+
+**Counts.** Every settings count (results header, settings chip, progress line,
+result modal) comes from one source: the reconciled restore rows, one per
+target. The apply envelope carries no restore summary, so the GUI never reads
+or invents one. A summary lists the non-zero outcomes in table order, e.g.
+“4 settings: 1 restored, 1 already up to date, 1 not in saved setup, 1 failed”.
+The settings chip shows the row total, adds “(N failed)” when any failed, and
+adds the restored count phrase (“restored” or “would be restored”) only when
+every row has that outcome. A failed restore makes the run read “Setup
+completed with errors”; a preview reads “Preview completed with errors — nothing
+was installed”, so it never claims a completed setup.
 
 **Row presentation (never surface the raw engine copy-spec):**
 - **Primary text** = `<module display name> · <target file basename>`, e.g.
@@ -216,7 +244,7 @@ rows**, not app rows: they use restore verbs, never the app "INSTALLING" verb.
   engine-authored `message` is used when present and clean; otherwise the
   canonical strings are:
   - `skipped_up_to_date` → “Already matches your saved settings”
-  - `skipped_missing_source` → “The saved copy wasn’t found, so nothing changed”
+  - `skipped_missing_source` → “Your saved setup doesn’t include this file, so nothing changed”
   - `failed` → “Couldn’t restore this file”
 - **Full raw source→target detail** may appear only in a hover title /
   disclosure, never as inline row text.

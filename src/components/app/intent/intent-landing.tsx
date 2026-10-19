@@ -104,7 +104,7 @@ export function IntentLanding({
           <div className="space-y-2">
             <h2 className="text-xl font-semibold">Save this computer</h2>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-[240px]">
-              Scan your apps and settings, then save everything as a portable file
+              On your old PC: scan your apps and settings, then save everything as a portable file
             </p>
           </div>
           {/* Chip slot — one chip at a time. Drift (engine-reported, amber)
@@ -222,7 +222,7 @@ export function IntentLanding({
           <div className="space-y-2">
             <h2 className="text-xl font-semibold">Set up this computer</h2>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-[240px]">
-              Import a saved setup or choose an existing profile to install your apps
+              On your new PC: import the saved setup or choose an existing profile to install your apps
             </p>
           </div>
           {setupHasSession && (

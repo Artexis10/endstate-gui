@@ -1,4 +1,4 @@
-import type { ApplyAction, ApplyItem } from '../types';
+import type { ApplyAction, ApplyItem, RestoreResultStatus } from '../types';
 import type { EngineItemStatus, ItemEvent, EnginePhase } from './streaming-events';
 
 /**
@@ -565,6 +565,11 @@ export interface AppEvent {
   kind?: 'app' | 'restore' | 'artifact';
   /** Terminal/transitional restore status, when kind === 'restore'. */
   restoreStatus?: RestoreStatusKey;
+  /**
+   * True when a restore row came from a dry run. Set from the run's dry-run
+   * flag; the engine reports `restored` for an item a preview would restore.
+   */
+  preview?: boolean;
   /** Friendly muted secondary line (skip reason, artifact name). */
   secondary?: string;
   /** Full raw detail for a hover title / disclosure only (never inline text). */
@@ -1140,40 +1145,102 @@ export type RestoreStatusKey =
   | 'skipped_missing_source'
   | 'failed';
 
-/** Restore status UI mapping */
-export const RESTORE_STATUS_MAP: Record<RestoreStatusKey, UiStatusConfig> = {
+/** Restore outcomes in the order every count summary lists them. */
+export const RESTORE_OUTCOME_ORDER: readonly RestoreResultStatus[] = [
+  'restored',
+  'skipped_up_to_date',
+  'skipped_missing_source',
+  'failed',
+];
+
+/**
+ * Restore status labels. `countLabel` is the phrase after a number in a count
+ * summary ("2 restored"). See docs/ux-language.md, "RESTORE rows".
+ */
+export interface RestoreUiStatusConfig extends UiStatusConfig {
+  countLabel: string;
+}
+
+/** Restore status UI mapping for a run that changes the machine. */
+export const RESTORE_STATUS_MAP: Record<RestoreStatusKey, RestoreUiStatusConfig> = {
   restoring: {
     shortLabel: 'RESTORING',
     longLabel: 'Restoring\u2026',
+    countLabel: 'restoring',
     color: 'info',
   },
   restored: {
     shortLabel: 'RESTORED',
     longLabel: 'Restored',
+    countLabel: 'restored',
     color: 'success',
   },
   skipped_up_to_date: {
     shortLabel: 'UP TO DATE',
     longLabel: 'Already up to date',
+    countLabel: 'already up to date',
     color: 'muted',
   },
+  // The engine reports this only for an optional settings file the saved setup
+  // does not contain. Absence of configuration is not a failure, so it is muted.
   skipped_missing_source: {
-    shortLabel: 'MISSING',
-    longLabel: 'Source missing',
-    color: 'warn',
+    shortLabel: 'NOT IN SETUP',
+    longLabel: 'Not included in the saved setup',
+    countLabel: 'not in saved setup',
+    color: 'muted',
   },
   failed: {
     shortLabel: 'FAILED',
     longLabel: 'Failed',
+    countLabel: 'failed',
     color: 'error',
   },
 } as const;
 
 /**
- * Get UI status config for a restore status key.
+ * Preview (dry-run) overrides. The engine reports `restored` for an item a
+ * preview would restore, so a preview row must say so in preview language.
  */
-export function getRestoreUiStatus(status: RestoreStatusKey): UiStatusConfig {
-  return RESTORE_STATUS_MAP[status] ?? RESTORE_STATUS_MAP.failed;
+const RESTORE_PREVIEW_STATUS_MAP: Partial<Record<RestoreStatusKey, RestoreUiStatusConfig>> = {
+  restoring: {
+    shortLabel: 'CHECKING',
+    longLabel: 'Checking\u2026',
+    countLabel: 'checking',
+    color: 'info',
+  },
+  restored: {
+    shortLabel: 'TO RESTORE',
+    longLabel: 'Would restore',
+    countLabel: 'would be restored',
+    color: 'action',
+  },
+};
+
+/**
+ * Get UI status config for a restore status key. `preview` comes from the
+ * run's dry-run flag, never from the item.
+ */
+export function getRestoreUiStatus(
+  status: RestoreStatusKey,
+  options: { preview?: boolean } = {},
+): RestoreUiStatusConfig {
+  const base = RESTORE_STATUS_MAP[status] ?? RESTORE_STATUS_MAP.failed;
+  if (!options.preview) return base;
+  return RESTORE_PREVIEW_STATUS_MAP[status] ?? base;
+}
+
+/**
+ * Plain-language count summary, e.g. "2 restored, 1 not in saved setup".
+ * Lists only non-zero outcomes; returns '' when every count is zero.
+ */
+export function formatRestoreCounts(
+  counts: Readonly<Record<RestoreResultStatus, number>>,
+  options: { preview?: boolean } = {},
+): string {
+  return RESTORE_OUTCOME_ORDER
+    .filter((status) => counts[status] > 0)
+    .map((status) => `${counts[status]} ${getRestoreUiStatus(status, options).countLabel}`)
+    .join(', ');
 }
 
 /**
@@ -1197,8 +1264,9 @@ function deriveStatusKey(event: AppEvent): StatusKey {
 /**
  * Single source of truth for an activity row's short status label + color.
  *
- * Restore rows use the RESTORING/RESTORED/UP TO DATE/MISSING/FAILED vocabulary
- * (never the app "INSTALLING" verb); artifact rows render a muted SAVED
+ * Restore rows use the restore vocabulary in RESTORE_STATUS_MAP, in preview
+ * language when the row came from a dry run (never the app "INSTALLING" verb
+ * and never RESTORED for a preview); artifact rows render a muted SAVED
  * completion marker; app rows fall through to the phase-aware app mapping. The
  * optional `phaseOverride` lets a render site pin the phase for app rows (e.g. a
  * results list that always reads as "apply") while restore/artifact rows ignore
@@ -1209,7 +1277,7 @@ export function getActivityRowLabel(
   phaseOverride?: UiPhase,
 ): { shortLabel: string; color: SemanticColor } {
   if (event.kind === 'restore') {
-    const cfg = getRestoreUiStatus(event.restoreStatus ?? 'failed');
+    const cfg = getRestoreUiStatus(event.restoreStatus ?? 'failed', { preview: event.preview });
     return { shortLabel: cfg.shortLabel, color: cfg.color };
   }
   if (event.kind === 'artifact') {

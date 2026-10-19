@@ -46,7 +46,10 @@ import {
   getColorClasses,
   getPhaseAwareStatusForEvent,
   getActivityRowLabel,
+  getRestoreUiStatus,
+  formatRestoreCounts,
 } from '@/lib/apply-utils';
+import { countRestoreOutcomes } from '@/lib/restore-activity';
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { ConfigModuleInfo, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
@@ -292,9 +295,6 @@ interface ApplyResult {
   /** Maps winget ID → config module name for apps with settings */
   configModuleMap?: Record<string, string>;
   restoreModulesAvailable?: RestoreModuleRef[];
-  configsRestored?: number;
-  configsSkipped?: number;
-  configsFailed?: number;
   configResolutions?: ConfigResolution[];
   configResolutionSummary?: ConfigResolutionSummary;
   warnings?: CommandWarning[];
@@ -311,6 +311,8 @@ export interface SetupFlowProps {
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
   onFileDrop: (files: File[]) => void;
+  /** Names of dropped or picked files the import does not accept. */
+  onUnsupportedFiles: (fileNames: string[]) => void;
   /** Import is staging/validating and must remain on the visible profile list. */
   profileImportActive?: boolean;
   /** Native Tauri drag acceptance owned by App. */
@@ -395,7 +397,8 @@ export function SetupFlow({
   onOpenProfilesFolder,
   onRefreshProfiles,
   onFileDrop,
-  profileImportActive = false,
+  onUnsupportedFiles,
+profileImportActive = false,
   nativeDragAccepted = false,
   onBrowse,
   onDeleteProfile,
@@ -507,6 +510,16 @@ export function SetupFlow({
     skipped: fallbackSkipped,
     failed: fallbackFailed,
   };
+  // Settings counts come from the restore rows the results list shows, so the
+  // header, the chip and the rows always agree.
+  const applyRestoreCounts = countRestoreOutcomes(applyResult?.appEvents ?? []);
+  const applyRestoreTotal = Object.values(applyRestoreCounts).reduce((sum, count) => sum + count, 0);
+  const applyHasErrors = !!applyResult && (
+    applyResult.success === false
+    || applyDisplayAppCounts.failed > 0
+    || !!applyResult.error
+    || applyRestoreCounts.failed > 0
+  );
   const reduced = prefersReducedMotion();
   const transition = reduced
     ? { duration: 0.01 }
@@ -562,6 +575,9 @@ export function SetupFlow({
   const isDisplayableEvent = (e: AppEvent) =>
     e.app !== '── APPLY ──' && e.app !== '── VERIFY ──' && !e.app.startsWith('copy:');
 
+  /** Restore rows are settings, never apps: app chips and app filters skip them. */
+  const isAppRow = (e: AppEvent) => !e.kind || e.kind === 'app';
+
   /** Winget apps carrying no settings — the complement of the `settings` filter. */
   const appsOnlyCount = (
     events: AppEvent[],
@@ -571,6 +587,7 @@ export function SetupFlow({
     events.filter(
       (e) =>
         isDisplayableEvent(e)
+        && isAppRow(e)
         && !isConfigOnlyApp(e, synthesizedAppIds)
         && !(e.app in configMap),
     ).length;
@@ -583,6 +600,7 @@ export function SetupFlow({
     const filtered = events.filter(isDisplayableEvent);
     if (activeFilters.size === 0) return filtered;
     return filtered.filter(event => {
+      if (!isAppRow(event)) return activeFilters.has('settings');
       const statusKey: StatusKey = event.statusKey || 'skipped';
       for (const f of activeFilters) {
         if (f === 'settings' && (event.app in configMap || isConfigOnlyApp(event, synthesizedAppIds))) return true;
@@ -939,6 +957,7 @@ export function SetupFlow({
               )}
               <DropZone
                 onFileDrop={onFileDrop}
+                onUnsupportedFiles={onUnsupportedFiles}
                 onBrowse={onBrowse}
                 disabled={interactionBlocked}
                 nativeDragAccepted={nativeDragAccepted}
@@ -1197,7 +1216,7 @@ export function SetupFlow({
                           key={`${event.app}-${event.timestamp}-${i}`}
                           className="flex items-center gap-2 text-xs pt-0.5"
                         >
-                          <span className={`w-16 text-right font-medium ${colors.text}`}>
+                          <span className={`w-24 text-right font-medium ${colors.text}`}>
                             {uiStatus.shortLabel}
                           </span>
                           <span className="truncate flex-1">
@@ -1441,7 +1460,7 @@ export function SetupFlow({
                                 )}
                               </span>
                             )}
-                            <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
+                            <span className={`w-24 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
                             <span className="w-4 flex-shrink-0 flex justify-center">
                               {hasSettings && (
                                 <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
@@ -1470,7 +1489,7 @@ export function SetupFlow({
                             const cfgColors = getColorClasses(cfgUiStatus.color);
                             return (
                               <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                                <span className={`w-16 flex-shrink-0 text-right font-medium ${cfgColors.text}`}>{cfgUiStatus.shortLabel}</span>
+                                <span className={`w-24 flex-shrink-0 text-right font-medium ${cfgColors.text}`}>{cfgUiStatus.shortLabel}</span>
                                 <span className="w-4 flex-shrink-0 flex justify-center">
                                   <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : getColorClasses('success').text}`} />
                                 </span>
@@ -1646,7 +1665,7 @@ export function SetupFlow({
                           className="flex items-center gap-2 text-xs pt-0.5"
                           title={event.title}
                         >
-                          <span className={`w-16 text-right font-medium ${colors.text}`}>
+                          <span className={`w-24 text-right font-medium ${colors.text}`}>
                             {shortLabel}
                           </span>
                           <span className="truncate flex-1">
@@ -1677,18 +1696,20 @@ export function SetupFlow({
             exit={{ opacity: 0, y: -8 }}
             transition={transition}
           >
-            <Card className={`border-l-2 ${applyResult.success === false || applyDisplayAppCounts.failed > 0 || applyResult.error ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
+            <Card className={`border-l-2 ${applyHasErrors ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
               <CardContent className="py-6 px-6">
                 <div className="flex items-center gap-3 mb-4">
-                  {applyResult.success === false || applyDisplayAppCounts.failed > 0 || applyResult.error ? (
+                  {applyHasErrors ? (
                     <XCircle className="h-5 w-5 text-amber-500" />
                   ) : (
                     <CheckCircle2 className="h-5 w-5 text-green-500" />
                   )}
                   <div>
                     <p className="text-sm font-medium">
-                      {applyResult.success === false || applyDisplayAppCounts.failed > 0 || applyResult.error
-                        ? 'Setup completed with errors'
+                      {applyHasErrors
+                        ? applyResult.dryRun
+                          ? 'Preview completed with errors — nothing was installed'
+                          : 'Setup completed with errors'
                         : applyResult.dryRun
                           ? 'Preview complete — nothing was installed'
                           : 'Setup complete'}
@@ -1699,11 +1720,9 @@ export function SetupFlow({
                         : `${applyDisplayAppCounts.installed} installed, ${applyDisplayAppCounts.present} already present`}
                       {applyDisplayAppCounts.failed > 0 ? `, ${applyDisplayAppCounts.failed} failed` : ''}
                       {(() => {
-                        const restored = applyResult.configsRestored ?? 0;
-                        const settingsFailed = applyResult.configsFailed ?? 0;
-                        if (restored > 0 && settingsFailed === 0) return <> &middot; {restored} {restored === 1 ? 'setting' : 'settings'} restored</>;
-                        if (restored > 0 && settingsFailed > 0) return <> &middot; {restored} {restored === 1 ? 'setting' : 'settings'} restored, {settingsFailed} failed</>;
-                        if (settingsFailed > 0) return <> &middot; {settingsFailed} {settingsFailed === 1 ? 'setting' : 'settings'} failed</>;
+                        if (applyRestoreTotal > 0) {
+                          return <> &middot; {applyRestoreTotal} {applyRestoreTotal === 1 ? 'setting' : 'settings'}: {formatRestoreCounts(applyRestoreCounts, { preview: applyResult.dryRun })}</>;
+                        }
                         // Fallback: show selected settings count (only when restore was requested)
                         if (restoreIntent === 'apps-and-settings' && selectedModules.length > 0) {
                           const count = selectedModules.length;
@@ -1744,9 +1763,8 @@ export function SetupFlow({
                         return selectedModules.includes(shortId) || selectedModules.includes(qualifiedId);
                       }))
                     : (restoreIntent === 'apps-and-settings' ? fullConfigMap : {});
-                  const applySettingsRestored = applyResult.configsRestored ?? 0;
-                  const applySettingsFailed = applyResult.configsFailed ?? 0;
-                  const applySettingsProcessed = applySettingsRestored + (applyResult.configsSkipped ?? 0) + applySettingsFailed;
+                  const applySettingsFailed = applyRestoreCounts.failed;
+                  const applySettingsProcessed = applyRestoreTotal;
                   // Fall back to selected modules count when restore counters are empty (only when restore was requested)
                   const configMapSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
                   const applySettingsTotal = applySettingsProcessed > 0 ? applySettingsProcessed : configMapSettingsCount;
@@ -1773,16 +1791,20 @@ export function SetupFlow({
                           {applyDisplayAppCounts.total} {applyDisplayAppCounts.total === 1 ? 'app' : 'apps'}
                         </FilterChip>
                       )}
-                      {applyDisplayAppCounts.installed > 0 && (
-                        <FilterChip
-                          onClick={() => toggleFilter('installed')}
-                          pressed={activeFilters.has('installed')}
-                          dimmed={activeFilters.size > 0 && !activeFilters.has('installed')}
-                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
-                        >
-                          {applyDisplayAppCounts.installed} installed
-                        </FilterChip>
-                      )}
+                      {applyDisplayAppCounts.installed > 0 && (() => {
+                        // A preview's rows are still `to_install`; filter and word them so.
+                        const installedKey = applyResult.dryRun ? 'to_install' : 'installed';
+                        return (
+                          <FilterChip
+                            onClick={() => toggleFilter(installedKey)}
+                            pressed={activeFilters.has(installedKey)}
+                            dimmed={activeFilters.size > 0 && !activeFilters.has(installedKey)}
+                            className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                          >
+                            {applyDisplayAppCounts.installed} {applyResult.dryRun ? 'to install' : 'installed'}
+                          </FilterChip>
+                        );
+                      })()}
                       {applyDisplayAppCounts.present > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('present')}
@@ -1821,10 +1843,10 @@ export function SetupFlow({
                             dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
                             className={applySettingsFailed > 0 ? `${getColorClasses('warn').bg} ${getColorClasses('warn').text}` : `${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                           >
-                            {applySettingsRestored > 0 && applySettingsFailed === 0
-                              ? `${applySettingsRestored} ${applySettingsRestored === 1 ? 'setting' : 'settings'} restored`
-                              : applySettingsFailed > 0
+                            {applySettingsFailed > 0
                               ? `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'} (${applySettingsFailed} failed)`
+                              : applyRestoreCounts.restored === applySettingsProcessed
+                              ? `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'} ${getRestoreUiStatus('restored', { preview: applyResult.dryRun }).countLabel}`
                               : `${applySettingsProcessed} ${applySettingsProcessed === 1 ? 'setting' : 'settings'}`
                             }
                           </FilterChip>
@@ -1858,18 +1880,23 @@ export function SetupFlow({
                         const colors = getColorClasses(color);
                         const hasSettings = (restoreIntent === 'apps-and-settings' && event.app in applyConfigMap) || event.kind === 'restore' || event.app.startsWith('\u2699');
                         const settingsOk = color !== 'error';
+                        // A restore row's icon takes the row's outcome colour; an
+                        // app row's icon only marks that it carries settings.
+                        const settingsIconClass = event.kind === 'restore'
+                          ? colors.text
+                          : `${settingsOk ? getColorClasses('success').text : getColorClasses('error').text} ${!settingsOk ? 'opacity-50' : ''}`;
                         return (
                           <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5" title={event.title}>
-                            <span className={`w-16 flex-shrink-0 text-right font-medium ${colors.text}`}>{shortLabel}</span>
+                            <span className={`w-24 flex-shrink-0 text-right font-medium ${colors.text}`}>{shortLabel}</span>
                             <span className="w-4 flex-shrink-0 flex justify-center">
                               {hasSettings && (
-                                <Settings2 className={`h-3 w-3 ${settingsOk ? getColorClasses('success').text : getColorClasses('error').text} ${!settingsOk ? 'opacity-50' : ''}`} />
+                                <Settings2 className={`h-3 w-3 ${settingsIconClass}`} />
                               )}
                             </span>
                             <span className="truncate">
                               {event.name || formatAppIdentity(event.app)}
                               {event.secondary && (
-                                <span className="text-muted-foreground"> \u00b7 {event.secondary}</span>
+                                <span className="text-muted-foreground"> · {event.secondary}</span>
                               )}
                             </span>
                           </div>
@@ -1904,7 +1931,7 @@ export function SetupFlow({
                               : { text: 'text-muted-foreground' };
                             return (
                               <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                                <span className={`w-16 flex-shrink-0 text-right font-medium ${cfgColor.text}`}>{cfgLabel}</span>
+                                <span className={`w-24 flex-shrink-0 text-right font-medium ${cfgColor.text}`}>{cfgLabel}</span>
                                 <span className="w-4 flex-shrink-0 flex justify-center">
                                   <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : wasSelected ? getColorClasses('success').text : 'text-muted-foreground'}`} />
                                 </span>
@@ -1925,7 +1952,7 @@ export function SetupFlow({
                   <Button variant="ghost" onClick={handleBackToProfiles}>
                     Back to profiles
                   </Button>
-                  {onUndoDryRun && restoreIntent === 'apps-and-settings' && ((applyResult.configsRestored ?? 0) > 0 || Object.keys(applyProfileConfigMap).length > 0) && (
+                  {onUndoDryRun && !applyResult.dryRun && restoreIntent === 'apps-and-settings' && (applyRestoreCounts.restored > 0 || Object.keys(applyProfileConfigMap).length > 0) && (
                     <Button
                       variant="ghost"
                       size="sm"

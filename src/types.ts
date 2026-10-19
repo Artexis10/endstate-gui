@@ -637,8 +637,6 @@ export interface EndstateApplyData {
   logFile?: string;
   eventsFile?: string;
   configModuleMap?: Record<string, string>;
-  /** Restore summary when --enable-restore is active. */
-  restoreSummary?: RestoreSummary;
   restoreItems?: RestoreResult[];
   restoreJournalFile?: string;
   restoreFilter?: string[];
@@ -792,14 +790,13 @@ export type RestoreResultStatus =
   | 'skipped_missing_source'
   | 'failed';
 
-/** Restore summary from JSON envelope */
-export interface RestoreSummary {
-  total: number;
-  restored: number;
-  skipped: number;
-  failed: number;
-  backupLocation: string | null;
-}
+/**
+ * Settings-restore outcome counts for one run, keyed by engine restore status.
+ * The apply envelope carries no restore summary: these counts come from the
+ * reconciled restore rows (`countRestoreOutcomes`), so each equals the rows
+ * shown. See docs/ux-language.md, "RESTORE rows".
+ */
+export type RestoreOutcomeCounts = Record<RestoreResultStatus, number>;
 
 /** Individual result item from revert command */
 export interface RevertResultItem {

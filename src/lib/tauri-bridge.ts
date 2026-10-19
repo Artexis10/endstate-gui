@@ -167,15 +167,19 @@ export async function safeListen<T = any>(
   }
 }
 
+/**
+ * Resolve the profiles folder. Throws the backend's reason when the default
+ * folder cannot be found or created; outside Tauri, safeInvoke's web fallback
+ * supplies the test folder.
+ */
 export async function getProfilesDirectory(customDir?: string): Promise<string> {
   if (customDir) return customDir;
-  
-  try {
-    const dir = await safeInvoke<string>('get_default_profiles_directory');
-    return dir || 'C:\\test\\profiles';
-  } catch {
-    return 'C:\\test\\profiles';
+
+  const dir = await safeInvoke<string>('get_default_profiles_directory');
+  if (!dir) {
+    throw new Error('Endstate did not report a profiles folder');
   }
+  return dir;
 }
 
 export async function ensureDirectory(path: string): Promise<void> {

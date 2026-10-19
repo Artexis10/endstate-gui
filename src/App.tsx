@@ -9,7 +9,6 @@ import {
   EndstateCaptureData,
   EndstateRevertData,
   type RestoreResult,
-  type RestoreSummary,
   type RestoreModuleRef,
   type ApplyRestoreOptions,
   type RestoreIntent,
@@ -18,17 +17,17 @@ import { AppSettings, loadCloudInvitationConsumption, loadSettings, resetAppSett
 import { loadDraft, clearDraft } from './lib/draft-store';
 import { resolveDraftContent } from './lib/draft-content-resolver';
 import { isConfigOnlyApp } from './lib/app-event-kind';
-import { discoverProfiles, validateProfile, DiscoveredProfile } from './file-discovery';
+import { discoverProfiles, describeSkippedProfiles, describeUnreadableProfilesFolder, validateProfile, DiscoveredProfile } from './file-discovery';
 import { findImportedProfile } from './lib/profile-import';
 import { createNativeProfileDropHandler, createProfileImportCoordinator } from './lib/native-profile-drop';
 import { createOpenedFilesHandler, OPENED_FILES_EVENT } from './lib/opened-profile-files';
-import { friendlyImportError } from './lib/import-errors';
+import { backendErrorMessage, friendlyImportError, unsupportedProfileFilesMessage } from './lib/import-errors';
 import { importProfileFromFile, importProfileFromPath } from './lib/dropped-profile-import';
 import { StreamEvent } from './streaming-runner';
 import { runEngineStreaming } from './lib/engine';
 import { LogBuffer } from './log-buffer';
-import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, buildOnlyFlagValue, type AppEvent, type UiPhase } from './lib/apply-utils';
-import { restoreEventToAppEvent, artifactEventToAppEvent, type RestoreRowContext } from './lib/restore-activity';
+import { StreamingLineBuffer, reconcileLiveActivity, itemEventToAppEvent, getPhaseAwareStatusForEvent, buildOnlyFlagValue, formatRestoreCounts, type AppEvent, type UiPhase } from './lib/apply-utils';
+import { restoreEventToAppEvent, artifactEventToAppEvent, countRestoreOutcomes, type RestoreRowContext } from './lib/restore-activity';
 import { engineSupportsApplyOnly, engineSupportsApplyRestoreTarget } from './lib/apply-capabilities';
 import {
   isConfigMigrationEvent,
@@ -514,7 +513,6 @@ function AppContent() {
     wasPreview?: boolean; // Track if this was a preview (for showing Apply button)
     configModuleMap?: Record<string, string>;
     restoreItems?: RestoreResult[];
-    restoreSummary?: RestoreSummary;
     restoreJournalFile?: string;
     restoreModulesAvailable?: RestoreModuleRef[];
   }
@@ -726,19 +724,33 @@ function AppContent() {
 
   const loadProfilesDirectory = async () => {
     try {
-      const dir = await getProfilesDirectory(settings.customProfilesDirectory);
-      return dir;
+      return await getProfilesDirectory(settings.customProfilesDirectory);
     } catch (err) {
-      console.error('Failed to load profiles directory:', err);
+      showToast(`Couldn't open your profiles folder: ${backendErrorMessage(err)}`, 'error', { id: 'profiles-folder' });
       return null;
     }
+  };
+
+  // A file the profile list leaves out, or a folder it cannot read, is shown
+  // to the user once per distinct problem, so a profile never just vanishes.
+  const reportedDiscoveryIssueRef = useRef('');
+  const loadDiscoveredProfiles = async (directory: string) => {
+    const discovery = await discoverProfiles(directory);
+    const issue = discovery.error
+      ? describeUnreadableProfilesFolder(directory, discovery.error)
+      : describeSkippedProfiles(discovery.skipped);
+    if (issue && issue !== reportedDiscoveryIssueRef.current) {
+      showToast(issue, discovery.error ? 'error' : 'warning', { id: 'profile-discovery' });
+    }
+    reportedDiscoveryIssueRef.current = issue ?? '';
+    return discovery.profiles;
   };
 
   const refreshProfiles = async () => {
     const dir = await loadProfilesDirectory();
     if (dir) {
       setProfilesDirectory(dir);
-      const discovered = await discoverProfiles(dir);
+      const discovered = await loadDiscoveredProfiles(dir);
       setProfiles(discovered);
     }
   };
@@ -757,7 +769,7 @@ function AppContent() {
       throw new Error(reason || 'The imported manifest is not a supported Endstate profile');
     }
 
-    const discovered = await discoverProfiles(directory);
+    const discovered = await loadDiscoveredProfiles(directory);
     setProfiles(discovered);
     const importedProfile = findImportedProfile(discovered, importedPath);
     if (!importedProfile) {
@@ -792,10 +804,7 @@ function AppContent() {
       dir = (await loadProfilesDirectory()) || '';
       if (dir) setProfilesDirectory(dir);
     }
-    if (!dir) {
-      showToast('Profiles directory not available', 'error');
-      return;
-    }
+    if (!dir) return;
 
     await ensureDirectory(dir);
 
@@ -845,10 +854,7 @@ function AppContent() {
       dir = (await loadProfilesDirectory()) || '';
       if (dir) setProfilesDirectory(dir);
     }
-    if (!dir) {
-      showToast('Profiles directory not available', 'error');
-      return;
-    }
+    if (!dir) return;
 
     await ensureDirectory(dir);
 
@@ -953,9 +959,12 @@ function AppContent() {
     },
     onBlocked: () => showToast(PROFILE_IMPORT_BUSY_MESSAGE, 'error'),
   };
+  const showUnsupportedProfileFiles = (fileNames: string[]) =>
+    showToast(unsupportedProfileFilesMessage(fileNames), 'error');
   const nativeProfileDropHandler = createNativeProfileDropHandler({
     ...profileImportDependencies,
     setDragAccepted: setNativeDragAccepted,
+    onUnsupportedFiles: showUnsupportedProfileFiles,
   });
   const nativeProfileDropHandlerRef = useRef(nativeProfileDropHandler);
   nativeProfileDropHandlerRef.current = nativeProfileDropHandler;
@@ -1122,7 +1131,7 @@ function AppContent() {
         // 2. Select the newly saved profile
         const dir = await loadProfilesDirectory();
         if (dir) {
-          const discovered = await discoverProfiles(dir);
+          const discovered = await loadDiscoveredProfiles(dir);
           // Find the profile that matches the saved name
           const savedProfile = discovered.find(p => 
             (trimmedValue && p.displayName === trimmedValue)
@@ -1240,7 +1249,7 @@ function AppContent() {
       const dir = await loadProfilesDirectory();
       if (dir) {
         setProfilesDirectory(dir);
-        const discovered = await discoverProfiles(dir);
+        const discovered = await loadDiscoveredProfiles(dir);
         setProfiles(discovered);
         
         // Setup profile choice is local to Setup. If the deliberately deleted
@@ -1351,7 +1360,7 @@ function AppContent() {
         setSelectedProfile('');
         setSelectedProfilePath('');
         // Refresh profiles list
-        const discovered = await discoverProfiles(dir);
+        const discovered = await loadDiscoveredProfiles(dir);
         setProfiles(discovered);
       }
       
@@ -2357,7 +2366,7 @@ function AppContent() {
       configModuleMap: restoreOptions?.configModuleMap,
       restoreModulesAvailable: restoreOptions?.restoreModulesAvailable,
     };
-    const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0, configsRestored: 0, configsSkipped: 0, configsFailed: 0 };
+    const counters = { installed: 0, alreadyPresent: 0, skipped: 0, failed: 0 };
     const verifyCounters = { confirmed: 0, missing: 0, total: 0 };
     let currentPhase: EnginePhase = 'apply';
     let hasInsertedApplyHeader = false;
@@ -2386,6 +2395,10 @@ function AppContent() {
     if (onlyValue) {
       applyArgs.push('--only', onlyValue);
     }
+    // Restore rows stream before the envelope arrives, so live rows take the
+    // dry-run flag this run was started with; the envelope's flag replaces it
+    // on the finished rows below.
+    const requestedDryRun = applyArgs.includes('--dry-run');
     const applyResult = await runEngineStreaming<EndstateApplyData>(
       settings,
       'apply',
@@ -2533,7 +2546,7 @@ function AppContent() {
           // row carries the engine-provided module display name + file basename,
           // never the raw copy-spec.
           else if (isRestoreItemEvent(ndjsonEvent)) {
-            const restoreAppEvent = restoreEventToAppEvent(ndjsonEvent, restoreRowContext);
+            const restoreAppEvent = restoreEventToAppEvent(ndjsonEvent, restoreRowContext, { preview: requestedDryRun });
             const restoreKey = restoreAppEvent.app;
             const existingIndex = appEventIndex.get(restoreKey);
             if (existingIndex !== undefined) {
@@ -2543,20 +2556,15 @@ function AppContent() {
               appEventList.push(restoreAppEvent);
             }
 
-            // Terminal statuses each arrive once per item (contract guarantee),
-            // so counting them here stays accurate under in-place reconciliation.
-            if (ndjsonEvent.status === 'restored') counters.configsRestored++;
-            else if (ndjsonEvent.status === 'skipped_up_to_date' || ndjsonEvent.status === 'skipped_missing_source') counters.configsSkipped++;
-            else if (ndjsonEvent.status === 'failed') counters.configsFailed++;
             throttledSetLiveAppEvents(
               appEventList.length > 2000 ? appEventList.slice(-2000) : [...appEventList],
               { ...counters }
             );
 
-            // Update progress message
+            // Counted from the rows themselves, so the line matches the feed.
             throttledSetProgress('setup', {
-              message: 'Restoring your settings\u2026',
-              detail: `${counters.configsRestored} restored`,
+              message: requestedDryRun ? 'Checking your settings\u2026' : 'Restoring your settings\u2026',
+              detail: formatRestoreCounts(countRestoreOutcomes(appEventList), { preview: requestedDryRun }) || undefined,
               phase: 'apply',
             });
           }
@@ -2582,7 +2590,11 @@ function AppContent() {
 
     // CRITICAL: Reconcile live activity with final envelope
     // This ensures "Working..." entries are updated to their final status (Failed, Installed, etc.)
-    const reconciledEvents = reconcileLiveActivity(appEventList, envelopeActions);
+    // The envelope's dry-run flag is authoritative for the finished restore rows.
+    const dryRun = envelopeData?.dryRun ?? requestedDryRun;
+    const reconciledEvents = reconcileLiveActivity(appEventList, envelopeActions).map((event) =>
+      event.kind === 'restore' && event.preview !== dryRun ? { ...event, preview: dryRun } : event,
+    );
     // Bounded buffer: keep up to 2000 events for scrollback
     setLiveAppEvents(reconciledEvents.length > 2000 ? reconciledEvents.slice(-2000) : reconciledEvents);
 
@@ -2602,18 +2614,7 @@ function AppContent() {
       skipped = 0;
     }
 
-    // Restore summary: envelope is source of truth, fall back to NDJSON counters for older CLI
-    const restoreSummary: RestoreSummary | undefined = envelopeData?.restoreSummary ?? (
-      (counters.configsRestored + counters.configsSkipped + counters.configsFailed > 0)
-        ? { total: counters.configsRestored + counters.configsSkipped + counters.configsFailed, restored: counters.configsRestored, skipped: counters.configsSkipped, failed: counters.configsFailed, backupLocation: null }
-        : undefined
-    );
-    setLiveCounters({
-      installed, alreadyPresent, skipped, failed,
-      configsRestored: restoreSummary?.restored ?? 0,
-      configsSkipped: restoreSummary?.skipped ?? 0,
-      configsFailed: restoreSummary?.failed ?? 0,
-    });
+    setLiveCounters({ installed, alreadyPresent, skipped, failed });
 
     // Determine success: envelope.success is authoritative
     // Partial failure = success:false but error:null with failed > 0
@@ -2705,14 +2706,13 @@ function AppContent() {
       // Carried through so the results surface can distinguish a preview from a
       // real apply. The engine has always reported this; nothing read it, which
       // is how a dry run rendered as "Setup complete".
-      dryRun: envelopeData?.dryRun ?? false,
+      dryRun,
       installed, alreadyPresent, failed, skipped,
       profile: profileName,
       appEvents: reconciledEvents,
       actions: envelopeActions,
       configModuleMap: configModuleMapResult,
       restoreItems: envelopeData?.restoreItems,
-      restoreSummary,
       restoreJournalFile: envelopeData?.restoreJournalFile,
       restoreModulesAvailable: restoreModulesAvailableResult,
       configResolutions: envelopeData?.configResolutions,
@@ -3253,6 +3253,7 @@ function AppContent() {
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
               onFileDrop={handleFileDrop}
+              onUnsupportedFiles={showUnsupportedProfileFiles}
               profileImportActive={isProfileImporting}
               nativeDragAccepted={nativeDragAccepted}
               onBrowse={isTauriRuntime() ? handleBrowseFiles : undefined}
@@ -3302,12 +3303,7 @@ function AppContent() {
                     result.success === false || result.failed > 0 ? 'error' : 'success',
                   );
                   setFlowHasWork(prev => ({ ...prev, setup: true }));
-                  return {
-                    ...result,
-                    configsRestored: result.restoreSummary?.restored,
-                    configsSkipped: result.restoreSummary?.skipped,
-                    configsFailed: result.restoreSummary?.failed,
-                  };
+                  return result;
                 } finally {
                   setIsRunning(false);
                   setOverviewRunningAction(null);

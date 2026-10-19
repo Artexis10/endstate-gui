@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProviders, screen, waitFor } from '../../test/test-utils';
 import { seedLocalStorage } from '../../test/localStorage-helpers';
 import { ApplyResultModal } from './apply-result-modal';
-import type { ApplyItem, ApplyCounts, RestoreSummary } from '../../types';
+import type { ApplyItem, ApplyCounts, RestoreOutcomeCounts } from '../../types';
 
 // Mock useShowDetails to control Details visibility in tests
 vi.mock('@/lib/use-show-details', () => ({
@@ -230,12 +230,11 @@ describe('ApplyResultModal', () => {
   });
 
   describe('Restore section', () => {
-    const restoreSummary: RestoreSummary = {
-      total: 5,
+    const restoreCounts: RestoreOutcomeCounts = {
       restored: 3,
-      skipped: 1,
-      failed: 1,
-      backupLocation: 'C:\\backups\\2025-01-01',
+      skipped_up_to_date: 2,
+      skipped_missing_source: 1,
+      failed: 4,
     };
 
     const applyProps = {
@@ -248,35 +247,40 @@ describe('ApplyResultModal', () => {
       ],
     };
 
-    it('shows restore summary when restoreSummary is provided', () => {
+    it('lists each settings outcome under its own label, with a missing optional file kept apart from up to date', () => {
       renderWithProviders(
-        <ApplyResultModal {...applyProps} restoreSummary={restoreSummary} />
+        <ApplyResultModal {...applyProps} restoreCounts={restoreCounts} />
       );
 
-      expect(screen.getByText('Settings')).toBeInTheDocument();
-      expect(screen.getByText('3')).toBeInTheDocument(); // restored count
+      const section = screen.getByTestId('restore-section');
+      expect(section).toHaveTextContent('Restored3');
+      expect(section).toHaveTextContent('Already up to date2');
+      expect(section).toHaveTextContent('Not included in the saved setup1');
+      expect(section).toHaveTextContent('Failed4');
     });
 
-    it('shows backup location', () => {
+    it('never says Restored for a preview', () => {
       renderWithProviders(
-        <ApplyResultModal {...applyProps} restoreSummary={restoreSummary} />
+        <ApplyResultModal {...defaultProps} restoreCounts={restoreCounts} />
       );
 
-      expect(screen.getByText(/C:\\backups\\2025-01-01/)).toBeInTheDocument();
+      const section = screen.getByTestId('restore-section');
+      expect(section).toHaveTextContent('Would restore3');
+      expect(section).not.toHaveTextContent('Restored');
     });
 
-    it('does not show restore section when restoreSummary is absent', () => {
+    it('does not show restore section when restoreCounts is absent', () => {
       renderWithProviders(<ApplyResultModal {...applyProps} />);
 
       expect(screen.queryByText('Settings')).not.toBeInTheDocument();
     });
 
-    it('shows revert button when restoreSummary has restorations and onRevertSettings is provided', () => {
+    it('shows revert button when settings were restored and onRevertSettings is provided', () => {
       const onRevert = vi.fn();
       renderWithProviders(
         <ApplyResultModal
           {...applyProps}
-          restoreSummary={restoreSummary}
+          restoreCounts={restoreCounts}
           onRevertSettings={onRevert}
         />
       );
@@ -291,7 +295,7 @@ describe('ApplyResultModal', () => {
       renderWithProviders(
         <ApplyResultModal
           {...defaultProps}
-          restoreSummary={restoreSummary}
+          restoreCounts={restoreCounts}
           onRevertSettings={vi.fn()}
         />
       );

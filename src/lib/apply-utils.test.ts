@@ -15,6 +15,7 @@ import {
   getPhaseAwareStatusForEvent,
   RESTORE_STATUS_MAP,
   getRestoreUiStatus,
+  getActivityRowLabel,
   deriveCountersFromEvents,
   buildOnlyFlagValue,
   UI_STATUS_MAP,
@@ -939,8 +940,12 @@ describe('apply-utils', () => {
       expect(RESTORE_STATUS_MAP.skipped_up_to_date.color).toBe('muted');
     });
 
-    it('skipped_missing_source maps to warn color', () => {
-      expect(RESTORE_STATUS_MAP.skipped_missing_source.color).toBe('warn');
+    // The engine reports skipped_missing_source only for an optional settings
+    // file the old PC never had. A warning colour told first-time users their
+    // setup had gone wrong when nothing had.
+    it('skipped_missing_source is neutral, not a warning', () => {
+      expect(RESTORE_STATUS_MAP.skipped_missing_source.color).toBe('muted');
+      expect(RESTORE_STATUS_MAP.skipped_missing_source.longLabel).toBe('Not included in the saved setup');
     });
 
     it('restoring maps to info color', () => {
@@ -953,7 +958,7 @@ describe('apply-utils', () => {
       expect(getRestoreUiStatus('restored').shortLabel).toBe('RESTORED');
       expect(getRestoreUiStatus('restoring').shortLabel).toBe('RESTORING');
       expect(getRestoreUiStatus('skipped_up_to_date').shortLabel).toBe('UP TO DATE');
-      expect(getRestoreUiStatus('skipped_missing_source').shortLabel).toBe('MISSING');
+      expect(getRestoreUiStatus('skipped_missing_source').shortLabel).toBe('NOT IN SETUP');
       expect(getRestoreUiStatus('failed').shortLabel).toBe('FAILED');
     });
 
@@ -961,6 +966,31 @@ describe('apply-utils', () => {
       const result = getRestoreUiStatus('unknown_status' as RestoreStatusKey);
       expect(result.shortLabel).toBe('FAILED');
       expect(result.color).toBe('error');
+    });
+  });
+
+  describe('getActivityRowLabel for restore rows', () => {
+    const restoreRow = (restoreStatus: RestoreStatusKey, preview: boolean): AppEvent => ({
+      app: `⚙ restore:${restoreStatus}`,
+      action: '',
+      kind: 'restore',
+      restoreStatus,
+      preview,
+    });
+
+    // The engine reports `restored` for an item a dry run would restore, so a
+    // label read from the item alone claims a preview changed the machine.
+    it('never reads RESTORED for a dry-run row', () => {
+      const label = getActivityRowLabel(restoreRow('restored', true));
+      expect(label.shortLabel).toBe('TO RESTORE');
+      expect(label.shortLabel).not.toBe('RESTORED');
+    });
+
+    // Neutral styling for a missing optional file must not leak into real
+    // failures, in a real run or a preview.
+    it('keeps a failed restore an error, in a real run and in a preview', () => {
+      expect(getActivityRowLabel(restoreRow('failed', false))).toEqual({ shortLabel: 'FAILED', color: 'error' });
+      expect(getActivityRowLabel(restoreRow('failed', true))).toEqual({ shortLabel: 'FAILED', color: 'error' });
     });
   });
 

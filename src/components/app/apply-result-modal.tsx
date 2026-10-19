@@ -1,17 +1,19 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { FilterChip } from '../ui/filter-chip';
-import { CheckCircle2, AlertTriangle, Copy, Package, Loader2, Settings, FolderArchive } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Copy, Package, Loader2, Settings } from 'lucide-react';
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { DetailsDisclosure } from '../ui/details-disclosure';
 import { useShowDetails } from '@/lib/use-show-details';
-import type { ApplyItem, ApplyCounts, RestoreResult, RestoreSummary } from '../../types';
+import type { ApplyItem, ApplyCounts, RestoreResult, RestoreOutcomeCounts } from '../../types';
 import {
   categorizeApplyItems,
   countCategorizedItems,
   reasonToStatusKey,
   getUiStatus,
   getColorClasses,
+  getRestoreUiStatus,
+  RESTORE_OUTCOME_ORDER,
   type StatusKey,
 } from '../../lib/apply-utils';
 import { useMicroFeedback } from '@/lib/micro-feedback';
@@ -30,7 +32,8 @@ interface ApplyResultModalProps {
   rawLogs?: string;
   rawEnvelope?: object;
   restoreItems?: RestoreResult[];
-  restoreSummary?: RestoreSummary;
+  /** Settings outcome counts from the run's restore rows (`countRestoreOutcomes`). */
+  restoreCounts?: RestoreOutcomeCounts;
   restoreJournalFile?: string;
   onRevertSettings?: () => void;
 }
@@ -46,7 +49,7 @@ export function ApplyResultModal({
   currentProgress,
   rawLogs,
   rawEnvelope,
-  restoreSummary,
+  restoreCounts,
   onRevertSettings,
 }: ApplyResultModalProps) {
   const copyFeedback = useMicroFeedback(2000);
@@ -398,39 +401,25 @@ export function ApplyResultModal({
             </div>
           )}
 
-          {/* Settings (restore) section — only when restore data is present */}
-          {restoreSummary && !isApplying && (
+          {/* Settings (restore) section — only when restore rows exist */}
+          {restoreCounts && RESTORE_OUTCOME_ORDER.some((status) => restoreCounts[status] > 0) && !isApplying && (
             <div className="border-t border-border pt-4 space-y-3" data-testid="restore-section">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Settings className="h-4 w-4" />
                 Settings
               </div>
               <div className="space-y-2">
-                {restoreSummary.restored > 0 && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-success/10 border border-success/20">
-                    <span className="text-sm font-medium">Restored</span>
-                    <span className="text-xl font-semibold text-success">{restoreSummary.restored}</span>
-                  </div>
-                )}
-                {restoreSummary.skipped > 0 && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/10 border border-muted/20">
-                    <span className="text-sm font-medium">Already up to date</span>
-                    <span className="text-xl font-semibold text-muted-foreground">{restoreSummary.skipped}</span>
-                  </div>
-                )}
-                {restoreSummary.failed > 0 && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-danger/10 border border-danger/20">
-                    <span className="text-sm font-medium">Failed</span>
-                    <span className="text-xl font-semibold text-danger">{restoreSummary.failed}</span>
-                  </div>
-                )}
+                {RESTORE_OUTCOME_ORDER.filter((status) => restoreCounts[status] > 0).map((status) => {
+                  const ui = getRestoreUiStatus(status, { preview: isDryRun });
+                  const colors = getColorClasses(ui.color);
+                  return (
+                    <div key={status} className={`flex items-center justify-between p-3 rounded-lg ${colors.bg} border ${colors.border}`}>
+                      <span className="text-sm font-medium">{ui.longLabel}</span>
+                      <span className={`text-xl font-semibold ${colors.text}`}>{restoreCounts[status]}</span>
+                    </div>
+                  );
+                })}
               </div>
-              {restoreSummary.backupLocation && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
-                  <FolderArchive className="h-3 w-3 flex-shrink-0" />
-                  <span>Backups: {restoreSummary.backupLocation}</span>
-                </div>
-              )}
             </div>
           )}
 
@@ -493,7 +482,7 @@ export function ApplyResultModal({
             </Button>
           )}
           {/* Revert settings button — only after non-dry-run with restore data */}
-          {!isDryRun && restoreSummary && restoreSummary.restored > 0 && onRevertSettings && (
+          {!isDryRun && restoreCounts && restoreCounts.restored > 0 && onRevertSettings && (
             <Button
               variant="secondary"
               onClick={onRevertSettings}
