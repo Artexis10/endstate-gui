@@ -123,7 +123,7 @@ function isCleanRestoreText(text: string): boolean {
  * preferred when present and clean. A preview restores nothing, so its
  * canonical failure says the check failed. See docs/ux-language.md.
  */
-export function restoreRowSecondary(event: RestoreItemEvent, preview = false): string | undefined {
+function restoreRowSecondary(event: RestoreItemEvent, preview = false): string | undefined {
   if (event.status !== 'failed') return undefined;
   const message = event.message?.trim();
   // A registry restore's engine message names registry internals, so its row
