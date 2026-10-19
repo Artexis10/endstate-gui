@@ -44,7 +44,7 @@ beforeEach(() => {
 
 const SETTINGS: AppSettings = {
   engineMode: 'bundled',
-  customProfilesDirectory: '',
+  storageDestination: null,
   selectedProfileName: null,
   dryRunEnabled: false,
   showDetails: false,

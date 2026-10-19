@@ -267,24 +267,7 @@ fn get_capture_cache_directory() -> Result<String, String> {
 /// * `Err(String)` - Failed to copy file
 #[tauri::command]
 fn copy_file(source_path: String, dest_path: String) -> Result<(), String> {
-    use std::path::Path;
-
-    let source = Path::new(&source_path);
-    let dest = Path::new(&dest_path);
-
-    if !source.exists() || !source.is_file() {
-        return Err(format!("Source file does not exist: {}", source_path));
-    }
-
-    // Ensure destination directory exists
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create destination directory: {}", e))?;
-    }
-
-    fs::copy(source, dest).map_err(|e| format!("Failed to copy file: {}", e))?;
-
-    Ok(())
+    cmd_impl::copy_file(&source_path, &dest_path)
 }
 
 /// Delete a file silently (ignore if not found).
@@ -430,8 +413,33 @@ fn show_file_dialog() -> Result<Option<String>, String> {
 /// * `Ok(Vec<String>)` - List of absolute file paths
 /// * `Err(String)` - Failed to read directory
 #[tauri::command]
-fn list_manifest_files(directory: String) -> Result<Vec<String>, String> {
-    cmd_impl::list_manifest_files(&directory)
+fn list_manifest_files(
+    directory: String,
+    include_availability: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    if include_availability == Some(true) {
+        serde_json::to_value(endstate_engine_core::storage::list_profile_entries(
+            &directory,
+        )?)
+        .map_err(|e| e.to_string())
+    } else {
+        serde_json::to_value(cmd_impl::list_manifest_files(&directory)?).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn discover_sync_folders() -> Vec<endstate_engine_core::storage::ProviderDiscovery> {
+    endstate_engine_core::storage::discover_sync_folders()
+}
+
+#[tauri::command]
+fn save_profile(
+    path: String,
+    content: String,
+    metadata: Option<String>,
+    create_new: bool,
+) -> Result<(), String> {
+    endstate_engine_core::storage::save_profile(&path, &content, metadata.as_deref(), create_new)
 }
 
 /// Read a text file from disk.
@@ -1025,6 +1033,8 @@ pub fn run() {
             engine_is_running,
             engine_get_run_id,
             list_manifest_files,
+            discover_sync_folders,
+            save_profile,
             run_endstate_streaming,
             check_file_exists,
             get_default_profiles_directory,

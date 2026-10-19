@@ -1051,26 +1051,27 @@ export function SetupFlow({
                     const cloudEntry = cloudStorageKnown
                       ? cloudBackupIndex?.get(profileKeyFor(profile))
                       : undefined;
+                    const onlineOnly = profile.availability === 'online-only';
                     const isRecentlyImported = recentlyImportedProfile?.path === profile.path;
                     const showSecondaryName =
                       !!profile.displayName && profile.displayName !== profile.name;
                     return (
                     <Card
-                      key={profile.name}
+                      key={profile.path}
                       ref={isRecentlyImported ? recentlyImportedCardRef : undefined}
                       className={`${isRecentlyImported ? 'border-green-500/50 shadow-sm' : 'cursor-pointer hover:border-green-500/50 hover:shadow-md'} transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-green-500/50`}
                       onClick={() => {
-                        if (!isRecentlyImported && !interactionBlocked) handleSelectProfile(profile);
+                        if (!isRecentlyImported && !interactionBlocked && !onlineOnly) handleSelectProfile(profile);
                       }}
                       onKeyDown={(e) => {
-                        if (!isRecentlyImported && !interactionBlocked && (e.key === 'Enter' || e.key === ' ')) {
+                        if (!isRecentlyImported && !interactionBlocked && !onlineOnly && (e.key === 'Enter' || e.key === ' ')) {
                           e.preventDefault();
                           handleSelectProfile(profile);
                         }
                       }}
-                      tabIndex={isRecentlyImported || interactionBlocked ? undefined : 0}
+                      tabIndex={isRecentlyImported || interactionBlocked || onlineOnly ? undefined : 0}
                       role={isRecentlyImported ? undefined : 'button'}
-                      aria-disabled={interactionBlocked || undefined}
+                      aria-disabled={interactionBlocked || onlineOnly || undefined}
                       data-testid={`profile-card-${profile.name}`}
                     >
                       <CardContent className="py-4 px-5">
@@ -1080,6 +1081,7 @@ export function SetupFlow({
                               <p className="text-sm font-medium truncate leading-5">
                                 {profile.displayName || profile.name}
                               </p>
+                              {onlineOnly && <span className="text-xs text-muted-foreground">Online-only</span>}
                               {isRecentlyImported && (
                                 <span className="rounded border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-500">
                                   Imported
@@ -1105,11 +1107,13 @@ export function SetupFlow({
                                 />
                               </p>
                             )}
+                            {onlineOnly && <p className="text-xs text-muted-foreground">Make this setup available locally in your sync app to use it.</p>}
                             <div className="mt-1 flex flex-wrap items-center gap-x-3">
                               {/* Inspection sits with the card's other inline
                                   links rather than the action cluster, so the
                                   Delete/Select pair stays a two-button decision. */}
                               <Button
+                                disabled={onlineOnly || interactionBlocked}
                                 type="button"
                                 variant="link"
                                 size="inline"
@@ -1137,6 +1141,7 @@ export function SetupFlow({
                                 (hostedBackupProviderKind === 'self-hosted' || hostedBackupSubscriptionStatus === 'active') &&
                                 onPushProfileToCloud && (
                                   <Button
+                                    disabled={onlineOnly || interactionBlocked}
                                     type="button"
                                     variant="link"
                                     size="inline"
@@ -1150,7 +1155,6 @@ export function SetupFlow({
                                         profile.displayName || profile.name,
                                       );
                                     }}
-                                    disabled={interactionBlocked}
                                     className="gap-1 text-xs"
                                     data-testid={`profile-card-${profile.name}-push-to-cloud`}
                                   >
@@ -1168,7 +1172,7 @@ export function SetupFlow({
                               size="sm"
                               tabIndex={isRecentlyImported ? 0 : -1}
                               aria-label={`Delete ${profile.displayName || profile.name}`}
-                              disabled={interactionBlocked}
+                              disabled={onlineOnly || interactionBlocked}
                               className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 px-2"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1180,7 +1184,7 @@ export function SetupFlow({
                             {isRecentlyImported ? (
                               <Button
                                 size="sm"
-                                disabled={interactionBlocked}
+                                disabled={onlineOnly || interactionBlocked}
                                 className="bg-green-600 text-white hover:bg-green-700"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1194,7 +1198,7 @@ export function SetupFlow({
                                 variant="secondary"
                                 size="sm"
                                 tabIndex={-1}
-                                disabled={interactionBlocked}
+                                disabled={onlineOnly || interactionBlocked}
                               >
                                 Select
                               </Button>

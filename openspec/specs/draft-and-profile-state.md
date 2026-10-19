@@ -147,7 +147,7 @@ interface CaptureArtifactEvent {
 interface AppSettings {
   engineMode: 'bundled' | 'path' | 'script';
   engineScriptPath: string;
-  customProfilesDirectory: string;
+  storageDestination: { kind: 'folder'; path: string } | null; // null uses Documents\Endstate\Setups
   selectedProfileName: string | null;  // NAME only, never path
   dryRunEnabled: boolean;
   showDetails: boolean;

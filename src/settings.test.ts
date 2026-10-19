@@ -44,7 +44,7 @@ describe('settings', () => {
       const settings = loadSettings();
 
       expect(settings.engineMode).toBe('bundled');
-      expect(settings.customProfilesDirectory).toBe('');
+      expect(settings.storageDestination).toEqual(null);
       expect(settings.selectedProfileName).toBeNull();
       expect(settings.dryRunEnabled).toBe(false);
     });
@@ -101,7 +101,7 @@ describe('settings', () => {
     it('loads settings from localStorage when present (namespaced)', () => {
       const stored: AppSettings = {
         engineMode: 'path',
-        customProfilesDirectory: '/manifests',
+        storageDestination: { kind: 'folder', path: '/manifests' },
         selectedProfileName: 'TestProfile',
         dryRunEnabled: false,
         showDetails: false,
@@ -117,7 +117,7 @@ describe('settings', () => {
     it('migrates legacy un-namespaced settings to namespaced key', () => {
       const stored: AppSettings = {
         engineMode: 'path',
-        customProfilesDirectory: '/legacy',
+        storageDestination: { kind: 'folder', path: '/legacy' },
         selectedProfileName: null,
         dryRunEnabled: false,
         showDetails: false,
@@ -137,14 +137,14 @@ describe('settings', () => {
     it('merges partial settings with defaults', () => {
       const partial = {
         engineMode: 'path' as const,
-        customProfilesDirectory: '/custom',
+        storageDestination: { kind: 'folder', path: '/custom' },
       };
       localStorage.setItem(NAMESPACED_KEY, JSON.stringify(partial));
 
       const settings = loadSettings();
 
       expect(settings.engineMode).toBe('path');
-      expect(settings.customProfilesDirectory).toBe('/custom');
+      expect(settings.storageDestination).toEqual({ kind: 'folder', path: '/custom' });
       expect(settings.dryRunEnabled).toBe(false);
     });
 
@@ -161,7 +161,7 @@ describe('settings', () => {
       const stored = {
         engineMode: 'script',
         engineScriptPath: '/old/path.ps1',
-        customProfilesDirectory: '',
+        storageDestination: null,
         selectedProfileName: null,
         dryRunEnabled: true,
         showDetails: false,
@@ -193,7 +193,7 @@ describe('settings', () => {
     it('persists settings to localStorage with namespace', () => {
       const settings: AppSettings = {
         engineMode: 'path',
-        customProfilesDirectory: '/test/manifests',
+        storageDestination: { kind: 'folder', path: '/test/manifests' },
         selectedProfileName: 'Profile1',
         dryRunEnabled: false,
         showDetails: false,
@@ -210,7 +210,7 @@ describe('settings', () => {
     it('overwrites existing settings', () => {
       const initial: AppSettings = {
         engineMode: 'bundled',
-        customProfilesDirectory: '/old',
+        storageDestination: { kind: 'folder', path: '/old' },
         selectedProfileName: 'Old',
         dryRunEnabled: true,
         showDetails: false,
@@ -220,7 +220,7 @@ describe('settings', () => {
 
       const updated: AppSettings = {
         engineMode: 'path',
-        customProfilesDirectory: '/new',
+        storageDestination: { kind: 'folder', path: '/new' },
         selectedProfileName: 'New',
         dryRunEnabled: false,
         showDetails: false,
@@ -236,7 +236,7 @@ describe('settings', () => {
   describe('auto-backup fields', () => {
     const FULL: AppSettings = {
       engineMode: 'bundled',
-      customProfilesDirectory: '',
+      storageDestination: null,
       selectedProfileName: 'my-profile',
       dryRunEnabled: true,
       showDetails: false,
@@ -265,7 +265,7 @@ describe('settings', () => {
         'endstate-gui-settings',
         JSON.stringify({
           engineMode: 'bundled',
-          customProfilesDirectory: '',
+          storageDestination: null,
           selectedProfileName: 'legacy',
           dryRunEnabled: true,
           showDetails: false,
@@ -292,7 +292,7 @@ describe('settings', () => {
         'endstate-gui-settings',
         JSON.stringify({
           engineMode: 'bundled',
-          customProfilesDirectory: '',
+          storageDestination: null,
           dryRunEnabled: true,
           showDetails: false,
           autoBackupEnabled: true,
@@ -338,7 +338,7 @@ describe('settings', () => {
         'endstate-gui-settings',
         JSON.stringify({
           engineMode: 'bundled',
-          customProfilesDirectory: '',
+          storageDestination: null,
           selectedProfileName: 'legacy',
           dryRunEnabled: true,
           showDetails: false,
@@ -369,7 +369,7 @@ describe('settings', () => {
         'endstate-gui-settings',
         JSON.stringify({
           engineMode: 'bundled',
-          customProfilesDirectory: '',
+          storageDestination: null,
           dryRunEnabled: true,
           showDetails: false,
           cloudInvitationShownAt: '2026-08-08T09:30:00.000Z',
@@ -470,7 +470,7 @@ describe('settings', () => {
         'endstate-gui-settings',
         JSON.stringify({
           engineMode: 'bundled',
-          customProfilesDirectory: '',
+          storageDestination: null,
           selectedProfileName: 'legacy',
           dryRunEnabled: true,
           showDetails: false,

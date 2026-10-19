@@ -17,6 +17,7 @@ parking_lot = "0.12"
 tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros", "net", "io-util", "time"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 base64 = "0.22"
+tempfile = "3.27"
 # Bridge-only deps: gated so the app crate (which links engine-core WITHOUT the
 # `bridge` feature) does not pull axum/tower-http/tokio-stream into release.
 axum = { version = "0.8", optional = true }
@@ -33,3 +34,6 @@ bridge = ["axum", "tower-http", "tokio-stream"]
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"

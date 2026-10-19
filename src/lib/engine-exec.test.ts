@@ -15,7 +15,7 @@ const mockIsEngineAvailable = vi.mocked(isEngineAvailable);
 describe('buildEngineCommand', () => {
   const baseSettings: AppSettings = {
     engineMode: 'bundled',
-    customProfilesDirectory: '',
+    storageDestination: null,
     selectedProfileName: null,
     dryRunEnabled: false,
     showDetails: false,
@@ -83,7 +83,7 @@ describe('buildEngineCommand', () => {
 describe('runEndstateOnce', () => {
   const baseSettings: AppSettings = {
     engineMode: 'bundled',
-    customProfilesDirectory: '',
+    storageDestination: null,
     selectedProfileName: null,
     dryRunEnabled: false,
     showDetails: false,

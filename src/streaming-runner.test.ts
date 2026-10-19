@@ -12,7 +12,7 @@ vi.mock('./lib/tauri-bridge', () => ({
 describe('streaming-runner', () => {
   const mockSettings: AppSettings = {
     engineMode: 'bundled',
-    customProfilesDirectory: '',
+    storageDestination: null,
     selectedProfileName: null,
     dryRunEnabled: true,
     showDetails: false,

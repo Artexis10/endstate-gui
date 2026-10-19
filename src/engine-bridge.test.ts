@@ -32,7 +32,7 @@ const mockListen = vi.mocked(listen);
 
 const baseSettings: AppSettings = {
   engineMode: 'bundled',
-  customProfilesDirectory: '',
+  storageDestination: null,
   selectedProfileName: null,
   dryRunEnabled: false,
   showDetails: false,

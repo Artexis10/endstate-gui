@@ -9,6 +9,7 @@ import { backendErrorMessage } from './lib/import-errors';
 export interface ProfileDescriptor {
   /** Stable ID derived from basename (e.g., "setup_2024-01-15") */
   id: string;
+  availability?: 'local' | 'online-only';
   /** Path to the setup file (setup_*.json or setup_*.jsonc) */
   setupPath: string;
   /** Path to the metadata file (optional, may not exist) */
@@ -44,6 +45,7 @@ export interface ValidationResult {
 export interface DiscoveredProfile {
   name: string;
   path: string;
+  availability?: 'local' | 'online-only';
   displayName?: string;
 }
 
@@ -150,7 +152,10 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
   }
 
   try {
-    const files = await invoke<string[]>('list_manifest_files', { directory });
+    const listed = await invoke<Array<string | { path: string; availability: 'local' | 'online-only'; metadataAvailable: boolean }>>('list_manifest_files', { directory, includeAvailability: true });
+    const entries = (listed || []).map(entry => typeof entry === 'string' ? { path: entry, availability: 'local' as const, metadataAvailable: true } : entry);
+    const byPath = new Map(entries.map(entry => [entry.path, entry]));
+    const files = entries.map(entry => entry.path);
     if (!files || !Array.isArray(files) || files.length === 0) {
       return { descriptors: [], skipped: [], error: null };
     }
@@ -176,6 +181,12 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
         const id = isNestedInSubdir ? parentDir : bareFilename;
         const metaPath = getMetaPath(setupPath);
         
+        const entry = byPath.get(setupPath);
+        if (entry?.availability === 'online-only') {
+          // Online-only placeholders are listed by name without opening them.
+          return { descriptor: { id, setupPath, metaPath, label: filename, availability: 'online-only' } };
+        }
+
         // Validate against profile contract
         const validation = await validateProfile(setupPath);
         if (!validation.valid) {
@@ -187,7 +198,7 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
         }
 
         // Load metadata for display name
-        const metadata = await readProfileMetadata(setupPath);
+        const metadata = entry?.metadataAvailable ? await readProfileMetadata(setupPath) : null;
         const displayName = metadata?.displayName;
         
         const descriptor: ProfileDescriptor = {
@@ -208,6 +219,12 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
       if ('descriptor' in result) descriptors.push(result.descriptor);
       else skipped.push(result.skipped);
     }
+    // Conflict copies and same-named setups in different folders stay apart.
+    const counts = new Map<string, number>();
+    for (const profile of descriptors) counts.set(profile.label, (counts.get(profile.label) || 0) + 1);
+    for (const profile of descriptors) {
+      if ((counts.get(profile.label) || 0) > 1) profile.label += ` (${profile.setupPath.slice(directory.length).replace(/^[\\/]+/, '')})`;
+    }
     return { descriptors, skipped, error: null };
   } catch (err) {
     return { descriptors: [], skipped: [], error: backendErrorMessage(err) };
@@ -224,7 +241,8 @@ export async function discoverProfiles(directory: string): Promise<ProfileDiscov
     profiles: descriptors.map(d => ({
       name: d.id,
       path: d.setupPath,
-      displayName: d.displayName,
+      displayName: d.label !== d.id ? d.label : d.displayName,
+      ...(d.availability ? { availability: d.availability } : {}),
     })),
     skipped,
     error,

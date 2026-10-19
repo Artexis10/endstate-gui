@@ -155,3 +155,16 @@ describe('SetupFlow — "What\'s inside"', () => {
     expect(onInspectProfile).not.toHaveBeenCalled();
   });
 });
+
+it('shows online-only profiles but prevents inspection, selection, or deletion', async () => {
+  const user = userEvent.setup();
+  renderWithProviders(<SetupFlow {...baseProps} profiles={[{ ...profiles[0], availability: 'online-only' }]} />);
+  expect(screen.getByText('Online-only')).toBeVisible();
+  expect(screen.getByText(/Make this setup available locally/)).toBeVisible();
+  const inspect = screen.getByRole('button', { name: "What's inside Work Laptop" });
+  expect(inspect).toBeDisabled();
+  await user.click(inspect);
+  expect(baseProps.onInspectProfile).not.toHaveBeenCalled();
+  expect(baseProps.onPreview).not.toHaveBeenCalled();
+  expect(baseProps.onDeleteProfile).not.toHaveBeenCalled();
+});

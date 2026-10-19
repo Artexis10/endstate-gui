@@ -21,7 +21,7 @@ describe('settings profile selection migration', () => {
       // Simulate stored settings with selectedProfileName already set
       const mockSettings = {
         engineMode: 'bundled',
-        customProfilesDirectory: '',
+        storageDestination: null,
         selectedProfileName: 'myprofile',
         dryRunEnabled: true,
         showDetails: false,
@@ -39,7 +39,7 @@ describe('settings profile selection migration', () => {
       // Simulate legacy stored settings with path but no selectedProfileName
       const legacySettings = {
         engineMode: 'bundled',
-        customProfilesDirectory: '',
+        storageDestination: null,
         selectedProfileName: null,
         lastSelectedProfile: '',
         lastSelectedProfilePath: 'C:\\profiles\\myprofile.jsonc',
@@ -68,7 +68,7 @@ describe('settings profile selection migration', () => {
     it('should clear selection when migration fails', async () => {
       const legacySettings = {
         engineMode: 'bundled',
-        customProfilesDirectory: '',
+        storageDestination: null,
         selectedProfileName: null,
         lastSelectedProfile: '',
         lastSelectedProfilePath: 'C:\\profiles\\nonexistent.jsonc',
@@ -91,7 +91,7 @@ describe('settings profile selection migration', () => {
     it('should migrate from legacy lastSelectedProfile when no path exists', async () => {
       const legacySettings = {
         engineMode: 'bundled',
-        customProfilesDirectory: '',
+        storageDestination: null,
         selectedProfileName: null,
         lastSelectedProfile: 'myprofile',
         lastSelectedProfilePath: '',
@@ -110,7 +110,7 @@ describe('settings profile selection migration', () => {
     it('should handle draft_ paths by clearing selection', async () => {
       const legacySettings = {
         engineMode: 'bundled',
-        customProfilesDirectory: '',
+        storageDestination: null,
         selectedProfileName: null,
         lastSelectedProfile: '',
         lastSelectedProfilePath: 'C:\\cache\\draft_2024-01-01.jsonc',
@@ -134,7 +134,7 @@ describe('settings profile selection migration', () => {
     it('should clear selectedProfileName only', () => {
       const mockSettings = {
         engineMode: 'bundled',
-        customProfilesDirectory: '',
+        storageDestination: null,
         selectedProfileName: 'myprofile',
         dryRunEnabled: true,
         showDetails: false,

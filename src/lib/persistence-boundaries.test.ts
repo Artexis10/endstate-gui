@@ -32,7 +32,7 @@ describe('Persistence Boundaries', () => {
       const settings = loadSettings();
 
       expect(settings.engineMode).toBe('bundled');
-      expect(settings.customProfilesDirectory).toBe('');
+      expect(settings.storageDestination).toEqual(null);
       expect(settings.selectedProfileName).toBeNull();
       expect(settings.dryRunEnabled).toBe(false);
     });
@@ -40,7 +40,7 @@ describe('Persistence Boundaries', () => {
     it('restores settings from localStorage when seeded', () => {
       const customSettings: AppSettings = {
         engineMode: 'path',
-        customProfilesDirectory: 'C:\\custom\\profiles',
+        storageDestination: { kind: 'folder', path: 'C:\\custom\\profiles' },
         selectedProfileName: 'my-profile',
         dryRunEnabled: false,
         showDetails: false,
@@ -69,7 +69,7 @@ describe('Persistence Boundaries', () => {
     it('persists settings to localStorage when saved', () => {
       const settings: AppSettings = {
         engineMode: 'path',
-        customProfilesDirectory: '/home/user/profiles',
+        storageDestination: { kind: 'folder', path: '/home/user/profiles' },
         selectedProfileName: 'work-setup',
         dryRunEnabled: true,
         showDetails: false,
@@ -105,7 +105,7 @@ describe('Persistence Boundaries', () => {
     it('merges partial updates with defaults', () => {
       const initial: AppSettings = {
         engineMode: 'path',
-        customProfilesDirectory: '',
+        storageDestination: null,
         selectedProfileName: null,
         dryRunEnabled: true,
         showDetails: false,
@@ -456,7 +456,7 @@ describe('Persistence Boundaries', () => {
       // Save all persisted preferences
       const settings: AppSettings = {
         engineMode: 'path',
-        customProfilesDirectory: '',
+        storageDestination: null,
         selectedProfileName: 'test',
         dryRunEnabled: true,
         showDetails: false,
