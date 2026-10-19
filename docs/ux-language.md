@@ -193,16 +193,16 @@ new engine-contract status.
 #### RESTORE rows (config settings restored during apply)
 
 Config-restore progress arrives as engine `restore-item` events (see
-`../endstate/docs/event-contract.md`, "Restore-Item Event"). These are **settings
+`../endstate/docs/contracts/event-contract.md`, "Restore-Item Event"). These are **settings
 rows**, not app rows: they use restore verbs, never the app "INSTALLING" verb.
 
 | Engine restore status | UI Label | Long label | Count phrase | Color | Meaning |
 |-----------------------|----------|------------|--------------|-------|---------|
 | `restoring` | RESTORING | Restoring… | — | info (blue) | In progress (transitional) |
-| `restored` | RESTORED | Restored | restored | success (green) | Setting file restored |
-| `skipped_up_to_date` | UP TO DATE | Already up to date | already up to date | muted (gray) | Target already matches the saved copy |
+| `restored` | RESTORED | Restored | restored | success (green) | The action changed the target |
+| `skipped_up_to_date` | UP TO DATE | Already up to date | already up to date | muted (gray) | Target already has the saved state, or an optional `delete-glob` folder is absent (nothing to delete) |
 | `skipped_missing_source` | NOT IN SETUP | Not included in the saved setup | not in saved setup | muted (gray) | An optional settings file the saved setup does not contain; nothing changed |
-| `failed` | FAILED | Failed | failed | error (red) | Restore failed |
+| `failed` | FAILED | Failed | failed | error (red) | The action could not complete, including a required file the saved setup does not include |
 
 `skipped_missing_source` is neutral: the engine emits it only for an optional
 entry whose source the saved setup does not contain (a required entry with a
@@ -211,7 +211,8 @@ a different meaning from verify **MISSING** (an app that is not installed),
 which keeps its warn mapping.
 
 **Preview (dry run).** The engine keeps the per-item status `restored` in a
-preview; `dryRun` is a run-level flag. The GUI takes the run's flag (the
+preview, where it means the action would change the target; `dryRun` is a
+run-level flag. The GUI takes the run's flag (the
 envelope's `data.dryRun` once the run ends) and shows preview language, never
 RESTORED:
 
@@ -247,8 +248,13 @@ was installed”, so it never claims a completed setup.
   label shows only the module name: its target names a registry key or value,
   and the default UI never shows registry references.
 - **Secondary text** (muted) surfaces a friendly, jargon-free reason. The
-  engine-authored `message` is used when present and clean; otherwise the
-  canonical strings are:
+  engine authors plain messages from the status and the dry-run flag:
+  “Already up to date”, “Not included in the saved setup”, “The saved setup
+  does not include this required file.” or the item's error text. The GUI
+  prefers a clean engine message over its own strings. A `restoring` or
+  `restored` row shows no secondary text, because its status label already
+  says it (“Settings restored” and “Would restore settings” add nothing).
+  Without a clean message the canonical strings are:
   - `skipped_up_to_date` → “Already matches your saved settings”
   - `skipped_missing_source` → “Your saved setup doesn’t include this file, so nothing changed”
   - `failed` → “Couldn’t restore this file”
@@ -299,7 +305,14 @@ reads the tier only through `src/lib/settings-kind.ts` and shows these groups:
   “Settings only — app installation not included”. Per-module engine notes
   (for example a value not set on this PC) stay behind Details.
 - A setup run carries no verify result for these settings: the engine checks
-  them only in `verify` and `rebuild`.
+  them only in `verify` and `rebuild`. There, a captured value check that the
+  same run did not restore comes back as `status: "skipped"` with
+  `reason: "not_restored"`; a standalone `verify` skips every such check. No
+  GUI screen renders `verify` result items today (the startup `verify` result
+  is stored and never shown), and the scheduled-check drift count reads only
+  `summary.fail`, so these skips never count as drift. The GUI therefore has
+  no mapping for `not_restored`; add one with the first screen that shows
+  verify items.
 
 #### Produced-artifact completion line
 

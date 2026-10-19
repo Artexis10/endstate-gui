@@ -22,6 +22,10 @@ Engine 2.32.0 adds a second kind of settings to a saved setup: Windows settings 
 
 - `windows-settings-presentation`: how the GUI shows settings that belong to no app, from profile contents through capture and setup results.
 
+### Modified Capabilities
+
+- `command-warning-presentation`: warning details show every technical field, and the capture warning `config_secret_scope_conflict` names its module in plain words.
+
 ## Impact
 
 - GUI only: `src/lib/settings-kind.ts`, `src/components/app/intent/profile-contents-modal.tsx`, `src/components/app/intent/setup-flow.tsx`, `src/components/app/intent/save-flow.tsx`, `src/components/app/overview/components/config-module-selector.tsx`, `src/components/app/overview/components/restore-intent-toggle.tsx`, `src/lib/restore-activity.ts`, `src/lib/apply-utils.ts`, `docs/ux-language.md`.

@@ -127,11 +127,16 @@ export interface ApplyRestoreOptions {
 }
 
 /** Engine-authored advisory attached to a completed command result. */
+/** An engine warning (`data.warnings`) from capture, plan, apply or verify. */
 export interface CommandWarning {
   code: string;
   message: string;
   driver?: string;
+  /** WinGet source the warning concerns (`winget` or `msstore`). */
+  source?: string;
   ref?: string;
+  /** Config module the warning concerns, e.g. for `config_secret_scope_conflict`. */
+  moduleId?: string;
 }
 
 export interface EndstateHostedBackupCapability {
@@ -671,13 +676,8 @@ export interface CapturedApp {
   name?: string;
 }
 
-export interface CaptureWarning {
-  code: string;
-  message: string;
-  driver?: string;
-  source?: string;
-  ref?: string;
-}
+/** Capture warnings share the engine's one warning shape. */
+export type CaptureWarning = CommandWarning;
 
 export interface CaptureCounts {
   totalFound: number;

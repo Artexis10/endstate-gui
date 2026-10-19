@@ -83,6 +83,42 @@ describe('SaveFlow Store capture results', () => {
     expect(screen.getByTestId('save-flow-save-file')).toBeInTheDocument();
   });
 
+  it('names the module of a secret-scope warning and keeps registry wording out of the default view', async () => {
+    renderWithProviders(
+      <SaveFlow
+        onBack={vi.fn()}
+        engineConnected
+        isRunning={false}
+        captureStage={null}
+        liveAppEvents={[]}
+        onStartCapture={vi.fn().mockResolvedValue({
+          count: 1,
+          draftText: '{}',
+          apps: [{ id: 'Notepad++.Notepad++', source: 'winget' }],
+          configModules: [{
+            id: 'apps.notepad-plus-plus', appId: 'notepad-plus-plus', displayName: 'Notepad++',
+            status: 'captured', filesCaptured: 2, wingetRefs: ['Notepad++.Notepad++'],
+          }],
+          warnings: [{
+            code: 'config_secret_scope_conflict',
+            message: 'Some Notepad++ settings were not captured because the module marks the same registry location as private. The rest of its settings were captured.',
+            moduleId: 'apps.notepad-plus-plus',
+          }],
+        })}
+        onSaveToFile={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start scan' }));
+    await waitFor(() => expect(screen.getByText('Scan complete')).toBeInTheDocument());
+
+    const warnings = screen.getByLabelText('Capture warnings');
+    expect(warnings).toHaveTextContent(
+      'Some Notepad++ settings were not captured because they may hold private data. Its other settings were captured.',
+    );
+    expect(warnings).not.toHaveTextContent(/registry|apps\.notepad-plus-plus/);
+  });
+
   it('does not promote an unavailable optional backend to a primary capture warning', async () => {
     renderWithProviders(
       <SaveFlow

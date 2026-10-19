@@ -22,6 +22,7 @@ import {
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { CaptureConfigModule, CaptureWarning, SubscriptionStatus } from '@/types';
 import { DetailsDisclosure } from '@/components/ui/details-disclosure';
+import { CommandWarningDetails } from '@/components/app/command-warning-list';
 import {
   NON_APP_SETTINGS_KINDS,
   SETTINGS_GROUP_COPY,
@@ -59,7 +60,8 @@ interface CaptureResult {
   warnings?: CaptureWarning[];
 }
 
-function captureWarningText(warning: CaptureWarning): string {
+// `code` is the engine's documented warning enum (cli-json-contract.md, "Command Warnings").
+function captureWarningText(warning: CaptureWarning, configModules: readonly CaptureConfigModule[]): string {
   switch (warning.code) {
     case 'store_source_unavailable':
       return 'Microsoft Store apps could not be included in this capture.';
@@ -67,6 +69,14 @@ function captureWarningText(warning: CaptureWarning): string {
       return 'Community-repository apps could not be included in this capture.';
     case 'store_version_unpinned':
       return 'Affected Microsoft Store apps will restore to the latest available version rather than the exact captured version.';
+    case 'config_secret_scope_conflict': {
+      // The engine message names a registry location, which the default UI
+      // never shows; Details keeps the code and the module ID.
+      const name = configModules.find((mod) => mod.id === warning.moduleId)?.displayName;
+      return name
+        ? `Some ${name} settings were not captured because they may hold private data. Its other settings were captured.`
+        : 'Some settings were not captured because they may hold private data. The other settings were captured.';
+    }
     default:
       return warning.message;
   }
@@ -644,7 +654,10 @@ export function SaveFlow({
                           className="flex items-start gap-2 text-xs text-warning"
                         >
                           <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" aria-hidden="true" />
-                          <span>{captureWarningText(warning)}</span>
+                          <div className="min-w-0">
+                            <span>{captureWarningText(warning, result.configModules ?? [])}</span>
+                            <CommandWarningDetails warning={warning} />
+                          </div>
                         </li>
                       ))}
                     </ul>

@@ -16,6 +16,14 @@
 - [x] 2.9 Capture results and setup results fallbacks: count each group apart; list three groups as "a, b and c"; the capture settings chip counts its rows.
 - [x] 2.10 Results rows: find an app row's settings through its package ref, as in the preview; treat `registry-import` rows like `registry-set` rows; start the hover title with the full row text.
 
+## 4. Mirror the engine contract (engine 2.32.0)
+
+- [x] 4.1 `docs/ux-language.md`: restore statuses and engine messages as in the event contract; record that no GUI screen renders verify items, so `not_restored` needs no mapping yet.
+- [x] 4.2 `docs/config-integration-design.md`: restore-item example message, full restorer list, optional `label`.
+- [x] 4.3 `src/types.ts`: one warning shape with `source` and `moduleId`; `CaptureWarning` is the same type.
+- [x] 4.4 `openspec/specs/engine-capture-contract.md` (a GUI-side contract document, edited directly as before): `sensitiveExcludedCount`, `configModules[].warnings`, `config_secret_scope_conflict`.
+- [x] 4.5 Warning details show every technical field; the secret-scope capture warning names its module in plain words.
+
 ## 3. Proof
 
 - [x] 3.1 Unit: Windows rows are not unidentified app settings; a selected Windows module reaches apply by full ID in its own group; captured Windows settings are not "Settings only"; the preview chip and module counts keep Windows settings apart.
