@@ -469,6 +469,20 @@ describe('apply-utils', () => {
   });
 
   describe('reconcileLiveActivity', () => {
+    it('never says a dry-run failure tried to install the app', () => {
+      const liveEvents: AppEvent[] = [{ app: 'Git.Git', action: 'Processing', timestamp: 1000 }];
+      const envelopeItems: ApplyItem[] = [
+        { id: 'Git.Git', name: 'Git', driver: 'winget', status: 'failed', reason: 'install_failed', message: 'Package not found' },
+      ];
+
+      const [preview] = reconcileLiveActivity(liveEvents, envelopeItems, true);
+      const [real] = reconcileLiveActivity(liveEvents, envelopeItems, false);
+
+      expect(preview.secondary).toBe("Couldn't check this app");
+      expect(preview.title).toBe("Git · Couldn't check this app\nPackage not found");
+      expect(real.secondary).toBe("Couldn't install this app");
+    });
+
     it('updates Working entry to Failed when envelope shows failure', () => {
       const liveEvents: AppEvent[] = [
         { app: 'Notepad++.Notepad++', action: 'Processing', timestamp: 1000 },

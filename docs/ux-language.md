@@ -336,9 +336,11 @@ follow these rules:
   stay in the list. The “N skipped” chip counts every app outcome that is not
   installed, present or failed, so its click shows MANUAL and CANCELLED rows
   too.
-- **A failed app keeps a reason.** Its secondary text reads “Couldn’t install
-  this app”. The engine's install message can name installer paths, so it
-  appears only in the hover title, as on a registry restore row.
+- **A failed app keeps a reason.** Its secondary text names what the run tried:
+  “Couldn’t install this app” in a real run, and “Couldn’t check this app” in a
+  preview or dry run, which install nothing. The engine's message can name
+  installer paths, so it appears only in the hover title, as on a registry
+  restore row.
 - **Quiet rows.** A results row shows the status label and the name, and
   secondary text only on a failure. A results row has no settings icon,
   because the settings rows themselves list under the apps. A preview app row

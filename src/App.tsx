@@ -2595,9 +2595,9 @@ function AppContent() {
 
     // CRITICAL: Reconcile live activity with final envelope
     // This ensures "Working..." entries are updated to their final status (Failed, Installed, etc.)
-    // The envelope's dry-run flag is authoritative for the finished restore rows.
+    // The envelope's dry-run flag is authoritative for the finished app and restore rows.
     const dryRun = envelopeData?.dryRun ?? requestedDryRun;
-    const reconciledEvents = reconcileLiveActivity(appEventList, envelopeActions).map((event) =>
+    const reconciledEvents = reconcileLiveActivity(appEventList, envelopeActions, dryRun).map((event) =>
       event.kind === 'restore' && event.preview !== dryRun ? { ...event, preview: dryRun } : event,
     );
     // Bounded buffer: keep up to 2000 events for scrollback

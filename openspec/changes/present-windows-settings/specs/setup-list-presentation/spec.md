@@ -2,7 +2,7 @@
 
 ### Requirement: Setup lists show failures first
 
-The setup preview list and the setup results list (a real run or a dry run) SHALL list every row whose status is an error, and every row that needs the person to act (MANUAL), under the heading "Needs attention", above the scrolling list and outside it, with the row's reason. Other warn outcomes, such as CANCELLED, SHALL stay in the list. Such a row SHALL NOT repeat in the list below, so each filter chip SHALL still equal the rows its click shows across both places; the "N skipped" chip counts and shows every app outcome that is not installed, present or failed. A failed app row SHALL read "Couldn't install this app" and SHALL keep the engine's install message in its hover title only, because that message can name installer paths.
+The setup preview list and the setup results list (a real run or a dry run) SHALL list every row whose status is an error, and every row that needs the person to act (MANUAL), under the heading "Needs attention", above the scrolling list and outside it, with the row's reason. Other warn outcomes, such as CANCELLED, SHALL stay in the list. Such a row SHALL NOT repeat in the list below, so each filter chip SHALL still equal the rows its click shows across both places; the "N skipped" chip counts and shows every app outcome that is not installed, present or failed. A failed app row SHALL name what failed in plain words: "Couldn't install this app" in a real run, and "Couldn't check this app" in a preview or a dry run, which install nothing. The row SHALL keep the engine's message in its hover title only, because that message can name installer paths.
 
 #### Scenario: Failures in a long run
 - **WHEN** a run of 100 apps and 35 settings ends with 1 failed app and 2 failed settings
@@ -14,6 +14,10 @@ The setup preview list and the setup results list (a real run or a dry run) SHAL
 - **WHEN** one app fails with the engine message "Installer exited with code 1603" and another needs a manual install
 - **THEN** both rows show under "Needs attention"
 - **AND** the failed row reads "Couldn't install this app", and the engine message is in its hover title, not in the row text
+
+#### Scenario: Failure in a dry run
+- **WHEN** an app fails in a dry run
+- **THEN** its row reads "Couldn't check this app", never "Couldn't install this app"
 
 #### Scenario: No failures
 - **WHEN** no row failed

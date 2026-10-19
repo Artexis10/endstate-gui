@@ -383,18 +383,31 @@ export function engineStatusToStatusKey(engineStatus: EngineItemStatus, phase?: 
 }
 
 /**
- * A failed app row's secondary text. The engine's install message can name
- * installer paths, so the row shows this plain line and the hover title keeps
- * the message, as on registry restore rows (docs/ux-language.md).
+ * A failed app row's secondary text, by what the run tried to do. The engine's
+ * message can name installer paths, so the row shows this plain line and the
+ * hover title keeps the message, as on registry restore rows (docs/ux-language.md).
+ * A preview or dry run installs nothing, so its failure says the check failed.
  */
-export const APP_INSTALL_FAILED_TEXT = "Couldn't install this app";
+export const APP_FAILED_TEXT = {
+  install: "Couldn't install this app",
+  check: "Couldn't check this app",
+  verify: "Couldn't verify this app",
+  capture: "Couldn't capture this app",
+} as const;
+
+type AppFailureKind = keyof typeof APP_FAILED_TEXT;
+
+function failureKindForPhase(phase: EnginePhase | undefined): AppFailureKind {
+  return phase === 'plan' ? 'check' : phase === 'verify' ? 'verify' : phase === 'capture' ? 'capture' : 'install';
+}
 
 /** Secondary text and hover title for a failed app row. */
-function appFailureText(name: string, message: string | null | undefined): Pick<AppEvent, 'secondary' | 'title'> {
+function appFailureText(name: string, message: string | null | undefined, kind: AppFailureKind): Pick<AppEvent, 'secondary' | 'title'> {
+  const text = APP_FAILED_TEXT[kind];
   const detail = message?.trim();
   return {
-    secondary: APP_INSTALL_FAILED_TEXT,
-    title: detail ? `${name} · ${APP_INSTALL_FAILED_TEXT}\n${detail}` : undefined,
+    secondary: text,
+    title: detail ? `${name} · ${text}\n${detail}` : undefined,
   };
 }
 
@@ -429,7 +442,7 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     reason: event.reason,
     name: event.name,
     driver: event.driver,
-    ...(statusKey === 'failed' ? appFailureText(event.name || event.id, event.message) : {}),
+    ...(statusKey === 'failed' ? appFailureText(event.name || event.id, event.message, failureKindForPhase(phase)) : {}),
   };
 }
 
@@ -1081,7 +1094,8 @@ export function reasonToActionString(item: ApplyItem): string {
  */
 export function reconcileLiveActivity(
   liveEvents: AppEvent[],
-  envelopeActions: ApplyAction[]
+  envelopeActions: ApplyAction[],
+  dryRun = false
 ): AppEvent[] {
   // Streaming-only runs (cancel/crash with no terminal envelope) keep their live
   // rows untouched — there is no authoritative list to reconcile against.
@@ -1122,7 +1136,7 @@ export function reconcileLiveActivity(
       // The envelope's message wins; a streamed failure keeps its own.
       ...(statusKey === 'failed'
         ? {
-            ...appFailureText(action.name ?? existing?.name ?? action.id, action.message),
+            ...appFailureText(action.name ?? existing?.name ?? action.id, action.message, dryRun ? 'check' : 'install'),
             ...(!action.message?.trim() && existing?.title ? { title: existing.title } : {}),
           }
         : {}),

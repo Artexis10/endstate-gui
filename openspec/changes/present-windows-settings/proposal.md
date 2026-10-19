@@ -22,11 +22,11 @@ Engine 2.32.0 adds a second kind of settings to a saved setup: Windows settings 
 ### New Capabilities
 
 - `windows-settings-presentation`: how the GUI shows settings that belong to no app, from profile contents through capture and setup results.
+- `setup-list-presentation`: the setup preview and results lists show failures first, keep one place for counts and say only what adds information.
 
 ### Modified Capabilities
 
 - `command-warning-presentation`: warning details show every technical field, and the capture warning `config_secret_scope_conflict` names its module in plain words.
-- `setup-list-presentation`: the setup preview and results lists show failures first, keep one place for counts and say only what adds information.
 
 ## Impact
 
