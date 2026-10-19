@@ -59,8 +59,9 @@ export interface AppSettings {
 }
 ```
 
-`null` means the existing default local directory. A selected provider and a manually
-entered directory both persist as `kind: 'folder'`; provider names are not persisted.
+`null` means the existing default Documents directory. A selected provider and a
+manually entered directory both persist as `kind: 'folder'`; provider names are not
+persisted.
 This keeps execution dependent only on the chosen path and leaves room for a future
 direct-upload variant.
 

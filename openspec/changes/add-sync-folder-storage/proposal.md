@@ -86,7 +86,7 @@ and draft invariants do not change. -->
   web fallback.
 - `src/file-discovery.ts`: preserve online-only entries without reading or validating
   their contents, and keep conflict copies distinct by path.
-- `src/components/app/settings/storage-location-setting.tsx` (new): render local,
+- `src/components/app/settings/storage-location-setting.tsx` (new): render default,
   detected, unavailable, browse, free-text, and encryption-warning states.
 - `src/App.tsx`: resolve the active profiles directory from the destination and place
   the new settings card outside Engine Configuration; route profile saves through

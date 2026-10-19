@@ -31,7 +31,7 @@ save, import, rename, delete, and setup.
 - **GIVEN** a persisted folder destination that cannot currently be accessed
 - **WHEN** a profile operation uses it
 - **THEN** the existing filesystem error is surfaced
-- **AND** the GUI does not silently fall back to the default local folder
+- **AND** the GUI does not silently fall back to the default Documents folder
 
 ### Requirement: Legacy custom directories migrate without relocation
 
