@@ -11,6 +11,12 @@ the current-user registry, or a local JSON file. Browser JavaScript cannot acces
 those sources, so discovery needs a narrow native boundary. The folder picker can use
 the already-installed Tauri dialog plugin.
 
+Current profile discovery validates every candidate and reads its optional metadata.
+Opening an online-only candidate can make OneDrive Files On-Demand, Google Drive
+streaming, or Dropbox download it. Current profile saves also write directly to the
+destination, so a sharing violation from a sync client can interrupt the operation
+without a transactional commit boundary.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -21,6 +27,10 @@ the already-installed Tauri dialog plugin.
   bare-string migration.
 - Preserve every existing custom path.
 - Support multiple accounts and isolate failures between providers.
+- Avoid implicit downloads while enumerating setup files.
+- Fail locked saves without replacing a complete setup with partial content.
+- Keep provider-created conflict copies visible and distinct.
+- Describe a redirected default Documents folder truthfully.
 - State clearly that Endstate does not encrypt files in a folder destination.
 
 **Non-goals:**
@@ -28,7 +38,8 @@ the already-installed Tauri dialog plugin.
 - Reimplement Hosted Backup on the client.
 - Authenticate to a sync provider or determine whether its sync is healthy.
 - Encrypt local files or design encryption-key custody.
-- Infer remote versions, quota, conflicts, or recovery behavior from a synced folder.
+- Infer remote versions, quota, or recovery behavior from a synced folder.
+- Merge, delete, or choose between provider-created conflict copies.
 
 ## Decisions
 
@@ -105,15 +116,22 @@ provider's personal/business metadata; otherwise they use a stable ordinal such 
 `Google Drive account 2`. The UI may display the discovered path so same-type accounts
 remain distinguishable.
 
-### 4. Use the documented Windows discovery sources
+### 4. Use local Windows discovery sources
 
-- OneDrive reads all three documented environment variables. Equal paths are
-  deduplicated, while distinct personal and commercial paths remain separate.
+- OneDrive reads all three environment variables first, then enumerates
+  `HKCU\Software\Microsoft\OneDrive\Accounts` and reads `UserFolder` from account
+  subkeys such as `Personal`, `Business1`, and `Business2`. Registry values supplement
+  missing environment values and provide a fallback when the variables are absent.
+  Equal paths are deduplicated, while distinct personal and commercial paths remain
+  separate.
 - Google Drive reads every value under
   `HKCU\Software\Google\DriveFS\PerAccountPreferences`, parses each JSON payload, and
-  appends `My Drive` to `mount_point_path`.
-- Dropbox reads `%LOCALAPPDATA%\Dropbox\info.json` and extracts both `personal.path`
-  and `business.path` when present.
+  appends `My Drive` to `mount_point_path`. This data is not a documented public
+  format, so malformed or changed payloads produce a visible provider-level reason
+  without exposing raw registry content.
+- Dropbox checks `Dropbox\info.json` under both `%LOCALAPPDATA%` and `%APPDATA%` and
+  extracts `personal.path` and `business.path` from every readable file. Equal paths
+  are deduplicated.
 
 One-click selection appends `Endstate` to the discovered sync root before storing the
 folder destination, matching the working `%OneDrive%\Endstate` configuration described
@@ -127,14 +145,77 @@ Direct registry access is preferred over parsing localized `reg.exe` output. If 
 existing dependency graph has no suitable API, use a target-specific Rust registry
 dependency so non-Windows builds do not acquire Windows behavior.
 
-### 5. Present storage separately from engine configuration
+### 5. Classify the default Documents location without changing its identity
+
+The default option remains a null destination resolved through
+`get_default_profiles_directory`. Its label is **Documents (default)**, not **This
+device**, because Windows Known Folder Move can place Documents below a OneDrive root.
+
+After provider discovery, the GUI compares the resolved default path with detected
+sync roots using case-insensitive Windows path containment. If the default sits below
+a OneDrive root, the option displays **Synced with OneDrive** and the same unencrypted
+files disclosure as an explicit provider choice. It remains the null/default
+destination; the GUI does not rewrite it to a provider path or create a duplicate
+setting.
+
+### 6. Do not hydrate online-only setups during discovery
+
+Native listing returns each candidate's path and local availability. On Windows,
+availability is determined from filesystem attributes before the file is opened.
+Candidates marked offline or recall-on-access are returned as `online-only`.
+
+`file-discovery.ts` does not call profile validation or read a metadata sidecar for an
+online-only candidate. It shows a disabled placeholder derived from the filename with
+an **Online-only** status and guidance to make the file available locally in the sync
+app. The next explicit or normal profile refresh validates it after the sync client
+makes it local. Endstate never requests hydration merely to populate the setup list.
+
+This trades immediate metadata and app counts for predictable network and disk use.
+The user remains in control of which remote setup is downloaded.
+
+### 7. Commit profile saves transactionally
+
+Profile saves use a native helper rather than direct `write_text_file`. The helper:
+
+1. Writes complete content to a uniquely named sibling staging entry whose name is
+   excluded from setup discovery.
+2. Flushes and closes the staging file.
+3. Atomically renames or replaces the final setup path.
+4. On any failure, keeps an existing final setup unchanged or a new final path absent,
+   reports the error, and cleans the staging entry.
+
+For a new save with optional display metadata, metadata is staged before the profile
+payload and the payload is the final commit marker. A failed payload commit removes
+the staged or newly committed metadata. Rename-only metadata updates use the same
+single-file transactional helper.
+
+A sharing violation or lock on the final path or staging entry produces a clear
+storage-busy error. If a sync client prevents immediate staging cleanup, the staging
+name remains undiscoverable and cleanup is retried on the next directory access. It
+never appears as a setup and never replaces the prior complete file.
+
+Imports retain their existing transactional importer. This decision adds the same
+partial-file safety to profile saves rather than changing import semantics.
+
+### 8. Treat conflict copies as independent setup artifacts
+
+Every locally available provider-created conflict copy with a supported extension and
+valid contents is discovered by its distinct filesystem path. Endstate does not infer
+which copy is authoritative and does not merge, delete, or overwrite either one.
+
+If two valid copies have the same internal or display name, the UI includes their
+filenames to keep both choices distinguishable. Online-only and invalid conflict
+copies follow the same availability and validation rules as any other candidate.
+
+### 9. Present storage separately from engine configuration
 
 The Settings page gains a **Storage location** card. It contains:
 
-- **This device**, representing the existing default directory.
+- **Documents (default)**, annotated when the resolved directory is synced by
+  OneDrive.
 - One row per detected sync location, including multiple accounts.
 - Visible unavailable rows for OneDrive, Google Drive, and Dropbox with
-  install/setup guidance.
+  install/setup guidance or a safe provider-specific parsing reason.
 - **Custom folder**, retaining free-text input and adding a native **Browse** button.
 
 Choosing a detected row updates only the destination path. Editing or browsing a
@@ -144,7 +225,7 @@ The card displays: **Files in this location sync as-is and aren't encrypted by
 Endstate.** The warning is adjacent to the sync/custom choices and does not claim that
 the provider itself is insecure.
 
-### 6. Hosted Backup remains a separate system
+### 10. Hosted Backup remains a separate system
 
 The change does not call or modify `backup push`, `backup list`, `backup versions`,
 claim, recover, restore, quota, subscription, or `--if-changed` paths. Folder
@@ -155,9 +236,20 @@ destinations only determine where local setup artifacts are read and written.
 - **A settings migration could relocate existing profiles.** Preserve the legacy path
   byte-for-byte and cover both empty and non-empty migration cases.
 - **Provider metadata can be malformed or partially configured.** Return per-provider
-  status and test parsers with injected environment, registry, and file inputs.
+  status with a safe visible reason, and test parsers with injected environment,
+  registry, and file inputs.
 - **Multiple variables can identify the same OneDrive folder.** Deduplicate paths
   case-insensitively on Windows while retaining distinct roots.
+- **Discovery could hydrate every remote setup.** Inspect filesystem availability
+  before opening content and render online-only placeholders without validation.
+- **A sync client can lock the final or staging file.** Use an undiscoverable staging
+  entry and atomic commit; preserve the prior complete destination and retry orphan
+  staging cleanup later.
+- **Conflict copies can share a display name.** Keep them as separate path identities
+  and include filenames when labels would otherwise collide.
+- **Known Folder Move makes the default a sync location.** Label the default by its
+  Documents identity and annotate detected OneDrive containment instead of claiming
+  it is device-only.
 - **A synced folder may be unavailable after selection.** Keep the saved path visible
   and let existing filesystem errors surface; do not silently fall back to the local
   default.
@@ -172,13 +264,15 @@ destinations only determine where local setup artifacts are read and written.
 1. Add migration tests before changing the settings type.
 2. Normalize stored settings to `storageDestination` and remove the legacy key.
 3. Route directory resolution through the typed destination.
-4. Add native discovery and parser tests.
-5. Add the Storage location component and integrate it into Settings.
-6. Update the legacy illustrative state spec and persistence fixtures.
-7. Roll back by reverting the change; migrated destinations retain the original path
+4. Add provider discovery, file-availability, and transactional-save tests.
+5. Update profile discovery to preserve online-only and conflict-copy entries.
+6. Add the Storage location component and integrate it into Settings.
+7. Update the legacy illustrative state spec and persistence fixtures.
+8. Roll back by reverting the change; migrated destinations retain the original path
    and can be mechanically represented by the legacy string if required.
 
 ## Open Questions
 
 None. Review of this proposal is the approval point for the field name, destination
-shape, `<sync root>\Endstate` convention, and target-specific registry dependency.
+shape, `<sync root>\Endstate` convention, target-specific registry dependency,
+online-only behavior, and transactional save boundary.

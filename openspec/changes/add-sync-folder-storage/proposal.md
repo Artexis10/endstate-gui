@@ -31,21 +31,34 @@ files receive the encryption and versioning guarantees of Hosted Backup.
   changing where setups are stored.
 - Move setup storage out of Engine Configuration into a dedicated **Storage
   location** card. Keep direct path entry, add a native folder picker, and offer the
-  default local folder plus detected sync folders as one-click choices.
+  default Documents folder plus detected sync folders as one-click choices. If
+  OneDrive Known Folder Move redirects Documents, identify the default as synced
+  instead of labelling it as device-only.
 - Detect Windows sync folders locally, with no authentication:
   - OneDrive from `OneDrive`, `OneDriveConsumer`, and `OneDriveCommercial`
-    environment variables, including simultaneous personal and work locations.
+    environment variables, with
+    `HKCU\Software\Microsoft\OneDrive\Accounts\<account>\UserFolder` as a fallback
+    and supplement for personal and multiple work locations.
   - Google Drive accounts from
     `HKCU\Software\Google\DriveFS\PerAccountPreferences`, using each account's
     `mount_point_path` and its `My Drive` root.
-  - Dropbox personal and business locations from
-    `%LOCALAPPDATA%\Dropbox\info.json`.
+  - Dropbox personal and business locations from `Dropbox\info.json` under both
+    `%LOCALAPPDATA%` and `%APPDATA%`.
 - Keep OneDrive, Google Drive, and Dropbox visible when no folder is detected, with
-  guidance to install or set up the desktop app. A provider failure must not hide
-  successfully detected locations from another provider.
+  guidance to install or set up the desktop app. A provider parsing failure keeps
+  that provider visible with a reason and must not hide successfully detected
+  locations from another provider.
 - Store a provider selection as a normal folder destination under
   `<sync root>\Endstate`. Provider identity and account labels are discovery metadata,
   not part of the persisted destination schema.
+- Make synced-folder I/O explicit:
+  - Discovery checks local availability before opening setup content and does not
+    automatically download online-only files. It shows them as unavailable until the
+    sync client makes them local.
+  - Saves use a transactional native write. A sync-client lock fails visibly, keeps
+    the previous complete setup unchanged, and never exposes a partial setup.
+  - Provider-created conflict copies remain separate setups. Endstate does not merge,
+    overwrite, or choose between them.
 - Show clear adjacent copy that files in these locations sync as-is and are not
   encrypted by Endstate. Call the feature a storage location, not a backup.
 - Keep Hosted Backup behavior isolated. Versions, `--if-changed`, claim, recover,
@@ -71,12 +84,19 @@ and draft invariants do not change. -->
   `customProfilesDirectory`, and stop persisting the legacy field.
 - `src/lib/tauri-bridge.ts`: expose typed sync-folder discovery with a deterministic
   web fallback.
+- `src/file-discovery.ts`: preserve online-only entries without reading or validating
+  their contents, and keep conflict copies distinct by path.
 - `src/components/app/settings/storage-location-setting.tsx` (new): render local,
   detected, unavailable, browse, free-text, and encryption-warning states.
 - `src/App.tsx`: resolve the active profiles directory from the destination and place
-  the new settings card outside Engine Configuration.
+  the new settings card outside Engine Configuration; route profile saves through
+  the transactional native write.
 - `src-tauri/src/sync_folders.rs` (new) and `src-tauri/src/lib.rs`: perform native
-  Windows discovery and register the Tauri command.
+  Windows provider and file-availability discovery, provide transactional profile
+  writes, and register the Tauri commands.
+- `src-tauri/engine-core/src/cmd.rs` and `src-tauri/engine-core/src/bridge.rs`: keep
+  standalone bridge behavior aligned for availability, staging cleanup, and
+  transactional writes.
 - `src-tauri/Cargo.toml` and `Cargo.lock`: add a Windows-targeted registry reader if
   direct registry access cannot be implemented with an existing dependency.
 - Focused TypeScript and Rust tests, plus the existing settings persistence fixture
@@ -88,7 +108,7 @@ and draft invariants do not change. -->
 
 - Calling OneDrive, Google Drive, Dropbox, or any other provider API.
 - Adding OAuth, provider credentials, upload state, quota tracking, remote versions,
-  conflict resolution, or sync-health monitoring.
+  automatic conflict resolution, or sync-health monitoring.
 - Encrypting local setup files. Encryption and key custody are tracked separately in
   [Artexis10/endstate#211](https://github.com/Artexis10/endstate/issues/211).
 - Changing the Hosted Backup pane or any engine `backup` command.
