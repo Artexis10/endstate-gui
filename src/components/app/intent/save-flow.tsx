@@ -21,6 +21,8 @@ import {
 } from '@/lib/apply-utils';
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { CaptureConfigModule, CaptureWarning, SubscriptionStatus } from '@/types';
+import { DetailsDisclosure } from '@/components/ui/details-disclosure';
+import { NON_APP_SETTINGS_KINDS, SETTINGS_GROUP_COPY, settingsKind } from '@/lib/settings-kind';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 import { CaptureProgress } from './capture-progress';
 import type { CaptureStage } from '@/lib/streaming-events';
@@ -434,13 +436,19 @@ export function SaveFlow({
     }
   }
 
-  // Config-only modules: captured settings with no winget match in the app list
+  // Config-only modules: captured app settings with no winget match in the app
+  // list. Settings that belong to no app (e.g. Windows settings) have their own
+  // section: they are not an app whose installer is missing.
   const appIds = new Set((result?.apps ?? []).map(a => a.id.toLowerCase()));
   const configOnlyModules = capturedConfigs.filter(mod => {
+    if (settingsKind(mod.id) !== 'app') return false;
     const refs = mod.wingetRefs ?? [];
     if (refs.length === 0) return true;
     return !refs.some(ref => appIds.has(ref.toLowerCase()));
   });
+  const nonAppSettingsGroups = NON_APP_SETTINGS_KINDS
+    .map((kind) => ({ kind, modules: capturedConfigs.filter((mod) => settingsKind(mod.id) === kind) }))
+    .filter((group) => group.modules.length > 0);
   const visibleWarnings = (result?.warnings ?? []).filter(
     warning => warning.code !== 'optional_driver_unavailable',
   );
@@ -735,6 +743,39 @@ export function SaveFlow({
                     </div>
                   </div>
                 )}
+
+                {nonAppSettingsGroups.map(({ kind, modules }) => {
+                  // Engine notes per module (e.g. a value not set on this PC)
+                  // name registry values, so they stay behind Details.
+                  const notes = modules.flatMap((mod) => mod.warnings ?? []);
+                  return (
+                    <div key={kind} className="mt-3 border-t pt-3" data-testid={`captured-settings-${kind}`}>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {SETTINGS_GROUP_COPY[kind].heading}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 mb-2">
+                        Saved with this setup. On the new PC, you choose whether to restore them.
+                      </p>
+                      <div className="space-y-1">
+                        {modules.map(mod => (
+                          <div key={mod.id} className="flex items-center gap-2 text-xs">
+                            <Settings2 className={`h-3 w-3 flex-shrink-0 ${getColorClasses('success').text}`} />
+                            <span className="truncate">{mod.displayName}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {notes.length > 0 && (
+                        <DetailsDisclosure className="mt-2">
+                          <ul className="space-y-1 text-xs text-muted-foreground">
+                            {notes.map((note, index) => (
+                              <li key={`${kind}-note-${index}`}>{note}</li>
+                            ))}
+                          </ul>
+                        </DetailsDisclosure>
+                      )}
+                    </div>
+                  );
+                })}
 
                 <div className="flex items-center gap-3 mt-6">
                   <Button

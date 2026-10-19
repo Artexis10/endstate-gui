@@ -172,6 +172,76 @@ describe('SetupFlow — Restore module selection', () => {
     );
   });
 
+  it('offers a Windows setting in its own group and passes its full module ID to apply', async () => {
+    const preview = makePreviewWithModules();
+    const onPreview = vi.fn().mockResolvedValue({
+      ...preview,
+      restoreModulesAvailable: [
+        ...preview.restoreModulesAvailable,
+        { id: 'windows-settings.keyboard', displayName: 'Windows keyboard: repeat delay and rate', entryCount: 2 },
+      ],
+    });
+    const onApply = vi.fn().mockResolvedValue({
+      installed: 3, alreadyPresent: 0, failed: 0, skipped: 0, appEvents: [],
+    });
+
+    renderWithProviders(
+      <SetupFlow {...baseProps} onPreview={onPreview} onApply={onApply} />
+    );
+
+    await userEvent.click(screen.getByText('test-profile'));
+    await waitFor(() => {
+      expect(screen.getByTestId('setup-flow-apply')).toBeInTheDocument();
+    });
+    expect(screen.getByText('This profile includes settings for 2 apps and 1 Windows setting')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: /settings/i }));
+
+    const appGroup = await screen.findByTestId('config-module-selector');
+    const windowsGroup = screen.getByTestId('config-module-selector-windows');
+    expect(within(appGroup).queryByText('Windows keyboard: repeat delay and rate')).not.toBeInTheDocument();
+    expect(within(windowsGroup).getByText('2 values')).toBeInTheDocument();
+    await userEvent.click(
+      within(windowsGroup).getByRole('checkbox', { name: /windows keyboard: repeat delay and rate/i }),
+    );
+    await userEvent.click(screen.getByTestId('setup-flow-apply'));
+
+    expect(onApply).toHaveBeenCalledWith(
+      mockProfile,
+      expect.objectContaining({
+        restoreIntent: 'apps-and-settings',
+        selectedModules: ['windows-settings.keyboard'],
+      }),
+    );
+  });
+
+  it('keeps Windows settings out of the preview settings chip and counts them apart', async () => {
+    const preview = makePreviewWithModules();
+    const onPreview = vi.fn().mockResolvedValue({
+      ...preview,
+      restoreModulesAvailable: [
+        ...preview.restoreModulesAvailable,
+        { id: 'windows-settings.keyboard', displayName: 'Windows keyboard: repeat delay and rate', entryCount: 2 },
+      ],
+    });
+
+    renderWithProviders(<SetupFlow {...baseProps} onPreview={onPreview} />);
+
+    await userEvent.click(screen.getByText('test-profile'));
+    await waitFor(() => {
+      expect(screen.getByTestId('setup-flow-apply')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/2 app settings and 1 Windows setting available/)).toBeInTheDocument();
+    expect(screen.getByTestId('settings-restore-off-summary')).toHaveTextContent(
+      "2 app settings and 1 Windows setting are available but won't be restored",
+    );
+
+    // The chip promises the rows its filter shows: the two apps with settings.
+    await userEvent.click(screen.getByRole('button', { name: '2 settings' }));
+    expect(screen.getByText('Visual Studio Code')).toBeInTheDocument();
+    expect(screen.getByText('Git')).toBeInTheDocument();
+    expect(screen.queryByText('Firefox')).not.toBeInTheDocument();
+  });
+
   it('can restore selected settings when every application is already present', async () => {
     const previewResult = {
       installed: 0,

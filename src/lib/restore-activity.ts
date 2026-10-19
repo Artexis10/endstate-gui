@@ -18,6 +18,7 @@ import type { AppEvent, RestoreStatusKey, StatusKey } from './apply-utils';
 import { getRestoreUiStatus, RESTORE_OUTCOME_ORDER } from './apply-utils';
 import type { ArtifactEvent, RestoreItemEvent } from './streaming-events';
 import type { RestoreModuleRef, RestoreResultStatus } from '../types';
+import { appModuleKey, settingsKind } from './settings-kind';
 
 /**
  * Resolution context sourced from the preview/apply envelope. Both fields are
@@ -29,11 +30,6 @@ export interface RestoreRowContext {
   configModuleMap?: Record<string, string>;
   /** Enriched module refs carrying engine display names. */
   restoreModulesAvailable?: RestoreModuleRef[];
-}
-
-/** Strip the engine's `apps.` module-id qualifier for cross-source matching. */
-function unqualifyModuleId(moduleId: string): string {
-  return moduleId.startsWith('apps.') ? moduleId.slice('apps.'.length) : moduleId;
 }
 
 /**
@@ -55,14 +51,14 @@ export function restoreTargetBasename(pathLike: string): string {
  */
 export function deriveRestoreModuleId(event: RestoreItemEvent): string | undefined {
   if (event.module && event.module.trim()) {
-    return unqualifyModuleId(event.module.trim());
+    return appModuleKey(event.module.trim());
   }
   const fromSource = event.source?.match(/(?:^|[\\/])configs[\\/]([^\\/]+)[\\/]/i);
   if (fromSource) {
-    return unqualifyModuleId(fromSource[1]);
+    return appModuleKey(fromSource[1]);
   }
   if (event.configSetId && event.configSetId.trim() && event.configSetId !== 'legacy') {
-    return unqualifyModuleId(event.configSetId.trim());
+    return appModuleKey(event.configSetId.trim());
   }
   return undefined;
 }
@@ -72,9 +68,9 @@ export function resolveRestoreModuleDisplayName(
   moduleId: string,
   context: RestoreRowContext,
 ): string | undefined {
-  const target = unqualifyModuleId(moduleId);
+  const target = appModuleKey(moduleId);
   const match = context.restoreModulesAvailable?.find(
-    (m) => unqualifyModuleId(m.id) === target,
+    (m) => appModuleKey(m.id) === target,
   );
   return match?.displayName;
 }
@@ -106,6 +102,8 @@ function isCleanRestoreText(text: string): boolean {
 export function restoreRowSecondary(event: RestoreItemEvent): string | undefined {
   const message = event.message?.trim();
   const cleanMessage = message && isCleanRestoreText(message) ? message : undefined;
+  // `registry-set` (an engine restore type) writes one setting, not a file.
+  const subject = event.restorer === 'registry-set' ? 'setting' : 'file';
 
   switch (event.status) {
     case 'restoring':
@@ -114,9 +112,9 @@ export function restoreRowSecondary(event: RestoreItemEvent): string | undefined
     case 'skipped_up_to_date':
       return cleanMessage ?? 'Already matches your saved settings';
     case 'skipped_missing_source':
-      return cleanMessage ?? "Your saved setup doesn't include this file, so nothing changed";
+      return cleanMessage ?? `Your saved setup doesn't include this ${subject}, so nothing changed`;
     case 'failed':
-      return cleanMessage ?? "Couldn't restore this file";
+      return cleanMessage ?? `Couldn't restore this ${subject}`;
     default:
       return cleanMessage;
   }
@@ -124,7 +122,8 @@ export function restoreRowSecondary(event: RestoreItemEvent): string | undefined
 
 /** Full raw source→target detail, for a hover title / disclosure only. */
 export function restoreRowTitle(event: RestoreItemEvent): string {
-  return `${event.source} → ${event.target}`;
+  // A restore type with no source file (such as `registry-set`) has only a target.
+  return event.source ? `${event.source} → ${event.target}` : event.target;
 }
 
 /**
@@ -162,10 +161,12 @@ export function restoreEventToAppEvent(
   options: { preview?: boolean } = {},
 ): AppEvent {
   const preview = options.preview === true;
+  const moduleId = deriveRestoreModuleId(event);
   return {
     app: restoreRowKey(event),
     kind: 'restore',
     restoreStatus: event.status,
+    settingsKind: moduleId ? settingsKind(moduleId) : 'app',
     preview,
     name: restoreRowPrimary(event, context),
     secondary: restoreRowSecondary(event),

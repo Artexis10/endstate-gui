@@ -1,0 +1,20 @@
+## 1. Read the tier once
+
+- [x] 1.1 Add `src/lib/settings-kind.ts`: tier from the module ID, the app-module key, and the group copy.
+- [x] 1.2 Use it for every `apps.` qualifier match in `setup-flow.tsx` and `restore-activity.ts`.
+
+## 2. Show the group at each step
+
+- [x] 2.1 Profile contents: own tab and badge; no association line; not counted as unidentified.
+- [x] 2.2 Restore choice: count app settings and Windows settings separately.
+- [x] 2.3 Settings selector: own group, own Select all, entry noun "value", full module ID to the restore filter.
+- [x] 2.4 Setup results: own heading after the app rows; "setting" wording and target-only hover title for `registry-set` rows.
+- [x] 2.5 Capture results: own heading; per-module notes behind Details.
+- [x] 2.6 Document the group in `docs/ux-language.md`.
+- [x] 2.7 Setup preview: count each group apart in module counts; the settings chip counts the rows its filter shows.
+
+## 3. Proof
+
+- [x] 3.1 Unit: Windows rows are not unidentified app settings; a selected Windows module reaches apply by full ID in its own group; captured Windows settings are not "Settings only"; the preview chip and module counts keep Windows settings apart.
+- [x] 3.2 E2E (`e2e/windows-settings-restore.spec.ts`): the restore filter carries full IDs; results group the rows and the header counts equal them.
+- [x] 3.3 Chrome DevTools: real engine import, contents, consent and dry-run results; mock engine apply results and capture results; light and dark.

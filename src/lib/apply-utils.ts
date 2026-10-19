@@ -1,5 +1,6 @@
 import type { ApplyAction, ApplyItem, RestoreResultStatus } from '../types';
 import type { EngineItemStatus, ItemEvent, EnginePhase } from './streaming-events';
+import type { SettingsKind } from './settings-kind';
 
 /**
  * Canonical status keys used for filtering and internal logic.
@@ -565,6 +566,8 @@ export interface AppEvent {
   kind?: 'app' | 'restore' | 'artifact';
   /** Terminal/transitional restore status, when kind === 'restore'. */
   restoreStatus?: RestoreStatusKey;
+  /** Whether a restore row's setting belongs to an app or to no app (e.g. Windows). */
+  settingsKind?: SettingsKind;
   /**
    * True when a restore row came from a dry run. Set from the run's dry-run
    * flag; the engine reports `restored` for an item a preview would restore.

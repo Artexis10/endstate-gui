@@ -25,4 +25,5 @@
 ## 5. Document and verify
 
 - [x] 5.1 Add the restore-row and produced-artifact presentation rules to `docs/ux-language.md`.
-- [ ] 5.2 Run unit + e2e suites, `tsc --noEmit`, and lint; confirm no `/copy:` text and single-row transitions.
+- [x] 5.2 Run unit + e2e suites, `tsc --noEmit`, and lint; confirm no `/copy:` text and single-row transitions.
+  Evidence (2026-10-19, mock engine): `npm run test:e2e -- --workers=3` ended "3 skipped / 131 passed (1.8m)", exit 0; the skips are the existing `test.describe.skip` in `e2e/capture-live.spec.ts`. `e2e/restore-activity-rows.spec.ts` checks the `/copy:` text and the single-row transitions. Vitest: 2065 passed, 2 skipped. `tsc --noEmit` and `npm run lint` exit 0.

@@ -246,11 +246,47 @@ was installed”, so it never claims a completed setup.
   - `skipped_up_to_date` → “Already matches your saved settings”
   - `skipped_missing_source` → “Your saved setup doesn’t include this file, so nothing changed”
   - `failed` → “Couldn’t restore this file”
+
+  A `registry-set` row restores one setting, not a file, so its two file
+  strings read “setting”: “Your saved setup doesn’t include this setting, so
+  nothing changed” and “Couldn’t restore this setting”.
 - **Full raw source→target detail** may appear only in a hover title /
-  disclosure, never as inline row text.
+  disclosure, never as inline row text. A row with no source (`registry-set`)
+  shows only its target there.
 - **One row per item across its lifecycle:** the transitional (`restoring`) and
   terminal (`restored`/`skipped_*`/`failed`) events share a stable identity
   (target path) and **update one row in place** — they never append a duplicate.
+
+#### Settings that belong to no app (Windows settings)
+
+A module ID is `<tier>.<name>`. Modules of the `apps` tier, and IDs without a
+tier from older engines, hold an app's settings. Modules of any other tier hold
+settings that belong to no app; the engine never shows them as an app. The GUI
+reads the tier only through `src/lib/settings-kind.ts` and shows these groups:
+
+| Tier | Group heading | One / many | Entry noun |
+|------|---------------|------------|------------|
+| `windows-settings` | Windows settings | Windows setting / Windows settings | value / values |
+| any other non-app tier | Other settings | other setting / other settings | entry / entries |
+
+- **Profile contents:** the group has its own tab and count badge beside Apps
+  and App settings. Its rows carry no association line, and they are not
+  counted as unidentified app settings.
+- **Consent:** the group has its own selector with its own Select all, under
+  the heading “<group> to restore:”. Each module shows its entry count with the
+  entry noun. Nothing in it is selected by default. The restore filter receives
+  the module's full ID.
+- **Preview:** a count of settings modules names each group apart, for example
+  “40 app settings and 7 Windows settings available”. A profile with app
+  settings only keeps “40 settings available”. The “N settings” filter chip
+  counts the rows that its filter shows, which are app rows only.
+- **Results:** the group's restore rows list under the group heading, after the
+  app rows. The settings counts still come from all restore rows together.
+- **Capture results:** the group lists under its own heading, never under
+  “Settings only — app installation not included”. Per-module engine notes
+  (for example a value not set on this PC) stay behind Details.
+- A setup run carries no verify result for these settings: the engine checks
+  them only in `verify` and `rebuild`.
 
 #### Produced-artifact completion line
 

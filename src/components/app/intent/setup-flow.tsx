@@ -50,6 +50,13 @@ import {
   formatRestoreCounts,
 } from '@/lib/apply-utils';
 import { countRestoreOutcomes } from '@/lib/restore-activity';
+import {
+  NON_APP_SETTINGS_KINDS,
+  SETTINGS_GROUP_COPY,
+  appModuleKey,
+  settingsKind,
+  settingsModulesPhrase,
+} from '@/lib/settings-kind';
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { ConfigModuleInfo, SubscriptionStatus } from '@/types';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
@@ -120,10 +127,6 @@ function countSynthesizedApplyEvents(
   return { total: synthesizedRows.length, installed, present, skipped, failed };
 }
 
-function normalizeConfigModuleId(moduleId: string): string {
-  return moduleId.startsWith('apps.') ? moduleId.slice('apps.'.length) : moduleId;
-}
-
 /**
  * The engine's config map is catalog metadata. Only restore modules explicitly
  * advertised for this profile are evidence that the profile carries settings.
@@ -133,13 +136,13 @@ function profileConfigModuleMap(
   restoreModules: RestoreModuleRef[] | undefined,
 ): Record<string, string> {
   const availableModuleIds = new Set(
-    (restoreModules ?? []).map((moduleRef) => normalizeConfigModuleId(moduleRef.id)),
+    (restoreModules ?? []).map((moduleRef) => appModuleKey(moduleRef.id)),
   );
   if (availableModuleIds.size === 0) return {};
 
   return Object.fromEntries(
     Object.entries(configMap ?? {}).filter(([, moduleId]) =>
-      availableModuleIds.has(normalizeConfigModuleId(moduleId))),
+      availableModuleIds.has(appModuleKey(moduleId))),
   );
 }
 
@@ -204,13 +207,8 @@ function hasUnmappableInstallable(actions: EndstateApplyData['actions']): boolea
 }
 
 function isSelectedConfigModule(moduleId: string, selectedModules: string[]): boolean {
-  const selectionKey = moduleId.startsWith('apps.') ? moduleId.slice('apps.'.length) : moduleId;
-  return selectedModules.some((selectedModule) => {
-    const selectedKey = selectedModule.startsWith('apps.')
-      ? selectedModule.slice('apps.'.length)
-      : selectedModule;
-    return selectedModule === moduleId || selectedKey === selectionKey;
-  });
+  const selectionKey = appModuleKey(moduleId);
+  return selectedModules.some((selectedModule) => appModuleKey(selectedModule) === selectionKey);
 }
 
 function selectedCaptureIds(
@@ -232,20 +230,20 @@ function moduleDisplayNameMap(
     const displayName = moduleRef.displayName?.trim();
     if (!displayName) continue;
 
-    const shortId = moduleRef.id.startsWith('apps.')
-      ? moduleRef.id.slice('apps.'.length)
-      : moduleRef.id;
-    const qualifiedId = `apps.${shortId}`;
+    // An app module is named with and without its `apps.` qualifier across
+    // engine sources; a module of any other tier only by its full ID.
+    const shortId = appModuleKey(moduleRef.id);
+    const aliases = settingsKind(moduleRef.id) === 'app'
+      ? [moduleRef.id, shortId, `apps.${shortId}`]
+      : [moduleRef.id];
 
     // A fallback displayName equal to an engine ID is provenance, not friendly
     // copy. Keep that value in Details instead of leaking it into the distilled row.
-    if (displayName === moduleRef.id || displayName === shortId || displayName === qualifiedId) {
+    if (aliases.includes(displayName)) {
       continue;
     }
 
-    displayNames[moduleRef.id] = displayName;
-    displayNames[shortId] = displayName;
-    displayNames[qualifiedId] = displayName;
+    for (const alias of aliases) displayNames[alias] = displayName;
   }
   return displayNames;
 }
@@ -578,6 +576,26 @@ export function SetupFlow({
   /** Restore rows are settings, never apps: app chips and app filters skip them. */
   const isAppRow = (e: AppEvent) => !e.kind || e.kind === 'app';
 
+  /**
+   * The rows the `settings` filter shows: settings rows, and app rows that
+   * carry settings. Its chip counts with this same test, so the chip always
+   * equals the rows a click on it shows.
+   */
+  const showsUnderSettings = (
+    e: AppEvent,
+    configMap: Record<string, string>,
+    synthesizedAppIds: Set<string>,
+  ) => !isAppRow(e) || e.app in configMap || isConfigOnlyApp(e, synthesizedAppIds);
+
+  const settingsRowCount = (
+    events: AppEvent[],
+    configMap: Record<string, string>,
+    synthesizedAppIds: Set<string>,
+  ) =>
+    events.filter(
+      (e) => isDisplayableEvent(e) && showsUnderSettings(e, configMap, synthesizedAppIds),
+    ).length;
+
   /** Winget apps carrying no settings — the complement of the `settings` filter. */
   const appsOnlyCount = (
     events: AppEvent[],
@@ -588,8 +606,7 @@ export function SetupFlow({
       (e) =>
         isDisplayableEvent(e)
         && isAppRow(e)
-        && !isConfigOnlyApp(e, synthesizedAppIds)
-        && !(e.app in configMap),
+        && !showsUnderSettings(e, configMap, synthesizedAppIds),
     ).length;
 
   const filterEvents = (
@@ -603,12 +620,12 @@ export function SetupFlow({
       if (!isAppRow(event)) return activeFilters.has('settings');
       const statusKey: StatusKey = event.statusKey || 'skipped';
       for (const f of activeFilters) {
-        if (f === 'settings' && (event.app in configMap || isConfigOnlyApp(event, synthesizedAppIds))) return true;
+        if (f === 'settings' && showsUnderSettings(event, configMap, synthesizedAppIds)) return true;
         // Complement of `settings`. The filter set had a positive "has settings"
         // filter but no way to ask the opposite question — "which of these are
         // just app installs?" — which is the more common one when reviewing a
         // plan.
-        if (f === 'apps_only' && !(event.app in configMap || isConfigOnlyApp(event, synthesizedAppIds))) return true;
+        if (f === 'apps_only' && !showsUnderSettings(event, configMap, synthesizedAppIds)) return true;
         if (f === statusKey) return true;
       }
       return false;
@@ -1245,10 +1262,11 @@ export function SetupFlow({
         {/* Preview done: Show results + Apply button */}
         {phase === 'preview-done' && previewResult && (() => {
           const configMap = previewProfileConfigMap;
-          const hasConfigMap = Object.keys(configMap).length > 0;
-          const settingsCount = previewResult.restoreModulesAvailable?.length ?? 0;
-          // Active settings count reflects user's restore selection
-          const activeSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
+          const availableModuleIds = (previewResult.restoreModulesAvailable ?? []).map((ref) => ref.id);
+          const settingsCount = availableModuleIds.length;
+          // Active settings reflect the user's restore selection
+          const activeModuleIds = restoreIntent === 'apps-and-settings' ? selectedModules : [];
+          const activeSettingsCount = activeModuleIds.length;
           // Separate config-only synthesized apps from winget apps
           const configOnlyPresent = previewResult.appEvents.filter(e => isConfigOnlyApp(e, previewSynthesizedAppIds) && (e.statusKey === 'present' || !e.statusKey)).length;
           const configOnlyToInstall = previewResult.appEvents.filter(e => isConfigOnlyApp(e, previewSynthesizedAppIds) && e.statusKey === 'to_install').length;
@@ -1285,6 +1303,11 @@ export function SetupFlow({
             configMap,
             previewSynthesizedAppIds,
           );
+          const previewSettingsRowCount = settingsRowCount(
+            previewResult.appEvents,
+            configMap,
+            previewSynthesizedAppIds,
+          );
           const allFilteredEvents = filterEvents(previewResult.appEvents, configMap, previewSynthesizedAppIds);
           const wingetEvents = allFilteredEvents.filter(e => !isConfigOnlyApp(e, previewSynthesizedAppIds));
           const configOnlyEvents = allFilteredEvents.filter(e => isConfigOnlyApp(e, previewSynthesizedAppIds));
@@ -1316,8 +1339,8 @@ export function SetupFlow({
                         : pickerEnabled && pickerSelectedCount === 0
                         ? 'No apps selected'
                         : `All ${displayTotal} apps already present`}
-                      {activeSettingsCount > 0 && ` · ${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'} selected`}
-                      {activeSettingsCount === 0 && settingsCount > 0 && ` · ${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'} available`}
+                      {activeSettingsCount > 0 && ` · ${settingsModulesPhrase(activeModuleIds)} selected`}
+                      {activeSettingsCount === 0 && settingsCount > 0 && ` · ${settingsModulesPhrase(availableModuleIds)} available`}
                     </p>
                   </div>
                 </div>
@@ -1369,23 +1392,17 @@ export function SetupFlow({
                           {displayPresent} present
                         </FilterChip>
                       )}
-                      {settingsCount > 0 && (
-                        hasConfigMap ? (
-                          <FilterChip
-                            onClick={() => toggleFilter('settings')}
-                            pressed={activeFilters.has('settings')}
-                            dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
-                            className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
-                          >
-                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'}`}
-                          </FilterChip>
-                        ) : (
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getColorClasses('success').bg} ${getColorClasses('success').text}`}>
-                            {activeSettingsCount > 0 ? `${activeSettingsCount} ${activeSettingsCount === 1 ? 'setting' : 'settings'}` : `${settingsCount} ${settingsCount === 1 ? 'setting' : 'settings'}`}
-                          </span>
-                        )
+                      {previewSettingsRowCount > 0 && (
+                        <FilterChip
+                          onClick={() => toggleFilter('settings')}
+                          pressed={activeFilters.has('settings')}
+                          dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
+                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                        >
+                          {previewSettingsRowCount} {previewSettingsRowCount === 1 ? 'setting' : 'settings'}
+                        </FilterChip>
                       )}
-                      {previewAppsOnlyCount > 0 && settingsCount > 0 && (
+                      {previewAppsOnlyCount > 0 && previewSettingsRowCount > 0 && (
                         <FilterChip
                           onClick={() => toggleFilter('apps_only')}
                           pressed={activeFilters.has('apps_only')}
@@ -1512,7 +1529,7 @@ export function SetupFlow({
                         className="rounded-lg border border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground"
                         data-testid="settings-restore-off-summary"
                       >
-                        {settingsCount} {settingsCount === 1 ? 'setting is' : 'settings are'} available but won&apos;t be restored
+                        {settingsModulesPhrase(availableModuleIds)} {settingsCount === 1 ? 'is' : 'are'} available but won&apos;t be restored
                       </div>
                     )}
                     <RestoreIntentToggle
@@ -1525,11 +1542,18 @@ export function SetupFlow({
                         void handlePreview(selectedProfile, intent);
                       }}
                       configModuleCount={settingsCount}
+                      nonAppSettingsCounts={Object.fromEntries(
+                        NON_APP_SETTINGS_KINDS.map((kind) => [
+                          kind,
+                          (previewResult.restoreModulesAvailable ?? [])
+                            .filter((ref) => settingsKind(ref.id) === kind).length,
+                        ]),
+                      )}
                     />
                     {restoreIntent === 'apps-and-settings' && (() => {
                       const moduleRefs = previewResult.restoreModulesAvailable;
                       if (!moduleRefs?.length) return null;
-                      const modules: ConfigModuleInfo[] = moduleRefs.map(ref => ({
+                      const toModuleInfo = (ref: RestoreModuleRef): ConfigModuleInfo => ({
                         id: ref.id,
                         displayName: ref.displayName,
                         // How many restore entries the profile carries for this
@@ -1540,22 +1564,49 @@ export function SetupFlow({
                         // than asserting a count we do not have.
                         entries: ref.entryCount ?? 0,
                         files: [],
-                      }));
+                      });
+                      const handleSelectionChange = (moduleIds: string[]) => {
+                        setSelectedModules(moduleIds);
+                        const allowedCaptureIds = selectedCaptureIds(
+                          previewResult.configResolutions,
+                          moduleIds,
+                        );
+                        setRestoreTargets((current) => current.filter(
+                          (mapping) => allowedCaptureIds.has(mapping.captureId),
+                        ));
+                      };
+                      // Settings that belong to no app get their own group, so
+                      // choosing app settings never also changes Windows itself.
+                      const appModules = moduleRefs.filter((ref) => settingsKind(ref.id) === 'app');
                       return (
-                        <ConfigModuleSelector
-                          modules={modules}
-                          selectedModules={selectedModules}
-                          onSelectionChange={(moduleIds) => {
-                            setSelectedModules(moduleIds);
-                            const allowedCaptureIds = selectedCaptureIds(
-                              previewResult.configResolutions,
-                              moduleIds,
+                        <>
+                          <ConfigModuleSelector
+                            modules={appModules.map(toModuleInfo)}
+                            selectedModules={selectedModules}
+                            onSelectionChange={handleSelectionChange}
+                            {...(appModules.length < moduleRefs.length
+                              ? { title: 'App settings to restore:' }
+                              : {})}
+                          />
+                          {NON_APP_SETTINGS_KINDS.map((kind) => {
+                            const kindModules = moduleRefs.filter((ref) => settingsKind(ref.id) === kind);
+                            if (kindModules.length === 0) return null;
+                            return (
+                              <ConfigModuleSelector
+                                key={kind}
+                                modules={kindModules.map(toModuleInfo)}
+                                selectedModules={selectedModules}
+                                onSelectionChange={handleSelectionChange}
+                                title={`${SETTINGS_GROUP_COPY[kind].heading} to restore:`}
+                                description={kind === 'windows'
+                                  ? "Changes this PC's Windows preferences to match your saved setup."
+                                  : undefined}
+                                entryNoun={SETTINGS_GROUP_COPY[kind].entry}
+                                testId={`config-module-selector-${kind}`}
+                              />
                             );
-                            setRestoreTargets((current) => current.filter(
-                              (mapping) => allowedCaptureIds.has(mapping.captureId),
-                            ));
-                          }}
-                        />
+                          })}
+                        </>
                       );
                     })()}
                     {/* Choosing "apps and settings" but checking nothing sends
@@ -1758,10 +1809,8 @@ export function SetupFlow({
                   const fullConfigMap = applyProfileConfigMap;
                   // Filter config map to only include entries for modules the user selected
                   const applyConfigMap = selectedModules.length > 0
-                    ? Object.fromEntries(Object.entries(fullConfigMap).filter(([, qualifiedId]) => {
-                        const shortId = qualifiedId.includes('.') ? qualifiedId.split('.').pop()! : qualifiedId;
-                        return selectedModules.includes(shortId) || selectedModules.includes(qualifiedId);
-                      }))
+                    ? Object.fromEntries(Object.entries(fullConfigMap).filter(([, qualifiedId]) =>
+                        isSelectedConfigModule(qualifiedId, selectedModules)))
                     : (restoreIntent === 'apps-and-settings' ? fullConfigMap : {});
                   const applySettingsFailed = applyRestoreCounts.failed;
                   const applySettingsProcessed = applyRestoreTotal;
@@ -1778,6 +1827,39 @@ export function SetupFlow({
                   const applyWingetEvents = allApplyEvents.filter(e => !isConfigOnlyApp(e, applySynthesizedAppIds));
                   const applyConfigOnlyEvents = allApplyEvents.filter(e => isConfigOnlyApp(e, applySynthesizedAppIds));
                   const showApplyConfigOnlySection = applyConfigOnlyEvents.length > 0 && (activeFilters.size === 0 || activeFilters.has('settings'));
+                  // Restore rows for settings that belong to no app list under
+                  // their own heading, after the app rows.
+                  const isNonAppSettingsRow = (event: AppEvent) =>
+                    event.kind === 'restore' && !!event.settingsKind && event.settingsKind !== 'app';
+                  const renderApplyRow = (event: AppEvent, i: number) => {
+                    // Restore rows read RESTORING/RESTORED and carry the
+                    // engine display name; app rows stay phase-aware ("apply").
+                    const { shortLabel, color } = getActivityRowLabel(event, 'apply');
+                    const colors = getColorClasses(color);
+                    const hasSettings = (restoreIntent === 'apps-and-settings' && event.app in applyConfigMap) || event.kind === 'restore' || event.app.startsWith('\u2699');
+                    const settingsOk = color !== 'error';
+                    // A restore row's icon takes the row's outcome colour; an
+                    // app row's icon only marks that it carries settings.
+                    const settingsIconClass = event.kind === 'restore'
+                      ? colors.text
+                      : `${settingsOk ? getColorClasses('success').text : getColorClasses('error').text} ${!settingsOk ? 'opacity-50' : ''}`;
+                    return (
+                      <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5" title={event.title}>
+                        <span className={`w-24 flex-shrink-0 text-right font-medium ${colors.text}`}>{shortLabel}</span>
+                        <span className="w-4 flex-shrink-0 flex justify-center">
+                          {hasSettings && (
+                            <Settings2 className={`h-3 w-3 ${settingsIconClass}`} />
+                          )}
+                        </span>
+                        <span className="truncate">
+                          {event.name || formatAppIdentity(event.app)}
+                          {event.secondary && (
+                            <span className="text-muted-foreground"> · {event.secondary}</span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  };
                   return (
                   <div className="mt-3 border-t pt-3">
                     <div className="flex items-center gap-1.5 mb-2">
@@ -1874,35 +1956,7 @@ export function SetupFlow({
                       )}
                     </div>
                     <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {applyWingetEvents.map((event, i) => {
-                        // Restore rows read RESTORING/RESTORED and carry the
-                        // engine display name; app rows stay phase-aware ("apply").
-                        const { shortLabel, color } = getActivityRowLabel(event, 'apply');
-                        const colors = getColorClasses(color);
-                        const hasSettings = (restoreIntent === 'apps-and-settings' && event.app in applyConfigMap) || event.kind === 'restore' || event.app.startsWith('\u2699');
-                        const settingsOk = color !== 'error';
-                        // A restore row's icon takes the row's outcome colour; an
-                        // app row's icon only marks that it carries settings.
-                        const settingsIconClass = event.kind === 'restore'
-                          ? colors.text
-                          : `${settingsOk ? getColorClasses('success').text : getColorClasses('error').text} ${!settingsOk ? 'opacity-50' : ''}`;
-                        return (
-                          <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5" title={event.title}>
-                            <span className={`w-24 flex-shrink-0 text-right font-medium ${colors.text}`}>{shortLabel}</span>
-                            <span className="w-4 flex-shrink-0 flex justify-center">
-                              {hasSettings && (
-                                <Settings2 className={`h-3 w-3 ${settingsIconClass}`} />
-                              )}
-                            </span>
-                            <span className="truncate">
-                              {event.name || formatAppIdentity(event.app)}
-                              {event.secondary && (
-                                <span className="text-muted-foreground"> · {event.secondary}</span>
-                              )}
-                            </span>
-                          </div>
-                        );
-                      })}
+                      {applyWingetEvents.filter((event) => !isNonAppSettingsRow(event)).map(renderApplyRow)}
                       {/* Config-only apps (detected via settings, not winget) */}
                       {showApplyConfigOnlySection && (
                         <>
@@ -1912,10 +1966,10 @@ export function SetupFlow({
                           {applyConfigOnlyEvents.map((event, i) => {
                             // Check if this config-only module was selected for restore
                             const moduleId = fullConfigMap[event.app];
-                            const shortId = moduleId?.includes('.') ? moduleId.split('.').pop()! : moduleId;
                             const wasSelected = restoreIntent === 'apps-and-settings' &&
                               selectedModules.length > 0 &&
-                              (selectedModules.includes(shortId ?? '') || selectedModules.includes(moduleId ?? ''));
+                              moduleId !== undefined &&
+                              isSelectedConfigModule(moduleId, selectedModules);
                             // Settings the user chose not to restore are not a
                             // problem, so they must not borrow the warning
                             // vocabulary. An orange SKIPPED beside every setting
@@ -1944,6 +1998,27 @@ export function SetupFlow({
                           })}
                         </>
                       )}
+                      {NON_APP_SETTINGS_KINDS.map((kind) => {
+                        const rows = applyWingetEvents.filter((event) =>
+                          isNonAppSettingsRow(event) && event.settingsKind === kind);
+                        if (rows.length === 0) return null;
+                        return (
+                          <div
+                            key={kind}
+                            role="group"
+                            aria-label={SETTINGS_GROUP_COPY[kind].heading}
+                            className="space-y-1"
+                            data-testid={`restore-group-${kind}`}
+                          >
+                            <div className="border-t mt-2 pt-2">
+                              <p className="text-[10px] font-medium text-muted-foreground mb-1">
+                                {SETTINGS_GROUP_COPY[kind].heading}
+                              </p>
+                            </div>
+                            {rows.map(renderApplyRow)}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   );

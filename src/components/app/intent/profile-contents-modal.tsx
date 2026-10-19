@@ -18,8 +18,34 @@ import type {
   ProfileInspectionData,
   ProfileInspectionSettingsApp,
 } from "@/types";
+import {
+  NON_APP_SETTINGS_KINDS,
+  SETTINGS_GROUP_COPY,
+  countSettingsPhrase,
+  settingsKind,
+  type SettingsKind,
+} from "@/lib/settings-kind";
 
-type ProfileContentsTab = "apps" | "settings";
+type NonAppSettingsKind = Exclude<SettingsKind, "app">;
+type ProfileContentsTab = "apps" | "settings" | NonAppSettingsKind;
+
+const EMPTY_QUERIES: Record<ProfileContentsTab, string> = {
+  apps: "",
+  settings: "",
+  windows: "",
+  other: "",
+};
+
+/**
+ * A settings row belongs to no app only when every module it carries is of a
+ * non-app tier. The engine reports such a row as `unresolved`, which here is
+ * not a failed association: there is no app to associate.
+ */
+function settingsRowKind(row: ProfileInspectionSettingsApp): SettingsKind {
+  const kinds = new Set(row.moduleIds.map(settingsKind));
+  if (kinds.size === 0 || kinds.has("app")) return "app";
+  return kinds.has("other") ? "other" : "windows";
+}
 
 interface ProfileContentsModalProps {
   open: boolean;
@@ -44,9 +70,10 @@ function pluralize(count: number, singular: string, plural: string): string {
 }
 
 function defaultTab(contents: ProfileInspectionData): ProfileContentsTab {
-  return contents.apps.length === 0 && contents.settingsApps.length > 0
-    ? "settings"
-    : "apps";
+  if (contents.apps.length > 0) return "apps";
+  const kinds = new Set(contents.settingsApps.map(settingsRowKind));
+  if (kinds.has("app")) return "settings";
+  return NON_APP_SETTINGS_KINDS.find((kind) => kinds.has(kind)) ?? "apps";
 }
 
 function rowMatches(query: string, values: string[]): boolean {
@@ -85,8 +112,7 @@ export function ProfileContentsModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ profilePath: string; message: string } | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileContentsTab>("apps");
-  const [appsQuery, setAppsQuery] = useState("");
-  const [settingsQuery, setSettingsQuery] = useState("");
+  const [queries, setQueries] = useState(EMPTY_QUERIES);
   const requestId = useRef(0);
   const inspectRef = useRef(onInspectProfile);
   const tabId = useId();
@@ -97,8 +123,7 @@ export function ProfileContentsModal({
 
   useEffect(() => {
     const currentRequest = ++requestId.current;
-    setAppsQuery("");
-    setSettingsQuery("");
+    setQueries(EMPTY_QUERIES);
     setContents(null);
     setError(null);
     setActiveTab("apps");
@@ -140,37 +165,62 @@ export function ProfileContentsModal({
     }
   };
 
-  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    let nextTab: ProfileContentsTab | null = null;
-    if (event.key === "Home") nextTab = "apps";
-    if (event.key === "End") nextTab = "settings";
-    if (event.key === "ArrowLeft") nextTab = activeTab === "apps" ? "settings" : "apps";
-    if (event.key === "ArrowRight") nextTab = activeTab === "apps" ? "settings" : "apps";
-    if (!nextTab) return;
-    event.preventDefault();
-    chooseTab(nextTab, true);
-  };
-
   // State updates happen after render. Keep a completed inspection tied to the
   // profile that requested it so a changed path cannot paint prior contents.
   const loadedContents = contents?.profilePath === profilePath ? contents.data : null;
   const loadedError = error?.profilePath === profilePath ? error.message : null;
   const appCount = loadedContents?.apps.length ?? 0;
-  const settingsCount = loadedContents?.settingsApps.length ?? 0;
+  const settingsRowsByKind: Record<SettingsKind, ProfileInspectionSettingsApp[]> = {
+    app: [],
+    windows: [],
+    other: [],
+  };
+  for (const row of loadedContents?.settingsApps ?? []) {
+    settingsRowsByKind[settingsRowKind(row)].push(row);
+  }
+  const settingsCount = settingsRowsByKind.app.length;
+  const unidentifiedSettingsCount = settingsRowsByKind.app.filter(
+    (row) => row.associationStatus === "ambiguous" || row.associationStatus === "unresolved",
+  ).length;
+  const nonAppGroups = NON_APP_SETTINGS_KINDS
+    .map((kind) => ({ kind, rows: settingsRowsByKind[kind] }))
+    .filter((group) => group.rows.length > 0);
+  const tabs: Array<{ tab: ProfileContentsTab; label: string; searchLabel: string }> = [
+    { tab: "apps", label: `Apps (${appCount})`, searchLabel: "Search apps" },
+    { tab: "settings", label: `App settings (${settingsCount})`, searchLabel: "Search app settings" },
+    ...nonAppGroups.map(({ kind, rows }) => ({
+      tab: kind,
+      label: `${SETTINGS_GROUP_COPY[kind].heading} (${rows.length})`,
+      searchLabel: `Search ${SETTINGS_GROUP_COPY[kind].plural}`,
+    })),
+  ];
   const filteredApps =
     loadedContents?.apps.filter((app) =>
-      rowMatches(appsQuery, [app.displayName, ...app.packageRefs]),
+      rowMatches(queries.apps, [app.displayName, ...app.packageRefs]),
     ) ?? [];
-  const filteredSettings =
-    loadedContents?.settingsApps.filter((row) =>
-      rowMatches(settingsQuery, [
-        row.displayName,
-        ...row.packageRefs,
-        ...row.moduleIds,
-        ...row.candidateAppIds,
-      ]),
-    ) ?? [];
-  const activeQuery = activeTab === "apps" ? appsQuery : settingsQuery;
+  const filteredSettings = settingsRowsByKind.app.filter((row) =>
+    rowMatches(queries.settings, [
+      row.displayName,
+      ...row.packageRefs,
+      ...row.moduleIds,
+      ...row.candidateAppIds,
+    ]),
+  );
+  const activeQuery = queries[activeTab];
+  const activeSearchLabel =
+    tabs.find((entry) => entry.tab === activeTab)?.searchLabel ?? "Search apps";
+
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const index = tabs.findIndex((entry) => entry.tab === activeTab);
+    let nextIndex: number | null = null;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = tabs.length - 1;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    chooseTab(tabs[nextIndex].tab, true);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -230,10 +280,15 @@ export function ProfileContentsModal({
                   "apps",
                 )}
               </Badge>
-              {loadedContents.summary.unidentifiedSettingsRowCount > 0 && (
+              {nonAppGroups.map(({ kind, rows }) => (
+                <Badge key={kind} variant="secondary">
+                  {countSettingsPhrase(kind, rows.length)}
+                </Badge>
+              ))}
+              {unidentifiedSettingsCount > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {pluralize(
-                    loadedContents.summary.unidentifiedSettingsRowCount,
+                    unidentifiedSettingsCount,
                     "unidentified app settings row",
                     "unidentified app settings rows",
                   )}
@@ -279,12 +334,7 @@ export function ProfileContentsModal({
               role="tablist"
               aria-label="Profile contents"
             >
-              {(
-                [
-                  ["apps", `Apps (${appCount})`],
-                  ["settings", `App settings (${settingsCount})`],
-                ] as const
-              ).map(([tab, label]) => (
+              {tabs.map(({ tab, label }) => (
                 <Button
                   key={tab}
                   id={`${tabId}-${tab}-tab`}
@@ -306,18 +356,13 @@ export function ProfileContentsModal({
 
             <Input
               type="search"
-              aria-label={
-                activeTab === "apps" ? "Search apps" : "Search app settings"
-              }
-              placeholder={
-                activeTab === "apps" ? "Search apps" : "Search app settings"
-              }
+              aria-label={activeSearchLabel}
+              placeholder={activeSearchLabel}
               value={activeQuery}
-              onChange={(event) =>
-                activeTab === "apps"
-                  ? setAppsQuery(event.target.value)
-                  : setSettingsQuery(event.target.value)
-              }
+              onChange={(event) => {
+                const value = event.target.value;
+                setQueries((current) => ({ ...current, [activeTab]: value }));
+              }}
               className="flex-shrink-0"
             />
 
@@ -333,8 +378,8 @@ export function ProfileContentsModal({
               >
                 {filteredApps.length === 0 ? (
                   <p className="py-4 text-sm text-muted-foreground">
-                    {appsQuery.trim()
-                      ? `No apps match “${appsQuery.trim()}”.`
+                    {queries.apps.trim()
+                      ? `No apps match “${queries.apps.trim()}”.`
                       : "This profile includes no apps."}
                   </p>
                 ) : (
@@ -368,8 +413,8 @@ export function ProfileContentsModal({
               >
                 {filteredSettings.length === 0 ? (
                   <p className="py-4 text-sm text-muted-foreground">
-                    {settingsQuery.trim()
-                      ? `No app settings match “${settingsQuery.trim()}”.`
+                    {queries.settings.trim()
+                      ? `No app settings match “${queries.settings.trim()}”.`
                       : "This profile includes no app settings."}
                   </p>
                 ) : (
@@ -392,6 +437,40 @@ export function ProfileContentsModal({
                   </ul>
                 )}
               </div>
+              {nonAppGroups.map(({ kind, rows }) => {
+                const query = queries[kind].trim();
+                const matches = rows.filter((row) =>
+                  rowMatches(query, [row.displayName, ...row.moduleIds]),
+                );
+                return (
+                  <div
+                    key={kind}
+                    id={`${tabId}-${kind}-panel`}
+                    role="tabpanel"
+                    aria-labelledby={`${tabId}-${kind}-tab`}
+                    hidden={activeTab !== kind}
+                  >
+                    {matches.length === 0 ? (
+                      <p className="py-4 text-sm text-muted-foreground">
+                        {`No ${SETTINGS_GROUP_COPY[kind].plural} match “${query}”.`}
+                      </p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {matches.map((row) => (
+                          <li
+                            key={row.id}
+                            className="rounded-md px-2 py-1.5 text-sm hover:bg-muted/40"
+                          >
+                            <p className="truncate" title={row.displayName}>
+                              {row.displayName}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
 
               <DetailsDisclosure title="Configuration details" className="border-t pt-3">
                 <dl className="space-y-2 text-xs text-muted-foreground">
