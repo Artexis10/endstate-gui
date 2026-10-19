@@ -27,6 +27,27 @@ jobs:
             echo "value=${GITHUB_REF_NAME#gui-v}" >> "$GITHUB_OUTPUT"
           fi
 
+      # The publish action can only push through the Artexis10/winget-pkgs fork.
+      # An expired or under-scoped WINGET_TOKEN once failed there quietly, so
+      # check the token first and fail with the fix in the message.
+      - name: Check WINGET_TOKEN can push to the winget-pkgs fork
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The WINGET_TOKEN secret is empty. Add a token that can push to Artexis10/winget-pkgs."
+            exit 1
+          fi
+          if ! push=$(gh api repos/Artexis10/winget-pkgs --jq .permissions.push 2>&1); then
+            echo "::error::GitHub rejected WINGET_TOKEN ($push). The token may have expired: replace the WINGET_TOKEN secret."
+            exit 1
+          fi
+          if [ "$push" != "true" ]; then
+            echo "::error::WINGET_TOKEN cannot push to Artexis10/winget-pkgs (permissions.push is '$push'). Replace the WINGET_TOKEN secret with a token that has push access to the fork."
+            exit 1
+          fi
+          echo "WINGET_TOKEN can push to Artexis10/winget-pkgs."
+
       - name: Publish to WinGet
         uses: vedantmgoyal9/winget-releaser@v2
         with:
