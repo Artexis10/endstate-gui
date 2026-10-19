@@ -7,7 +7,8 @@ import { installTauriMock } from './helpers/tauri-mock';
  * "Windows settings" heading with counts equal to the rows.
  *
  * Events follow the engine's registry-set shape: a `windows-settings.<name>`
- * module, no source file, and a target that names one registry value.
+ * module, no source file, and a target that names one registry value. Engine
+ * 2.32.0 adds a human `label`; the failed item has none, as from an older engine.
  */
 test('a chosen Windows setting reaches the engine by full ID and its results list under Windows settings', async ({ page }) => {
   await installTauriMock(page, {
@@ -27,9 +28,9 @@ test('a chosen Windows setting reaches the engine by full ID and its results lis
       { id: 'windows-settings.personalization', displayName: 'Windows theme: light or dark mode', entryCount: 1 },
     ];
     const registryItems = [
-      { module: 'windows-settings.keyboard', target: 'HKCU\\Control Panel\\Keyboard\\KeyboardDelay', status: 'restored', reason: null, message: 'settings restored' },
-      { module: 'windows-settings.keyboard', target: 'HKCU\\Control Panel\\Keyboard\\KeyboardSpeed', status: 'skipped_up_to_date', reason: 'already_up_to_date', message: 'target settings are already current' },
-      { module: 'windows-settings.personalization', target: 'HKCU\\Software\\Example\\Personalize\\AppsUseLightTheme', status: 'failed', reason: 'restore_failed', message: 'Access is denied: HKCU\\Software\\Example\\Personalize' },
+      { module: 'windows-settings.keyboard', target: 'HKCU\\Control Panel\\Keyboard\\KeyboardDelay', label: 'Delay before a held key starts repeating', status: 'restored', reason: null, message: 'settings restored' },
+      { module: 'windows-settings.keyboard', target: 'HKCU\\Control Panel\\Keyboard\\KeyboardSpeed', label: 'How fast a held key repeats', status: 'skipped_up_to_date', reason: 'already_up_to_date', message: 'target settings are already current' },
+      { module: 'windows-settings.personalization', target: 'HKCU\\Software\\Example\\Personalize\\AppsUseLightTheme', status: 'failed', reason: 'restore_failed', message: 'cannot set DWORD value: Access is denied.' },
     ];
     (window as any).__restoreFilters = [];
 
@@ -68,6 +69,7 @@ test('a chosen Windows setting reaches the engine by full ID and its results lis
               version: 1, runId: 'apply', timestamp: TS, event: 'restore-item',
               id: `registry-set:${item.target}`, module: item.module, restorer: 'registry-set',
               source: '', target: item.target, backupPath: null, targetExisted: true,
+              ...(item.label ? { label: item.label } : {}),
             };
             await emit({ ...restoreItem, status: 'restoring', reason: null, message: 'restoring settings' });
             await emit({ ...restoreItem, status: item.status, reason: item.reason, message: item.message });
@@ -117,6 +119,9 @@ test('a chosen Windows setting reaches the engine by full ID and its results lis
   await expect(windowsResults.getByText('UP TO DATE', { exact: true })).toHaveCount(1);
   await expect(windowsResults.getByText('FAILED', { exact: true })).toHaveCount(1);
   await expect(windowsResults.getByText("Couldn't restore this setting")).toBeVisible();
-  // The registry path is detail for the hover title only.
-  await expect(page.locator('text=/HKCU/')).toHaveCount(0);
+  await expect(
+    windowsResults.getByText('Windows keyboard: repeat delay and rate · Delay before a held key starts repeating'),
+  ).toBeVisible();
+  // Registry paths, value names and registry errors are hover-title detail only.
+  await expect(page.getByText(/HKCU|KeyboardDelay|KeyboardSpeed|AppsUseLightTheme|DWORD/)).toHaveCount(0);
 });

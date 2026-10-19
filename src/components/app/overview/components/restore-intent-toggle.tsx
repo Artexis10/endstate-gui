@@ -5,7 +5,7 @@
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Shield } from 'lucide-react';
 import type { RestoreIntent } from '@/types';
-import { NON_APP_SETTINGS_KINDS, countSettingsPhrase, type SettingsKind } from '@/lib/settings-kind';
+import { NON_APP_SETTINGS_KINDS, countSettingsPhrase, joinPhrases, type SettingsKind } from '@/lib/settings-kind';
 
 interface RestoreIntentToggleProps {
   restoreIntent: RestoreIntent;
@@ -40,7 +40,7 @@ export function RestoreIntentToggle({
       data-testid="restore-intent-toggle"
     >
       <p className="text-sm text-muted-foreground">
-        This profile includes {parts.join(' and ')}
+        This profile includes {joinPhrases(parts)}
       </p>
 
       <RadioGroup

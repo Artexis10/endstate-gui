@@ -42,14 +42,19 @@ The restore choice SHALL count app settings and settings that belong to no app s
 - **THEN** every Windows settings module is selected
 - **AND** no app settings module changes its selection
 
-### Requirement: Preview counts never mix the groups
+### Requirement: Settings counts never mix the groups
 
-Each count of settings modules in the setup preview SHALL count app settings and settings that belong to no app separately. The settings filter chip SHALL count the rows that its filter shows.
+Each count of settings modules in the setup preview, the setup results header and the capture results SHALL count app settings and settings that belong to no app separately, listed as "a, b and c". A settings filter chip SHALL count the rows that its filter shows.
 
 #### Scenario: Preview with Windows settings
 - **WHEN** a profile offers 40 app settings modules and 7 Windows settings modules, and 40 preview app rows carry settings
 - **THEN** the preview headline reads "40 app settings and 7 Windows settings available"
 - **AND** the settings filter chip reads "40 settings", and selecting it shows those 40 app rows
+
+#### Scenario: Capture with Windows settings
+- **WHEN** a capture includes 1 app settings module for a listed app and 2 Windows settings modules
+- **THEN** the capture headline reads "1 app setting and 2 Windows settings captured"
+- **AND** the settings filter chip reads "1 setting"
 
 ### Requirement: Setup results list Windows settings under their own heading
 
@@ -59,8 +64,21 @@ The setup results SHALL list the restore rows of settings that belong to no app 
 - **WHEN** a run ends with Windows settings rows that are restored, already up to date and failed
 - **THEN** those rows appear under "Windows settings"
 - **AND** the header counts include them, for example "3 settings: 1 restored, 1 already up to date, 1 failed"
-- **AND** the failed row reads "Couldn't restore this setting" when the engine message is not clean
+- **AND** the failed row reads "Couldn't restore this setting"
 - **AND** no registry path appears as row text
+
+### Requirement: Restore rows never show registry internals
+
+A restore row SHALL use the engine's `label` for the restore entry, when present, after the module name. A `registry-set` row without a label SHALL show only the module name. A `registry-set` row SHALL NOT show its registry value name or its engine message inline; its hover title SHALL keep both.
+
+#### Scenario: Labelled Windows setting
+- **WHEN** a `registry-set` restore item for `windows-settings.keyboard` carries the label "Delay before a held key starts repeating"
+- **THEN** its row reads "Windows keyboard: repeat delay and rate · Delay before a held key starts repeating"
+
+#### Scenario: Windows setting from an engine without labels
+- **WHEN** a `registry-set` restore item for `windows-settings.personalization` has no label and fails with an engine message that names a registry value type
+- **THEN** its row reads "Windows theme: light or dark mode · Couldn't restore this setting"
+- **AND** neither the registry value name nor the engine message appears as row text
 
 ### Requirement: Capture results list Windows settings under their own heading
 

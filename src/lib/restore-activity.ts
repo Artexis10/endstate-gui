@@ -76,14 +76,35 @@ export function resolveRestoreModuleDisplayName(
 }
 
 /**
- * The primary row label: `<display name or module id> · <file basename>`.
- * Never returns the raw copy-spec.
+ * `registry-set` (an engine restore type) writes one registry value. Its
+ * target and engine messages name registry internals, which the default UI
+ * never shows (docs/ux-guardrails.md, "Jargon in Default UX").
+ */
+function isRegistryRestore(event: RestoreItemEvent): boolean {
+  return event.restorer === 'registry-set';
+}
+
+/**
+ * What tells one restore item of a module from another: the engine's label
+ * when it sends one, otherwise the target file name. A registry value name is
+ * never shown inline; the hover title keeps it.
+ */
+function restoreRowDisambiguator(event: RestoreItemEvent): string | undefined {
+  const label = event.label?.trim();
+  if (label) return label;
+  if (isRegistryRestore(event)) return undefined;
+  return restoreTargetBasename(event.target || event.source || event.id);
+}
+
+/**
+ * The primary row label: `<display name or module id> · <label or file
+ * basename>`. Never returns the raw copy-spec or a registry value name.
  */
 export function restoreRowPrimary(event: RestoreItemEvent, context: RestoreRowContext): string {
-  const basename = restoreTargetBasename(event.target || event.source || event.id);
   const moduleId = deriveRestoreModuleId(event);
-  const label = moduleId ? resolveRestoreModuleDisplayName(moduleId, context) ?? moduleId : undefined;
-  return label ? `${label} · ${basename}` : basename;
+  const moduleName = moduleId ? resolveRestoreModuleDisplayName(moduleId, context) ?? moduleId : undefined;
+  const parts = [moduleName, restoreRowDisambiguator(event)].filter((part): part is string => !!part);
+  return parts.length > 0 ? parts.join(' · ') : 'Setting';
 }
 
 /**
@@ -101,9 +122,10 @@ function isCleanRestoreText(text: string): boolean {
  */
 export function restoreRowSecondary(event: RestoreItemEvent): string | undefined {
   const message = event.message?.trim();
-  const cleanMessage = message && isCleanRestoreText(message) ? message : undefined;
-  // `registry-set` (an engine restore type) writes one setting, not a file.
-  const subject = event.restorer === 'registry-set' ? 'setting' : 'file';
+  // A registry restore's engine message names registry internals, so its row
+  // uses the canonical strings and the hover title keeps the message.
+  const cleanMessage = message && !isRegistryRestore(event) && isCleanRestoreText(message) ? message : undefined;
+  const subject = isRegistryRestore(event) ? 'setting' : 'file';
 
   switch (event.status) {
     case 'restoring':
@@ -123,7 +145,9 @@ export function restoreRowSecondary(event: RestoreItemEvent): string | undefined
 /** Full raw source→target detail, for a hover title / disclosure only. */
 export function restoreRowTitle(event: RestoreItemEvent): string {
   // A restore type with no source file (such as `registry-set`) has only a target.
-  return event.source ? `${event.source} → ${event.target}` : event.target;
+  const detail = event.source ? `${event.source} → ${event.target}` : event.target;
+  const message = event.message?.trim();
+  return isRegistryRestore(event) && message ? `${detail}\n${message}` : detail;
 }
 
 /**

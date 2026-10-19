@@ -21,7 +21,7 @@ describe('CaptureProgress', () => {
 
   it.each([
     ['inventory', 'Checking installed apps…'],
-    ['settings', 'Collecting app settings…'],
+    ['settings', 'Collecting settings…'],
     ['packaging', 'Packaging your setup…'],
   ] as const)('maps %s to GUI-owned stage copy', (stage, copy) => {
     renderWithProviders(<CaptureProgress stage={stage} />);

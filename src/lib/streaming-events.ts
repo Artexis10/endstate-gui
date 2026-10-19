@@ -204,6 +204,8 @@ export interface RestoreItemEvent extends BaseStreamingEvent {
   backupPath: string | null;
   targetExisted: boolean;
   message?: string;
+  /** Human name of this restore entry, from its manifest `reason` (engine 2.32.0+). */
+  label?: string;
   /** Owning generation-aware config capture (engine additive field). */
   captureId?: string;
   /** Owning config set; `legacy` for the anonymous legacy lane. */

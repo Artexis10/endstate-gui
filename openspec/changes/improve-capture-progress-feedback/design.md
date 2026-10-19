@@ -42,7 +42,7 @@ Capture has no honest total-work denominator: package-manager enumeration, modul
 The stage copy will be:
 
 - `inventory`: “Checking installed apps…”
-- `settings`: “Collecting app settings…”
+- `settings`: “Collecting settings…”
 - `packaging`: “Packaging your setup…”
 
 Before the first stage event, including with an older engine, the GUI will show “Starting capture…”. Item events will update activity rows without overwriting the current stage.

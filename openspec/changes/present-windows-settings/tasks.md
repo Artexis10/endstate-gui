@@ -12,9 +12,11 @@
 - [x] 2.5 Capture results: own heading; per-module notes behind Details.
 - [x] 2.6 Document the group in `docs/ux-language.md`.
 - [x] 2.7 Setup preview: count each group apart in module counts; the settings chip counts the rows its filter shows.
+- [x] 2.8 Restore rows: use the engine `label` (engine 2.32.0+) after the module name; a `registry-set` row shows no value name and no engine message inline.
+- [x] 2.9 Capture results and setup results fallbacks: count each group apart; list three groups as "a, b and c"; the capture settings chip counts its rows.
 
 ## 3. Proof
 
 - [x] 3.1 Unit: Windows rows are not unidentified app settings; a selected Windows module reaches apply by full ID in its own group; captured Windows settings are not "Settings only"; the preview chip and module counts keep Windows settings apart.
-- [x] 3.2 E2E (`e2e/windows-settings-restore.spec.ts`): the restore filter carries full IDs; results group the rows and the header counts equal them.
+- [x] 3.2 E2E (`e2e/windows-settings-restore.spec.ts`): the restore filter carries full IDs; results group the rows and the header counts equal them; no registry value name, path or registry error is row text.
 - [x] 3.3 Chrome DevTools: real engine import, contents, consent and dry-run results; mock engine apply results and capture results; light and dark.

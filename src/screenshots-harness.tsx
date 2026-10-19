@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { ArrowLeft, HardDrive, Download, CheckCircle2, Save, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { RestoreIntentToggle } from '@/components/app/overview/components/restore-intent-toggle';
 import {
   type StatusKey,
   getColorClasses,
@@ -210,7 +211,7 @@ function SetupScreenshot() {
             <div>
               <p className="text-sm font-medium">Preview complete</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {toInstallCount} to install, {presentCount} already present &middot; {settingsCount} settings included
+                {toInstallCount} to install, {presentCount} already present &middot; {settingsCount} settings available
               </p>
             </div>
           </div>
@@ -251,21 +252,13 @@ function SetupScreenshot() {
             </div>
           </div>
 
-          {/* Settings radio group */}
-          <div className="mt-6 border-t pt-4">
-            <p className="text-xs text-muted-foreground mb-3">This profile includes settings for {settingsCount} apps</p>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <span className="w-4 h-4 rounded-full border-2 border-green-500 flex items-center justify-center">
-                  <span className="w-2 h-2 rounded-full bg-green-500" />
-                </span>
-                Install apps only
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer text-muted-foreground">
-                <span className="w-4 h-4 rounded-full border-2 border-muted-foreground/40" />
-                Install apps and restore settings
-              </label>
-            </div>
+          {/* Settings choice: the real component, so its copy cannot drift */}
+          <div className="mt-6">
+            <RestoreIntentToggle
+              restoreIntent="apps-only"
+              onRestoreIntentChange={() => {}}
+              configModuleCount={settingsCount}
+            />
           </div>
 
           <div className="flex items-center gap-3 mt-6">

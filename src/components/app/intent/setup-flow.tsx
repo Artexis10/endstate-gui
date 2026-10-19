@@ -1776,8 +1776,7 @@ export function SetupFlow({
                         }
                         // Fallback: show selected settings count (only when restore was requested)
                         if (restoreIntent === 'apps-and-settings' && selectedModules.length > 0) {
-                          const count = selectedModules.length;
-                          return <> &middot; {count} {count === 1 ? 'setting' : 'settings'} included</>;
+                          return <> &middot; {settingsModulesPhrase(selectedModules)} included</>;
                         }
                         return null;
                       })()}
@@ -1814,8 +1813,11 @@ export function SetupFlow({
                     : (restoreIntent === 'apps-and-settings' ? fullConfigMap : {});
                   const applySettingsFailed = applyRestoreCounts.failed;
                   const applySettingsProcessed = applyRestoreTotal;
-                  // Fall back to selected modules count when restore counters are empty (only when restore was requested)
-                  const configMapSettingsCount = restoreIntent === 'apps-and-settings' ? selectedModules.length : 0;
+                  // With no restore rows, the chip counts the app rows its
+                  // filter shows (only when restore was requested).
+                  const configMapSettingsCount = restoreIntent === 'apps-and-settings'
+                    ? settingsRowCount(applyResult.appEvents, applyConfigMap, applySynthesizedAppIds)
+                    : 0;
                   const applySettingsTotal = applySettingsProcessed > 0 ? applySettingsProcessed : configMapSettingsCount;
                   // Partition filtered events
                   const applyAppsOnlyCount = appsOnlyCount(

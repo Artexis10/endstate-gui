@@ -72,18 +72,29 @@ export function countSettingsPhrase(kind: Exclude<SettingsKind, 'app'>, count: n
   return `${count} ${count === 1 ? copy.singular : copy.plural}`;
 }
 
+/** Joins phrases as an English list: "a", "a and b", "a, b and c". */
+export function joinPhrases(parts: readonly string[]): string {
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
 /**
- * Counts settings modules with one number per group, so no number mixes app
- * settings with settings that belong to no app: "40 app settings and 7 Windows
- * settings". A profile with app settings only keeps the plain "40 settings".
+ * One count phrase per settings group, so no number mixes app settings with
+ * settings that belong to no app: ["40 app settings", "7 Windows settings"].
+ * A profile with app settings only keeps the plain ["40 settings"].
  */
-export function settingsModulesPhrase(moduleIds: readonly string[]): string {
+export function settingsModulesParts(moduleIds: readonly string[]): string[] {
   const appCount = moduleIds.filter((id) => settingsKind(id) === 'app').length;
   const nonAppParts = NON_APP_SETTINGS_KINDS
     .map((kind) => ({ kind, count: moduleIds.filter((id) => settingsKind(id) === kind).length }))
     .filter(({ count }) => count > 0)
     .map(({ kind, count }) => countSettingsPhrase(kind, count));
   const settingsWord = appCount === 1 ? 'setting' : 'settings';
-  if (nonAppParts.length === 0) return `${appCount} ${settingsWord}`;
-  return [...(appCount > 0 ? [`${appCount} app ${settingsWord}`] : []), ...nonAppParts].join(' and ');
+  if (nonAppParts.length === 0) return [`${appCount} ${settingsWord}`];
+  return [...(appCount > 0 ? [`${appCount} app ${settingsWord}`] : []), ...nonAppParts];
+}
+
+/** The groups of `settingsModulesParts` as one list: "40 app settings and 7 Windows settings". */
+export function settingsModulesPhrase(moduleIds: readonly string[]): string {
+  return joinPhrases(settingsModulesParts(moduleIds));
 }

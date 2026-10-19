@@ -89,7 +89,7 @@ Capture is indeterminate: the GUI never invents a percentage or estimates comple
 | Engine stage | GUI copy |
 |--------------|----------|
 | `inventory` | “Checking installed apps…” |
-| `settings` | “Collecting app settings…” |
+| `settings` | “Collecting settings…” (app settings and Windows settings) |
 | `packaging` | “Packaging your setup…” |
 
 Elapsed time is visual-only. At eight seconds the GUI adds: **“Still working — your package manager can take 20 seconds or more on systems with many apps.”** Only stage changes use a polite live region; elapsed seconds are not announced.
@@ -240,6 +240,12 @@ was installed”, so it never claims a completed setup.
   derived from the source path `./configs/<module-id>/…` when no display name
   resolves — falling back to `<module-id> · <basename>`. The raw
   `/copy:<source>-><target>` spec is **never** shown inline.
+- When the engine sends a `label` (the manifest restore entry's human `reason`,
+  engine 2.32.0 and later), the label replaces the file basename, for example
+  `Windows keyboard: repeat delay and rate · Delay before a held key starts
+  repeating`. A `registry-set` row without a label shows only the module
+  name: its target names a registry value, and the default UI never shows
+  registry references.
 - **Secondary text** (muted) surfaces a friendly, jargon-free reason. The
   engine-authored `message` is used when present and clean; otherwise the
   canonical strings are:
@@ -249,10 +255,12 @@ was installed”, so it never claims a completed setup.
 
   A `registry-set` row restores one setting, not a file, so its two file
   strings read “setting”: “Your saved setup doesn’t include this setting, so
-  nothing changed” and “Couldn’t restore this setting”.
+  nothing changed” and “Couldn’t restore this setting”. A `registry-set` row
+  always uses these canonical strings, because its engine message names
+  registry internals.
 - **Full raw source→target detail** may appear only in a hover title /
   disclosure, never as inline row text. A row with no source (`registry-set`)
-  shows only its target there.
+  shows only its target there, followed by the engine message.
 - **One row per item across its lifecycle:** the transitional (`restoring`) and
   terminal (`restored`/`skipped_*`/`failed`) events share a stable identity
   (target path) and **update one row in place** — they never append a duplicate.
@@ -276,10 +284,12 @@ reads the tier only through `src/lib/settings-kind.ts` and shows these groups:
   the heading “<group> to restore:”. Each module shows its entry count with the
   entry noun. Nothing in it is selected by default. The restore filter receives
   the module's full ID.
-- **Preview:** a count of settings modules names each group apart, for example
-  “40 app settings and 7 Windows settings available”. A profile with app
-  settings only keeps “40 settings available”. The “N settings” filter chip
-  counts the rows that its filter shows, which are app rows only.
+- **Counts:** in the preview, the setup results and the capture results, a
+  count of settings modules names each group apart, for example “40 app
+  settings and 7 Windows settings available”; three groups read “a, b and c”.
+  A profile with app settings only keeps “40 settings available”. An
+  “N settings” filter chip counts the rows that its filter shows, which are
+  app rows only.
 - **Results:** the group's restore rows list under the group heading, after the
   app rows. The settings counts still come from all restore rows together.
 - **Capture results:** the group lists under its own heading, never under

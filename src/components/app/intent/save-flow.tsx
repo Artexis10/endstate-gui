@@ -22,7 +22,14 @@ import {
 import { formatAppIdentity } from '@/lib/app-identity';
 import type { CaptureConfigModule, CaptureWarning, SubscriptionStatus } from '@/types';
 import { DetailsDisclosure } from '@/components/ui/details-disclosure';
-import { NON_APP_SETTINGS_KINDS, SETTINGS_GROUP_COPY, settingsKind } from '@/lib/settings-kind';
+import {
+  NON_APP_SETTINGS_KINDS,
+  SETTINGS_GROUP_COPY,
+  joinPhrases,
+  settingsKind,
+  settingsModulesParts,
+  settingsModulesPhrase,
+} from '@/lib/settings-kind';
 import { HostedBackupChip } from '@/components/app/backup/hosted-backup-chip';
 import { CaptureProgress } from './capture-progress';
 import type { CaptureStage } from '@/lib/streaming-events';
@@ -418,6 +425,7 @@ export function SaveFlow({
       ? capturedConfigs
       : (result?.configsIncluded ?? []).map(id => ({ id, displayName: id }));
   const settingsCount = settingsToShow.length;
+  const capturedSettingsPhrase = settingsModulesPhrase(settingsToShow.map((mod) => mod.id));
 
   // Build lookup: winget ID → has captured settings (for inline icon on app row)
   const settingsByApp = new Set<string>();
@@ -426,6 +434,8 @@ export function SaveFlow({
       settingsByApp.add(ref);
     }
   }
+  // The settings chip counts the app rows its filter shows.
+  const appsWithSettingsCount = (result?.apps ?? []).filter((app) => settingsByApp.has(app.id)).length;
 
   // Build name lookup: winget ID → friendly display name
   // Sources: configModules (all, not just captured) provide displayName via wingetRefs
@@ -590,16 +600,14 @@ export function SaveFlow({
                     <p className="text-sm font-medium">Scan complete</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Found {result.count} {result.count === 1 ? 'app' : 'apps'}
-                      {/* One settings number for the whole flow. This headline
-                          used to read `configsIncluded.length` while the chips,
-                          the app rows, and now the cloud invitation all read
-                          `settingsCount` — two counts for one fact, which the
-                          UX guardrails forbid ("must never compute counts
-                          differently across UI components"). `settingsCount`
-                          still falls back to `configsIncluded` when the engine
-                          omits structured `configModules`. */}
+                      {/* The headline and the cloud invitation count the same
+                          captured modules (`settingsToShow`), one number per
+                          settings group. `settingsToShow` falls back to
+                          `configsIncluded` when the engine omits structured
+                          `configModules`. The settings chip counts the app rows
+                          its filter shows. */}
                       {settingsCount > 0 && (
-                        <> &middot; {settingsCount} {settingsCount === 1 ? 'setting' : 'settings'} captured</>
+                        <> &middot; {capturedSettingsPhrase} captured</>
                       )}
                     </p>
                   </div>
@@ -661,7 +669,7 @@ export function SaveFlow({
                       >
                         {result.apps.length} apps
                       </FilterChip>
-                      {settingsCount > 0 && (
+                      {appsWithSettingsCount > 0 && (
                         <>
                           <FilterChip
                             onClick={() => toggleFilter('settings')}
@@ -669,7 +677,7 @@ export function SaveFlow({
                             dimmed={activeFilters.size > 0 && !activeFilters.has('settings')}
                             className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
                           >
-                            {settingsCount} settings
+                            {appsWithSettingsCount} {appsWithSettingsCount === 1 ? 'setting' : 'settings'}
                           </FilterChip>
                           <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                             <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} aria-hidden="true" />
@@ -897,7 +905,10 @@ export function SaveFlow({
                           <div className="min-w-0">
                             <p className="text-sm font-medium">Your setup is saved locally</p>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              {result.count} applications and {settingsCount} supported settings were captured.
+                              {joinPhrases([
+                                `${result.count} ${result.count === 1 ? 'application' : 'applications'}`,
+                                ...settingsModulesParts(settingsToShow.map((mod) => mod.id)),
+                              ])} were captured.
                             </p>
                             <p className="text-sm font-medium mt-4">
                               Keep an encrypted version with Endstate Cloud

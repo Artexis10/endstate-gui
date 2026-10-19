@@ -777,6 +777,8 @@ export interface RestoreResult {
   error?: string;
   warnings?: string[];
   restoreType?: string;
+  /** Human name of this restore entry, from its manifest `reason` (engine 2.32.0+). */
+  label?: string;
   captureId?: string;
   configSetId?: string;
   targetInstanceId?: string;
