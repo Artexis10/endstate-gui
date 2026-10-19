@@ -48,6 +48,16 @@ export default {
           DEFAULT: 'hsl(var(--danger))',
           foreground: 'hsl(var(--danger-foreground))',
         },
+        // Status text and labels on result, preview and restore rows
+        // (getColorClasses). Text only: fills keep the semantic tokens above.
+        status: {
+          success: 'hsl(var(--status-success))',
+          warning: 'hsl(var(--status-warning))',
+          danger: 'hsl(var(--status-danger))',
+          info: 'hsl(var(--status-info))',
+          action: 'hsl(var(--status-action))',
+          detected: 'hsl(var(--status-detected))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',

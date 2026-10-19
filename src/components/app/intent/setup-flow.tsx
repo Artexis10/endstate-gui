@@ -1338,6 +1338,17 @@ export function SetupFlow({
           const displayInstalled = pickerEnabled ? selectedToInstall : adjustedInstalled;
           const displayPresent = pickerEnabled ? selectedPresent : adjustedPresent;
           const displayTotal = pickerEnabled ? displayInstalled + displayPresent : totalApps;
+          // The "N apps" chip clears the filters, so it counts the app rows the
+          // cleared list shows, manual and skipped apps included. With the
+          // picker on it counts the selected ones, like the chips beside it.
+          const previewAppRows = previewResult.appEvents.filter((e) =>
+            isDisplayableEvent(e) && isAppRow(e) && !isConfigOnlyApp(e, previewSynthesizedAppIds));
+          const previewAppChipCount = pickerEnabled
+            ? previewAppRows.filter((e) => {
+                const appId = manifestIdByEventKey.get(e.app);
+                return !appId || selectedAppIds.has(appId);
+              }).length
+            : previewAppRows.length;
           // Partition filtered events
           const previewAppsOnlyCount = appsOnlyCount(
             previewResult.appEvents,
@@ -1409,14 +1420,14 @@ export function SetupFlow({
                 {previewResult.appEvents.length > 0 && (
                   <div className="mt-3 border-t pt-3">
                     <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                      {displayTotal > 0 && (
+                      {previewAppChipCount > 0 && (
                         <FilterChip
                           onClick={clearFilters}
                           pressed={activeFilters.size === 0}
                           dimmed={activeFilters.size > 0}
                           className={`${getColorClasses('detected').bg} ${getColorClasses('detected').text}`}
                         >
-                          {displayTotal} {displayTotal === 1 ? 'app' : 'apps'}
+                          {previewAppChipCount} {previewAppChipCount === 1 ? 'app' : 'apps'}
                         </FilterChip>
                       )}
                       {displayInstalled > 0 && (

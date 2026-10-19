@@ -273,6 +273,26 @@ describe('itemEventToAppEvent - Streaming Event Conversion', () => {
     expect(itemEventToAppEvent(failed, 'apply').secondary).toBe("Couldn't install this app");
   });
 
+  it('says a failure with no engine message was a check in a preview and an install in a real run', () => {
+    const failed = {
+      version: 1,
+      runId: 'fail-no-message',
+      event: 'item',
+      id: 'Git.Git',
+      driver: 'winget',
+      status: 'failed',
+      reason: 'install_failed',
+      message: '   ',
+      name: 'Git',
+    } as unknown as ItemEvent;
+
+    const preview = itemEventToAppEvent(failed, 'plan');
+    expect(preview.action).toBe("Couldn't check this app (no details provided)");
+    expect(preview.action).not.toMatch(/install/i);
+    expect(preview.secondary).toBe("Couldn't check this app");
+    expect(itemEventToAppEvent(failed, 'apply').action).toBe("Couldn't install this app (no details provided)");
+  });
+
   it('maps the engine 2.24.1 captured compatibility status to detected during capture', () => {
     const itemEvent = {
       version: 1,

@@ -300,18 +300,18 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
 export function getColorClasses(color: SemanticColor): { text: string; bg: string; border: string } {
   switch (color) {
     case 'success':
-      return { text: 'text-success', bg: 'bg-success/10', border: 'border-success/20' };
+      return { text: 'text-status-success', bg: 'bg-success/10', border: 'border-success/20' };
     case 'info':
-      return { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' };
+      return { text: 'text-status-info', bg: 'bg-blue-500/10', border: 'border-blue-500/20' };
     case 'action':
       // Action required: vivid blue, stronger border for emphasis
-      return { text: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/40' };
+      return { text: 'text-status-action', bg: 'bg-blue-500/10', border: 'border-blue-500/40' };
     case 'detected':
-      return { text: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/20' };
+      return { text: 'text-status-detected', bg: 'bg-teal-500/10', border: 'border-teal-500/20' };
     case 'warn':
-      return { text: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20' };
+      return { text: 'text-status-warning', bg: 'bg-warning/10', border: 'border-warning/20' };
     case 'error':
-      return { text: 'text-danger', bg: 'bg-danger/10', border: 'border-danger/20' };
+      return { text: 'text-status-danger', bg: 'bg-danger/10', border: 'border-danger/20' };
     case 'muted':
     default:
       return { text: 'text-muted-foreground', bg: 'bg-muted/10', border: 'border-muted/20' };
@@ -426,11 +426,13 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     phase === 'capture' ? 'capture' :
     undefined;
   
-  // Determine action text with fallback for failed items with no message
+  // Determine action text with fallback for failed items with no message. The
+  // fallback names what the run tried, so a preview never claims an install.
   const statusKey = engineStatusToStatusKey(event.status, phase);
+  const failureKind = failureKindForPhase(phase);
   let action = event.message || event.status;
   if (statusKey === 'failed' && (!event.message || !event.message.trim())) {
-    action = 'Install failed (no details provided)';
+    action = `${APP_FAILED_TEXT[failureKind]} (no details provided)`;
   }
   
   return {
@@ -442,7 +444,7 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     reason: event.reason,
     name: event.name,
     driver: event.driver,
-    ...(statusKey === 'failed' ? appFailureText(event.name || event.id, event.message, failureKindForPhase(phase)) : {}),
+    ...(statusKey === 'failed' ? appFailureText(event.name || event.id, event.message, failureKind) : {}),
   };
 }
 

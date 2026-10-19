@@ -173,6 +173,26 @@ changed nothing (PRESENT, and a restore row's UP TO DATE and NOT IN SETUP) is
 muted, so the rows that changed or failed stand out in a long list. A filter
 chip takes the colour of the rows it filters.
 
+Status text reads its colour from the `--status-*` tokens in
+`src/styles/globals.css` (through `getColorClasses`), not from the shared
+semantic fills. In the light theme every coloured status reaches WCAG AA, at
+least 4.5:1, on white, the panel, the muted surface and a chip's 10% tint;
+muted status text uses the shared muted grey, which reaches AA on white and
+the panel. The dark theme keeps the colours these rows had before. Ratios on white (light) and
+on the dark background (dark):
+
+| Colour | Labels | Light | Dark |
+|--------|--------|------:|-----:|
+| success | INSTALLED, RESTORED, CONFIRMED | 6.02 | 8.33 |
+| warn | MANUAL, CANCELLED, SKIPPED, MISSING | 6.04 | 8.95 |
+| error | FAILED | 6.41 | 5.06 |
+| action | TO INSTALL, TO RESTORE | 6.77 | 5.27 |
+| info | INSTALLING, CHECKING | 6.65 | 7.58 |
+| detected | DETECTED | 5.52 | 10.23 |
+| muted | PRESENT, UP TO DATE, NOT IN SETUP | 4.72 | 6.07 |
+
+`src/lib/status-contrast.test.ts` checks these from the stylesheet.
+
 #### VERIFY Phase
 
 | StatusKey | Reason | UI Label | Color | Meaning |
@@ -336,12 +356,15 @@ follow these rules:
   click shows, across both places. Other warn outcomes, such as CANCELLED,
   stay in the list. The “N skipped” chip counts every app outcome that is not
   installed, present or failed, so its click shows MANUAL and CANCELLED rows
-  too.
+  too. The preview “N apps” chip clears the filters, so it counts every app
+  row the cleared list shows, skipped and manual apps included (with the
+  per-app picker on, the selected ones).
 - **A failed app keeps a reason.** Its secondary text names what the run tried:
   “Couldn’t install this app” in a real run, and “Couldn’t check this app” in a
   preview or dry run, which install nothing. The engine's message can name
   installer paths, so it appears only in the hover title, as on a registry
-  restore row.
+  restore row. A failure with no engine message keeps the same wording, with
+  “(no details provided)” added: never “Install failed” in a preview.
 - **Quiet rows.** A results row shows the status label and the name, and
   secondary text only on a failure. A results row has no settings icon,
   because the settings rows themselves list under the apps. A preview app row

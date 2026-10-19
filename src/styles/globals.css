@@ -54,6 +54,16 @@
 
     /* "Action required" — stronger than info, not error */
     --action-required: 217 91% 60%;
+
+    /* Status text on result, preview and restore rows (getColorClasses).
+       Dark keeps the colours these rows already had; teal is the 400 shade
+       the rows asked for, since no .dark class enables `dark:` variants. */
+    --status-success: 142 71% 45%;
+    --status-warning: 38 92% 50%;
+    --status-danger: 0 84% 60%;
+    --status-info: 213 94% 68%;
+    --status-action: 217 91% 60%;
+    --status-detected: 172 66% 50%;
   }
 
   /* Light theme overrides */
@@ -96,6 +106,15 @@
 
     --danger: 0 84% 55%;
     --danger-foreground: 0 0% 100%;
+
+    /* Status text: at least 4.5:1 (WCAG AA) on white, the panel, the muted
+       surface and a 10% status tint. Ratios in docs/ux-language.md. */
+    --status-success: 142 72% 26%;
+    --status-warning: 26 90% 33%;
+    --status-danger: 0 74% 42%;
+    --status-info: 224 76% 48%;
+    --status-action: 221 83% 45%;
+    --status-detected: 175 77% 26%;
   }
 
   * {
