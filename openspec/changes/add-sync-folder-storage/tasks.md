@@ -62,7 +62,7 @@
 - [x] 6.1 Update affected `AppSettings` fixtures and the legacy
   `draft-and-profile-state.md` model.
 - [x] 6.2 Add or update the persistence reload test for a typed destination.
-- [x] 6.3 Confirm no Hosted Backup command or component changed.
+- [x] 6.3 Verify storage selection does not invoke or alter Hosted Backup commands.
 - [x] 6.4 Run focused TypeScript settings/component tests and Rust discovery/I/O
   tests.
 - [x] 6.5 Run TypeScript build, lint, strict OpenSpec validation, and only the
@@ -93,3 +93,14 @@ validation, and Rust formatting pass. The native facade compiles with temporary
 sidecar. No installer or runnable application was built, installed, or launched.
 Provider parsers are tested with injected fixtures; no live cloud account or
 actual sync client is required by these tests. Versions are unchanged.
+
+## CI follow-up: focus-refresh timer (2026-10-19)
+
+The coverage job exposed an existing focus-refresh race in the backup state hook:
+changing the refresh callback during a render removed the focus listener and
+canceled its pending debounce. A deterministic regression reproduced the same
+missing second status call before the fix. The focus subscription now stays
+mounted and invokes the latest refresh callback through a ref, preserving current
+settings and retaining unmount cleanup. Added coverage also checks that a pending
+refresh is canceled when the hook unmounts. This restores existing refresh
+behavior; folder/provider selection still does not invoke any backup command.

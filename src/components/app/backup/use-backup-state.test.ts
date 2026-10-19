@@ -293,6 +293,34 @@ describe('useBackupState progress reducers', () => {
 });
 
 describe('useBackupState focus refresh', () => {
+  it('preserves a pending focus refresh across rerenders and uses the latest settings', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus } = await import('@/lib/backup-bridge');
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupStatus.mockResolvedValue({ signedIn: false, issuerUrl: 'https://substratesystems.io' });
+
+      const { rerender } = renderHook(
+        ({ settings }) => useBackupState(settings),
+        { initialProps: { settings: SETTINGS } },
+      );
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      const initialCalls = mockBackupStatus.mock.calls.length;
+
+      act(() => { window.dispatchEvent(new Event('focus')); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+      const latestSettings: AppSettings = { ...SETTINGS, engineMode: 'path' };
+      rerender({ settings: latestSettings });
+      await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+
+      expect(mockBackupStatus).toHaveBeenCalledTimes(initialCalls + 1);
+      expect(mockBackupStatus).toHaveBeenLastCalledWith(latestSettings);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('refreshes when the window regains focus', async () => {
     vi.useFakeTimers();
     try {
@@ -314,6 +342,28 @@ describe('useBackupState focus refresh', () => {
       await vi.advanceTimersByTimeAsync(1100);
 
       expect(mockBackupStatus.mock.calls.length).toBe(initialCalls + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels a pending focus refresh when unmounted', async () => {
+    vi.useFakeTimers();
+    try {
+      const { backupStatus } = await import('@/lib/backup-bridge');
+      const mockBackupStatus = vi.mocked(backupStatus);
+      mockBackupStatus.mockClear();
+      mockBackupStatus.mockResolvedValue({ signedIn: false, issuerUrl: 'https://substratesystems.io' });
+      const { unmount } = renderHook(() => useBackupState(SETTINGS));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      const initialCalls = mockBackupStatus.mock.calls.length;
+
+      act(() => { window.dispatchEvent(new Event('focus')); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+      unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+      expect(mockBackupStatus).toHaveBeenCalledTimes(initialCalls);
     } finally {
       vi.useRealTimers();
     }
