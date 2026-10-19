@@ -197,8 +197,8 @@ describe('engineStatusToStatusKey - Streaming Status Mapping', () => {
   });
 
   describe('UI_STATUS_MAP color consistency', () => {
-    it('present uses green (success)', () => {
-      expect(UI_STATUS_MAP.present.color).toBe('success');
+    it('present is muted: nothing changed', () => {
+      expect(UI_STATUS_MAP.present.color).toBe('muted');
     });
 
     it('to_install uses action color (vivid blue)', () => {
@@ -416,7 +416,7 @@ describe('PHASE_STATUS_MAP - Phase-Aware Status Labels', () => {
       const status = PHASE_STATUS_MAP.apply.present;
       expect(status?.shortLabel).toBe('PRESENT');
       expect(status?.longLabel).toBe('Already present');
-      expect(status?.color).toBe('success');
+      expect(status?.color).toBe('muted');
     });
 
     it('to_install shows as "To install"', () => {
@@ -629,7 +629,7 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
   });
 
   describe('Apply phase: reason-aware discrimination', () => {
-    it('apply + skipped + reason=already_installed -> PRESENT (success), NOT "Skipped"', () => {
+    it('apply + skipped + reason=already_installed -> PRESENT (muted), NOT "Skipped"', () => {
       const status = getPhaseAwareStatusForEvent({
         statusKey: 'skipped',
         phase: 'apply',
@@ -637,17 +637,17 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
       });
       expect(status.shortLabel).toBe('PRESENT');
       expect(status.longLabel).toBe('Already present');
-      expect(status.color).toBe('success');
+      expect(status.color).toBe('muted');
     });
 
-    it('apply + skipped + reason=already_present -> PRESENT (success)', () => {
+    it('apply + skipped + reason=already_present -> PRESENT (muted)', () => {
       const status = getPhaseAwareStatusForEvent({
         statusKey: 'skipped',
         phase: 'apply',
         reason: 'already_present',
       });
       expect(status.shortLabel).toBe('PRESENT');
-      expect(status.color).toBe('success');
+      expect(status.color).toBe('muted');
     });
 
     it('apply + skipped + reason=filtered -> SKIPPED (warn) - true exclusion', () => {
@@ -660,13 +660,13 @@ describe('getPhaseAwareStatusForEvent - Reason-Aware Status Resolution', () => {
       expect(status.color).toBe('warn');
     });
 
-    it('apply + present -> PRESENT (success)', () => {
+    it('apply + present -> PRESENT (muted)', () => {
       const status = getPhaseAwareStatusForEvent({
         statusKey: 'present',
         phase: 'apply',
       });
       expect(status.shortLabel).toBe('PRESENT');
-      expect(status.color).toBe('success');
+      expect(status.color).toBe('muted');
     });
   });
 

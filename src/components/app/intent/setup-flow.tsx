@@ -43,11 +43,12 @@ import { EngineEnvelopeError } from '@/lib/engine-envelope-error';
 import {
   type AppEvent,
   type StatusKey,
+  type SemanticColor,
   getColorClasses,
+  getPhaseAwareStatus,
   getPhaseAwareStatusForEvent,
   getActivityRowLabel,
   getRestoreUiStatus,
-  formatRestoreCounts,
   appRowHasSettings,
 } from '@/lib/apply-utils';
 import { countRestoreOutcomes } from '@/lib/restore-activity';
@@ -68,6 +69,16 @@ import { CommandWarningList } from '@/components/app/command-warning-list';
 
 type SetupPhase = 'browse' | 'previewing' | 'preview-done' | 'applying' | 'apply-done' | 'error'
   | 'undo-checking' | 'undo-confirm' | 'undo-empty' | 'undo-running' | 'undo-done' | 'undo-error';
+
+/**
+ * A filter chip's classes for a row status colour, so a chip matches the rows
+ * it filters. The muted token's 10% fill does not show, so a muted chip takes
+ * a half-strength muted surface to keep its shape.
+ */
+function chipColorClasses(color: SemanticColor): string {
+  const colors = getColorClasses(color);
+  return `${color === 'muted' ? 'bg-muted/50' : colors.bg} ${colors.text}`;
+}
 
 function appIdSet(appIds: string[] | undefined): Set<string> {
   return new Set(appIds ?? []);
@@ -309,6 +320,8 @@ export interface SetupFlowProps {
   onBack: () => void;
   onOpenProfilesFolder: () => void;
   onRefreshProfiles: () => Promise<void>;
+  /** Why the profiles folder could not be read; an empty list then is not "no profiles". */
+  profilesReadError?: string | null;
   onFileDrop: (files: File[]) => void;
   /** Names of dropped or picked files the import does not accept. */
   onUnsupportedFiles: (fileNames: string[]) => void;
@@ -395,6 +408,7 @@ export function SetupFlow({
   onBack,
   onOpenProfilesFolder,
   onRefreshProfiles,
+  profilesReadError = null,
   onFileDrop,
   onUnsupportedFiles,
   profileImportActive = false,
@@ -641,6 +655,10 @@ export function SetupFlow({
         // the opposite question — "which of these are just app installs?" —
         // which is the more common one when reviewing a plan.
         if (f === 'apps_only' && !carriesSettings(event, configMap, synthesizedAppIds)) return true;
+        // The "skipped" chip counts every app outcome that is not installed,
+        // present or failed (countApplyActions), so it shows that same set,
+        // MANUAL and CANCELLED rows included. These are the GUI StatusKey enum.
+        if (f === 'skipped' && !(['installed', 'to_install', 'present', 'failed'] as StatusKey[]).includes(statusKey)) return true;
         if (f === statusKey) return true;
       }
       return false;
@@ -1002,7 +1020,9 @@ export function SetupFlow({
                 <h3 className="text-base font-medium">
                   {profiles.length > 0
                     ? `${profiles.length} ${profiles.length === 1 ? 'profile' : 'profiles'} available`
-                    : 'No profiles found'}
+                    : profilesReadError
+                      ? "Couldn't read your profiles folder"
+                      : 'No profiles found'}
                 </h3>
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" onClick={onOpenProfilesFolder}>
@@ -1189,10 +1209,16 @@ export function SetupFlow({
               ) : (
                 <Card className="border-dashed">
                   <CardContent className="py-8 px-6 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Drop a zip bundle or manifest file above, or place profile files
-                      in your Profiles folder.
-                    </p>
+                    {profilesReadError ? (
+                      <p className="text-sm text-muted-foreground" role="alert" data-testid="profiles-read-error">
+                        {profilesReadError}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Drop a zip bundle or manifest file above, or place profile files
+                        in your Profiles folder.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -1338,25 +1364,31 @@ export function SetupFlow({
           >
             <Card className={`border-l-2 ${previewResult.success === false ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
               <CardContent className="py-6 px-6">
+                {/* The app counts live in the filter chips below; a preview
+                    with no rows has no chips, so its header keeps them. The
+                    header keeps the settings line, because the settings
+                    choice sits below a long list. */}
                 <div className="flex items-center gap-3 mb-4">
                   {previewResult.success === false ? (
-                    <XCircle className="h-5 w-5 text-amber-500" />
+                    <XCircle className="h-5 w-5 flex-shrink-0 text-amber-500" />
                   ) : (
-                    <Eye className="h-5 w-5 text-green-500" />
+                    <Eye className="h-5 w-5 flex-shrink-0 text-green-500" />
                   )}
                   <div>
                     <p className="text-sm font-medium">
                       {previewResult.success === false ? 'Preview completed with errors' : 'Preview complete'}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {displayInstalled > 0
-                        ? `${displayInstalled} to install, ${displayPresent} already present`
-                        : pickerEnabled && pickerSelectedCount === 0
-                        ? 'No apps selected'
-                        : `All ${displayTotal} apps already present`}
-                      {activeSettingsCount > 0 && ` · ${settingsModulesPhrase(activeModuleIds)} selected`}
-                      {activeSettingsCount === 0 && settingsCount > 0 && ` · ${settingsModulesPhrase(availableModuleIds)} available`}
-                    </p>
+                    {(settingsCount > 0 || previewResult.appEvents.length === 0) && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {previewResult.appEvents.length === 0 && (displayInstalled > 0
+                          ? `${displayInstalled} to install, ${displayPresent} already present`
+                          : `All ${displayTotal} apps already present`)}
+                        {previewResult.appEvents.length === 0 && settingsCount > 0 && ' · '}
+                        {settingsCount > 0 && (activeSettingsCount > 0
+                          ? `${settingsModulesPhrase(activeModuleIds)} selected`
+                          : `${settingsModulesPhrase(availableModuleIds)} available`)}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1376,7 +1408,7 @@ export function SetupFlow({
                 {/* Activity summary */}
                 {previewResult.appEvents.length > 0 && (
                   <div className="mt-3 border-t pt-3">
-                    <div className="flex items-center gap-1.5 mb-2">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
                       {displayTotal > 0 && (
                         <FilterChip
                           onClick={clearFilters}
@@ -1402,7 +1434,7 @@ export function SetupFlow({
                           onClick={() => toggleFilter('present')}
                           pressed={activeFilters.has('present')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('present')}
-                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                          className={chipColorClasses(getPhaseAwareStatus('present', 'preview').color)}
                         >
                           {displayPresent} present
                         </FilterChip>
@@ -1457,24 +1489,37 @@ export function SetupFlow({
                         </div>
                       </div>
                     )}
-                    <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {wingetEvents.map((event, i) => {
+                    {(() => {
+                      // The same rule as the results list: a failed row, or one
+                      // the person must act on, leads outside the scroll box.
+                      const previewRowStatus = (event: AppEvent) => {
+                        if (isConfigOnlyApp(event, previewSynthesizedAppIds)) {
+                          return getPhaseAwareStatusForEvent({ statusKey: event.statusKey || 'present', phase: 'apply', reason: event.reason });
+                        }
                         const statusKey: StatusKey = event.statusKey || (
                           event.action === 'OK' ? 'present' :
                           event.action === 'To install' ? 'to_install' :
                           'skipped'
                         );
-                        const uiStatus = getPhaseAwareStatusForEvent({ statusKey, phase: 'preview', reason: event.reason });
-                        const colors = getColorClasses(uiStatus.color);
-                        const hasSettings = appRowHasSettings(event, configMap);
+                        return getPhaseAwareStatusForEvent({ statusKey, phase: 'preview', reason: event.reason });
+                      };
+                      const needsPreviewAttention = (event: AppEvent) => {
+                        const status = previewRowStatus(event);
+                        return status.color === 'error' || status.needsAction === true;
+                      };
+                      const renderPreviewRow = (event: AppEvent, i: number, wrap = false) => {
+                        const uiStatus = previewRowStatus(event);
+                        const isConfigOnly = isConfigOnlyApp(event, previewSynthesizedAppIds);
+                        // A config-only row exists for its settings, so it always carries them.
+                        const hasSettings = isConfigOnly || appRowHasSettings(event, configMap);
                         // Manifest app id for --only (streamed events are keyed
                         // by winget ref; the envelope actions map ref → id).
-                        const appId = pickerEnabled ? manifestIdByEventKey.get(event.app) : undefined;
+                        const appId = pickerEnabled && !isConfigOnly ? manifestIdByEventKey.get(event.app) : undefined;
                         const isSelected = appId ? selectedAppIds.has(appId) : true;
                         return (
-                          <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                            {pickerEnabled && (
-                              <span className="w-4 flex-shrink-0 flex justify-center">
+                          <div key={`${isConfigOnly ? 'config-' : ''}${event.app}-${i}`} className="flex items-baseline gap-2 text-xs pt-0.5" title={event.title}>
+                            {pickerEnabled && !isConfigOnly && (
+                              <span className="w-4 flex-shrink-0 flex justify-center self-center">
                                 {appId && (
                                   <Checkbox
                                     checked={isSelected}
@@ -1492,48 +1537,59 @@ export function SetupFlow({
                                 )}
                               </span>
                             )}
-                            <span className={`w-24 flex-shrink-0 text-right font-medium ${colors.text}`}>{uiStatus.shortLabel}</span>
-                            <span className="w-4 flex-shrink-0 flex justify-center">
+                            <span className={`w-24 flex-shrink-0 text-right font-medium ${getColorClasses(uiStatus.color).text}`}>{uiStatus.shortLabel}</span>
+                            <span className="w-4 flex-shrink-0 flex justify-center self-center">
                               {hasSettings && (
-                                <Settings2 className={`h-3 w-3 ${getColorClasses('success').text}`} />
+                                <Settings2 className={`h-3 w-3 ${getColorClasses(uiStatus.color === 'error' ? 'error' : 'success').text}`} />
                               )}
                             </span>
-                            <span className={`truncate ${pickerEnabled && !isSelected ? 'text-muted-foreground' : ''}`}>
+                            <span className={`min-w-0 ${wrap ? 'break-words' : 'truncate'} ${pickerEnabled && !isSelected ? 'text-muted-foreground' : ''}`}>
                               {event.name || formatAppIdentity(event.app)}
+                              {event.secondary && (
+                                <span className="text-muted-foreground"> · {event.secondary}</span>
+                              )}
                             </span>
                           </div>
                         );
-                      })}
-                      {/* Config-only apps (detected via settings, not winget) */}
-                      {showConfigOnlySection && (
+                      };
+                      const previewFailures = [...wingetEvents, ...(showConfigOnlySection ? configOnlyEvents : [])].filter(needsPreviewAttention);
+                      const listWingetEvents = wingetEvents.filter((event) => !needsPreviewAttention(event));
+                      const listConfigOnlyEvents = configOnlyEvents.filter((event) => !needsPreviewAttention(event));
+                      return (
                         <>
-                          <div className="border-t mt-2 pt-2">
-                            <p className="text-[10px] font-medium text-muted-foreground">
-                              Settings only — app installation not included
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 mb-1">
-                              Endstate can restore these settings, but this profile cannot install the accompanying app.
-                            </p>
-                          </div>
-                          {configOnlyEvents.map((event, i) => {
-                            const cfgStatusKey: StatusKey = event.statusKey || 'present';
-                            const cfgUiStatus = getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason });
-                            const cfgColors = getColorClasses(cfgUiStatus.color);
-                            return (
-                              <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                                <span className={`w-24 flex-shrink-0 text-right font-medium ${cfgColors.text}`}>{cfgUiStatus.shortLabel}</span>
-                                <span className="w-4 flex-shrink-0 flex justify-center">
-                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : getColorClasses('success').text}`} />
-                                </span>
-                                <span className="truncate">
-                                  {event.name || formatAppIdentity(event.app)}
-                                </span>
-                              </div>
-                            );
-                          })}
+                          {previewFailures.length > 0 && (
+                            <div
+                              role="group"
+                              aria-label="Needs attention"
+                              className={`-mx-2 mb-2 space-y-1 rounded-md border px-2 py-1.5 ${getColorClasses('error').border} ${getColorClasses('error').bg}`}
+                              data-testid="preview-needs-attention"
+                            >
+                              <p className="text-[10px] font-medium text-muted-foreground">Needs attention</p>
+                              {previewFailures.map((event, i) => renderPreviewRow(event, i, true))}
+                            </div>
+                          )}
+                          {(listWingetEvents.length > 0 || (showConfigOnlySection && listConfigOnlyEvents.length > 0)) && (
+                            <div className="space-y-1 max-h-64 overflow-y-auto">
+                              {listWingetEvents.map((event, i) => renderPreviewRow(event, i))}
+                              {/* Config-only apps (detected via settings, not winget) */}
+                              {showConfigOnlySection && listConfigOnlyEvents.length > 0 && (
+                                <>
+                                  <div className="border-t mt-2 pt-2">
+                                    <p className="text-[10px] font-medium text-muted-foreground">
+                                      Settings only — app installation not included
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5 mb-1">
+                                      Endstate can restore these settings, but this profile cannot install the accompanying app.
+                                    </p>
+                                  </div>
+                                  {listConfigOnlyEvents.map((event, i) => renderPreviewRow(event, i))}
+                                </>
+                              )}
+                            </div>
+                          )}
                         </>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -1627,17 +1683,16 @@ export function SetupFlow({
                     {/* Choosing "apps and settings" but checking nothing sends
                         no --enable-restore at all, so the run silently becomes
                         apps-only. Say so rather than letting the label imply
-                        settings will transfer. */}
+                        settings will transfer. A skipped selection is a normal
+                        outcome, so the note is neutral, never a warning
+                        (docs/ux-guardrails.md). */}
                     {restoreIntent === 'apps-and-settings'
                       && (previewResult.restoreModulesAvailable?.length ?? 0) > 0
                       && selectedModules.length === 0 && (
-                      <p className="text-xs text-amber-600 dark:text-amber-500" data-testid="no-settings-selected-notice">
+                      <p className="text-xs text-muted-foreground" data-testid="no-settings-selected-notice">
                         No settings selected — this will set up apps only.
                       </p>
                     )}
-                    {(() => {
-                      return null;
-                    })()}
                   </div>
                 )}
 
@@ -1764,11 +1819,14 @@ export function SetupFlow({
           >
             <Card className={`border-l-2 ${applyHasErrors ? 'border-l-amber-500/50' : 'border-l-green-500/50'}`}>
               <CardContent className="py-6 px-6">
+                {/* The verdict only: the filter chips below are the one place
+                    for the counts. A run with no rows has no chips, so its
+                    header keeps the app counts. */}
                 <div className="flex items-center gap-3 mb-4">
                   {applyHasErrors ? (
-                    <XCircle className="h-5 w-5 text-amber-500" />
+                    <XCircle className="h-5 w-5 flex-shrink-0 text-amber-500" />
                   ) : (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-500" />
                   )}
                   <div>
                     <p className="text-sm font-medium">
@@ -1780,22 +1838,14 @@ export function SetupFlow({
                           ? 'Preview complete — nothing was installed'
                           : 'Setup complete'}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {applyResult.dryRun
-                        ? `${applyDisplayAppCounts.installed} would be installed, ${applyDisplayAppCounts.present} already present`
-                        : `${applyDisplayAppCounts.installed} installed, ${applyDisplayAppCounts.present} already present`}
-                      {applyDisplayAppCounts.failed > 0 ? `, ${applyDisplayAppCounts.failed} failed` : ''}
-                      {(() => {
-                        if (applyRestoreTotal > 0) {
-                          return <> &middot; {applyRestoreTotal} {applyRestoreTotal === 1 ? 'setting' : 'settings'}: {formatRestoreCounts(applyRestoreCounts, { preview: applyResult.dryRun })}</>;
-                        }
-                        // Fallback: show selected settings count (only when restore was requested)
-                        if (restoreIntent === 'apps-and-settings' && selectedModules.length > 0) {
-                          return <> &middot; {settingsModulesPhrase(selectedModules)} included</>;
-                        }
-                        return null;
-                      })()}
-                    </p>
+                    {applyResult.appEvents.length === 0 && applyDisplayAppCounts.total > 0 && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {applyResult.dryRun
+                          ? `${applyDisplayAppCounts.installed} would be installed, ${applyDisplayAppCounts.present} already present`
+                          : `${applyDisplayAppCounts.installed} installed, ${applyDisplayAppCounts.present} already present`}
+                        {applyDisplayAppCounts.failed > 0 ? `, ${applyDisplayAppCounts.failed} failed` : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1841,35 +1891,61 @@ export function SetupFlow({
                     applySynthesizedAppIds,
                   );
                   const allApplyEvents = filterEvents(applyResult.appEvents, applyConfigMap, applySynthesizedAppIds);
-                  const applyWingetEvents = allApplyEvents.filter(e => !isConfigOnlyApp(e, applySynthesizedAppIds));
-                  const applyConfigOnlyEvents = allApplyEvents.filter(e => isConfigOnlyApp(e, applySynthesizedAppIds));
+                  // A row's status word and colour. Restore rows read
+                  // RESTORING/RESTORED; app rows stay phase-aware ("apply").
+                  const applyRowStatus = (event: AppEvent) => {
+                    if (!isConfigOnlyApp(event, applySynthesizedAppIds)) {
+                      return { ...getActivityRowLabel(event, 'apply'), excluded: false };
+                    }
+                    // Settings the user chose not to restore are not a
+                    // problem, so they must not borrow the warning
+                    // vocabulary. An orange SKIPPED beside every setting
+                    // reads as a run that half-failed when the user simply
+                    // picked "Install apps only". A genuine engine skip —
+                    // selected, then skipped — keeps its warning styling.
+                    const moduleId = fullConfigMap[event.app];
+                    const wasSelected = restoreIntent === 'apps-and-settings'
+                      && selectedModules.length > 0
+                      && moduleId !== undefined
+                      && isSelectedConfigModule(moduleId, selectedModules);
+                    if (!wasSelected) return { shortLabel: 'EXCLUDED', color: 'muted' as const, excluded: true };
+                    const status = getPhaseAwareStatusForEvent({ statusKey: event.statusKey || 'present', phase: 'apply', reason: event.reason });
+                    return { shortLabel: status.shortLabel, color: status.color, needsAction: status.needsAction, excluded: false };
+                  };
+                  // A failure (docs/ux-principles.md, "UX Failure States") and
+                  // an outcome the status map marks as needing the person
+                  // (MANUAL) lead the list with their reason, outside the
+                  // scroll box. Each row shows once, so every chip still
+                  // equals the rows its click shows.
+                  const needsAttention = (event: AppEvent) => {
+                    const status = applyRowStatus(event);
+                    return status.color === 'error' || status.needsAction === true;
+                  };
+                  const attentionEvents = allApplyEvents.filter(needsAttention);
+                  const listEvents = allApplyEvents.filter((event) => !needsAttention(event));
+                  const applyWingetEvents = listEvents.filter(e => !isConfigOnlyApp(e, applySynthesizedAppIds));
+                  const applyConfigOnlyEvents = listEvents.filter(e => isConfigOnlyApp(e, applySynthesizedAppIds));
                   const showApplyConfigOnlySection = applyConfigOnlyEvents.length > 0 && (activeFilters.size === 0 || activeFilters.has('settings'));
                   // Restore rows for settings that belong to no app list under
                   // their own heading, after the app rows.
                   const isNonAppSettingsRow = (event: AppEvent) =>
                     event.kind === 'restore' && !!event.settingsKind && event.settingsKind !== 'app';
-                  const renderApplyRow = (event: AppEvent, i: number) => {
-                    // Restore rows read RESTORING/RESTORED and carry the
-                    // engine display name; app rows stay phase-aware ("apply").
-                    const { shortLabel, color } = getActivityRowLabel(event, 'apply');
-                    const colors = getColorClasses(color);
-                    const hasSettings = (restoreIntent === 'apps-and-settings' && appRowHasSettings(event, applyConfigMap)) || event.kind === 'restore' || event.app.startsWith('\u2699');
-                    const settingsOk = color !== 'error';
-                    // A restore row's icon takes the row's outcome colour; an
-                    // app row's icon only marks that it carries settings.
-                    const settingsIconClass = event.kind === 'restore'
-                      ? colors.text
-                      : `${settingsOk ? getColorClasses('success').text : getColorClasses('error').text} ${!settingsOk ? 'opacity-50' : ''}`;
+                  const renderApplyRow = (
+                    event: AppEvent,
+                    i: number,
+                    options: { underGroupHeading?: boolean; wrap?: boolean } = {},
+                  ) => {
+                    const { shortLabel, color, excluded } = applyRowStatus(event);
+                    // Under a group heading the engine's item label names the
+                    // setting on its own; elsewhere the name keeps the module.
+                    const primary = (options.underGroupHeading && event.label)
+                      || event.name
+                      || formatAppIdentity(event.app);
                     return (
-                      <div key={`${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5" title={event.title}>
-                        <span className={`w-24 flex-shrink-0 text-right font-medium ${colors.text}`}>{shortLabel}</span>
-                        <span className="w-4 flex-shrink-0 flex justify-center">
-                          {hasSettings && (
-                            <Settings2 className={`h-3 w-3 ${settingsIconClass}`} />
-                          )}
-                        </span>
-                        <span className="truncate">
-                          {event.name || formatAppIdentity(event.app)}
+                      <div key={`${event.app}-${i}`} className="flex items-baseline gap-2 text-xs pt-0.5" title={event.title}>
+                        <span className={`w-24 flex-shrink-0 text-right font-medium ${getColorClasses(color).text}`}>{shortLabel}</span>
+                        <span className={`min-w-0 ${options.wrap ? 'break-words' : 'truncate'} ${excluded ? 'text-muted-foreground' : ''}`}>
+                          {primary}
                           {event.secondary && (
                             <span className="text-muted-foreground"> · {event.secondary}</span>
                           )}
@@ -1877,9 +1953,10 @@ export function SetupFlow({
                       </div>
                     );
                   };
+                  const showListBox = applyWingetEvents.length > 0 || showApplyConfigOnlySection;
                   return (
                   <div className="mt-3 border-t pt-3">
-                    <div className="flex items-center gap-1.5 mb-2">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
                       {applyDisplayAppCounts.total > 0 && (
                         <FilterChip
                           onClick={clearFilters}
@@ -1910,7 +1987,7 @@ export function SetupFlow({
                           onClick={() => toggleFilter('present')}
                           pressed={activeFilters.has('present')}
                           dimmed={activeFilters.size > 0 && !activeFilters.has('present')}
-                          className={`${getColorClasses('success').bg} ${getColorClasses('success').text}`}
+                          className={chipColorClasses(getPhaseAwareStatus('present', 'apply').color)}
                         >
                           {applyDisplayAppCounts.present} present
                         </FilterChip>
@@ -1972,47 +2049,27 @@ export function SetupFlow({
                         </FilterChip>
                       )}
                     </div>
+                    {attentionEvents.length > 0 && (
+                      <div
+                        role="group"
+                        aria-label="Needs attention"
+                        className={`-mx-2 mb-2 space-y-1 rounded-md border px-2 py-1.5 ${getColorClasses('error').border} ${getColorClasses('error').bg}`}
+                        data-testid="results-needs-attention"
+                      >
+                        <p className="text-[10px] font-medium text-muted-foreground">Needs attention</p>
+                        {attentionEvents.map((event, i) => renderApplyRow(event, i, { wrap: true }))}
+                      </div>
+                    )}
+                    {showListBox && (
                     <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {applyWingetEvents.filter((event) => !isNonAppSettingsRow(event)).map(renderApplyRow)}
+                      {applyWingetEvents.filter((event) => !isNonAppSettingsRow(event)).map((event, i) => renderApplyRow(event, i))}
                       {/* Config-only apps (detected via settings, not winget) */}
                       {showApplyConfigOnlySection && (
                         <>
                           <div className="border-t mt-2 pt-2">
                             <p className="text-[10px] font-medium text-muted-foreground mb-1">Settings only</p>
                           </div>
-                          {applyConfigOnlyEvents.map((event, i) => {
-                            // Check if this config-only module was selected for restore
-                            const moduleId = fullConfigMap[event.app];
-                            const wasSelected = restoreIntent === 'apps-and-settings' &&
-                              selectedModules.length > 0 &&
-                              moduleId !== undefined &&
-                              isSelectedConfigModule(moduleId, selectedModules);
-                            // Settings the user chose not to restore are not a
-                            // problem, so they must not borrow the warning
-                            // vocabulary. An orange SKIPPED beside every setting
-                            // reads as a run that half-failed when the user
-                            // simply picked "Install apps only". A genuine
-                            // engine skip — selected, then skipped — keeps its
-                            // warning styling below.
-                            const cfgStatusKey: StatusKey = wasSelected ? (event.statusKey || 'present') : 'skipped';
-                            const cfgLabel = wasSelected
-                              ? getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason }).shortLabel
-                              : 'EXCLUDED';
-                            const cfgColor = wasSelected
-                              ? getColorClasses(getPhaseAwareStatusForEvent({ statusKey: cfgStatusKey, phase: 'apply', reason: event.reason }).color)
-                              : { text: 'text-muted-foreground' };
-                            return (
-                              <div key={`config-${event.app}-${i}`} className="flex items-center gap-2 text-xs pt-0.5">
-                                <span className={`w-24 flex-shrink-0 text-right font-medium ${cfgColor.text}`}>{cfgLabel}</span>
-                                <span className="w-4 flex-shrink-0 flex justify-center">
-                                  <Settings2 className={`h-3 w-3 ${cfgStatusKey === 'failed' ? getColorClasses('error').text : wasSelected ? getColorClasses('success').text : 'text-muted-foreground'}`} />
-                                </span>
-                                <span className={`truncate ${!wasSelected ? 'text-muted-foreground' : ''}`}>
-                                  {event.name || formatAppIdentity(event.app)}
-                                </span>
-                              </div>
-                            );
-                          })}
+                          {applyConfigOnlyEvents.map((event, i) => renderApplyRow(event, i))}
                         </>
                       )}
                       {NON_APP_SETTINGS_KINDS.map((kind) => {
@@ -2032,11 +2089,12 @@ export function SetupFlow({
                                 {SETTINGS_GROUP_COPY[kind].heading}
                               </p>
                             </div>
-                            {rows.map(renderApplyRow)}
+                            {rows.map((event, i) => renderApplyRow(event, i, { underGroupHeading: true }))}
                           </div>
                         );
                       })}
                     </div>
+                    )}
                   </div>
                   );
                 })()}

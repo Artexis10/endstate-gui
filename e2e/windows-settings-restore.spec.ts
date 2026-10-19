@@ -112,16 +112,18 @@ test('a chosen Windows setting reaches the engine by full ID and its results lis
   expect(await page.evaluate(() => (window as any).__restoreFilters)).toEqual([
     'windows-settings.keyboard,windows-settings.personalization',
   ]);
-  await expect(page.getByText('3 settings: 1 restored, 1 already up to date, 1 failed')).toBeVisible();
+  await expect(page.getByRole('button', { name: '3 settings (1 failed)' })).toBeVisible();
 
+  // The failure leads, with its reason, outside the list; the others stay
+  // under their heading by label alone.
+  const attention = page.getByRole('group', { name: 'Needs attention' });
+  await expect(attention.getByText('FAILED', { exact: true })).toHaveCount(1);
+  await expect(attention.getByText("Couldn't restore this setting")).toBeVisible();
   const windowsResults = page.getByRole('group', { name: 'Windows settings' });
   await expect(windowsResults.getByText('RESTORED', { exact: true })).toHaveCount(1);
   await expect(windowsResults.getByText('UP TO DATE', { exact: true })).toHaveCount(1);
-  await expect(windowsResults.getByText('FAILED', { exact: true })).toHaveCount(1);
-  await expect(windowsResults.getByText("Couldn't restore this setting")).toBeVisible();
-  await expect(
-    windowsResults.getByText('Windows keyboard: repeat delay and rate · Delay before a held key starts repeating'),
-  ).toBeVisible();
+  await expect(windowsResults.getByText('FAILED', { exact: true })).toHaveCount(0);
+  await expect(windowsResults.getByText('Delay before a held key starts repeating', { exact: true })).toBeVisible();
   // Registry paths, value names and registry errors are hover-title detail only.
   await expect(page.getByText(/HKCU|KeyboardDelay|KeyboardSpeed|AppsUseLightTheme|DWORD/)).toHaveCount(0);
 });

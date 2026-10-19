@@ -1,17 +1,26 @@
 /**
  * DropZone - File drop target for importing profiles (ADR-001)
  *
- * Accepts .endstate capture bundles (and the legacy .zip) plus bare .jsonc
- * manifest files. Renders as a prominent drop area within the Set up flow.
+ * Accepts .endstate capture bundles (and the legacy .zip) plus bare manifest
+ * files (.json, .jsonc, .json5). Renders as a prominent drop area within the Set up flow.
  */
 
 import { useState, useCallback, useEffect, useRef, type DragEvent } from 'react';
 import { motion } from 'framer-motion';
 import { Upload } from 'lucide-react';
 import { prefersReducedMotion } from '@/lib/motion';
-import { PROFILE_EXTENSIONS, isSupportedProfilePath } from '@/lib/profile-extensions';
+import {
+  BUNDLE_EXTENSIONS,
+  MANIFEST_EXTENSIONS,
+  PROFILE_EXTENSIONS,
+  extensionListPhrase,
+  isSupportedProfilePath,
+} from '@/lib/profile-extensions';
 
 const ACCEPTED_INPUT = PROFILE_EXTENSIONS.join(',');
+// Built from the same lists as the refusal message, so the two always agree.
+const [PREFERRED_BUNDLE, ...OTHER_BUNDLES] = BUNDLE_EXTENSIONS;
+const ACCEPTED_HINT = `Accepts ${PREFERRED_BUNDLE} bundles (${extensionListPhrase(OTHER_BUNDLES)} also works) or ${extensionListPhrase(MANIFEST_EXTENSIONS)} manifest files`;
 
 interface DropZoneProps {
   onFileDrop: (files: File[]) => void;
@@ -169,7 +178,7 @@ export function DropZone({
           {isDragOver ? 'Drop to import' : 'Click to browse or drop a file'}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Accepts .endstate bundles (.zip also works) or .jsonc manifest files
+          {ACCEPTED_HINT}
         </p>
       </div>
 

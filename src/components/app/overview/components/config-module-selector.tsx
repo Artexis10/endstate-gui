@@ -2,6 +2,7 @@
  * ConfigModuleSelector - Per-module checkboxes for selecting which settings to restore
  */
 
+import { useId } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import type { ConfigModuleInfo } from '@/types';
@@ -30,6 +31,8 @@ export function ConfigModuleSelector({
   entryNoun = { singular: 'file', plural: 'files' },
   testId = 'config-module-selector',
 }: ConfigModuleSelectorProps) {
+  const titleId = useId();
+  const toggleId = useId();
   if (modules.length === 0) return null;
 
   const allSelected = modules.every((m) => selectedModules.includes(m.id));
@@ -52,12 +55,14 @@ export function ConfigModuleSelector({
 
   return (
     <div
+      role="group"
+      aria-labelledby={titleId}
       className="rounded-lg border border-border bg-muted/20 p-4 space-y-3"
       data-testid={testId}
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium text-muted-foreground">
+          <p id={titleId} className="text-xs font-medium text-muted-foreground">
             {title}
           </p>
           {description && (
@@ -71,6 +76,9 @@ export function ConfigModuleSelector({
           onClick={handleToggleAll}
           disabled={disabled}
           data-testid="config-module-toggle-all"
+          // Two selectors can show at once; the name says which one it acts on.
+          id={toggleId}
+          aria-labelledby={`${toggleId} ${titleId}`}
         >
           {allSelected ? 'Deselect all' : 'Select all'}
         </Button>

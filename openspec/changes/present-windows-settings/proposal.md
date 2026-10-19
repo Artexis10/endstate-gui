@@ -15,6 +15,7 @@ Engine 2.32.0 adds a second kind of settings to a saved setup: Windows settings 
 - Keep the restore opt-in: nothing in the Windows settings group is selected by default, it has its own Select all, and the restore filter receives the full module ID.
 - Word `registry-set` rows as settings, not files, and show only the target in their hover title.
 - Keep per-module capture notes behind the Details disclosure, because they name registry values.
+- Make the setup preview and results lists calm for a long run: the chips are the one place for counts, failed rows lead under "Needs attention" outside the scrolling list, a row shows secondary text only for a failure, a Windows setting shows its label alone under its heading, and an outcome that changed nothing is muted.
 
 ## Capabilities
 
@@ -25,9 +26,10 @@ Engine 2.32.0 adds a second kind of settings to a saved setup: Windows settings 
 ### Modified Capabilities
 
 - `command-warning-presentation`: warning details show every technical field, and the capture warning `config_secret_scope_conflict` names its module in plain words.
+- `setup-list-presentation`: the setup preview and results lists show failures first, keep one place for counts and say only what adds information.
 
 ## Impact
 
 - GUI only: `src/lib/settings-kind.ts`, `src/components/app/intent/profile-contents-modal.tsx`, `src/components/app/intent/setup-flow.tsx`, `src/components/app/intent/save-flow.tsx`, `src/components/app/overview/components/config-module-selector.tsx`, `src/components/app/overview/components/restore-intent-toggle.tsx`, `src/lib/restore-activity.ts`, `src/lib/apply-utils.ts`, `docs/ux-language.md`.
-- No engine change, and no change to the status mapping or the settings counts that `restore-results-honest-omissions` defines.
+- No engine change, and no change to the status labels or the settings counts that `restore-results-honest-omissions` defines. The colour of PRESENT changes from green to muted, to match UP TO DATE.
 - A setup run carries no verify result for Windows settings. The engine checks them only in `verify` and `rebuild`, so the setup results show restore outcomes only.

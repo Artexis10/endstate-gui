@@ -184,14 +184,12 @@ test.describe('Setup activity feed — restore & app row presentation', () => {
 
   // The header used to fold "not in saved setup" into a skipped count it never
   // showed, while the row itself read a warning MISSING.
-  test('a mixed restore run shows each outcome, and the header counts equal the rows', async ({ page }) => {
+  test('a mixed restore run shows each outcome, and the settings chip counts equal the rows', async ({ page }) => {
     await installRestoreMock(page, { dryRunSetting: false });
     await applyWithSettings(page);
 
     await expect(page.getByText('Setup completed with errors')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(
-      '4 settings: 1 restored, 1 already up to date, 1 not in saved setup, 1 failed',
-    )).toBeVisible();
+    await expect(page.getByRole('button', { name: '4 settings (1 failed)' })).toBeVisible();
 
     await expect(page.getByText('RESTORED', { exact: true })).toHaveCount(1);
     await expect(page.getByText('UP TO DATE', { exact: true })).toHaveCount(1);
@@ -218,7 +216,6 @@ test.describe('Setup activity feed — restore & app row presentation', () => {
     await expect(page.getByText('Setup completed with errors')).toHaveCount(0);
     await expect(page.getByText('TO RESTORE', { exact: true })).toHaveCount(1);
     await expect(page.getByText('RESTORED', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('1 would be restored')).toBeVisible();
     await expect(page.getByText(/\b\d+ restored\b/)).toHaveCount(0);
 
     // A preview changed nothing, so there is nothing to undo.

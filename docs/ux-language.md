@@ -160,13 +160,18 @@ new engine-contract status.
 |-----------|--------|----------|-------|----------|
 | `installing` | * | INSTALLING | info (blue) | In progress |
 | `installed` | * | INSTALLED | success (green) | Successfully installed |
-| `present` | * | PRESENT | success (green) | Already on system |
-| `skipped` | `already_installed` | PRESENT | success (green) | Already on system (NOT "Skipped") |
+| `present` | * | PRESENT | muted (gray) | Already on system; nothing changed |
+| `skipped` | `already_installed` | PRESENT | muted (gray) | Already on system (NOT "Skipped") |
 | `skipped` | `user_denied` | CANCELLED | warn (yellow) | User cancelled (NOT "Failed") |
 | `skipped` | * | SKIPPED | warn (yellow) | Skipped by filter |
 | `skipped` | `manual_required` | MANUAL | warn (yellow) | Requires manual installation |
 | `failed` | `install_failed` | FAILED | error (red) | Real install failure |
 | `failed` | * | FAILED | error (red) | Unknown failure |
+
+In apply and preview, colour marks a change or a problem. An outcome that
+changed nothing (PRESENT, and a restore row's UP TO DATE and NOT IN SETUP) is
+muted, so the rows that changed or failed stand out in a long list. A filter
+chip takes the colour of the rows it filters.
 
 #### VERIFY Phase
 
@@ -222,8 +227,8 @@ RESTORED:
 | `restored` | TO RESTORE | Would restore | would be restored | action (blue) |
 | other statuses | as above | as above | as above | as above |
 
-**Counts.** Every settings count (results header, settings chip, progress line,
-result modal) comes from one source: the reconciled restore rows, one per
+**Counts.** Every settings count (settings chip, progress line, result modal)
+comes from one source: the reconciled restore rows, one per
 target. The apply envelope carries no restore summary, so the GUI never reads
 or invents one. A summary lists the non-zero outcomes in table order, e.g.
 “4 settings: 1 restored, 1 already up to date, 1 not in saved setup, 1 failed”.
@@ -247,22 +252,17 @@ was installed”, so it never claims a completed setup.
   repeating`. A registry row (`registry-set` or `registry-import`) without a
   label shows only the module name: its target names a registry key or value,
   and the default UI never shows registry references.
-- **Secondary text** (muted) surfaces a friendly, jargon-free reason. The
-  engine authors plain messages from the status and the dry-run flag:
-  “Already up to date”, “Not included in the saved setup”, “The saved setup
-  does not include this required file.” or the item's error text. The GUI
-  prefers a clean engine message over its own strings. A `restoring` or
-  `restored` row shows no secondary text, because its status label already
-  says it (“Settings restored” and “Would restore settings” add nothing).
-  Without a clean message the canonical strings are:
-  - `skipped_up_to_date` → “Already matches your saved settings”
-  - `skipped_missing_source` → “Your saved setup doesn’t include this file, so nothing changed”
-  - `failed` → “Couldn’t restore this file”
-
-  A registry row restores settings, not a file, so its two file strings read
-  “setting”: “Your saved setup doesn’t include this setting, so nothing
-  changed” and “Couldn’t restore this setting”. A registry row always uses
-  these canonical strings, because its engine message names registry
+- Under a group heading (for example “Windows settings”) a row with a
+  `label` shows the label alone, for example `Keyboard repeat delay`: the
+  heading already says what kind of setting it is. Everywhere else the row
+  keeps its module name.
+- **Secondary text** (muted) appears only on a `failed` row, where it gives the
+  reason. Every other status label already says what happened (UP TO DATE,
+  NOT IN SETUP, RESTORED), so a restatement only adds noise. The GUI prefers a
+  clean engine message (for a `failed` item, its error text). Without one the
+  canonical string is “Couldn’t restore this file”. A registry row restores a
+  setting, not a file, so it reads “Couldn’t restore this setting”; it always
+  uses this canonical string, because its engine message names registry
   internals.
 - **Hover title:** the row's full visible text comes first, because a long row
   truncates. The raw source→target detail follows; it never appears as inline
@@ -300,7 +300,8 @@ reads the tier only through `src/lib/settings-kind.ts` and shows these groups:
   app row carries settings when `configModuleMap` names its package ref, so a
   results row rebuilt under its manifest id still matches.
 - **Results:** the group's restore rows list under the group heading, after the
-  app rows. The settings counts still come from all restore rows together.
+  app rows, each by its label alone. The settings counts still come from all
+  restore rows together.
 - **Capture results:** the group lists under its own heading, never under
   “Settings only — app installation not included”. Per-module engine notes
   (for example a value not set on this PC) stay behind Details.
@@ -313,6 +314,36 @@ reads the tier only through `src/lib/settings-kind.ts` and shows these groups:
   `summary.fail`, so these skips never count as drift. The GUI therefore has
   no mapping for `not_restored`; add one with the first screen that shows
   verify items.
+
+#### Setup preview and results lists
+
+A long list must still show at a glance what happened and what needs
+attention. The preview screen and the results screen (a real run or a dry run)
+follow these rules:
+
+- **One place for counts.** The filter chips carry the counts. The results
+  header shows only the verdict (“Setup complete”, “Setup completed with
+  errors”, “Preview complete — nothing was installed”). A run or a preview
+  with no rows has no chips, so its header keeps the app counts. The preview header
+  keeps one line about settings (“40 app settings and 7 Windows settings
+  available” or “… selected”), because the settings choice sits below a long
+  list.
+- **Failures first.** A row whose status is an error (FAILED), or one the
+  status map marks as needing the person to act (MANUAL), lists under “Needs
+  attention”, above the scrolling list and outside it, with its reason. It
+  does not repeat in the list below, so every chip still equals the rows its
+  click shows, across both places. Other warn outcomes, such as CANCELLED,
+  stay in the list. The “N skipped” chip counts every app outcome that is not
+  installed, present or failed, so its click shows MANUAL and CANCELLED rows
+  too.
+- **A failed app keeps a reason.** Its secondary text reads “Couldn’t install
+  this app”. The engine's install message can name installer paths, so it
+  appears only in the hover title, as on a registry restore row.
+- **Quiet rows.** A results row shows the status label and the name, and
+  secondary text only on a failure. A results row has no settings icon,
+  because the settings rows themselves list under the apps. A preview app row
+  keeps the icon: it is the only sign of which apps bring settings.
+- The chip row wraps at a narrow width; a chip never breaks its own text.
 
 #### Produced-artifact completion line
 
@@ -363,7 +394,7 @@ Artifact visibility is required (the produced artifact is always surfaced).
 - `verify` + `present` → **CONFIRMED** / "Confirmed"
 
 **Rationale:** Different phases use different language for the same underlying state.
-- APPLY: "Already present" = no action needed (success)
+- APPLY: "Already present" = no action needed (muted: nothing changed)
 - VERIFY: "Confirmed" = verified installed (success)
 
 ### 4. INSTALLED vs CONFIRMED

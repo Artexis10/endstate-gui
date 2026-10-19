@@ -72,6 +72,14 @@ describe('ConfigModuleSelector', () => {
     expect(onChange).toHaveBeenCalledWith(['vscode', 'git', 'terminal']);
   });
 
+  it('names its Select all after its own group, so two selectors stay apart for a screen reader', () => {
+    renderWithProviders(
+      <ConfigModuleSelector {...defaultProps} selectedModules={[]} title="Windows settings to restore:" />
+    );
+
+    expect(screen.getByRole('button', { name: 'Select all Windows settings to restore:' })).toBeInTheDocument();
+  });
+
   it('renders deselect all button when all selected and deselects all', () => {
     const onChange = vi.fn();
     renderWithProviders(

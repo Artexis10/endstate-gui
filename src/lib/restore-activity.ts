@@ -117,30 +117,18 @@ function isCleanRestoreText(text: string): boolean {
 }
 
 /**
- * Friendly, jargon-free secondary line. Terminal skip/failure reasons become
- * plain-language copy; the engine-authored message is preferred when present
- * and clean. See docs/ux-language.md for the canonical strings.
+ * Friendly, jargon-free secondary line: a failure's reason, and nothing else.
+ * Every other status label already says what happened ("UP TO DATE", "NOT IN
+ * SETUP"), so a restatement only adds noise. The engine-authored message is
+ * preferred when present and clean. See docs/ux-language.md.
  */
 export function restoreRowSecondary(event: RestoreItemEvent): string | undefined {
+  if (event.status !== 'failed') return undefined;
   const message = event.message?.trim();
   // A registry restore's engine message names registry internals, so its row
-  // uses the canonical strings and the hover title keeps the message.
+  // uses the canonical string and the hover title keeps the message.
   const cleanMessage = message && !isRegistryRestore(event) && isCleanRestoreText(message) ? message : undefined;
-  const subject = isRegistryRestore(event) ? 'setting' : 'file';
-
-  switch (event.status) {
-    case 'restoring':
-    case 'restored':
-      return undefined;
-    case 'skipped_up_to_date':
-      return cleanMessage ?? 'Already matches your saved settings';
-    case 'skipped_missing_source':
-      return cleanMessage ?? `Your saved setup doesn't include this ${subject}, so nothing changed`;
-    case 'failed':
-      return cleanMessage ?? `Couldn't restore this ${subject}`;
-    default:
-      return cleanMessage;
-  }
+  return cleanMessage ?? `Couldn't restore this ${isRegistryRestore(event) ? 'setting' : 'file'}`;
 }
 
 /** Full raw source→target detail, for a hover title / disclosure only. */
@@ -196,6 +184,7 @@ export function restoreEventToAppEvent(
     settingsKind: moduleId ? settingsKind(moduleId) : 'app',
     preview,
     name,
+    label: event.label?.trim() || undefined,
     secondary,
     // A long row truncates, so the hover title starts with its full text.
     title: `${[name, secondary].filter(Boolean).join(' · ')}\n${restoreRowTitle(event)}`,

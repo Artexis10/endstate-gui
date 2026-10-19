@@ -67,7 +67,7 @@ test.describe('Setup Flow UX - Already Installed Results', () => {
     await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
     await page.locator('[data-testid="profile-card-test-profile"]').click();
     await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('text=/already present/i').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /^\d+ present$/ })).toBeVisible();
     await expect(page.locator('text=App1').first()).toBeVisible();
   });
 });

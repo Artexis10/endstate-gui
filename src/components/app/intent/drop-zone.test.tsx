@@ -21,7 +21,7 @@ describe('DropZone', () => {
   it('shows idle text when not dragging', () => {
     renderWithProviders(<DropZone {...defaultProps} />);
     expect(screen.getByText(/click to browse or drop a file/i)).toBeInTheDocument();
-    expect(screen.getByText(/accepts .endstate bundles \(.zip also works\) or .jsonc manifest files/i)).toBeInTheDocument();
+    expect(screen.getByText('Accepts .endstate bundles (.zip also works) or .json, .jsonc or .json5 manifest files')).toBeInTheDocument();
   });
 
   it('shows drag-over text during drag', () => {

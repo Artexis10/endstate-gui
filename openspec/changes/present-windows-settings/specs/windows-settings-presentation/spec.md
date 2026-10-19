@@ -44,7 +44,7 @@ The restore choice SHALL count app settings and settings that belong to no app s
 
 ### Requirement: Settings counts never mix the groups
 
-Each count of settings modules in the setup preview, the setup results header and the capture results SHALL count app settings and settings that belong to no app separately, listed as "a, b and c". A settings filter chip SHALL count the rows that its filter shows: the restore rows when the run has any, otherwise the app rows that carry settings.
+Each count of settings modules in the setup preview and the capture results SHALL count app settings and settings that belong to no app separately, listed as "a, b and c". A settings filter chip SHALL count the rows that its filter shows: the restore rows when the run has any, otherwise the app rows that carry settings.
 
 #### Scenario: Preview with Windows settings
 - **WHEN** a profile offers 40 app settings modules and 7 Windows settings modules, and 40 preview app rows carry settings
@@ -63,22 +63,23 @@ Each count of settings modules in the setup preview, the setup results header an
 
 ### Requirement: Setup results list Windows settings under their own heading
 
-The setup results SHALL list the restore rows of settings that belong to no app under the group heading, after the app rows, using the same restore status mapping and the same single settings count as every other restore row. A `registry-set` row SHALL use "setting" in its fallback secondary text, and its hover title SHALL show its target without an empty source.
+The setup results SHALL list the restore rows of settings that belong to no app under the group heading, after the app rows, using the same restore status mapping and the same single settings count as every other restore row. Under the heading, a row with an engine label SHALL show the label alone. A failed row SHALL follow the failures-first rule of the setup lists. A `registry-set` row SHALL use "setting" in its fallback secondary text, and its hover title SHALL show its target without an empty source.
 
 #### Scenario: Mixed Windows settings outcomes
 - **WHEN** a run ends with Windows settings rows that are restored, already up to date and failed
-- **THEN** those rows appear under "Windows settings"
-- **AND** the header counts include them, for example "3 settings: 1 restored, 1 already up to date, 1 failed"
-- **AND** the failed row reads "Couldn't restore this setting"
+- **THEN** the restored and up-to-date rows appear under "Windows settings"
+- **AND** the settings chip counts all three, for example "3 settings (1 failed)"
+- **AND** the failed row appears under "Needs attention" and reads "Windows theme: light or dark mode · Couldn't restore this setting"
 - **AND** no registry path appears as row text
 
 ### Requirement: Restore rows never show registry internals
 
-A restore row SHALL use the engine's `label` for the restore entry, when present, after the module name. A registry row (`registry-set` or `registry-import`) without a label SHALL show only the module name. A registry row SHALL NOT show its registry key, its value name or its engine message inline, and SHALL use "setting" in its fallback text. A restore row's hover title SHALL start with the row's full visible text and SHALL keep the raw detail and, for a registry row, the engine message.
+A restore row SHALL use the engine's `label` for the restore entry, when present, after the module name, or alone under a group heading that already names the kind of setting. A registry row (`registry-set` or `registry-import`) without a label SHALL show only the module name. A registry row SHALL NOT show its registry key, its value name or its engine message inline, and SHALL use "setting" in its fallback text. A restore row's hover title SHALL start with the row's full visible text and SHALL keep the raw detail and, for a registry row, the engine message.
 
 #### Scenario: Labelled Windows setting
 - **WHEN** a `registry-set` restore item for `windows-settings.keyboard` carries the label "Delay before a held key starts repeating"
-- **THEN** its row reads "Windows keyboard: repeat delay and rate · Delay before a held key starts repeating"
+- **THEN** its row under "Windows settings" reads "Delay before a held key starts repeating"
+- **AND** its hover title starts with "Windows keyboard: repeat delay and rate · Delay before a held key starts repeating"
 
 #### Scenario: Windows setting from an engine without labels
 - **WHEN** a `registry-set` restore item for `windows-settings.personalization` has no label and fails with an engine message that names a registry value type

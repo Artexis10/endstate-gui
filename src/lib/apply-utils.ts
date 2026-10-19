@@ -32,6 +32,8 @@ export interface UiStatusConfig {
   shortLabel: string;   // For live activity (compact)
   longLabel: string;    // For modals/summaries
   color: SemanticColor; // Semantic color token
+  /** The person must act on this outcome (e.g. install the app by hand). */
+  needsAction?: boolean;
 }
 
 /**
@@ -39,10 +41,12 @@ export interface UiStatusConfig {
  * Both Live Activity and Setup Details MUST consume this mapping.
  */
 export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
+  // Nothing changed, so it is muted like a restore row's UP TO DATE: colour
+  // marks a change or a problem (docs/ux-language.md, "Apply Phase").
   present: {
     shortLabel: 'PRESENT',
     longLabel: 'Already present',
-    color: 'success',
+    color: 'muted',
   },
   to_install: {
     shortLabel: 'TO INSTALL',
@@ -83,6 +87,7 @@ export const UI_STATUS_MAP: Record<StatusKey, UiStatusConfig> = {
     shortLabel: 'MANUAL',
     longLabel: 'Manual installation required',
     color: 'warn',
+    needsAction: true,
   },
 } as const;
 
@@ -98,6 +103,8 @@ export interface PhaseAwareStatusConfig {
   shortLabel: string;
   longLabel: string;
   color: SemanticColor;
+  /** The person must act on this outcome (e.g. install the app by hand). */
+  needsAction?: boolean;
 }
 
 /**
@@ -107,7 +114,7 @@ export interface PhaseAwareStatusConfig {
  * Key semantic rules:
  * - Capture: "Skipped" with reason "already_installed" → "Detected" (green)
  * - Capture: Never shows "Skipped" - only "Detected" or "Not found"
- * - Apply: "present" → "Already present" (green, success - no action needed)
+ * - Apply: "present" → "Already present" (muted - nothing changed, no action needed)
  * - Verify: "present" → "Confirmed" (green)
  * - Verify: "to_install" → "Missing" (red - needs attention)
  */
@@ -123,24 +130,24 @@ export const PHASE_STATUS_MAP: Record<UiPhase, Partial<Record<StatusKey, PhaseAw
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
   },
   preview: {
-    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
+    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'muted' },
     to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
     installing: { shortLabel: 'EVALUATING', longLabel: 'Evaluating…', color: 'info' },
     installed: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'muted' },
     failed: { shortLabel: 'FAILED', longLabel: 'Failed', color: 'error' },
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
-    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn' },
+    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn', needsAction: true },
   },
   apply: {
-    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' },
+    present: { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'muted' },
     to_install: { shortLabel: 'TO INSTALL', longLabel: 'To install', color: 'action' },
     installing: { shortLabel: 'INSTALLING', longLabel: 'Installing…', color: 'info' },
     installed: { shortLabel: 'INSTALLED', longLabel: 'Installed', color: 'success' },
     skipped: { shortLabel: 'SKIPPED', longLabel: 'Skipped', color: 'warn' },
     failed: { shortLabel: 'FAILED', longLabel: 'Failed', color: 'error' },
     cancelled: { shortLabel: 'CANCELLED', longLabel: 'Cancelled', color: 'warn' },
-    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn' },
+    manual: { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn', needsAction: true },
   },
   verify: {
     present: { shortLabel: 'CONFIRMED', longLabel: 'Confirmed', color: 'success' },
@@ -187,8 +194,8 @@ export interface PhaseAwareStatusArgs {
  * APPLY PHASE:
  * - (apply, installing, *)           -> installing   | INSTALLING      | info
  * - (apply, installed, *)            -> installed    | INSTALLED       | success
- * - (apply, present, *)              -> present      | PRESENT         | success
- * - (apply, skipped, already_installed) -> present   | PRESENT         | success  ← NOT "Skipped"
+ * - (apply, present, *)              -> present      | PRESENT         | muted
+ * - (apply, skipped, already_installed) -> present   | PRESENT         | muted    ← NOT "Skipped"
  * - (apply, skipped, user_denied)    -> cancelled    | CANCELLED       | warn     ← User cancelled, NOT failed
  * - (apply, skipped, *)              -> skipped      | SKIPPED         | warn
  * - (apply, failed, install_failed)  -> failed       | FAILED          | error    ← Real install failure
@@ -213,7 +220,7 @@ export interface PhaseAwareStatusArgs {
  * Key semantic distinctions:
  * 1. User denial (apply, skipped, user_denied) -> CANCELLED (warn), NOT FAILED (error)
  * 2. Missing apps (verify, failed, missing) -> MISSING (warn), NOT FAILED (error)
- * 3. Already installed (apply, skipped, already_installed) -> PRESENT (success), NOT SKIPPED
+ * 3. Already installed (apply, skipped, already_installed) -> PRESENT (muted), NOT SKIPPED
  * 
  * @param args - Status key, phase, and optional reason
  * @returns UI status configuration with labels and color
@@ -244,9 +251,9 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
 
   // Apply phase: reason-aware discrimination
   if (phase === 'apply') {
-    // skipped + already_installed -> PRESENT (success), NOT "Skipped"
+    // skipped + already_installed -> PRESENT, NOT "Skipped"
     if (statusKey === 'skipped' && (reasonLower === 'already_installed' || reasonLower === 'already_present')) {
-      return { shortLabel: 'PRESENT', longLabel: 'Already present', color: 'success' };
+      return PHASE_STATUS_MAP.apply.present!;
     }
     // skipped + user_denied -> CANCELLED (warn) - user cancelled, not a failure
     if (statusKey === 'skipped' && reasonLower === 'user_denied') {
@@ -254,7 +261,7 @@ export function getPhaseAwareStatusForEvent(args: PhaseAwareStatusArgs): PhaseAw
     }
     // skipped + manual_required -> MANUAL (warn) - requires manual installation
     if (statusKey === 'skipped' && reasonLower === 'manual_required') {
-      return { shortLabel: 'MANUAL', longLabel: 'Manual installation required', color: 'warn' };
+      return PHASE_STATUS_MAP.apply.manual!;
     }
     // manual status key (already resolved) -> MANUAL (warn)
     if (statusKey === 'manual') {
@@ -376,6 +383,22 @@ export function engineStatusToStatusKey(engineStatus: EngineItemStatus, phase?: 
 }
 
 /**
+ * A failed app row's secondary text. The engine's install message can name
+ * installer paths, so the row shows this plain line and the hover title keeps
+ * the message, as on registry restore rows (docs/ux-language.md).
+ */
+export const APP_INSTALL_FAILED_TEXT = "Couldn't install this app";
+
+/** Secondary text and hover title for a failed app row. */
+function appFailureText(name: string, message: string | null | undefined): Pick<AppEvent, 'secondary' | 'title'> {
+  const detail = message?.trim();
+  return {
+    secondary: APP_INSTALL_FAILED_TEXT,
+    title: detail ? `${name} · ${APP_INSTALL_FAILED_TEXT}\n${detail}` : undefined,
+  };
+}
+
+/**
  * Convert an ItemEvent from streaming to an AppEvent for UI display.
  * Uses EnginePhase which includes 'plan' | 'apply' | 'verify' | 'capture'.
  * Note: 'plan' phase maps to 'apply' for UI purposes (preview behaves like apply).
@@ -406,6 +429,7 @@ export function itemEventToAppEvent(event: ItemEvent, phase?: EnginePhase): AppE
     reason: event.reason,
     name: event.name,
     driver: event.driver,
+    ...(statusKey === 'failed' ? appFailureText(event.name || event.id, event.message) : {}),
   };
 }
 
@@ -578,7 +602,12 @@ export interface AppEvent {
    * flag; the engine reports `restored` for an item a preview would restore.
    */
   preview?: boolean;
-  /** Friendly muted secondary line (skip reason, artifact name). */
+  /**
+   * The engine's name for one restore item (e.g. "Keyboard repeat delay").
+   * Under a group heading it stands alone; elsewhere `name` keeps the module.
+   */
+  label?: string;
+  /** Friendly muted secondary line (a failure's reason, artifact name). */
   secondary?: string;
   /** Full raw detail for a hover title / disclosure only (never inline text). */
   title?: string;
@@ -1090,6 +1119,13 @@ export function reconcileLiveActivity(
       name: action.name ?? existing?.name,
       driver: action.driver ?? existing?.driver,
       ref: action.ref ?? existing?.ref,
+      // The envelope's message wins; a streamed failure keeps its own.
+      ...(statusKey === 'failed'
+        ? {
+            ...appFailureText(action.name ?? existing?.name ?? action.id, action.message),
+            ...(!action.message?.trim() && existing?.title ? { title: existing.title } : {}),
+          }
+        : {}),
     };
   };
 
@@ -1296,7 +1332,7 @@ function deriveStatusKey(event: AppEvent): StatusKey {
 export function getActivityRowLabel(
   event: AppEvent,
   phaseOverride?: UiPhase,
-): { shortLabel: string; color: SemanticColor } {
+): { shortLabel: string; color: SemanticColor; needsAction?: boolean } {
   if (event.kind === 'restore') {
     const cfg = getRestoreUiStatus(event.restoreStatus ?? 'failed', { preview: event.preview });
     return { shortLabel: cfg.shortLabel, color: cfg.color };
@@ -1309,7 +1345,7 @@ export function getActivityRowLabel(
     phase: phaseOverride ?? event.phase,
     reason: event.reason,
   });
-  return { shortLabel: cfg.shortLabel, color: cfg.color };
+  return { shortLabel: cfg.shortLabel, color: cfg.color, needsAction: cfg.needsAction };
 }
 
 /**

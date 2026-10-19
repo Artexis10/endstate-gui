@@ -24,8 +24,19 @@
 - [x] 4.4 `openspec/specs/engine-capture-contract.md` (a GUI-side contract document, edited directly as before): `sensitiveExcludedCount`, `configModules[].warnings`, `config_secret_scope_conflict`.
 - [x] 4.5 Warning details show every technical field; the secret-scope capture warning names its module in plain words.
 
+## 5. Calm setup lists
+
+- [x] 5.1 Results header shows the verdict only; the preview header keeps only its settings line; chip rows wrap.
+- [x] 5.2 Failed rows lead under "Needs attention", outside the scrolling list, in the preview and results lists.
+- [x] 5.3 Restore rows show secondary text only on failure; a labelled row shows its label alone under its group heading.
+- [x] 5.4 Results rows drop the settings icon; PRESENT and its chip are muted, from the one status map.
+- [x] 5.5 Update `docs/ux-language.md`, "Setup preview and results lists".
+- [x] 5.6 A failed app row reads "Couldn't install this app" with the engine message in its hover title; MANUAL rows lead under "Needs attention" from a status-map flag.
+
 ## 3. Proof
 
 - [x] 3.1 Unit: Windows rows are not unidentified app settings; a selected Windows module reaches apply by full ID in its own group; captured Windows settings are not "Settings only"; the preview chip and module counts keep Windows settings apart.
 - [x] 3.2 E2E (`e2e/windows-settings-restore.spec.ts`): the restore filter carries full IDs; results group the rows and the header counts equal them; no registry value name, path or registry error is row text.
 - [x] 3.3 Chrome DevTools: real engine import, contents, consent and dry-run results; mock engine apply results and capture results; light and dark.
+- [x] 3.4 Unit: failed rows lead and count once per chip; an up-to-date row carries no secondary text.
+- [x] 3.5 Chrome DevTools at 800x600 and 500 px, dark and light: a worst-case and a 100-app mock run, results and dry-run results, and the preview list.

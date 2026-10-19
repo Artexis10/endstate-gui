@@ -236,6 +236,8 @@ function AppContent() {
   const [sidebarVisible, setSidebarVisible] = useState(loadSidebarVisible());
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
+  // Why the last profile scan could not read the folder, or null when it could.
+  const [profilesReadError, setProfilesReadError] = useState<string | null>(null);
   const [profilesDirectory, setProfilesDirectory] = useState('');
   const [recentlyImportedProfile, setRecentlyImportedProfile] = useState<DiscoveredProfile | null>(null);
   const [nativeDragAccepted, setNativeDragAccepted] = useState(false);
@@ -736,9 +738,12 @@ function AppContent() {
   const reportedDiscoveryIssueRef = useRef('');
   const loadDiscoveredProfiles = async (directory: string) => {
     const discovery = await discoverProfiles(directory);
-    const issue = discovery.error
+    const unreadable = discovery.error
       ? describeUnreadableProfilesFolder(directory, discovery.error)
-      : describeSkippedProfiles(discovery.skipped);
+      : null;
+    // The toast fades, so the list keeps saying why it is empty.
+    setProfilesReadError(unreadable);
+    const issue = unreadable ?? describeSkippedProfiles(discovery.skipped);
     if (issue && issue !== reportedDiscoveryIssueRef.current) {
       showToast(issue, discovery.error ? 'error' : 'warning', { id: 'profile-discovery' });
     }
@@ -3252,6 +3257,7 @@ function AppContent() {
               onFlowReset={() => { setFlowHasWork(prev => ({ ...prev, setup: false })); setRecentlyImportedProfile(null); }}
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
+              profilesReadError={profilesReadError}
               onFileDrop={handleFileDrop}
               onUnsupportedFiles={showUnsupportedProfileFiles}
               profileImportActive={isProfileImporting}

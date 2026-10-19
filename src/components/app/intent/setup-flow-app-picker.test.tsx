@@ -147,11 +147,13 @@ describe('SetupFlow — per-app picker', () => {
       const onPreview = vi.fn().mockResolvedValue(makePreviewWithActions());
       await renderToPreviewDone({ onPreview, applyOnlySupported: true });
 
-      expect(screen.getByText('2 to install, 1 already present')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '2 to install' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '1 present' })).toBeInTheDocument();
 
       await userEvent.click(screen.getByTestId('app-picker-checkbox-git-git'));
 
-      expect(screen.getByText('1 to install, 1 already present')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '1 to install' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '1 present' })).toBeInTheDocument();
       expect(screen.getByTestId('app-picker-count')).toHaveTextContent('2 of 3 selected');
     });
   });
@@ -295,7 +297,8 @@ describe('SetupFlow — per-app picker', () => {
       expect(firefoxCheckbox).toBeEnabled();
       await userEvent.click(firefoxCheckbox);
 
-      expect(screen.getByText('2 to install, 0 already present')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '2 to install' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /present$/ })).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByTestId('setup-flow-apply'));
       expect(onApply).toHaveBeenCalledWith(mockProfile, {

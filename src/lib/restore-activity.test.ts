@@ -101,12 +101,11 @@ describe('restore-activity row mapping', () => {
     expect(row.name).not.toContain(row.title ?? '@@');
   });
 
-  it('surfaces a friendly, jargon-free secondary line for skips', () => {
-    const skip: RestoreItemEvent = { ...legacyRestored, status: 'skipped_up_to_date', message: '' };
-    const row = restoreEventToAppEvent(skip, ctx);
-    expect(row.secondary).toBeTruthy();
-    expect(row.secondary!).not.toContain('/copy:');
-    expect(row.secondary!).not.toContain('->');
+  it('gives only a failure secondary text: a skip is said by its status label', () => {
+    const skip: RestoreItemEvent = { ...legacyRestored, status: 'skipped_up_to_date', message: 'target settings are already current' };
+    expect(restoreEventToAppEvent(skip, ctx).secondary).toBeUndefined();
+    const failed: RestoreItemEvent = { ...legacyRestored, status: 'failed', message: 'The file is in use by another program' };
+    expect(restoreEventToAppEvent(failed, ctx).secondary).toBe('The file is in use by another program');
   });
 
   it('keeps the registry key of a registry-import row out of the row text', () => {

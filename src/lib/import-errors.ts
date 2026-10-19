@@ -12,13 +12,11 @@
  * that never echoes the raw transport message.
  */
 
-import { PROFILE_EXTENSIONS } from './profile-extensions';
+import { PROFILE_EXTENSIONS, extensionListPhrase } from './profile-extensions';
 
 /** ".endstate, .zip, .json, .jsonc or .json5", from the one extension list. */
 function acceptedProfileTypes(): string {
-  const types = [...PROFILE_EXTENSIONS];
-  const last = types.pop();
-  return types.length > 0 ? `${types.join(', ')} or ${last}` : `${last}`;
+  return extensionListPhrase(PROFILE_EXTENSIONS);
 }
 
 /**
