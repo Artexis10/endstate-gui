@@ -104,3 +104,26 @@ mounted and invokes the latest refresh callback through a ref, preserving curren
 settings and retaining unmount cleanup. Added coverage also checks that a pending
 refresh is canceled when the hook unmounts. This restores existing refresh
 behavior; folder/provider selection still does not invoke any backup command.
+
+## Review follow-up: rebase and storage fixes (2026-10-19)
+
+Rebased onto main after PR #236. Discovery keeps #236's result shape
+(`descriptors`, `skipped`, `error`) and its single reporting path in the app;
+the `onError` callback this change had added is gone. Online-only entries and
+duplicate-label disambiguation sit on that shape.
+
+- [x] Listing leaves out an entry or subfolder it cannot read instead of
+  failing the whole folder. Only the chosen folder itself must be readable.
+- [x] The `runs` folder is skipped in any letter case, as before this change.
+- [x] A failed new-profile save removes the sidecar it committed at once and
+  never defers it, so a later retry cannot delete a sidecar a later save wrote.
+- [x] A new profile's name counts as taken when its manifest or its sidecar
+  exists, so a leftover sidecar no longer makes the save fail.
+- [x] Google Drive discovery reads the combined `PerAccountPreferences` value
+  under `Software\Google\DriveFS` as well as the per-account key, skips
+  registry values that are not strings, and turns a bare drive letter into
+  `<letter>:\My Drive`. Not yet checked against a real Drive for desktop
+  install.
+- [x] The custom folder field commits on Enter or blur, not on each
+  keystroke, and clearing it keeps the current destination.
+- [x] The app and the dev bridge share one `list_manifest_files` helper.

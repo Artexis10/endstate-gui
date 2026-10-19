@@ -41,11 +41,28 @@ describe('Storage location', () => {
     render(<StorageLocation destination={{ kind: 'folder', path: 'Z:\\Unavailable' }} onChange={onChange} />);
     expect(screen.getByRole('textbox', { name: 'Custom storage folder' })).toHaveValue('Z:\\Unavailable');
     fireEvent.change(screen.getByRole('textbox'), { target: { value: ' D:\\Exact path ' } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(screen.getByRole('textbox'));
     expect(onChange).toHaveBeenLastCalledWith({ kind: 'folder', path: ' D:\\Exact path ' });
     fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ kind: 'folder', path: 'E:\\My setups' }));
     fireEvent.click(screen.getByRole('radio', { name: /Documents \(default\)/ }));
     expect(onChange).toHaveBeenLastCalledWith(null);
+  });
+  it('commits typed paths only on Enter or blur, and never clears to the default', () => {
+    const onChange = vi.fn();
+    render(<StorageLocation destination={{ kind: 'folder', path: 'D:\\Old' }} onChange={onChange} />);
+    const box = screen.getByRole('textbox', { name: 'Custom storage folder' });
+    for (const partial of ['D', 'D:', 'D:\\', 'D:\\Sync']) fireEvent.change(box, { target: { value: partial } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith({ kind: 'folder', path: 'D:\\Sync' });
+    fireEvent.change(box, { target: { value: '' } });
+    fireEvent.blur(box);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(box).toHaveValue('D:\\Old');
+    expect(screen.getByRole('radio', { name: /Documents \(default\)/ })).toHaveAttribute('aria-checked', 'false');
   });
   it('keeps unsupported providers visible and reports picker failures', async () => {
     vi.mocked(invoke).mockResolvedValue(unsupportedSyncFolders());

@@ -417,14 +417,10 @@ fn list_manifest_files(
     directory: String,
     include_availability: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    if include_availability == Some(true) {
-        serde_json::to_value(endstate_engine_core::storage::list_profile_entries(
-            &directory,
-        )?)
-        .map_err(|e| e.to_string())
-    } else {
-        serde_json::to_value(cmd_impl::list_manifest_files(&directory)?).map_err(|e| e.to_string())
-    }
+    endstate_engine_core::storage::list_manifest_files_value(
+        &directory,
+        include_availability == Some(true),
+    )
 }
 
 #[tauri::command]

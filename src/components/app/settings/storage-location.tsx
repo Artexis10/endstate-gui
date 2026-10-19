@@ -14,7 +14,15 @@ export function StorageLocation({ destination, onChange }: {
   const [defaultPath, setDefaultPath] = useState('');
   const [error, setError] = useState('');
   const [custom, setCustom] = useState(false);
+  // Typed text stays a draft until blur or Enter. Committing each keystroke
+  // would list every partial path ("D:", "D:\S") and toast its errors.
+  const [draft, setDraft] = useState(destination?.path || '');
   useEffect(() => { if (destination === null) setCustom(false); }, [destination]);
+  useEffect(() => { setDraft(destination?.path || ''); }, [destination?.path]);
+  const commitDraft = () => {
+    if (!draft.trim()) { setDraft(destination?.path || ''); return; }
+    if (draft !== destination?.path) onChange({ kind: 'folder', path: draft });
+  };
   useEffect(() => {
     let cancelled = false;
     getProfilesDirectory(null).then(path => { if (!cancelled) setDefaultPath(path); })
@@ -70,11 +78,11 @@ export function StorageLocation({ destination, onChange }: {
         </div>
       </RadioGroup>
       <div className="flex gap-2">
-        <Input aria-label="Custom storage folder" value={destination?.path || ''}
-          placeholder="Enter a folder path" onChange={e => {
-            setCustom(true);
-            onChange(e.target.value.trim() ? { kind: 'folder', path: e.target.value } : null);
-          }} />
+        <Input aria-label="Custom storage folder" value={draft}
+          placeholder="Enter a folder path"
+          onChange={e => { setCustom(true); setDraft(e.target.value); }}
+          onBlur={commitDraft}
+          onKeyDown={e => { if (e.key === 'Enter') commitDraft(); }} />
         <Button variant="secondary" onClick={async () => {
           try {
             setError('');

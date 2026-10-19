@@ -5,6 +5,18 @@ export interface ProfileMetadata {
   displayName?: string;
 }
 
+/**
+ * A new profile's name is taken when its manifest or its sidecar exists. The
+ * native save never overwrites a sidecar, so a sidecar left behind by a deleted
+ * manifest would otherwise make the save fail.
+ */
+export async function profilePathTaken(path: string): Promise<boolean> {
+  for (const candidate of [path, getMetaPath(path)]) {
+    if (await invoke<boolean>('check_file_exists', { path: candidate })) return true;
+  }
+  return false;
+}
+
 /** Manifest and optional sidecar are committed by one native transaction. */
 export async function saveNewProfile(path: string, content: string, displayName?: string): Promise<void> {
   if (!content.trim()) throw new Error('No capture draft available. Please run Capture again.');

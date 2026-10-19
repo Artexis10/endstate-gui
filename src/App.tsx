@@ -53,7 +53,7 @@ import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invo
 import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
 import { inspectProfileContents } from './lib/profile-contents';
 import { shouldDeleteCaptureArtifact } from './lib/capture-artifact-lifecycle';
-import { saveNewProfile, saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
+import { saveNewProfile, saveProfileMetadata, deleteProfileFiles, profilePathTaken } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
 import { AppShell } from './components/layout/app-shell';
@@ -1091,8 +1091,7 @@ function AppContent() {
           // Check for collision and add suffix if needed
           let suffix = 1;
           while (true) {
-            const exists = await invoke<boolean>('check_file_exists', { path: destPath });
-            if (!exists) break;
+            if (!(await profilePathTaken(destPath))) break;
             newFilename = `${sanitized}_${suffix}${extension}`;
             destPath = `${profilesDir}\\${newFilename}`;
             suffix++;

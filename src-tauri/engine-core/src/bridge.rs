@@ -550,21 +550,14 @@ async fn handle_invoke(
                 .get("directory")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            if req
+            let include_availability = req
                 .args
                 .get("includeAvailability")
                 .and_then(|v| v.as_bool())
-                == Some(true)
-            {
-                match crate::storage::list_profile_entries(directory) {
-                    Ok(entries) => ok_response(serde_json::json!(entries)),
-                    Err(e) => err_response(e),
-                }
-            } else {
-                match crate::cmd::list_manifest_files(directory) {
-                    Ok(entries) => ok_response(serde_json::json!(entries)),
-                    Err(e) => err_response(e),
-                }
+                == Some(true);
+            match crate::storage::list_manifest_files_value(directory, include_availability) {
+                Ok(entries) => ok_response(entries),
+                Err(e) => err_response(e),
             }
         }
         "get_default_profiles_directory" => match crate::cmd::get_default_profiles_directory() {

@@ -102,30 +102,60 @@ fn probe(source: &impl DiscoverySource) -> Vec<ProviderDiscovery> {
         Err(_) => one.error("OneDrive account discovery failed. Choose its folder manually."),
     }
     let mut google = ProviderDiscovery::new("google-drive");
-    match source.registry("Software\\Google\\DriveFS\\PerAccountPreferences", false) {
-        Ok(accounts) => {
-            for (_, payload) in accounts {
-                let data = serde_json::from_str::<serde_json::Value>(&payload);
-                if let Some(root) = data
-                    .as_ref()
-                    .ok()
-                    .and_then(|v| v.get("mount_point_path"))
-                    .and_then(|v| v.as_str())
-                    .filter(|p| !p.trim().is_empty())
-                {
-                    google.add(
-                        "Google Drive account",
-                        format!("{}\\My Drive", root.trim_end_matches(['\\', '/'])),
-                    );
-                } else {
-                    google.error(
-                        "Google Drive account data could not be read. Choose My Drive manually.",
-                    );
-                }
+    // Drive for desktop keeps one PerAccountPreferences JSON value under DriveFS
+    // ({"per_account_preferences":[{"value":{"mount_point_path":"G"}}]}). Older
+    // layouts keep one JSON value per account under a PerAccountPreferences key.
+    let mut google_payloads = vec![];
+    for (key, combined) in [
+        ("Software\\Google\\DriveFS", true),
+        ("Software\\Google\\DriveFS\\PerAccountPreferences", false),
+    ] {
+        match source.registry(key, false) {
+            Ok(values) => google_payloads.extend(
+                values
+                    .into_iter()
+                    .filter(|(name, _)| {
+                        !combined || name.eq_ignore_ascii_case("PerAccountPreferences")
+                    })
+                    .map(|(_, payload)| (combined, payload)),
+            ),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => (),
+            Err(_) => {
+                google.error("Google Drive account discovery failed. Choose My Drive manually.")
             }
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => (),
-        Err(_) => google.error("Google Drive account discovery failed. Choose My Drive manually."),
+    }
+    for (combined, payload) in google_payloads {
+        let data = serde_json::from_str::<serde_json::Value>(&payload).ok();
+        let accounts: Vec<&serde_json::Value> = match (&data, combined) {
+            (Some(v), true) => v
+                .get("per_account_preferences")
+                .and_then(|a| a.as_array())
+                .map(|a| a.iter().filter_map(|item| item.get("value")).collect())
+                .unwrap_or_default(),
+            (Some(v), false) => vec![v],
+            (None, _) => vec![],
+        };
+        if accounts.is_empty() {
+            google.error("Google Drive account data could not be read. Choose My Drive manually.");
+        }
+        for account in accounts {
+            match account
+                .get("mount_point_path")
+                .and_then(|v| v.as_str())
+                .map(|p| p.trim().trim_end_matches(['\\', '/']))
+                .filter(|p| !p.is_empty())
+            {
+                // A bare drive letter such as "G" names the drive root.
+                Some(root) if root.len() == 1 && root.chars().all(|c| c.is_ascii_alphabetic()) => {
+                    google.add("Google Drive account", format!("{root}:\\My Drive"))
+                }
+                Some(root) => google.add("Google Drive account", format!("{root}\\My Drive")),
+                None => google.error(
+                    "Google Drive account data could not be read. Choose My Drive manually.",
+                ),
+            }
+        }
     }
     let mut dropbox = ProviderDiscovery::new("dropbox");
     for key in ["LOCALAPPDATA", "APPDATA"] {
@@ -193,7 +223,11 @@ impl DiscoverySource for WindowsSource {
         } else {
             for value in key.enum_values() {
                 let (name, _) = value?;
-                values.push((name.clone(), key.get_value(&name)?));
+                // Only string values can hold account JSON. Skip DWORD or binary
+                // values instead of failing the whole provider.
+                if let Ok(text) = key.get_value::<String, _>(&name) {
+                    values.push((name, text));
+                }
             }
         }
         Ok(values)
@@ -281,12 +315,18 @@ fn filename_key(name: &std::ffi::OsStr) -> String {
     }
 }
 fn ignored(name: &str) -> bool {
-    name.starts_with(STAGING_PREFIX) || name.starts_with(".endstate-import-") || name == "runs"
+    name.starts_with(STAGING_PREFIX)
+        || name.starts_with(".endstate-import-")
+        || name.eq_ignore_ascii_case("runs")
 }
 pub fn list_profile_entries(directory: &str) -> Result<Vec<ProfileEntry>, String> {
     fn visit(directory: &Path, nested: bool, out: &mut Vec<ProfileEntry>) -> io::Result<()> {
         retry_cleanup(directory);
-        let entries = fs::read_dir(directory)?.collect::<io::Result<Vec<_>>>()?;
+        // Only the chosen folder itself must be readable. An entry or subfolder
+        // that cannot be read is left out, so one bad entry never hides the rest.
+        let entries = fs::read_dir(directory)?
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
         // Sidecar lookup uses enumeration only, too. An online-only sidecar is never opened.
         let local: HashSet<_> = entries
             .iter()
@@ -304,11 +344,12 @@ pub fn list_profile_entries(directory: &str) -> Result<Vec<ProfileEntry>, String
             if ignored(&name) {
                 continue;
             }
-            let offline = entry_online_only(entry)?;
-            let kind = entry.file_type()?; // Also cached directory data on Windows.
+            let (Ok(offline), Ok(kind)) = (entry_online_only(entry), entry.file_type()) else {
+                continue; // Both read cached directory data on Windows.
+            };
             let path = entry.path();
             if kind.is_dir() && !nested && !offline {
-                visit(&path, true, out)?;
+                let _ = visit(&path, true, out);
             } else if !kind.is_dir()
                 && !kind.is_symlink()
                 && path.extension().is_some_and(|e| {
@@ -333,6 +374,19 @@ pub fn list_profile_entries(directory: &str) -> Result<Vec<ProfileEntry>, String
         .map_err(|e| format!("Could not list storage folder: {e}"))?;
     entries.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(entries)
+}
+
+/// The list_manifest_files command for both the app and the dev bridge: paths
+/// only, or entries with availability when the caller asks for them.
+pub fn list_manifest_files_value(
+    directory: &str,
+    include_availability: bool,
+) -> Result<serde_json::Value, String> {
+    if include_availability {
+        serde_json::to_value(list_profile_entries(directory)?).map_err(|e| e.to_string())
+    } else {
+        serde_json::to_value(crate::cmd::list_manifest_files(directory)?).map_err(|e| e.to_string())
+    }
 }
 
 fn storage_error(error: io::Error) -> String {
@@ -448,8 +502,11 @@ pub fn save_profile(
     })();
     if let Err(e) = operation {
         cleanup(&payload);
+        // Remove the sidecar this call committed, now and only now. It is a real
+        // file, not a staging name, so it must never join the deferred cleanup
+        // set: a later retry would delete a sidecar that a later save wrote.
         if committed_meta {
-            cleanup(&meta_path);
+            let _ = fs::remove_file(&meta_path);
         }
         return Err(storage_error(e));
     }
@@ -515,6 +572,24 @@ mod tests {
         assert_eq!(results[2].locations.len(), 2);
     }
     #[test]
+    fn google_drive_reads_the_combined_drivefs_value_and_drive_letters() {
+        let mut f = Fixture::default();
+        f.registry.insert(
+            "Software\\Google\\DriveFS".into(),
+            vec![
+                ("Version".into(), "100".into()),
+                (
+                    "PerAccountPreferences".into(),
+                    r#"{"per_account_preferences":[{"key":"1","value":{"mount_point_path":"G"}},{"key":"2","value":{"mount_point_path":"H:\\"}}]}"#.into(),
+                ),
+            ],
+        );
+        let google = &probe(&f)[1];
+        assert_eq!(google.status, "detected");
+        let paths: Vec<_> = google.locations.iter().map(|l| l.path.as_str()).collect();
+        assert_eq!(paths, ["G:\\My Drive", "H:\\My Drive"]);
+    }
+    #[test]
     fn all_recall_attributes_are_online_only() {
         for mask in [0x1000, 0x40000, 0x400000, 0x400020] {
             assert!(online_only(mask));
@@ -570,6 +645,30 @@ mod tests {
         }
         let entries = list_profile_entries(dir.to_str().unwrap()).unwrap();
         assert_eq!(entries.len(), 2);
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn listing_skips_runs_in_any_case() {
+        let dir = test_dir();
+        fs::create_dir(dir.join("Runs")).unwrap();
+        fs::write(dir.join("Runs").join("summary.json"), "{}").unwrap();
+        fs::write(dir.join("setup.jsonc"), "data").unwrap();
+        let entries = list_profile_entries(dir.to_str().unwrap()).unwrap();
+        assert_eq!(entries.len(), 1);
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_subfolder_does_not_hide_other_profiles() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = test_dir();
+        let locked = dir.join("locked");
+        fs::create_dir(&locked).unwrap();
+        fs::write(dir.join("setup.jsonc"), "data").unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        let entries = list_profile_entries(dir.to_str().unwrap());
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(entries.unwrap().len(), 1);
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]
