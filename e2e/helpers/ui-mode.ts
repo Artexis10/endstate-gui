@@ -161,3 +161,20 @@ export async function goToVerifyPage(page: Page): Promise<void> {
   // Verify is part of the setup flow in the intent-based design
   await goToApplyPage(page);
 }
+
+/** Load the app and wait for its startup engine calls to settle. */
+export async function openApp(page: Page, url?: string): Promise<void> {
+  await page.goto(url || '/');
+  await page.waitForLoadState('networkidle');
+}
+
+/**
+ * From the landing page: enter the setup flow, pick the test profile and wait
+ * for the automatic preview to finish.
+ */
+export async function previewTestProfile(page: Page): Promise<void> {
+  await page.locator('[data-testid="intent-setup"]').click();
+  await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
+  await page.locator('[data-testid="profile-card-test-profile"]').click();
+  await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+}

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { installTauriMock } from './helpers/tauri-mock';
+import { installEngineMocks } from './helpers/mock-engine';
+import { openApp } from './helpers/ui-mode';
 
 /**
  * A Windows setting belongs to no app. Choosing one for restore must reach the
@@ -11,16 +12,12 @@ import { installTauriMock } from './helpers/tauri-mock';
  * 2.32.0 adds a human `label`; the failed item has none, as from an older engine.
  */
 test('a chosen Windows setting reaches the engine by full ID and its results list under Windows settings', async ({ page }) => {
-  await installTauriMock(page, {
-    initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
+  await installEngineMocks(page, {
+    settings: { dryRunEnabled: false, dryRunDefaultCorrected: true },
   });
 
   await page.addInitScript(() => {
-    localStorage.setItem('test:endstate-gui-settings', JSON.stringify({
-      dryRunEnabled: false,
-      dryRunDefaultCorrected: true,
-    }));
-
+    const kit = (window as any).__E2E_MOCK_KIT__;
     const TS = '2025-01-01T00:00:00.000Z';
     const restoreModules = [
       { id: 'apps.notepad-plus-plus', displayName: 'Notepad++', entryCount: 1 },
@@ -42,17 +39,9 @@ test('a chosen Windows setting reaches the engine by full ID and its results lis
         onEvent: Function,
         options?: any,
       ) => {
-        if (command === 'capabilities') {
-          return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } }, ndjsonEvents: [] };
-        }
-        if (command === 'report') {
-          return { exitCode: 0, envelope: { success: true, data: { hasState: false } }, ndjsonEvents: [] };
-        }
-        const emit = async (evt: any) => {
-          options?.onNdjsonEvent?.(evt);
-          onEvent?.({ type: 'stdout', data: JSON.stringify(evt) + '\n' });
-          await new Promise((r) => setTimeout(r, 10));
-        };
+        const startup = kit.startup(command);
+        if (startup) return startup;
+        const emit = kit.emitter(onEvent, options, 10);
         const filterIndex = args.indexOf('--restore-filter');
         const filter = filterIndex >= 0 ? args[filterIndex + 1].split(',') : [];
         if (filterIndex >= 0) (window as any).__restoreFilters.push(args[filterIndex + 1]);
@@ -76,28 +65,20 @@ test('a chosen Windows setting reaches the engine by full ID and its results lis
           }
         }
 
-        return {
-          exitCode: 0,
-          envelope: {
-            success: true,
-            data: {
-              dryRun: isDryRun,
-              summary: { total: 1, success: isDryRun ? 0 : 1, skipped: 0, failed: 0 },
-              actions: [
-                { id: 'windirstat', ref: 'WinDirStat.WinDirStat', driver: 'winget', name: 'WinDirStat', status: isDryRun ? 'to_install' : 'installed', reason: isDryRun ? 'would_install' : '', message: '', version: '', manual: null },
-              ],
-              restoreModulesAvailable: restoreModules,
-              configModuleMap: {},
-            },
-          },
-          ndjsonEvents: [],
-        };
+        return kit.result({
+          dryRun: isDryRun,
+          summary: { total: 1, success: isDryRun ? 0 : 1, skipped: 0, failed: 0 },
+          actions: [
+            { id: 'windirstat', ref: 'WinDirStat.WinDirStat', driver: 'winget', name: 'WinDirStat', status: isDryRun ? 'to_install' : 'installed', reason: isDryRun ? 'would_install' : '', message: '', version: '', manual: null },
+          ],
+          restoreModulesAvailable: restoreModules,
+          configModuleMap: {},
+        });
       },
     };
   });
 
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await openApp(page);
   await page.locator('[data-testid="intent-setup"]').click();
   await page.locator('[data-testid="profile-card-test-profile"]').click();
   await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });

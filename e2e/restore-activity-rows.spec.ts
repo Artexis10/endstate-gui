@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { installTauriMock } from './helpers/tauri-mock';
+import { installEngineMocks } from './helpers/mock-engine';
+import { openApp, previewTestProfile } from './helpers/ui-mode';
 
 /**
  * E2E for the Setup-flow activity feed restore/app row presentation.
@@ -18,16 +19,12 @@ import { installTauriMock } from './helpers/tauri-mock';
  */
 
 async function installRestoreMock(page: Page, options: { dryRunSetting: boolean }) {
-  await installTauriMock(page, {
-    initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
+  await installEngineMocks(page, {
+    settings: { dryRunEnabled: options.dryRunSetting, dryRunDefaultCorrected: true },
   });
 
-  await page.addInitScript(({ dryRunSetting }) => {
-    localStorage.setItem('test:endstate-gui-settings', JSON.stringify({
-      dryRunEnabled: dryRunSetting,
-      dryRunDefaultCorrected: true,
-    }));
-
+  await page.addInitScript(() => {
+    const kit = (window as any).__E2E_MOCK_KIT__;
     const TS = '2025-01-01T00:00:00.000Z';
     // Inlined here: addInitScript runs in the browser, so module-scope consts
     // from the test file are not in scope.
@@ -52,43 +49,28 @@ async function installRestoreMock(page: Page, options: { dryRunSetting: boolean 
         onEvent: Function,
         options?: any,
       ) => {
-        if (command === 'capabilities') {
-          return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } }, ndjsonEvents: [] };
-        }
-        if (command === 'report') {
-          return { exitCode: 0, envelope: { success: true, data: { hasState: false } }, ndjsonEvents: [] };
-        }
+        const startup = kit.startup(command);
+        if (startup) return startup;
 
         const isDryRun = args.includes('--dry-run');
         // The setup flow's own previews never pass a restore filter; an Apply
         // under the dry-run setting does.
         const isPreview = isDryRun && !args.includes('--restore-filter');
-        const emit = async (evt: any) => {
-          options?.onNdjsonEvent?.(evt);
-          onEvent?.({ type: 'stdout', data: JSON.stringify(evt) + '\n' });
-          await new Promise((r) => setTimeout(r, 10));
-        };
+        const emit = kit.emitter(onEvent, options, 10);
 
         if (isPreview) {
           // Preview: one installable app + restorable settings modules so the
           // "apps and settings" option and module checkboxes appear.
           await emit({ version: 1, runId: 'preview', timestamp: TS, event: 'item', id: 'WinDirStat.WinDirStat', driver: 'winget', status: 'to_install', reason: 'would_install', name: 'WinDirStat' });
-          return {
-            exitCode: 0,
-            envelope: {
-              success: true,
-              data: {
-                dryRun: true,
-                summary: { total: 1, success: 0, skipped: 0, failed: 0 },
-                actions: [
-                  { id: 'windirstat', ref: 'WinDirStat.WinDirStat', driver: 'winget', name: 'WinDirStat', status: 'to_install', reason: 'would_install', message: '', version: '', manual: null },
-                ],
-                restoreModulesAvailable: restoreModules,
-                configModuleMap: {},
-              },
-            },
-            ndjsonEvents: [],
-          };
+          return kit.result({
+            dryRun: true,
+            summary: { total: 1, success: 0, skipped: 0, failed: 0 },
+            actions: [
+              { id: 'windirstat', ref: 'WinDirStat.WinDirStat', driver: 'winget', name: 'WinDirStat', status: 'to_install', reason: 'would_install', message: '', version: '', manual: null },
+            ],
+            restoreModulesAvailable: restoreModules,
+            configModuleMap: {},
+          });
         }
 
         // Apply: app streams under its winget ref across apply+verify; envelope
@@ -118,35 +100,24 @@ async function installRestoreMock(page: Page, options: { dryRunSetting: boolean 
           await emit({ version: 1, runId: 'apply', timestamp: TS, event: 'summary', phase: 'verify', total: 1, success: 1, skipped: 0, failed: 0 });
         }
 
-        return {
-          exitCode: 0,
-          envelope: {
-            success: true,
-            data: {
-              dryRun: isDryRun,
-              summary: { total: 1, success: isDryRun ? 0 : 1, skipped: 0, failed: 0 },
-              actions: [
-                { id: 'windirstat', ref: 'WinDirStat.WinDirStat', driver: 'winget', name: 'WinDirStat', status: isDryRun ? 'to_install' : 'installed', reason: isDryRun ? 'would_install' : '', message: isDryRun ? '' : 'Installed successfully', version: '2.7.0', manual: null },
-              ],
-              restoreModulesAvailable: restoreModules,
-              configModuleMap: {},
-            },
-          },
-          ndjsonEvents: [],
-        };
+        return kit.result({
+          dryRun: isDryRun,
+          summary: { total: 1, success: isDryRun ? 0 : 1, skipped: 0, failed: 0 },
+          actions: [
+            { id: 'windirstat', ref: 'WinDirStat.WinDirStat', driver: 'winget', name: 'WinDirStat', status: isDryRun ? 'to_install' : 'installed', reason: isDryRun ? 'would_install' : '', message: isDryRun ? '' : 'Installed successfully', version: '2.7.0', manual: null },
+          ],
+          restoreModulesAvailable: restoreModules,
+          configModuleMap: {},
+        });
       },
     };
-  }, options);
+  });
 
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  await openApp(page);
 }
 
 async function applyWithSettings(page: Page) {
-  await page.locator('[data-testid="intent-setup"]').click();
-  await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
-  await page.locator('[data-testid="profile-card-test-profile"]').click();
-  await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+  await previewTestProfile(page);
   await page.getByRole('radio', { name: 'Install apps and restore settings' }).click();
   await page.getByRole('button', { name: 'Select all' }).click();
   await page.locator('[data-testid="setup-flow-apply"]').click();
@@ -155,10 +126,7 @@ async function applyWithSettings(page: Page) {
 test.describe('Setup activity feed — restore & app row presentation', () => {
   test('restore rows are friendly and single, app rows do not duplicate across phases', async ({ page }) => {
     await installRestoreMock(page, { dryRunSetting: false });
-    await page.locator('[data-testid="intent-setup"]').click();
-    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
-    await page.locator('[data-testid="profile-card-test-profile"]').click();
-    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+    await previewTestProfile(page);
 
     await page.locator('[data-testid="setup-flow-apply"]').click();
     await expect(page.getByText('Setup completed with errors')).toBeVisible({ timeout: 15000 });
