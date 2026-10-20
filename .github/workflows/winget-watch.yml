@@ -5,7 +5,8 @@ name: WinGet publication watch
 # `release: released`, and an expired WINGET_TOKEN failed without notice.
 # This daily check fails when the newest published GUI release is more than
 # 3 days old and still missing from microsoft/winget-pkgs, or when
-# WINGET_TOKEN is rejected or expires within 14 days.
+# WINGET_TOKEN is rejected, cannot publish through the fork, or expires
+# within 14 days.
 
 on:
   schedule:
@@ -50,31 +51,12 @@ jobs:
   winget-token:
     runs-on: ubuntu-latest
     steps:
-      - name: Check WINGET_TOKEN is accepted and not about to expire
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/check-winget-token.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Check WINGET_TOKEN can publish and is not about to expire
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "$WINGET_TOKEN" ]; then
-            echo "::error::The WINGET_TOKEN secret is empty."
-            exit 1
-          fi
-          # Only the status and the expiry header are written; the token never is.
-          response=$(curl -sS -o /dev/null -H "Authorization: Bearer $WINGET_TOKEN" \
-            -w '%{http_code} %header{github-authentication-token-expiration}' https://api.github.com/user)
-          status=${response%% *}
-          expiry=${response#* }
-          if [ "$status" != "200" ]; then
-            echo "::error::GitHub rejected WINGET_TOKEN (HTTP $status). Replace the WINGET_TOKEN secret."
-            exit 1
-          fi
-          if [ -z "$expiry" ]; then
-            echo "WINGET_TOKEN has no expiry date."
-            exit 0
-          fi
-          days_left=$(( ($(date -u -d "$expiry" +%s) - $(date -u +%s)) / 86400 ))
-          if [ "$days_left" -lt 14 ]; then
-            echo "::error::WINGET_TOKEN expires on $expiry, in $days_left days. Replace the WINGET_TOKEN secret now."
-            exit 1
-          fi
-          echo "WINGET_TOKEN expires on $expiry, in $days_left days."
+        run: bash scripts/check-winget-token.sh 14
