@@ -28,8 +28,10 @@ if [ "$status" != "200" ]; then
     exit 1
 fi
 
+# An absent header prints nothing: a fine-grained token sends no scopes, and a
+# token without an expiry date sends no expiry.
 header() {
-    tr -d '\r' < "$headers" | grep -i "^$1:" | head -n 1 | sed 's/^[^:]*:[[:space:]]*//'
+    { tr -d '\r' < "$headers" | grep -i "^$1:" || true; } | head -n 1 | sed 's/^[^:]*:[[:space:]]*//'
 }
 
 login=$(GH_TOKEN="$WINGET_TOKEN" gh api user --jq '.login')
