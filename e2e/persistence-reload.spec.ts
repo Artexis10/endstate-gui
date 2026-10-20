@@ -49,6 +49,8 @@ test.describe('Persistence Boundaries on Reload', () => {
     await expect(input).toHaveValue(path);
     await expect(page.getByText("Files in this location sync as-is and aren't encrypted by Endstate.")).toBeVisible();
     await input.fill('E:\\Exact folder');
+    // A typed folder is committed on Enter or blur, not on each keystroke.
+    await input.press('Enter');
     await page.reload();
     await page.getByRole('button', { name: /Set up this computer/ }).click();
     await page.getByTitle('Settings', { exact: true }).click();
