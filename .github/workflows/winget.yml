@@ -27,26 +27,80 @@ jobs:
             echo "value=${GITHUB_REF_NAME#gui-v}" >> "$GITHUB_OUTPUT"
           fi
 
-      # The publish action can only push through the Artexis10/winget-pkgs fork.
-      # An expired or under-scoped WINGET_TOKEN once failed there quietly, so
-      # check the token first and fail with the fix in the message.
-      - name: Check WINGET_TOKEN can push to the winget-pkgs fork
+      # The publish action syncs the Artexis10/winget-pkgs fork through
+      # POST /repos/Artexis10/winget-pkgs/merge-upstream, then opens the pull
+      # request on microsoft/winget-pkgs. Reading the fork's permissions.push
+      # is not enough: it reports the account's role, not what the token may
+      # do, so a token without write scopes passed that check and the sync
+      # still returned 404. Check the token type and scopes, then run the same
+      # sync call the action runs, and fail with the fix in the message.
+      - name: Check WINGET_TOKEN can sync the winget-pkgs fork
         env:
-          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          FORK: Artexis10/winget-pkgs
+          FIX: "Replace the WINGET_TOKEN secret with a classic personal access token from the Artexis10 account that has the public_repo and workflow scopes."
         run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::error::The WINGET_TOKEN secret is empty. Add a token that can push to Artexis10/winget-pkgs."
+          set -euo pipefail
+          if [ -z "$WINGET_TOKEN" ]; then
+            echo "::error::The WINGET_TOKEN secret is empty. $FIX"
             exit 1
           fi
-          if ! push=$(gh api repos/Artexis10/winget-pkgs --jq .permissions.push 2>&1); then
-            echo "::error::GitHub rejected WINGET_TOKEN ($push). The token may have expired: replace the WINGET_TOKEN secret."
+          headers=$(mktemp)
+          body=$(mktemp)
+          # Only status codes, headers and response bodies are written; the token never is.
+          github() {
+            curl -sS -D "$headers" -o "$body" -w '%{http_code}' \
+              -H "Authorization: Bearer $WINGET_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" "$@"
+          }
+          header() { grep -i "^$1:" "$headers" | cut -d: -f2- | tr -d '\r' | xargs || true; }
+
+          status=$(github https://api.github.com/user)
+          if [ "$status" != "200" ]; then
+            echo "::error::GitHub rejected WINGET_TOKEN (HTTP $status). The token may have expired. $FIX"
             exit 1
           fi
-          if [ "$push" != "true" ]; then
-            echo "::error::WINGET_TOKEN cannot push to Artexis10/winget-pkgs (permissions.push is '$push'). Replace the WINGET_TOKEN secret with a token that has push access to the fork."
+          login=$(jq -r .login "$body")
+          if [ "$login" != "${FORK%%/*}" ]; then
+            echo "::error::WINGET_TOKEN belongs to '$login', but the action publishes through $FORK. $FIX"
             exit 1
           fi
-          echo "WINGET_TOKEN can push to Artexis10/winget-pkgs."
+
+          # Classic tokens list their scopes in X-OAuth-Scopes; fine-grained
+          # tokens send no such header.
+          if ! grep -qi '^x-oauth-scopes:' "$headers"; then
+            echo "::error::WINGET_TOKEN is a fine-grained token. The WinGet action needs a classic token: it opens the pull request on microsoft/winget-pkgs, which Artexis10 does not own. $FIX"
+            exit 1
+          fi
+          scopes=" $(header x-oauth-scopes | tr -d ',') "
+          missing=""
+          if [[ "$scopes" != *" public_repo "* && "$scopes" != *" repo "* ]]; then
+            missing="public_repo"
+          fi
+          if [[ "$scopes" != *" workflow "* ]]; then
+            missing="${missing:+$missing and }workflow"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error::WINGET_TOKEN lacks the $missing scope (it has:${scopes% }). Syncing $FORK writes to the fork and pulls in upstream workflow files. $FIX"
+            exit 1
+          fi
+
+          # Run the action's own first write: sync the fork's default branch.
+          status=$(github "https://api.github.com/repos/$FORK")
+          if [ "$status" != "200" ]; then
+            echo "::error::Could not read $FORK (HTTP $status). The fork may be missing or renamed: fork microsoft/winget-pkgs to the Artexis10 account."
+            exit 1
+          fi
+          branch=$(jq -r .default_branch "$body")
+          status=$(github -X POST -d "{\"branch\":\"$branch\"}" "https://api.github.com/repos/$FORK/merge-upstream")
+          if [ "$status" != "200" ]; then
+            message=$(jq -r '.message // empty' "$body" 2>/dev/null || true)
+            needs=$(header x-accepted-github-permissions)
+            echo "::error::WINGET_TOKEN cannot sync $FORK:$branch with microsoft/winget-pkgs (HTTP $status${message:+: $message}${needs:+; GitHub requires $needs}). This is the merge-upstream call the WinGet action makes first, and it needs write access to the fork's contents and workflows. $FIX"
+            exit 1
+          fi
+          echo "WINGET_TOKEN synced $FORK:$branch ($(jq -r .merge_type "$body"))."
 
       - name: Publish to WinGet
         uses: vedantmgoyal9/winget-releaser@v2
