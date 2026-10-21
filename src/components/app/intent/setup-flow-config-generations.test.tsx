@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from '@testing-library/react';
-import { renderWithProviders, screen, userEvent, waitFor, within } from '@/test/test-utils';
+import { renderWithProviders, screen, userEvent, waitFor } from '@/test/test-utils';
 import type { ConfigResolution } from '@/types';
 import { EngineEnvelopeError } from '@/lib/engine-envelope-error';
 import { SetupFlow } from './setup-flow';
@@ -193,7 +193,7 @@ describe('SetupFlow config generations', () => {
       error: { code: 'SETTINGS_PREVIEW_FAILED', message: 'Engine settings preview failed' },
       configResolutions: [configResolution({
         captureId: 'failed-settings',
-        resolution: 'legacy_unverified',
+        resolution: 'incompatible',
         label: 'Engine-authored settings warning',
       })],
     };
@@ -335,16 +335,16 @@ describe('SetupFlow config generations', () => {
 
     await user.click(screen.getByText('generation-profile'));
     await screen.findByText('Preview complete');
-    expect(screen.queryByText('Engine legacy warning')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-folded')).not.toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: /settings/i }));
 
     await waitFor(() => expect(onPreview).toHaveBeenNthCalledWith(2, profile, {
       restoreIntent: 'apps-and-settings',
     }));
-    expect(await screen.findByText('Engine legacy warning')).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId('config-resolution-group-legacy_unverified')).getByText('Adobe Photoshop'),
-    ).toBeVisible();
+    // The folded line is the compatibility notice shown before Apply.
+    expect(await screen.findByTestId('config-resolution-folded')).toHaveTextContent(
+      'Compatibility not checked for 1 setting. It was saved before Endstate checked versions.',
+    );
 
     const legacyConsent = screen.getByRole('checkbox', { name: 'Adobe Photoshop' });
     expect(legacyConsent).not.toBeChecked();
@@ -780,7 +780,7 @@ describe('SetupFlow config generations', () => {
 
     expect(await screen.findByText('Setup complete')).toBeInTheDocument();
     expect(onApply).toHaveBeenCalledWith(profile, undefined);
-    expect(screen.queryByTestId('config-resolution-group-legacy_unverified')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-folded')).not.toBeInTheDocument();
     expect(screen.queryByTestId('config-resolution-group-migrate')).not.toBeInTheDocument();
     expect(screen.queryByText('Engine install-only leftover warning')).not.toBeInTheDocument();
     expect(screen.queryByText('Engine install-only migrate result')).not.toBeInTheDocument();

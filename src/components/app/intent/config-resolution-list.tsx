@@ -1,8 +1,10 @@
 import type {
   ConfigResolution,
   ConfigResolutionKind,
+  ConfigResolutionStatus,
   RestoreTargetMapping,
 } from '@/types';
+import { settingsModulesPhrase } from '@/lib/settings-kind';
 import {
   Select,
   SelectContent,
@@ -38,6 +40,45 @@ interface IndividualResolution {
 
 type RenderItem = ResolutionGroup | IndividualResolution;
 
+/** What a resolution asks of the person; this alone decides how it renders. */
+type Disposition = 'decision' | 'attention' | 'direct' | 'folded';
+
+// Terminal statuses that mean a config set did not end well.
+const FAILED_STATUSES: ReadonlySet<ConfigResolutionStatus> = new Set([
+  'failed',
+  'rolled_back',
+  'rollback_failed',
+]);
+
+// The engine's documented reasons (docs/contracts/cli-json-contract.md) that
+// need nothing from the person: no target app yet, nothing to change, or not
+// selected. The documented list is open ("include"), so every other reason,
+// including a new one, stays a card.
+const UNKNOWN_REASONS_NEEDING_NOTHING: ReadonlySet<string> = new Set([
+  'target_not_detected',
+  'already_up_to_date',
+  'restore_filtered',
+  'restore_not_enabled',
+]);
+
+function disposition(resolution: ConfigResolution): Disposition {
+  if (resolution.reason === 'ambiguous_target_instance') return 'decision';
+  if (FAILED_STATUSES.has(resolution.status)) return 'attention';
+  switch (resolution.resolution) {
+    case 'direct':
+      return 'direct';
+    case 'legacy_unverified':
+      return 'folded';
+    case 'unknown':
+      return resolution.reason !== null && UNKNOWN_REASONS_NEEDING_NOTHING.has(resolution.reason)
+        ? 'folded'
+        : 'attention';
+    default:
+      // migrate and incompatible always matter to the person.
+      return 'attention';
+  }
+}
+
 export function ConfigResolutionList(
   {
     resolutions,
@@ -49,7 +90,8 @@ export function ConfigResolutionList(
 ) {
   if (resolutions.length === 0) return null;
 
-  const items = buildRenderItems(resolutions);
+  const items = buildRenderItems(resolutions.filter((r) => disposition(r) !== 'folded'));
+  const folded = resolutions.filter((r) => disposition(r) === 'folded');
 
   return (
     <section className="space-y-2" aria-label="Settings compatibility">
@@ -113,21 +155,15 @@ export function ConfigResolutionList(
                   </div>
                 )}
               <DetailsDisclosure title="Configuration details" className="mt-3">
-                <dl className="space-y-1 text-xs text-muted-foreground">
-                  {provenanceEntries(resolution).map(([label, value]) => (
-                    <div key={label} className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
-                      <dt>{label}</dt>
-                      <dd className="break-all font-mono">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
+                <ProvenanceList resolution={resolution} />
               </DetailsDisclosure>
             </article>
           );
         }
 
-        // A `direct` confirmation is a quiet muted line, never a card.
-        if (item.resolution === 'direct') {
+        // A `direct` confirmation is a quiet muted line, never a card. A
+        // failed one is not a confirmation, so it keeps its card.
+        if (item.resolution === 'direct' && item.members.every((m) => disposition(m) === 'direct')) {
           return (
             <p
               key={item.key}
@@ -205,14 +241,7 @@ export function ConfigResolutionList(
                         {moduleDisplayNames[member.moduleId]}
                       </p>
                     )}
-                    <dl className="space-y-1 text-xs text-muted-foreground">
-                      {provenanceEntries(member).map(([label, value]) => (
-                        <div key={label} className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
-                          <dt>{label}</dt>
-                          <dd className="break-all font-mono">{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
+                    <ProvenanceList resolution={member} />
                   </div>
                 ))}
               </div>
@@ -220,7 +249,113 @@ export function ConfigResolutionList(
           </article>
         );
       })}
+      {folded.length > 0 && (
+        <FoldedCompatibility resolutions={folded} moduleDisplayNames={moduleDisplayNames} />
+      )}
     </section>
+  );
+}
+
+/**
+ * Resolutions that need nothing from the person fold into one quiet line. The
+ * line is the compatibility notice shown before Apply; the engine's own
+ * message for each setting sits behind the details disclosure, once per
+ * distinct message.
+ */
+function FoldedCompatibility(
+  { resolutions, moduleDisplayNames }: {
+    resolutions: ConfigResolution[];
+    moduleDisplayNames: Readonly<Record<string, string>>;
+  },
+) {
+  const messageGroups = groupByMessage(resolutions);
+  const labels = [...new Set(resolutions.map((r) => r.label))];
+
+  return (
+    <div data-testid="config-resolution-folded">
+      <p className="text-xs text-muted-foreground">{foldedLine(resolutions)}</p>
+      <DetailsDisclosure title="Configuration details" className="mt-2">
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">{labels.join(' · ')}</p>
+          {messageGroups.map((group) => (
+            <div key={group.message} className="space-y-2">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-foreground">{group.message}</p>
+                {distinctRemediations(group.members).map((remediation) => (
+                  <p key={remediation} className="text-xs text-muted-foreground">
+                    {remediation}
+                  </p>
+                ))}
+              </div>
+              {group.members.map((member) => (
+                <div
+                  key={member.captureId}
+                  className="space-y-1"
+                  data-testid={`config-resolution-${member.captureId}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    {moduleDisplayNames[member.moduleId] && (
+                      <p className="min-w-0 text-xs font-medium text-foreground">
+                        {moduleDisplayNames[member.moduleId]}
+                      </p>
+                    )}
+                    <span className="ml-auto flex-shrink-0 font-mono text-[10px] text-muted-foreground">
+                      {member.status}
+                    </span>
+                  </div>
+                  <ProvenanceList resolution={member} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </DetailsDisclosure>
+    </div>
+  );
+}
+
+/**
+ * The GUI-authored line over the folded resolutions. Counts come from the
+ * data, over distinct modules. The reason sentence only claims what holds:
+ * the legacy kind is the only one that was saved before version checks.
+ */
+function foldedLine(resolutions: ConfigResolution[]): string {
+  const moduleIds = (rows: ConfigResolution[]) => [...new Set(rows.map((r) => r.moduleId))];
+  const all = moduleIds(resolutions);
+  const legacy = moduleIds(resolutions.filter((r) => r.resolution === 'legacy_unverified'));
+  const lead = `Compatibility not checked for ${settingsModulesPhrase(all)}.`;
+
+  if (legacy.length === 0) return lead;
+  const reason = 'saved before Endstate checked versions';
+  if (legacy.length === all.length) {
+    return `${lead} ${all.length === 1 ? 'It was' : 'They were'} ${reason}.`;
+  }
+  return `${lead} ${legacy.length} of them ${legacy.length === 1 ? 'was' : 'were'} ${reason}.`;
+}
+
+/** Groups by the engine message, keeping first-occurrence order. */
+function groupByMessage(
+  resolutions: ConfigResolution[],
+): Array<{ message: string; members: ConfigResolution[] }> {
+  const groups = new Map<string, ConfigResolution[]>();
+  for (const resolution of resolutions) {
+    const members = groups.get(resolution.message);
+    if (members) members.push(resolution);
+    else groups.set(resolution.message, [resolution]);
+  }
+  return [...groups].map(([message, members]) => ({ message, members }));
+}
+
+function ProvenanceList({ resolution }: { resolution: ConfigResolution }) {
+  return (
+    <dl className="space-y-1 text-xs text-muted-foreground">
+      {provenanceEntries(resolution).map(([label, value]) => (
+        <div key={label} className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
+          <dt>{label}</dt>
+          <dd className="break-all font-mono">{value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -259,9 +394,17 @@ function buildRenderItems(resolutions: ConfigResolution[]): RenderItem[] {
   return items;
 }
 
-/** Collision-safe composite key over the engine-owned grouping fields. */
+/**
+ * Collision-safe composite key over the engine-owned grouping fields. The
+ * disposition keeps a failed `direct` result out of the quiet confirmations.
+ */
 function groupKey(resolution: ConfigResolution): string {
-  return JSON.stringify([resolution.resolution, resolution.label, resolution.message]);
+  return JSON.stringify([
+    resolution.resolution,
+    resolution.label,
+    resolution.message,
+    disposition(resolution),
+  ]);
 }
 
 function distinctRemediations(members: ConfigResolution[]): string[] {

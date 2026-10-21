@@ -290,12 +290,14 @@ test.describe('configuration generations', () => {
     await page.getByRole('radio', { name: 'Install apps and restore settings' }).click();
     const legacyConsent = page.getByRole('checkbox', { name: 'Adobe Photoshop' });
     await expect(legacyConsent).not.toBeChecked();
-    // The legacy warning stays at the top level of its group card, visible
-    // without opening any disclosure.
-    const legacyGroup = page.locator('[data-testid="config-resolution-group-legacy_unverified"]');
-    await expect(legacyGroup).toBeVisible();
-    await expect(legacyGroup.getByText('Engine legacy consent warning')).toBeVisible();
-    await expect(page.getByText('Engine legacy consent warning')).toBeVisible();
+    // The legacy settings fold into one quiet line, visible without opening
+    // any disclosure; the engine's own warning sits behind the details.
+    const folded = page.locator('[data-testid="config-resolution-folded"]');
+    await expect(folded).toBeVisible();
+    await expect(folded).toContainText('Compatibility not checked for 1 setting.');
+    await expect(page.getByText('Engine legacy consent warning')).toHaveCount(0);
+    await folded.getByRole('button', { name: 'Configuration details' }).click();
+    await expect(folded.getByText('Engine legacy consent warning')).toBeVisible();
 
     // Ambiguous target rows stay individual decision cards; their provenance is
     // on the card itself, not behind a group disclosure.
@@ -398,10 +400,10 @@ test.describe('configuration generations', () => {
     await expect(page.getByText('Preview completed with errors')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Engine preview terminal failure')).toBeVisible();
     await expect(page.getByText('Engine preview failure remediation')).toBeVisible();
-    await expect(page.getByText('Engine legacy consent warning')).toHaveCount(0);
+    await expect(page.locator('[data-testid="config-resolution-folded"]')).toHaveCount(0);
 
     await page.getByRole('radio', { name: 'Install apps and restore settings' }).click();
-    await expect(page.getByText('Engine legacy consent warning')).toBeVisible();
+    await expect(page.locator('[data-testid="config-resolution-folded"]')).toBeVisible();
     await expect(page.getByText('Engine warning retained on failure')).toBeVisible();
     await expect(page.locator('[data-testid="setup-flow-apply"]')).toBeDisabled();
   });

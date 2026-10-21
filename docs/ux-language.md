@@ -1,7 +1,7 @@
 # Endstate UX Language & Status Contract
 
 **Status:** Locked  
-**Last Updated:** 2026-10-19
+**Last Updated:** 2026-10-21
 
 This document is the **single source of truth** for status/phase semantics across Endstate GUI and engine. It defines:
 - How engine events map to UI labels and colors
@@ -347,6 +347,42 @@ follow these rules:
   because the settings rows themselves list under the apps. A preview app row
   keeps the icon: it is the only sign of which apps bring settings.
 - The chip row wraps at a narrow width; a chip never breaks its own text.
+
+#### Settings compatibility (setup preview and results)
+
+The engine returns one `configResolutions[]` row for each captured config set.
+A long profile returns dozens of rows that carry the same engine label and say
+nothing the person can act on. The GUI shows a card only for a row that needs
+the person, and folds the other rows into one quiet line. It decides from
+`resolution`, `reason` and `status`, never from message text. The preview and
+the results use the same rule (`config-resolution-list.tsx`).
+
+| Row | Shown as |
+|-----|----------|
+| `reason: ambiguous_target_instance` | Its own card with the target picker, whatever its `resolution` |
+| `migrate`, `incompatible` | A card |
+| Any row with status `failed`, `rolled_back` or `rollback_failed` | A card |
+| `unknown` whose `reason` is not `target_not_detected`, `already_up_to_date`, `restore_filtered` or `restore_not_enabled` (this includes a new reason and a missing reason) | A card |
+| `legacy_unverified` that did not fail | The quiet line |
+| `unknown` with one of the four reasons above, that did not fail | The quiet line |
+| `direct` that did not fail | A muted “Compatible” line, as before |
+
+- **The quiet line is the compatibility notice before Apply.** It shows without
+  opening any disclosure. It reads “Compatibility not checked for 40 app
+  settings and 7 Windows settings. They were saved before Endstate checked
+  versions.” The counts come from the distinct modules in the folded rows, named
+  by group as in the counts above. The second sentence claims only what holds:
+  “They were saved before…” when every folded row is `legacy_unverified`,
+  “N of them were saved before…” when only some are, and no second sentence when
+  none is. It is calm and muted, never a warning or a card
+  (`ux-guardrails.md`, “Treating Normal Outcomes as Errors”).
+- **The section has no heading.** When no row needs the person, the section is
+  that one line. When every row needs the person, the section is the cards.
+- **Details.** With Show details on, the line has a “Configuration details”
+  disclosure. It shows each engine label once, each engine message once with its
+  remediation, and under each message the settings it covers, each with its
+  status and portable provenance. No label or message repeats.
+- **A failed `direct` row is a card.** A failure is never a quiet confirmation.
 
 #### Produced-artifact completion line
 
