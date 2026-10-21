@@ -13,6 +13,7 @@
 pub mod broadcast;
 pub mod cmd;
 pub mod engine;
+pub mod storage;
 
 #[cfg(feature = "bridge")]
 pub mod bridge;

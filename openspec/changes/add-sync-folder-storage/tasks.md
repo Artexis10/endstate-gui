@@ -1,71 +1,143 @@
 ## 1. Settings Contract And Migration
 
-- [ ] 1.1 Add `StorageDestination` and replace `customProfilesDirectory` in
+- [x] 1.1 Add `StorageDestination` and replace `customProfilesDirectory` in
   `AppSettings`.
-- [ ] 1.2 Migrate empty and non-empty legacy settings without changing paths, and
+- [x] 1.2 Migrate empty and non-empty legacy settings without changing paths, and
   remove the legacy key from normalized persistence.
-- [ ] 1.3 Add focused settings and persistence tests for defaults, migration,
+- [x] 1.3 Add focused settings and persistence tests for defaults, migration,
   round-trip behavior, and invalid stored data.
 
 ## 2. Native Sync-Folder Discovery
 
-- [ ] 2.1 Add typed provider discovery models and independent OneDrive, Google Drive,
+- [x] 2.1 Add typed provider discovery models and independent OneDrive, Google Drive,
   and Dropbox probes.
-- [ ] 2.2 Read all OneDrive environment variants, enumerate account `UserFolder`
+- [x] 2.2 Read all OneDrive environment variants, enumerate account `UserFolder`
   registry fallbacks, and deduplicate equal Windows paths.
-- [ ] 2.3 Read every Google Drive account registry payload and resolve each `My Drive`
+- [x] 2.3 Read every Google Drive account registry payload and resolve each `My Drive`
   root.
-- [ ] 2.4 Parse Dropbox personal and business paths from `%LOCALAPPDATA%` and
+- [x] 2.4 Parse Dropbox personal and business paths from `%LOCALAPPDATA%` and
   `%APPDATA%` `info.json` files.
-- [ ] 2.5 Return provider-level detected, not-detected, error, and unsupported states
+- [x] 2.5 Return provider-level detected, not-detected, error, and unsupported states
   with safe visible reasons, without allowing one provider failure to erase another
   provider's results.
-- [ ] 2.6 Add Rust tests with injected environment, registry, and file data so tests
+- [x] 2.6 Add Rust tests with injected environment, registry, and file data so tests
   do not depend on the developer machine.
 
 ## 3. Safe Synced-Folder I/O
 
-- [ ] 3.1 Return local versus online-only availability without opening candidate
+- [x] 3.1 Return local versus online-only availability without opening candidate
   setup content.
-- [ ] 3.2 Keep online-only files visible but disabled, skip validation and metadata
+- [x] 3.2 Keep online-only files visible but disabled, skip validation and metadata
   reads, and refresh them normally once local.
-- [ ] 3.3 Add a transactional profile-save command with undiscoverable staging,
+- [x] 3.3 Add a transactional profile-save command with undiscoverable staging,
   atomic commit, visible sharing-violation errors, rollback, and deferred staging
   cleanup.
-- [ ] 3.4 Discover provider-created conflict copies as separate path identities and
+- [x] 3.4 Discover provider-created conflict copies as separate path identities and
   disambiguate duplicate labels with filenames.
-- [ ] 3.5 Add focused tests for no-hydration discovery, locks on final and staging
+- [x] 3.5 Add focused tests for no-hydration discovery, locks on final and staging
   files, rollback/cleanup, and conflict copies.
 
 ## 4. Bridge And Directory Resolution
 
-- [ ] 4.1 Register the native discovery, availability, and transactional-save
+- [x] 4.1 Register the native discovery, availability, and transactional-save
   commands and expose typed frontend invocation.
-- [ ] 4.2 Add deterministic non-native fallbacks that perform no host inspection.
-- [ ] 4.3 Resolve the profiles directory from `StorageDestination | null` at every
+- [x] 4.2 Add deterministic non-native fallbacks that perform no host inspection.
+- [x] 4.3 Resolve the profiles directory from `StorageDestination | null` at every
   existing read/write boundary.
 
 ## 5. Storage Location UI
 
-- [ ] 5.1 Add a dedicated shadcn-based Storage location component outside Engine
+- [x] 5.1 Add a dedicated shadcn-based Storage location component outside Engine
   Configuration.
-- [ ] 5.2 Render **Documents (default)**, annotate OneDrive Known Folder Move, render
+- [x] 5.2 Render **Documents (default)**, annotate OneDrive Known Folder Move, render
   all detected accounts, and keep unavailable/error providers visible with guidance.
-- [ ] 5.3 Store one-click provider choices as `<sync root>\Endstate`.
-- [ ] 5.4 Keep free-text entry and add a native folder Browse action.
-- [ ] 5.5 Display the unencrypted sync warning and avoid backup terminology.
-- [ ] 5.6 Add component tests for selection, multiple accounts, Known Folder Move,
+- [x] 5.3 Store one-click provider choices as `<sync root>\Endstate`.
+- [x] 5.4 Keep free-text entry and add a native folder Browse action.
+- [x] 5.5 Display the unencrypted sync warning and avoid backup terminology.
+- [x] 5.6 Add component tests for selection, multiple accounts, Known Folder Move,
   unavailable/error states, browsing, free text, and warning copy.
 
 ## 6. Compatibility And Verification
 
-- [ ] 6.1 Update affected `AppSettings` fixtures and the legacy
+- [x] 6.1 Update affected `AppSettings` fixtures and the legacy
   `draft-and-profile-state.md` model.
-- [ ] 6.2 Add or update the persistence reload test for a typed destination.
-- [ ] 6.3 Confirm no Hosted Backup command or component changed.
-- [ ] 6.4 Run focused TypeScript settings/component tests and Rust discovery/I/O
+- [x] 6.2 Add or update the persistence reload test for a typed destination.
+- [x] 6.3 Verify storage selection does not invoke or alter Hosted Backup commands.
+- [x] 6.4 Run focused TypeScript settings/component tests and Rust discovery/I/O
   tests.
-- [ ] 6.5 Run TypeScript build, lint, strict OpenSpec validation, and only the
+- [x] 6.5 Run TypeScript build, lint, strict OpenSpec validation, and only the
   persistence E2E scenario needed for this change.
-- [ ] 6.6 Inspect the final diff for version changes, unrelated refactors, generated
+- [x] 6.6 Inspect the final diff for version changes, unrelated refactors, generated
   artifacts, and unintended dependency churn.
+
+## Implementation evidence (2026-10-19)
+
+Implements the approved proposal in Artexis10/endstate-gui#221. The review's two
+implementation notes are included: OFFLINE, RECALL_ON_OPEN, and
+RECALL_ON_DATA_ACCESS are checked from cached Windows directory-enumeration data,
+without per-file opens or stat calls. Staging, writes/copies, flush, rollback,
+and atomic commit are owned by `engine-core/src/storage.rs`.
+
+Validation: 272 focused frontend tests (18 files), nine native storage tests,
+29 native import/validation regressions, one bridge router regression, and four
+focused browser scenarios passed. This includes focused settings/migration, discovery, storage UI, save, and
+import regression tests; native Windows attribute, locked-final/staging,
+rollback, cleanup, binary-copy, and collision tests; and the typed-destination
+persistence E2E scenario. The E2E scenario was run headlessly with installed
+Edge because this checkout does not have Playwright's Chromium binary. The
+Storage location screenshot was visually inspected.
+
+TypeScript checking, Vite production compilation, ESLint, strict OpenSpec
+validation, and Rust formatting pass. The native facade compiles with temporary
+`TAURI_CONFIG` excluding packaging resources: the checkout lacks the engine
+sidecar. No installer or runnable application was built, installed, or launched.
+Provider parsers are tested with injected fixtures; no live cloud account or
+actual sync client is required by these tests. Versions are unchanged.
+
+## CI follow-up: focus-refresh timer (2026-10-19)
+
+The coverage job exposed an existing focus-refresh race in the backup state hook:
+changing the refresh callback during a render removed the focus listener and
+canceled its pending debounce. A deterministic regression reproduced the same
+missing second status call before the fix. The focus subscription now stays
+mounted and invokes the latest refresh callback through a ref, preserving current
+settings and retaining unmount cleanup. Added coverage also checks that a pending
+refresh is canceled when the hook unmounts. This restores existing refresh
+behavior; folder/provider selection still does not invoke any backup command.
+
+## Review follow-up: rebase and storage fixes (2026-10-19)
+
+Rebased onto main after PR #236. Discovery keeps #236's result shape
+(`descriptors`, `skipped`, `error`) and its single reporting path in the app;
+the `onError` callback this change had added is gone. Online-only entries and
+duplicate-label disambiguation sit on that shape.
+
+- [x] Listing leaves out an entry or subfolder it cannot read instead of
+  failing the whole folder. Only the chosen folder itself must be readable.
+- [x] The `runs` folder is skipped in any letter case, as before this change.
+- [x] A failed new-profile save removes the sidecar it committed at once and
+  never defers it, so a later retry cannot delete a sidecar a later save wrote.
+- [x] A new profile's name counts as taken when its manifest or its sidecar
+  exists, so a leftover sidecar no longer makes the save fail.
+- [x] Google Drive discovery reads the combined `PerAccountPreferences` value
+  under `Software\Google\DriveFS` as well as the per-account key, skips
+  registry values that are not strings, and turns a bare drive letter into
+  `<letter>:\My Drive`. Not yet checked against a real Drive for desktop
+  install.
+- [x] The custom folder field commits on Enter or blur, not on each
+  keystroke, and clearing it keeps the current destination.
+- [x] The app and the dev bridge share one `list_manifest_files` helper.
+
+## Second review follow-up (2026-10-21)
+
+- [x] A destination whose `Endstate` folder does not exist yet, under a parent that
+  does, lists as empty with a note that the first save creates it. A missing
+  parent or drive, and access errors, still show the unreadable-folder error.
+- [x] Google Drive accounts are labelled by mount, as Explorer names them:
+  `Google Drive (G:)`, or the folder name for an account mirrored to a folder.
+- [x] Discovery reads only the combined `PerAccountPreferences` value; the
+  one-value-per-account fallback, which matches no known install, is removed.
+- [x] An empty account list is not detected, not an error.
+- [x] A superseded profile load no longer reports its errors or folder state over
+  a newer one.
+- [x] Design sections 3 and 4 and the storage-destinations scenarios match.

@@ -101,7 +101,7 @@ test.describe('Save Profile - Opt-in Behavior', () => {
     // Modal should close
     await expect(page.locator('[data-testid="profile-name-modal"]')).not.toBeVisible();
 
-    // Product behavior: Save mode writes a NEW file (write_text_file), not rename
+    // Product behavior: Save mode writes a NEW file through save_profile, not rename
     // The filename is derived from the typed name
     const writeCalls = await page.evaluate(() => (window as any).__test_writeFileCalls);
     

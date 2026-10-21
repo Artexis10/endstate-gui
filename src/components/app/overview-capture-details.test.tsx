@@ -11,7 +11,7 @@ import type { AppEvent } from '@/lib/apply-utils';
 vi.mock('@/settings', () => ({
   loadSettings: () => ({
     engineMode: 'bundled',
-    customProfilesDirectory: '',
+    storageDestination: null,
     lastSelectedProfile: '',
     lastSelectedProfilePath: '',
     dryRunEnabled: true,

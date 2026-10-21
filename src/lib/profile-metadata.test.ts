@@ -46,3 +46,19 @@ describe('Profile Metadata - deleteProfileFiles', () => {
     expect(mockInvoke).not.toHaveBeenCalledWith('delete_file', { path: 'C:\\profiles\\test-profile.meta.json' });
   });
 });
+
+describe('Profile Metadata - profilePathTaken', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('treats a sidecar left without its manifest as a taken name', async () => {
+    const { invoke } = await import('./tauri-bridge');
+    const { profilePathTaken } = await import('./profile-metadata');
+    (invoke as ReturnType<typeof vi.fn>).mockImplementation(async (_cmd: string, args: { path: string }) =>
+      args.path === 'C:\profiles\My_setup.meta.json');
+
+    expect(await profilePathTaken('C:\profiles\My_setup.jsonc')).toBe(true);
+    expect(await profilePathTaken('C:\profiles\Other.jsonc')).toBe(false);
+  });
+});

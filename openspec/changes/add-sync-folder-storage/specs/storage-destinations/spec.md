@@ -132,10 +132,24 @@ API, or read provider credentials.
 
 #### Scenario: Multiple Google Drive accounts
 
-- **GIVEN** the Google Drive per-account registry data contains two valid
-  `mount_point_path` values
+- **GIVEN** the `PerAccountPreferences` value under `HKCU\Software\Google\DriveFS`
+  lists two accounts mounted at `G` and `H`
 - **WHEN** discovery runs
-- **THEN** both `<mount point>\My Drive` roots are returned
+- **THEN** `G:\My Drive` and `H:\My Drive` are returned as separate choices
+- **AND** they are labelled `Google Drive (G:)` and `Google Drive (H:)`
+
+#### Scenario: Google Drive account mirrored to a folder
+
+- **GIVEN** a Google Drive account's mount is the folder `D:\Sync\Work Drive`
+- **WHEN** discovery runs
+- **THEN** `D:\Sync\Work Drive\My Drive` is returned, labelled
+  `Google Drive (Work Drive)`
+
+#### Scenario: Google Drive with no signed-in account
+
+- **GIVEN** the `PerAccountPreferences` value lists no accounts
+- **WHEN** discovery runs
+- **THEN** Google Drive is reported as not detected, not as an error
 
 #### Scenario: Personal and business Dropbox coexist
 
@@ -199,6 +213,21 @@ and import boundaries SHALL create it when needed.
 - **WHEN** the user selects it
 - **THEN** the persisted folder destination path is
   `C:\Users\me\OneDrive\Endstate`
+
+#### Scenario: Endstate subfolder not created yet
+
+- **GIVEN** the selected destination is `C:\Users\me\OneDrive\Endstate`
+- **AND** `C:\Users\me\OneDrive` exists but `Endstate` inside it does not
+- **WHEN** the setup list loads
+- **THEN** the list is empty and says Endstate creates the folder on the first save
+- **AND** no "Couldn't read your profiles folder" error is shown
+
+#### Scenario: Destination parent missing
+
+- **GIVEN** the selected destination's parent folder or drive does not exist, or
+  the destination cannot be read
+- **WHEN** the setup list loads
+- **THEN** the list shows the "Couldn't read your profiles folder" error
 
 ### Requirement: Discovery does not download online-only setups
 

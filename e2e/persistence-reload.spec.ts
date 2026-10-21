@@ -36,6 +36,32 @@ test.describe('Persistence Boundaries on Reload', () => {
     await page.waitForLoadState('networkidle');
   });
 
+  test('typed storage destination survives reload and preserves the selected folder', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 1100 });
+    const path = 'D:\\My Setups';
+    await page.evaluate((path) => {
+      localStorage.setItem('test:endstate-gui-settings', JSON.stringify({ storageDestination: { kind: 'folder', path }, dryRunDefaultCorrected: true }));
+    }, path);
+    await page.reload();
+    await page.getByRole('button', { name: /Set up this computer/ }).click();
+    await page.getByTitle('Settings', { exact: true }).click();
+    const input = page.getByRole('textbox', { name: 'Custom storage folder' });
+    await expect(input).toHaveValue(path);
+    await expect(page.getByText("Files in this location sync as-is and aren't encrypted by Endstate.")).toBeVisible();
+    await input.fill('E:\\Exact folder');
+    // A typed folder is committed on Enter or blur, not on each keystroke.
+    await input.press('Enter');
+    await page.reload();
+    await page.getByRole('button', { name: /Set up this computer/ }).click();
+    await page.getByTitle('Settings', { exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Custom storage folder' })).toHaveValue('E:\\Exact folder');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('test:endstate-gui-settings') || '{}'));
+    expect(stored.storageDestination).toEqual({ kind: 'folder', path: 'E:\\Exact folder' });
+    expect(stored).not.toHaveProperty('customProfilesDirectory');
+    await page.getByRole('heading', { name: 'Storage location', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath('storage-location.png'), fullPage: true });
+  });
+
   test('persisted preferences survive reload while transient states reset', async ({ page }) => {
     // Step 1: Seed localStorage with persisted preferences
     await page.evaluate(() => {

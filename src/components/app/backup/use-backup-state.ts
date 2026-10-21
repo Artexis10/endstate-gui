@@ -371,6 +371,14 @@ export function useBackupState(
     inFlightRef.current.pullOpen = pullOpen;
   }, [pullOpen]);
 
+  // Refresh changes as settings/options change. Keep the focus subscription
+  // stable so a render cannot cancel its pending debounce, and call the latest
+  // callback when the timer fires rather than capturing stale settings.
+  const focusRefreshRef = useRef(refresh);
+  useEffect(() => {
+    focusRefreshRef.current = refresh;
+  }, [refresh]);
+
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const trigger = () => {
@@ -381,7 +389,7 @@ export function useBackupState(
         // SWR: don't flip `loading`, don't clear `error`, drop non-AUTH
         // failures, and gate AUTH_REQUIRED on the re-auth dialog not being
         // open. Cached data stays visible across the round-trip.
-        void refresh({ silent: true });
+        void focusRefreshRef.current({ silent: true });
       }, 1000);
     };
     const onFocus = () => trigger();
@@ -395,7 +403,7 @@ export function useBackupState(
       document.removeEventListener('visibilitychange', onVisibility);
       if (timeoutId !== null) clearTimeout(timeoutId);
     };
-  }, [refresh]);
+  }, []);
 
   const resetPushProgress = useCallback(() => setPushProgress(EMPTY_PUSH), []);
   const resetPullProgress = useCallback(() => setPullProgress(EMPTY_PULL), []);

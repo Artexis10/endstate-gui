@@ -1,3 +1,5 @@
+import type { StorageDestination } from './storage-destination';
+import { unsupportedSyncFolders } from './storage-destination';
 /**
  * Tauri Bridge - Safe wrapper for Tauri APIs with web fallbacks
  *
@@ -22,6 +24,7 @@ const WEB_FALLBACK_COMMANDS: Record<string, () => any> = {
   'check_file_exists': () => null,
   'read_dir': () => [],
   'list_manifest_files': () => [],
+  'discover_sync_folders': unsupportedSyncFolders,
   'get_default_profiles_directory': () => 'C:\\test\\profiles',
   'get_capture_cache_directory': () => 'C:\\test\\cache\\captures',
   'show_file_dialog': () => null,
@@ -172,12 +175,12 @@ export async function safeListen<T = any>(
  * folder cannot be found or created; outside Tauri, safeInvoke's web fallback
  * supplies the test folder.
  */
-export async function getProfilesDirectory(customDir?: string): Promise<string> {
-  if (customDir) return customDir;
+export async function getProfilesDirectory(destination?: StorageDestination | null): Promise<string> {
+  if (destination?.kind === 'folder') return destination.path;
 
   const dir = await safeInvoke<string>('get_default_profiles_directory');
   if (!dir) {
-    throw new Error('Endstate did not report a profiles folder');
+    throw new Error('Endstate did not report a profiles folder. Choose a storage folder.');
   }
   return dir;
 }
@@ -185,8 +188,8 @@ export async function getProfilesDirectory(customDir?: string): Promise<string> 
 export async function ensureDirectory(path: string): Promise<void> {
   try {
     await safeInvoke('ensure_dir', { path });
-  } catch {
-    // No-op in web environment
+  } catch (error) {
+    if (isEngineAvailable()) throw error;
   }
 }
 
@@ -207,3 +210,11 @@ export async function openFolder(path: string): Promise<{ ok: boolean; reason?: 
 
 export const invoke = safeInvoke;
 export const listen = safeListen;
+
+/** A native picker is explicit user interaction, never host inspection in web mode. */
+export async function browseStorageFolder(): Promise<string | null> {
+  if (!isTauriRuntime()) throw new Error('Folder browsing requires the Endstate desktop app. Enter a path instead.');
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const selected = await open({ directory: true, multiple: false, title: 'Choose setup storage folder' });
+  return typeof selected === 'string' ? selected : null;
+}

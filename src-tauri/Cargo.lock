@@ -1018,10 +1018,12 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-stream",
  "tower",
  "tower-http",
+ "winreg",
  "zip 2.4.2",
 ]
 

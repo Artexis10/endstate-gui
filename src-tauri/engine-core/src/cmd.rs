@@ -147,8 +147,7 @@ pub fn copy_file(source_path: &str, dest_path: &str) -> Result<(), String> {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create destination directory: {}", e))?;
     }
-    fs::copy(source, dest).map_err(|e| format!("Failed to copy file: {}", e))?;
-    Ok(())
+    crate::storage::copy_profile(source_path, dest_path)
 }
 
 pub fn delete_file_silent(path: &str) -> Result<(), String> {
@@ -198,7 +197,7 @@ const IMPORT_STAGING_PREFIX: &str = ".endstate-import-staging-";
 const BUNDLE_EXTENSIONS: [&str; 2] = ["endstate", "zip"];
 
 /// Extensions that name a bare profile manifest, without the leading dot.
-const MANIFEST_EXTENSIONS: [&str; 3] = ["json", "jsonc", "json5"];
+pub(crate) const MANIFEST_EXTENSIONS: [&str; 3] = ["json", "jsonc", "json5"];
 
 struct StagingDirectory {
     path: PathBuf,
@@ -641,60 +640,11 @@ pub fn show_file_dialog() -> Result<Option<String>, String> {
 }
 
 pub fn list_manifest_files(directory: &str) -> Result<Vec<String>, String> {
-    let dir_path = Path::new(directory);
-    if !dir_path.exists() || !dir_path.is_dir() {
-        return Err(format!("Directory does not exist: {}", directory));
-    }
-
-    fn is_manifest(path: &Path) -> bool {
-        path.is_file()
-            && !path
-                .file_name()
-                .map(|name| name.to_string_lossy().starts_with(IMPORT_STAGING_PREFIX))
-                .unwrap_or(false)
-            && path
-                .extension()
-                .map(|ext| {
-                    let e = ext.to_string_lossy().to_lowercase();
-                    MANIFEST_EXTENSIONS.contains(&e.as_str())
-                })
-                .unwrap_or(false)
-    }
-
-    let entries = fs::read_dir(dir_path).map_err(|e| format!("Failed to read directory: {}", e))?;
-    let mut manifest_files = Vec::new();
-    for entry in entries {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if is_manifest(&path) {
-                if let Some(path_str) = path.to_str() {
-                    manifest_files.push(path_str.to_string());
-                }
-            } else if path.is_dir() {
-                // Look one level into subdirectories for extracted zip bundles
-                // (e.g. Setups/my-capture/manifest.jsonc)
-                // Skip known non-profile directories
-                let dir_name = entry.file_name().to_string_lossy().to_lowercase();
-                if dir_name == "runs" || dir_name.starts_with(IMPORT_STAGING_PREFIX) {
-                    continue;
-                }
-                if let Ok(sub_entries) = fs::read_dir(&path) {
-                    for sub_entry in sub_entries {
-                        if let Ok(sub_entry) = sub_entry {
-                            let sub_path = sub_entry.path();
-                            if is_manifest(&sub_path) {
-                                if let Some(path_str) = sub_path.to_str() {
-                                    manifest_files.push(path_str.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    manifest_files.sort();
-    Ok(manifest_files)
+    Ok(crate::storage::list_profile_entries(directory)?
+        .into_iter()
+        .filter(|entry| entry.availability == "local")
+        .map(|entry| entry.path)
+        .collect())
 }
 
 pub fn read_text_file(path: &str) -> Result<String, String> {

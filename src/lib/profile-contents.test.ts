@@ -9,7 +9,7 @@ vi.mock("./engine-exec", () => ({ runEndstateOnce: vi.fn() }));
 
 const SETTINGS = {
   engineMode: "bundled",
-  customProfilesDirectory: "",
+  storageDestination: null,
 } as AppSettings;
 
 function inspectionEnvelope() {

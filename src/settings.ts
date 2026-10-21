@@ -1,9 +1,11 @@
+import { normalizeStorageDestination, type StorageDestination } from './lib/storage-destination';
+export type { StorageDestination } from './lib/storage-destination';
 import { ALL_NAMESPACES, clearAllKnownKeys, getItem, KNOWN_KEYS, setItem } from './lib/storage';
 import { migrateProfileSelection } from './lib/profile-selection-migration';
 
 export interface AppSettings {
   engineMode: 'bundled' | 'path';
-  customProfilesDirectory: string;
+  storageDestination: StorageDestination | null;
   selectedProfileName: string | null;
   dryRunEnabled: boolean;
   showDetails: boolean;
@@ -108,7 +110,7 @@ export function saveCloudInvitationConsumption(consumption: CloudInvitationConsu
 
 const DEFAULT_SETTINGS: AppSettings = {
   engineMode: 'bundled',
-  customProfilesDirectory: '',
+  storageDestination: null,
   selectedProfileName: null,
   // False so the primary action actually provisions the machine. While this
   // defaulted to true, "Set up" appended --dry-run, installed nothing, and the
@@ -167,6 +169,7 @@ export function loadSettings(): AppSettings {
       }
       // Migration: strip removed engineScriptPath field
       delete parsed.engineScriptPath;
+      normalizeStorageDestination(parsed);
       applyDryRunDefaultCorrection(parsed);
       return { ...DEFAULT_SETTINGS, ...parsed };
     }
@@ -179,7 +182,9 @@ export function loadSettings(): AppSettings {
 
 export function saveSettings(settings: AppSettings): boolean {
   try {
-    setItem(SETTINGS_KEY, JSON.stringify(settings));
+    const clean = { ...settings };
+    normalizeStorageDestination(clean);
+    setItem(SETTINGS_KEY, JSON.stringify(clean));
     return true;
   } catch (err) {
     console.error('Failed to save settings:', err);
@@ -251,6 +256,7 @@ export async function loadSettingsWithProfileMigration(
   }
   // Migration: strip removed engineScriptPath field
   delete parsed.engineScriptPath;
+  normalizeStorageDestination(parsed);
   applyDryRunDefaultCorrection(parsed);
   const rawSettings: AppSettings & LegacySettings = { ...DEFAULT_SETTINGS, ...parsed };
 
@@ -273,7 +279,7 @@ export async function loadSettingsWithProfileMigration(
     if (migratedName) {
       const updatedSettings: AppSettings = {
         engineMode: rawSettings.engineMode,
-        customProfilesDirectory: rawSettings.customProfilesDirectory,
+        storageDestination: rawSettings.storageDestination,
         selectedProfileName: migratedName,
         dryRunEnabled: rawSettings.dryRunEnabled,
         dryRunDefaultCorrected: rawSettings.dryRunDefaultCorrected,
@@ -296,7 +302,7 @@ export async function loadSettingsWithProfileMigration(
       console.debug('[settings] Could not migrate legacy profile selection, clearing selection');
       const updatedSettings: AppSettings = {
         engineMode: rawSettings.engineMode,
-        customProfilesDirectory: rawSettings.customProfilesDirectory,
+        storageDestination: rawSettings.storageDestination,
         selectedProfileName: null,
         dryRunEnabled: rawSettings.dryRunEnabled,
         dryRunDefaultCorrected: rawSettings.dryRunDefaultCorrected,
@@ -322,7 +328,7 @@ export async function loadSettingsWithProfileMigration(
     console.debug('[settings] Migrating legacy name-based profile selection');
     const updatedSettings: AppSettings = {
       engineMode: rawSettings.engineMode,
-      customProfilesDirectory: rawSettings.customProfilesDirectory,
+      storageDestination: rawSettings.storageDestination,
       selectedProfileName: rawSettings.lastSelectedProfile,
       dryRunEnabled: rawSettings.dryRunEnabled,
       dryRunDefaultCorrected: rawSettings.dryRunDefaultCorrected,

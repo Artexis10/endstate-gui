@@ -124,6 +124,25 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           profileFiles.add(newPath);
           return null;
         },
+        discover_sync_folders: () => ['onedrive', 'google-drive', 'dropbox'].map(provider => ({ provider, status: 'unsupported', locations: [], message: 'Automatic discovery is available on Windows.' })),
+        save_profile: (args?: any) => {
+          const { path, content, metadata, createNew } = args;
+          const files = (window as any).__test_profileFiles;
+          const contents = (window as any).__test_fileContents;
+          if (createNew && files.has(path)) throw new Error('Setup already exists');
+          // Simulates one native transaction, retaining the existing write tracker.
+          (window as any).__test_operations.push({ type: 'save_profile', path });
+          (window as any).__test_writeFileCalls.push({ path, content });
+          if (metadata) {
+            const metaPath = path.replace(/\.(jsonc?|json5)$/i, '.meta.json');
+            contents.set(metaPath, metadata);
+            files.add(metaPath);
+            (window as any).__test_writeFileCalls.push({ path: metaPath, content: metadata });
+          }
+          contents.set(path, content);
+          files.add(path);
+          return null;
+        },
         write_text_file: (args?: any) => {
           const operations = (window as any).__test_operations;
           const writeFileCalls = (window as any).__test_writeFileCalls;
@@ -335,6 +354,25 @@ export async function installTauriMockOnContext(context: BrowserContext, options
           renameFileCalls.push({ oldPath, newPath });
           profileFiles.delete(oldPath);
           profileFiles.add(newPath);
+          return null;
+        },
+        discover_sync_folders: () => ['onedrive', 'google-drive', 'dropbox'].map(provider => ({ provider, status: 'unsupported', locations: [], message: 'Automatic discovery is available on Windows.' })),
+        save_profile: (args?: any) => {
+          const { path, content, metadata, createNew } = args;
+          const files = (window as any).__test_profileFiles;
+          const contents = (window as any).__test_fileContents;
+          if (createNew && files.has(path)) throw new Error('Setup already exists');
+          // Simulates one native transaction, retaining the existing write tracker.
+          (window as any).__test_operations.push({ type: 'save_profile', path });
+          (window as any).__test_writeFileCalls.push({ path, content });
+          if (metadata) {
+            const metaPath = path.replace(/\.(jsonc?|json5)$/i, '.meta.json');
+            contents.set(metaPath, metadata);
+            files.add(metaPath);
+            (window as any).__test_writeFileCalls.push({ path: metaPath, content: metadata });
+          }
+          contents.set(path, content);
+          files.add(path);
           return null;
         },
         write_text_file: (args?: any) => {

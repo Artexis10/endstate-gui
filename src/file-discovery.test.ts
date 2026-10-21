@@ -58,7 +58,7 @@ describe('file-discovery', () => {
 
       expect(profiles).toHaveLength(3);
       expect(profiles.map(p => p.name)).toEqual(['My-Laptop', 'Test-Profile', 'Another']);
-      expect(invoke).toHaveBeenCalledWith('list_manifest_files', { directory: 'C:\\manifests' });
+      expect(invoke).toHaveBeenCalledWith('list_manifest_files', { directory: 'C:\\manifests', includeAvailability: true });
     });
 
     it('handles Unix-style paths', async () => {
@@ -406,5 +406,56 @@ describe('file-discovery', () => {
     it('handles Unix paths', () => {
       expect(getMetaPath('/home/user/profiles/setup.json')).toBe('/home/user/profiles/setup.meta.json');
     });
+  });
+});
+
+describe('sync folder availability', () => {
+  beforeEach(() => vi.clearAllMocks());
+  it('does not validate or open online-only profiles or sidecars', async () => {
+    vi.mocked(invoke).mockImplementation(async cmd => {
+      if (cmd === 'list_manifest_files') return [
+        { path: 'C:/Setups/offline.jsonc', availability: 'online-only', metadataAvailable: false },
+        { path: 'C:/Setups/local.jsonc', availability: 'local', metadataAvailable: false },
+      ];
+      if (cmd === 'validate_profile') return validResult();
+      throw new Error('Unexpected content read');
+    });
+    const { descriptors: profiles } = await discoverProfileDescriptors('C:/Setups');
+    expect(profiles).toHaveLength(2);
+    expect(profiles[0].availability).toBe('online-only');
+    expect(invoke).toHaveBeenCalledWith('validate_profile', { path: 'C:/Setups/local.jsonc' });
+    expect(vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === 'validate_profile')).toHaveLength(1);
+    expect(vi.mocked(invoke).mock.calls.some(([cmd]) => cmd === 'read_text_file' || cmd === 'check_file_exists')).toBe(false);
+  });
+  it('reports a storage folder that does not exist yet as empty, not as an error', async () => {
+    vi.mocked(invoke).mockImplementation(async cmd => {
+      if (cmd === 'list_manifest_files') return { entries: [], folderMissing: true };
+      throw new Error('Unexpected command');
+    });
+    const discovery = await discoverProfileDescriptors('C:/OneDrive/Endstate');
+    expect(discovery).toEqual({ descriptors: [], skipped: [], error: null, folderMissing: true });
+  });
+  it('reads entries from the native object response', async () => {
+    vi.mocked(invoke).mockImplementation(async cmd => {
+      if (cmd === 'list_manifest_files') return { entries: [{ path: 'C:/Setups/local.jsonc', availability: 'local', metadataAvailable: false }], folderMissing: false };
+      if (cmd === 'validate_profile') return validResult();
+      return null;
+    });
+    const { descriptors, folderMissing } = await discoverProfileDescriptors('C:/Setups');
+    expect(descriptors.map(d => d.setupPath)).toEqual(['C:/Setups/local.jsonc']);
+    expect(folderMissing).toBeUndefined();
+  });
+  it('keeps duplicate conflict labels distinct by path and filename', async () => {
+    vi.mocked(invoke).mockImplementation(async cmd => {
+      if (cmd === 'list_manifest_files') return ['C:/Setups/setup.jsonc', 'C:/Setups/setup (conflicted copy).jsonc'];
+      if (cmd === 'validate_profile') return validResult();
+      if (cmd === 'check_file_exists') return true;
+      if (cmd === 'read_text_file') return JSON.stringify({ displayName: 'My setup' });
+      return null;
+    });
+    const { descriptors: profiles } = await discoverProfileDescriptors('C:/Setups');
+    expect(profiles.map(p => p.setupPath)).toHaveLength(2);
+    expect(profiles[0].label).toBe('My setup (setup.jsonc)');
+    expect(profiles[1].label).toBe('My setup (setup (conflicted copy).jsonc)');
   });
 });

@@ -9,6 +9,7 @@ import { backendErrorMessage } from './lib/import-errors';
 export interface ProfileDescriptor {
   /** Stable ID derived from basename (e.g., "setup_2024-01-15") */
   id: string;
+  availability?: 'local' | 'online-only';
   /** Path to the setup file (setup_*.json or setup_*.jsonc) */
   setupPath: string;
   /** Path to the metadata file (optional, may not exist) */
@@ -44,6 +45,7 @@ export interface ValidationResult {
 export interface DiscoveredProfile {
   name: string;
   path: string;
+  availability?: 'local' | 'online-only';
   displayName?: string;
 }
 
@@ -67,13 +69,18 @@ export interface ProfileDescriptorDiscovery {
   skipped: SkippedProfileFile[];
   /** Why the folder could not be read; null when it was read. */
   error: string | null;
+  /** The folder does not exist yet; the first save creates it. */
+  folderMissing?: boolean;
 }
 
 export interface ProfileDiscovery {
   profiles: DiscoveredProfile[];
   skipped: SkippedProfileFile[];
   error: string | null;
+  folderMissing?: boolean;
 }
+
+type ListedEntry = { path: string; availability: 'local' | 'online-only'; metadataAvailable: boolean };
 
 /**
  * Check if a filename is a metadata file (*.meta.json)
@@ -150,9 +157,16 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
   }
 
   try {
-    const files = await invoke<string[]>('list_manifest_files', { directory });
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      return { descriptors: [], skipped: [], error: null };
+    // The native command answers { entries, folderMissing }; older callers and
+    // mocks answer a bare array of paths or entries.
+    const listed = await invoke<Array<string | ListedEntry> | { entries: ListedEntry[]; folderMissing?: boolean }>('list_manifest_files', { directory, includeAvailability: true });
+    const raw = Array.isArray(listed) ? listed : listed?.entries ?? [];
+    const folderMissing = !Array.isArray(listed) && listed?.folderMissing === true;
+    const entries = raw.map(entry => typeof entry === 'string' ? { path: entry, availability: 'local' as const, metadataAvailable: true } : entry);
+    const byPath = new Map(entries.map(entry => [entry.path, entry]));
+    const files = entries.map(entry => entry.path);
+    if (files.length === 0) {
+      return { descriptors: [], skipped: [], error: null, ...(folderMissing ? { folderMissing } : {}) };
     }
 
     // Filter out .meta.json files and bundle metadata - they are not profiles
@@ -176,6 +190,12 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
         const id = isNestedInSubdir ? parentDir : bareFilename;
         const metaPath = getMetaPath(setupPath);
         
+        const entry = byPath.get(setupPath);
+        if (entry?.availability === 'online-only') {
+          // Online-only placeholders are listed by name without opening them.
+          return { descriptor: { id, setupPath, metaPath, label: filename, availability: 'online-only' } };
+        }
+
         // Validate against profile contract
         const validation = await validateProfile(setupPath);
         if (!validation.valid) {
@@ -187,7 +207,7 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
         }
 
         // Load metadata for display name
-        const metadata = await readProfileMetadata(setupPath);
+        const metadata = entry?.metadataAvailable ? await readProfileMetadata(setupPath) : null;
         const displayName = metadata?.displayName;
         
         const descriptor: ProfileDescriptor = {
@@ -208,6 +228,12 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
       if ('descriptor' in result) descriptors.push(result.descriptor);
       else skipped.push(result.skipped);
     }
+    // Conflict copies and same-named setups in different folders stay apart.
+    const counts = new Map<string, number>();
+    for (const profile of descriptors) counts.set(profile.label, (counts.get(profile.label) || 0) + 1);
+    for (const profile of descriptors) {
+      if ((counts.get(profile.label) || 0) > 1) profile.label += ` (${profile.setupPath.slice(directory.length).replace(/^[\\/]+/, '')})`;
+    }
     return { descriptors, skipped, error: null };
   } catch (err) {
     return { descriptors: [], skipped: [], error: backendErrorMessage(err) };
@@ -219,15 +245,17 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
  * Legacy function for backward compatibility.
  */
 export async function discoverProfiles(directory: string): Promise<ProfileDiscovery> {
-  const { descriptors, skipped, error } = await discoverProfileDescriptors(directory);
+  const { descriptors, skipped, error, folderMissing } = await discoverProfileDescriptors(directory);
   return {
     profiles: descriptors.map(d => ({
       name: d.id,
       path: d.setupPath,
-      displayName: d.displayName,
+      displayName: d.label !== d.id ? d.label : d.displayName,
+      ...(d.availability ? { availability: d.availability } : {}),
     })),
     skipped,
     error,
+    ...(folderMissing ? { folderMissing } : {}),
   };
 }
 

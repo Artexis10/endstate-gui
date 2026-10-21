@@ -521,15 +521,42 @@ async fn handle_invoke(
                 Err(e) => err_response(e),
             }
         }
+        "discover_sync_folders" => {
+            ok_response(serde_json::json!(crate::storage::discover_sync_folders()))
+        }
+        "save_profile" => {
+            let Some(path) = req.args.get("path").and_then(|v| v.as_str()) else {
+                return err_response("Missing path");
+            };
+            let Some(content) = req.args.get("content").and_then(|v| v.as_str()) else {
+                return err_response("Missing content");
+            };
+            let Some(create_new) = req.args.get("createNew").and_then(|v| v.as_bool()) else {
+                return err_response("Missing createNew");
+            };
+            match crate::storage::save_profile(
+                path,
+                content,
+                req.args.get("metadata").and_then(|v| v.as_str()),
+                create_new,
+            ) {
+                Ok(()) => ok_response(serde_json::json!(null)),
+                Err(e) => err_response(e),
+            }
+        }
         "list_manifest_files" => {
             let directory = req
                 .args
                 .get("directory")
                 .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            match crate::cmd::list_manifest_files(&directory) {
-                Ok(files) => ok_response(serde_json::json!(files)),
+                .unwrap_or("");
+            let include_availability = req
+                .args
+                .get("includeAvailability")
+                .and_then(|v| v.as_bool())
+                == Some(true);
+            match crate::storage::list_manifest_files_value(directory, include_availability) {
+                Ok(entries) => ok_response(entries),
                 Err(e) => err_response(e),
             }
         }

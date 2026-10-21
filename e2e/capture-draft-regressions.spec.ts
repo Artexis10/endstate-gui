@@ -78,10 +78,11 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
               return '{"version": 1, "apps": []}';
             }
             
-            if (cmd === 'write_text_file') {
+            if (cmd === 'write_text_file' || cmd === 'save_profile') {
               const path = args?.path;
               const content = args?.content;
-              operations.push({ type: 'write_text_file', path });
+              operations.push({ type: cmd, path });
+              if (args?.metadata) metadataFiles.set(path.replace(/\.(jsonc?|json5)$/i, '.meta.json'), args.metadata);
               if (path?.endsWith('.meta.json')) {
                 metadataFiles.set(path, content);
               } else {
@@ -227,9 +228,9 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
       expect(finalTitleClasses).toBe(initialTitleClasses);
     } else {
       // If card doesn't appear, verify the save operation succeeded
-      // Save flow uses write_text_file (not rename_file) to write draft content to profiles directory
+      // Save flow uses the native save_profile transaction to write draft content to profiles directory
       const operations = await page.evaluate(() => (window as any).__test_operations);
-      const writeOps = operations.filter((op: any) => op.type === 'write_text_file');
+      const writeOps = operations.filter((op: any) => op.type === 'save_profile');
       expect(writeOps.length).toBeGreaterThan(0);
     }
   });
@@ -290,7 +291,7 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
     
     // Verify write was called (save operation uses write_text_file, not rename_file)
     const finalOps = await page.evaluate(() => (window as any).__test_operations);
-    const writeOps = finalOps.filter((op: any) => op.type === 'write_text_file');
+    const writeOps = finalOps.filter((op: any) => op.type === 'save_profile');
     expect(writeOps.length).toBeGreaterThan(0);
   });
 
@@ -513,9 +514,9 @@ test.describe('Capture Draft Lifecycle - Regressions', () => {
         expect(titleClasses).toContain('text-success');
       } else {
         // If card doesn't appear, verify save succeeded
-        // Save flow uses write_text_file (not rename_file) to write draft content
+        // Save flow uses the native save_profile transaction to write draft content
         const operations = await page.evaluate(() => (window as any).__test_operations);
-        const writeOps = operations.filter((op: any) => op.type === 'write_text_file');
+        const writeOps = operations.filter((op: any) => op.type === 'save_profile');
         expect(writeOps.length).toBeGreaterThan(0);
       }
     }

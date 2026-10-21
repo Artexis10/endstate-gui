@@ -190,4 +190,16 @@ describe('SetupFlow profile list', () => {
     expect(screen.getByText("Couldn't read your profiles folder: Access is denied.")).toBeInTheDocument();
     expect(screen.queryByText('No profiles found')).not.toBeInTheDocument();
   });
+
+  it('lists a storage folder that does not exist yet as empty, not unreadable', () => {
+    renderWithProviders(setupFlow(makeProps({
+      profiles: [],
+      recentlyImportedProfile: null,
+      profilesFolderMissing: true,
+    })));
+
+    expect(screen.getByRole('heading', { name: 'No profiles found' })).toBeInTheDocument();
+    expect(screen.getByText(/Endstate creates it when you save your first setup/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

@@ -1,3 +1,4 @@
+import { StorageLocation } from './components/app/settings/storage-location';
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -52,7 +53,7 @@ import { getProfilesDirectory, ensureDirectory, isTauriRuntime, openFolder, invo
 import { runEndstateOnce, getErrorMessage, buildEngineCommand } from './lib/engine-exec';
 import { inspectProfileContents } from './lib/profile-contents';
 import { shouldDeleteCaptureArtifact } from './lib/capture-artifact-lifecycle';
-import { saveProfileMetadata, deleteProfileFiles } from './lib/profile-metadata';
+import { saveNewProfile, saveProfileMetadata, deleteProfileFiles, profilePathTaken } from './lib/profile-metadata';
 import { validateProfileFilename, getExtension, type ValidExtension } from './lib/filename-validation';
 import { loadRunSummaries, createRunBundle, generateRunId, writeSummary, writeLog, generateDiagnosticsText, writeDiagnostics, type RunBundle, type RunSummary } from './lib/run-artifacts';
 import { AppShell } from './components/layout/app-shell';
@@ -238,6 +239,7 @@ function AppContent() {
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   // Why the last profile scan could not read the folder, or null when it could.
   const [profilesReadError, setProfilesReadError] = useState<string | null>(null);
+  const [profilesFolderMissing, setProfilesFolderMissing] = useState(false);
   const [profilesDirectory, setProfilesDirectory] = useState('');
   const [recentlyImportedProfile, setRecentlyImportedProfile] = useState<DiscoveredProfile | null>(null);
   const [nativeDragAccepted, setNativeDragAccepted] = useState(false);
@@ -724,11 +726,20 @@ function AppContent() {
   };
   
 
-  const loadProfilesDirectory = async () => {
+  // Each profile load supersedes the ones before it. A superseded load neither
+  // shows its list nor reports its errors over a newer one.
+  const profileRefreshGeneration = useRef(0);
+  const startProfileLoad = () => {
+    const generation = ++profileRefreshGeneration.current;
+    return () => generation === profileRefreshGeneration.current;
+  };
+  const loadProfilesDirectory = async (isCurrent: () => boolean = () => true) => {
     try {
-      return await getProfilesDirectory(settings.customProfilesDirectory);
+      return await getProfilesDirectory(settingsRef.current.storageDestination);
     } catch (err) {
-      showToast(`Couldn't open your profiles folder: ${backendErrorMessage(err)}`, 'error', { id: 'profiles-folder' });
+      if (isCurrent()) {
+        showToast(`Couldn't open your profiles folder: ${backendErrorMessage(err)}`, 'error', { id: 'profiles-folder' });
+      }
       return null;
     }
   };
@@ -736,8 +747,10 @@ function AppContent() {
   // A file the profile list leaves out, or a folder it cannot read, is shown
   // to the user once per distinct problem, so a profile never just vanishes.
   const reportedDiscoveryIssueRef = useRef('');
-  const loadDiscoveredProfiles = async (directory: string) => {
+  const loadDiscoveredProfiles = async (directory: string, isCurrent: () => boolean = startProfileLoad()) => {
     const discovery = await discoverProfiles(directory);
+    if (!isCurrent()) return discovery.profiles;
+    setProfilesFolderMissing(discovery.folderMissing === true);
     const unreadable = discovery.error
       ? describeUnreadableProfilesFolder(directory, discovery.error)
       : null;
@@ -752,12 +765,12 @@ function AppContent() {
   };
 
   const refreshProfiles = async () => {
-    const dir = await loadProfilesDirectory();
-    if (dir) {
-      setProfilesDirectory(dir);
-      const discovered = await loadDiscoveredProfiles(dir);
-      setProfiles(discovered);
-    }
+    const isCurrent = startProfileLoad();
+    const dir = await loadProfilesDirectory(isCurrent);
+    if (!dir || !isCurrent()) return;
+    setProfilesDirectory(dir);
+    const discovered = await loadDiscoveredProfiles(dir, isCurrent);
+    if (isCurrent()) setProfiles(discovered);
   };
 
   const finishProfileImport = async (
@@ -804,11 +817,8 @@ function AppContent() {
   // Handle file drops from the Setup flow drop zone (ADR-001)
   const importDroppedFiles = async (files: File[]) => {
     // Resolve profiles directory on-demand if startup init hasn't completed yet
-    let dir = profilesDirectory;
-    if (!dir) {
-      dir = (await loadProfilesDirectory()) || '';
-      if (dir) setProfilesDirectory(dir);
-    }
+    const dir = (await loadProfilesDirectory()) || '';
+    if (dir) setProfilesDirectory(dir);
     if (!dir) return;
 
     await ensureDirectory(dir);
@@ -854,11 +864,8 @@ function AppContent() {
   // Import profiles by file path (Tauri mode: Rust handles file I/O directly)
   const importFilePaths = async (paths: string[]) => {
     // Resolve profiles directory on-demand if startup init hasn't completed yet
-    let dir = profilesDirectory;
-    if (!dir) {
-      dir = (await loadProfilesDirectory()) || '';
-      if (dir) setProfilesDirectory(dir);
-    }
+    const dir = (await loadProfilesDirectory()) || '';
+    if (dir) setProfilesDirectory(dir);
     if (!dir) return;
 
     await ensureDirectory(dir);
@@ -1094,8 +1101,7 @@ function AppContent() {
           // Check for collision and add suffix if needed
           let suffix = 1;
           while (true) {
-            const exists = await invoke<boolean>('check_file_exists', { path: destPath });
-            if (!exists) break;
+            if (!(await profilePathTaken(destPath))) break;
             newFilename = `${sanitized}_${suffix}${extension}`;
             destPath = `${profilesDir}\\${newFilename}`;
             suffix++;
@@ -1110,13 +1116,7 @@ function AppContent() {
         
         // INV-SAVE-MANIFEST: Write manifest JSONC to .jsonc file
         // draftContent contains the captured manifest (apps, version, etc.), NOT metadata
-        await invoke('write_text_file', { path: destPath, content: draftContent });
-        
-        // INV-SAVE-META: Write metadata to separate .meta.json file
-        // Metadata (displayName) is stored separately from the manifest
-        if (trimmedValue) {
-          await saveProfileMetadata(destPath, { displayName: trimmedValue });
-        }
+        await saveNewProfile(destPath, draftContent, trimmedValue || undefined);
       } else {
         // Rename mode: just update display name metadata
         await saveProfileMetadata(profileNameModalPath, { 
@@ -1397,7 +1397,7 @@ function AppContent() {
 
   useEffect(() => {
     refreshProfiles();
-  }, [settings.customProfilesDirectory]);
+  }, [settings.storageDestination]);
 
 
   const updateSettings = (
@@ -2151,6 +2151,9 @@ function AppContent() {
     profile: DiscoveredProfile,
     restoreIntent: RestoreIntent = 'apps-only',
   ) => {
+    if (profile.availability === 'online-only') {
+      throw new Error('Make this setup available locally in your sync app first.');
+    }
     const profileName = profile.name;
     const profilePath = profile.path;
     const authoredProfileAppIds = await readAuthoredProfileAppIds(profilePath);
@@ -2340,6 +2343,9 @@ function AppContent() {
     profile: DiscoveredProfile,
     restoreOptions?: ApplyRestoreOptions,
   ) => {
+    if (profile.availability === 'online-only') {
+      throw new Error('Make this setup available locally in your sync app first.');
+    }
     const profileName = profile.name;
     const profilePath = profile.path;
 
@@ -3083,9 +3089,11 @@ function AppContent() {
                 let savedPath: string | undefined;
                 if (isTauriRuntime()) {
                   // Native Tauri: use OS save dialog
+                  const storageDir = await getProfilesDirectory(settingsRef.current.storageDestination);
+                  await ensureDirectory(storageDir);
                   const { save } = await import('@tauri-apps/plugin-dialog');
                   const savePath = await save({
-                    defaultPath: defaultName,
+                    defaultPath: `${storageDir}\\${defaultName}`,
                     filters: isZip
                       ? [{ name: 'Endstate Bundle', extensions: BUNDLE_DIALOG_EXTENSIONS }]
                       : [{ name: 'Endstate Profile', extensions: ['jsonc'] }],
@@ -3096,7 +3104,7 @@ function AppContent() {
                   if (isZip) {
                     await invoke('copy_file', { sourcePath: captureResult.outputPath, destPath: savePath });
                   } else {
-                    await invoke('write_text_file', { path: savePath, content: captureResult.draftText });
+                    await invoke('save_profile', { path: savePath, content: captureResult.draftText, metadata: null, createNew: false });
                   }
                   // Record the saved capture as the continuous-protection
                   // baseline. The transient capture cache is wiped at app
@@ -3259,6 +3267,7 @@ function AppContent() {
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
               profilesReadError={profilesReadError}
+              profilesFolderMissing={profilesFolderMissing}
               onFileDrop={handleFileDrop}
               onUnsupportedFiles={showUnsupportedProfileFiles}
               profileImportActive={isProfileImporting}
@@ -4164,18 +4173,6 @@ function AppContent() {
                   </div>
                 </RadioGroup>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Custom Storage Directory (optional)</label>
-                  <Input
-                    type="text"
-                    value={settings.customProfilesDirectory}
-                    onChange={(e) => updateSettings({ customProfilesDirectory: e.target.value })}
-                    placeholder="Leave empty to use default: Documents\Endstate\Setups"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    By default, setups are stored in Documents\Endstate\Setups
-                  </p>
-                </div>
 
                 <div className="flex gap-2 pt-4">
                   <Button onClick={loadInitialData}>
@@ -4187,6 +4184,8 @@ function AppContent() {
                 </div>
               </CardContent>
             </Card>
+
+            <StorageLocation destination={settings.storageDestination} onChange={storageDestination => updateSettings({ storageDestination })} />
 
             {/* Advanced Settings */}
             <Card>
