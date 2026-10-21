@@ -322,6 +322,8 @@ export interface SetupFlowProps {
   onRefreshProfiles: () => Promise<void>;
   /** Why the profiles folder could not be read; an empty list then is not "no profiles". */
   profilesReadError?: string | null;
+  /** The storage folder does not exist yet; the first save creates it. */
+  profilesFolderMissing?: boolean;
   onFileDrop: (files: File[]) => void;
   /** Names of dropped or picked files the import does not accept. */
   onUnsupportedFiles: (fileNames: string[]) => void;
@@ -409,6 +411,7 @@ export function SetupFlow({
   onOpenProfilesFolder,
   onRefreshProfiles,
   profilesReadError = null,
+  profilesFolderMissing = false,
   onFileDrop,
   onUnsupportedFiles,
   profileImportActive = false,
@@ -1216,6 +1219,11 @@ export function SetupFlow({
                     {profilesReadError ? (
                       <p className="text-sm text-muted-foreground" role="alert" data-testid="profiles-read-error">
                         {profilesReadError}
+                      </p>
+                    ) : profilesFolderMissing ? (
+                      <p className="text-sm text-muted-foreground" data-testid="profiles-folder-pending">
+                        Your storage folder doesn't exist yet. Endstate creates it when you
+                        save your first setup.
                       </p>
                     ) : (
                       <p className="text-sm text-muted-foreground">

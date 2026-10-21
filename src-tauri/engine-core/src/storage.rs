@@ -102,60 +102,45 @@ fn probe(source: &impl DiscoverySource) -> Vec<ProviderDiscovery> {
         Err(_) => one.error("OneDrive account discovery failed. Choose its folder manually."),
     }
     let mut google = ProviderDiscovery::new("google-drive");
-    // Drive for desktop keeps one PerAccountPreferences JSON value under DriveFS
-    // ({"per_account_preferences":[{"value":{"mount_point_path":"G"}}]}). Older
-    // layouts keep one JSON value per account under a PerAccountPreferences key.
-    let mut google_payloads = vec![];
-    for (key, combined) in [
-        ("Software\\Google\\DriveFS", true),
-        ("Software\\Google\\DriveFS\\PerAccountPreferences", false),
-    ] {
-        match source.registry(key, false) {
-            Ok(values) => google_payloads.extend(
-                values
-                    .into_iter()
-                    .filter(|(name, _)| {
-                        !combined || name.eq_ignore_ascii_case("PerAccountPreferences")
-                    })
-                    .map(|(_, payload)| (combined, payload)),
-            ),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => (),
-            Err(_) => {
-                google.error("Google Drive account discovery failed. Choose My Drive manually.")
-            }
-        }
-    }
-    for (combined, payload) in google_payloads {
-        let data = serde_json::from_str::<serde_json::Value>(&payload).ok();
-        let accounts: Vec<&serde_json::Value> = match (&data, combined) {
-            (Some(v), true) => v
-                .get("per_account_preferences")
-                .and_then(|a| a.as_array())
-                .map(|a| a.iter().filter_map(|item| item.get("value")).collect())
-                .unwrap_or_default(),
-            (Some(v), false) => vec![v],
-            (None, _) => vec![],
-        };
-        if accounts.is_empty() {
-            google.error("Google Drive account data could not be read. Choose My Drive manually.");
-        }
-        for account in accounts {
-            match account
-                .get("mount_point_path")
-                .and_then(|v| v.as_str())
-                .map(|p| p.trim().trim_end_matches(['\\', '/']))
-                .filter(|p| !p.is_empty())
+    // Drive for desktop keeps every account in one PerAccountPreferences JSON
+    // value under DriveFS:
+    // {"per_account_preferences":[{"key":"…","value":{"mount_point_path":"G"}}]}.
+    match source.registry("Software\\Google\\DriveFS", false) {
+        Ok(values) => {
+            if let Some((_, payload)) = values
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("PerAccountPreferences"))
             {
-                // A bare drive letter such as "G" names the drive root.
-                Some(root) if root.len() == 1 && root.chars().all(|c| c.is_ascii_alphabetic()) => {
-                    google.add("Google Drive account", format!("{root}:\\My Drive"))
+                match serde_json::from_str::<serde_json::Value>(payload)
+                    .ok()
+                    .as_ref()
+                    .and_then(|v| v.get("per_account_preferences"))
+                    .and_then(|a| a.as_array())
+                {
+                    // An empty list means no signed-in account: not detected.
+                    Some(accounts) => {
+                        for account in accounts {
+                            match account
+                                .get("value")
+                                .and_then(|v| v.get("mount_point_path"))
+                                .and_then(|v| v.as_str())
+                                .and_then(google_drive_mount)
+                            {
+                                Some((label, path)) => google.add(&label, path),
+                                None => google.error(
+                                    "Google Drive account data could not be read. Choose My Drive manually.",
+                                ),
+                            }
+                        }
+                    }
+                    None => google.error(
+                        "Google Drive account data could not be read. Choose My Drive manually.",
+                    ),
                 }
-                Some(root) => google.add("Google Drive account", format!("{root}\\My Drive")),
-                None => google.error(
-                    "Google Drive account data could not be read. Choose My Drive manually.",
-                ),
             }
         }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => (),
+        Err(_) => google.error("Google Drive account discovery failed. Choose My Drive manually."),
     }
     let mut dropbox = ProviderDiscovery::new("dropbox");
     for key in ["LOCALAPPDATA", "APPDATA"] {
@@ -192,6 +177,27 @@ fn probe(source: &impl DiscoverySource) -> Vec<ProviderDiscovery> {
         }
     }
     vec![one, google, dropbox]
+}
+
+/// Label and My Drive path for a Drive for desktop mount, named the way
+/// Explorer names it: a drive letter "G" is "Google Drive (G:)" at G:\My Drive,
+/// and a mirrored folder is labelled by its folder name.
+#[cfg(any(windows, test))]
+fn google_drive_mount(mount: &str) -> Option<(String, String)> {
+    let root = mount.trim().trim_end_matches(['\\', '/']);
+    let letter = root.strip_suffix(':').unwrap_or(root);
+    if letter.len() == 1 && letter.chars().all(|c| c.is_ascii_alphabetic()) {
+        let letter = letter.to_ascii_uppercase();
+        return Some((
+            format!("Google Drive ({letter}:)"),
+            format!("{letter}:\\My Drive"),
+        ));
+    }
+    let name = root.rsplit(['\\', '/']).next().filter(|n| !n.is_empty())?;
+    Some((
+        format!("Google Drive ({name})"),
+        format!("{root}\\My Drive"),
+    ))
 }
 
 #[cfg(windows)]
@@ -376,6 +382,16 @@ pub fn list_profile_entries(directory: &str) -> Result<Vec<ProfileEntry>, String
     Ok(entries)
 }
 
+/// The folder itself is absent while its parent is a readable directory.
+/// Any other failure (no parent, access denied) is left to the listing.
+fn folder_not_created_yet(directory: &Path) -> bool {
+    matches!(fs::metadata(directory), Err(e) if e.kind() == io::ErrorKind::NotFound)
+        && directory
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .is_some_and(|p| fs::metadata(p).is_ok_and(|m| m.is_dir()))
+}
+
 /// The list_manifest_files command for both the app and the dev bridge: paths
 /// only, or entries with availability when the caller asks for them.
 pub fn list_manifest_files_value(
@@ -383,7 +399,16 @@ pub fn list_manifest_files_value(
     include_availability: bool,
 ) -> Result<serde_json::Value, String> {
     if include_availability {
-        serde_json::to_value(list_profile_entries(directory)?).map_err(|e| e.to_string())
+        // A chosen sync destination such as <OneDrive>\Endstate does not exist
+        // until the first save creates it. That is an empty folder, not an
+        // error; a missing parent (drive) or an access error still fails.
+        let missing = folder_not_created_yet(Path::new(directory));
+        let entries = if missing {
+            vec![]
+        } else {
+            list_profile_entries(directory)?
+        };
+        Ok(serde_json::json!({ "entries": entries, "folderMissing": missing }))
     } else {
         serde_json::to_value(crate::cmd::list_manifest_files(directory)?).map_err(|e| e.to_string())
     }
@@ -551,11 +576,11 @@ mod tests {
             ],
         );
         f.registry.insert(
-            "Software\\Google\\DriveFS\\PerAccountPreferences".into(),
-            vec![
-                ("bad".into(), "secret malformed data".into()),
-                ("ok".into(), r#"{"mount_point_path":"G:"}"#.into()),
-            ],
+            "Software\\Google\\DriveFS".into(),
+            vec![(
+                "PerAccountPreferences".into(),
+                r#"{"per_account_preferences":[{"key":"secret","value":{}},{"key":"ok","value":{"mount_point_path":"G:"}}]}"#.into(),
+            )],
         );
         for (key, root) in [("LOCALAPPDATA", "local"), ("APPDATA", "roaming")] {
             f.env.insert(key.into(), root.into());
@@ -586,8 +611,43 @@ mod tests {
         );
         let google = &probe(&f)[1];
         assert_eq!(google.status, "detected");
-        let paths: Vec<_> = google.locations.iter().map(|l| l.path.as_str()).collect();
-        assert_eq!(paths, ["G:\\My Drive", "H:\\My Drive"]);
+        let found: Vec<_> = google
+            .locations
+            .iter()
+            .map(|l| (l.label.as_str(), l.path.as_str()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("Google Drive (G:)", "G:\\My Drive"),
+                ("Google Drive (H:)", "H:\\My Drive")
+            ]
+        );
+    }
+    #[test]
+    fn google_drive_labels_a_mirrored_folder_by_its_name() {
+        assert_eq!(
+            google_drive_mount("D:\\Sync\\Work Drive\\"),
+            Some((
+                "Google Drive (Work Drive)".into(),
+                "D:\\Sync\\Work Drive\\My Drive".into()
+            ))
+        );
+        assert_eq!(google_drive_mount("  "), None);
+    }
+    #[test]
+    fn google_drive_with_no_signed_in_account_is_not_an_error() {
+        let mut f = Fixture::default();
+        f.registry.insert(
+            "Software\\Google\\DriveFS".into(),
+            vec![(
+                "PerAccountPreferences".into(),
+                r#"{"per_account_preferences":[]}"#.into(),
+            )],
+        );
+        let google = &probe(&f)[1];
+        assert_eq!(google.status, "not-detected");
+        assert!(google.message.is_none());
     }
     #[test]
     fn all_recall_attributes_are_online_only() {
@@ -645,6 +705,22 @@ mod tests {
         }
         let entries = list_profile_entries(dir.to_str().unwrap()).unwrap();
         assert_eq!(entries.len(), 2);
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn a_destination_not_created_yet_lists_empty_but_a_missing_parent_fails() {
+        let dir = test_dir();
+        let pending = dir.join("Endstate");
+        let value = list_manifest_files_value(pending.to_str().unwrap(), true).unwrap();
+        assert_eq!(value["folderMissing"], true);
+        assert_eq!(value["entries"].as_array().unwrap().len(), 0);
+        let orphan = dir.join("missing-parent").join("Endstate");
+        assert!(list_manifest_files_value(orphan.to_str().unwrap(), true).is_err());
+        fs::create_dir(&pending).unwrap();
+        fs::write(pending.join("setup.jsonc"), "data").unwrap();
+        let value = list_manifest_files_value(pending.to_str().unwrap(), true).unwrap();
+        assert_eq!(value["folderMissing"], false);
+        assert_eq!(value["entries"].as_array().unwrap().len(), 1);
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]

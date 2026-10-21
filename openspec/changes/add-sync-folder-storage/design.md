@@ -112,10 +112,15 @@ Each provider is probed independently. Malformed Dropbox JSON or an unreadable G
 Drive registry key produces an error for that provider without discarding OneDrive or
 other successful results. Missing expected data is `not-detected`, not an error.
 
-Duplicate canonical paths are removed within each provider. Account labels prefer the
-provider's personal/business metadata; otherwise they use a stable ordinal such as
-`Google Drive account 2`. The UI may display the discovered path so same-type accounts
-remain distinguishable.
+Duplicate canonical paths are removed within each provider. OneDrive and Dropbox labels
+use the provider's personal/business metadata. Google Drive labels use the account's
+mount, the way Explorer names it: `Google Drive (G:)` for a drive letter, or the folder
+name, as in `Google Drive (Work Drive)`, for an account that mirrors to a folder. A
+mount-based label is what people recognize and, unlike an ordinal, does not shift when
+an account is added. The UI also shows the discovered path.
+
+A provider with no signed-in account, including Drive for desktop with an empty
+account list, is `not-detected`, not an error.
 
 ### 4. Use local Windows discovery sources
 
@@ -125,11 +130,14 @@ remain distinguishable.
   missing environment values and provide a fallback when the variables are absent.
   Equal paths are deduplicated, while distinct personal and commercial paths remain
   separate.
-- Google Drive reads every value under
-  `HKCU\Software\Google\DriveFS\PerAccountPreferences`, parses each JSON payload, and
-  appends `My Drive` to `mount_point_path`. This data is not a documented public
-  format, so malformed or changed payloads produce a visible provider-level reason
-  without exposing raw registry content.
+- Google Drive reads the single `PerAccountPreferences` string value under
+  `HKCU\Software\Google\DriveFS`. It holds every account as JSON:
+  `{"per_account_preferences":[{"key":"…","value":{"mount_point_path":"G"}}]}`.
+  Each account's `mount_point_path` is a drive letter (`G`, mapped to `G:\My Drive`) or
+  a folder (mapped to `<folder>\My Drive`), and the mount names the account (see
+  section 3). Values under the key that are not strings are ignored. This data is not a
+  documented public format, so a malformed payload or an account without a mount
+  produces a visible provider-level reason without exposing raw registry content.
 - Dropbox checks `Dropbox\info.json` under both `%LOCALAPPDATA%` and `%APPDATA%` and
   extracts `personal.path` and `business.path` from every readable file. Equal paths
   are deduplicated.

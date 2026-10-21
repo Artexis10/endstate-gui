@@ -239,6 +239,7 @@ function AppContent() {
   const [profiles, setProfiles] = useState<DiscoveredProfile[]>([]);
   // Why the last profile scan could not read the folder, or null when it could.
   const [profilesReadError, setProfilesReadError] = useState<string | null>(null);
+  const [profilesFolderMissing, setProfilesFolderMissing] = useState(false);
   const [profilesDirectory, setProfilesDirectory] = useState('');
   const [recentlyImportedProfile, setRecentlyImportedProfile] = useState<DiscoveredProfile | null>(null);
   const [nativeDragAccepted, setNativeDragAccepted] = useState(false);
@@ -725,12 +726,20 @@ function AppContent() {
   };
   
 
+  // Each profile load supersedes the ones before it. A superseded load neither
+  // shows its list nor reports its errors over a newer one.
   const profileRefreshGeneration = useRef(0);
-  const loadProfilesDirectory = async () => {
+  const startProfileLoad = () => {
+    const generation = ++profileRefreshGeneration.current;
+    return () => generation === profileRefreshGeneration.current;
+  };
+  const loadProfilesDirectory = async (isCurrent: () => boolean = () => true) => {
     try {
       return await getProfilesDirectory(settingsRef.current.storageDestination);
     } catch (err) {
-      showToast(`Couldn't open your profiles folder: ${backendErrorMessage(err)}`, 'error', { id: 'profiles-folder' });
+      if (isCurrent()) {
+        showToast(`Couldn't open your profiles folder: ${backendErrorMessage(err)}`, 'error', { id: 'profiles-folder' });
+      }
       return null;
     }
   };
@@ -738,8 +747,10 @@ function AppContent() {
   // A file the profile list leaves out, or a folder it cannot read, is shown
   // to the user once per distinct problem, so a profile never just vanishes.
   const reportedDiscoveryIssueRef = useRef('');
-  const loadDiscoveredProfiles = async (directory: string) => {
+  const loadDiscoveredProfiles = async (directory: string, isCurrent: () => boolean = startProfileLoad()) => {
     const discovery = await discoverProfiles(directory);
+    if (!isCurrent()) return discovery.profiles;
+    setProfilesFolderMissing(discovery.folderMissing === true);
     const unreadable = discovery.error
       ? describeUnreadableProfilesFolder(directory, discovery.error)
       : null;
@@ -754,13 +765,12 @@ function AppContent() {
   };
 
   const refreshProfiles = async () => {
-    const generation = ++profileRefreshGeneration.current;
-    const dir = await loadProfilesDirectory();
-    if (dir && generation === profileRefreshGeneration.current) {
-      setProfilesDirectory(dir);
-      const discovered = await loadDiscoveredProfiles(dir);
-      if (generation === profileRefreshGeneration.current) setProfiles(discovered);
-    }
+    const isCurrent = startProfileLoad();
+    const dir = await loadProfilesDirectory(isCurrent);
+    if (!dir || !isCurrent()) return;
+    setProfilesDirectory(dir);
+    const discovered = await loadDiscoveredProfiles(dir, isCurrent);
+    if (isCurrent()) setProfiles(discovered);
   };
 
   const finishProfileImport = async (
@@ -3257,6 +3267,7 @@ function AppContent() {
               onOpenProfilesFolder={handleOpenProfilesFolder}
               onRefreshProfiles={refreshProfiles}
               profilesReadError={profilesReadError}
+              profilesFolderMissing={profilesFolderMissing}
               onFileDrop={handleFileDrop}
               onUnsupportedFiles={showUnsupportedProfileFiles}
               profileImportActive={isProfileImporting}

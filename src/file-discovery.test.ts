@@ -427,6 +427,24 @@ describe('sync folder availability', () => {
     expect(vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === 'validate_profile')).toHaveLength(1);
     expect(vi.mocked(invoke).mock.calls.some(([cmd]) => cmd === 'read_text_file' || cmd === 'check_file_exists')).toBe(false);
   });
+  it('reports a storage folder that does not exist yet as empty, not as an error', async () => {
+    vi.mocked(invoke).mockImplementation(async cmd => {
+      if (cmd === 'list_manifest_files') return { entries: [], folderMissing: true };
+      throw new Error('Unexpected command');
+    });
+    const discovery = await discoverProfileDescriptors('C:/OneDrive/Endstate');
+    expect(discovery).toEqual({ descriptors: [], skipped: [], error: null, folderMissing: true });
+  });
+  it('reads entries from the native object response', async () => {
+    vi.mocked(invoke).mockImplementation(async cmd => {
+      if (cmd === 'list_manifest_files') return { entries: [{ path: 'C:/Setups/local.jsonc', availability: 'local', metadataAvailable: false }], folderMissing: false };
+      if (cmd === 'validate_profile') return validResult();
+      return null;
+    });
+    const { descriptors, folderMissing } = await discoverProfileDescriptors('C:/Setups');
+    expect(descriptors.map(d => d.setupPath)).toEqual(['C:/Setups/local.jsonc']);
+    expect(folderMissing).toBeUndefined();
+  });
   it('keeps duplicate conflict labels distinct by path and filename', async () => {
     vi.mocked(invoke).mockImplementation(async cmd => {
       if (cmd === 'list_manifest_files') return ['C:/Setups/setup.jsonc', 'C:/Setups/setup (conflicted copy).jsonc'];

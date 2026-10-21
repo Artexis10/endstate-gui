@@ -127,3 +127,17 @@ duplicate-label disambiguation sit on that shape.
 - [x] The custom folder field commits on Enter or blur, not on each
   keystroke, and clearing it keeps the current destination.
 - [x] The app and the dev bridge share one `list_manifest_files` helper.
+
+## Second review follow-up (2026-10-21)
+
+- [x] A destination whose `Endstate` folder does not exist yet, under a parent that
+  does, lists as empty with a note that the first save creates it. A missing
+  parent or drive, and access errors, still show the unreadable-folder error.
+- [x] Google Drive accounts are labelled by mount, as Explorer names them:
+  `Google Drive (G:)`, or the folder name for an account mirrored to a folder.
+- [x] Discovery reads only the combined `PerAccountPreferences` value; the
+  one-value-per-account fallback, which matches no known install, is removed.
+- [x] An empty account list is not detected, not an error.
+- [x] A superseded profile load no longer reports its errors or folder state over
+  a newer one.
+- [x] Design sections 3 and 4 and the storage-destinations scenarios match.

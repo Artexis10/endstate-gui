@@ -69,13 +69,18 @@ export interface ProfileDescriptorDiscovery {
   skipped: SkippedProfileFile[];
   /** Why the folder could not be read; null when it was read. */
   error: string | null;
+  /** The folder does not exist yet; the first save creates it. */
+  folderMissing?: boolean;
 }
 
 export interface ProfileDiscovery {
   profiles: DiscoveredProfile[];
   skipped: SkippedProfileFile[];
   error: string | null;
+  folderMissing?: boolean;
 }
+
+type ListedEntry = { path: string; availability: 'local' | 'online-only'; metadataAvailable: boolean };
 
 /**
  * Check if a filename is a metadata file (*.meta.json)
@@ -152,12 +157,16 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
   }
 
   try {
-    const listed = await invoke<Array<string | { path: string; availability: 'local' | 'online-only'; metadataAvailable: boolean }>>('list_manifest_files', { directory, includeAvailability: true });
-    const entries = (listed || []).map(entry => typeof entry === 'string' ? { path: entry, availability: 'local' as const, metadataAvailable: true } : entry);
+    // The native command answers { entries, folderMissing }; older callers and
+    // mocks answer a bare array of paths or entries.
+    const listed = await invoke<Array<string | ListedEntry> | { entries: ListedEntry[]; folderMissing?: boolean }>('list_manifest_files', { directory, includeAvailability: true });
+    const raw = Array.isArray(listed) ? listed : listed?.entries ?? [];
+    const folderMissing = !Array.isArray(listed) && listed?.folderMissing === true;
+    const entries = raw.map(entry => typeof entry === 'string' ? { path: entry, availability: 'local' as const, metadataAvailable: true } : entry);
     const byPath = new Map(entries.map(entry => [entry.path, entry]));
     const files = entries.map(entry => entry.path);
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      return { descriptors: [], skipped: [], error: null };
+    if (files.length === 0) {
+      return { descriptors: [], skipped: [], error: null, ...(folderMissing ? { folderMissing } : {}) };
     }
 
     // Filter out .meta.json files and bundle metadata - they are not profiles
@@ -236,7 +245,7 @@ export async function discoverProfileDescriptors(directory: string): Promise<Pro
  * Legacy function for backward compatibility.
  */
 export async function discoverProfiles(directory: string): Promise<ProfileDiscovery> {
-  const { descriptors, skipped, error } = await discoverProfileDescriptors(directory);
+  const { descriptors, skipped, error, folderMissing } = await discoverProfileDescriptors(directory);
   return {
     profiles: descriptors.map(d => ({
       name: d.id,
@@ -246,6 +255,7 @@ export async function discoverProfiles(directory: string): Promise<ProfileDiscov
     })),
     skipped,
     error,
+    ...(folderMissing ? { folderMissing } : {}),
   };
 }
 
