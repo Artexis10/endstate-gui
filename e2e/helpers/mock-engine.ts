@@ -33,7 +33,7 @@ export interface MockEngineKit {
 
 function installKit(page: Page, defaultCapabilities: string[]): Promise<void> {
   return page.addInitScript((defaultCapabilities) => {
-    const kit = {
+    const kit: MockEngineKit = {
       startup(command: string, capabilities?: string[]) {
         if (command === 'capabilities') {
           return { exitCode: 0, envelope: { success: true, data: { commands: capabilities ?? defaultCapabilities } }, ndjsonEvents: [] };

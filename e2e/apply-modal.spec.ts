@@ -33,6 +33,7 @@ test.describe('Setup Flow - All Already Installed', () => {
 
   test('selecting a profile auto-starts preview and shows results', async ({ page }) => {
     await previewTestProfile(page);
+    await expect(page.locator('text=Preview complete')).toBeVisible();
     await expect(page.getByRole('button', { name: /^\d+ present$/ })).toBeVisible();
   });
 

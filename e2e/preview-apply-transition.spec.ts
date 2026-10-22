@@ -35,6 +35,7 @@ test.describe('Preview to Apply Transition', () => {
 
   test('Real-time progress shows during preview', async ({ page }) => {
     await previewTestProfile(page);
+    await expect(page.locator('text=Preview complete')).toBeVisible();
     await expect(page.locator('text=Notepad++')).toBeVisible();
   });
 

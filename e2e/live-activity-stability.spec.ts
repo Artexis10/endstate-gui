@@ -33,6 +33,7 @@ test.describe('Live Activity Stability', () => {
 
   test('preview completes and shows results inline', async ({ page }) => {
     await previewTestProfile(page);
+    await expect(page.locator('text=Preview complete')).toBeVisible();
     await expect(page.locator('text=/to install|already present/i').first()).toBeVisible();
   });
 

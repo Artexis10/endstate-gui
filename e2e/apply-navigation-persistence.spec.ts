@@ -43,6 +43,7 @@ test.describe('Apply Navigation Persistence', () => {
 
   test('Setup flow completes preview and shows apply button', async ({ page }) => {
     await previewTestProfile(page);
+    await expect(page.locator('text=Preview complete')).toBeVisible();
     await expect(page.locator('text=/to install/i').first()).toBeVisible();
     await expect(page.locator('[data-testid="setup-flow-apply"]')).toBeVisible();
   });
