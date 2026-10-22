@@ -1,5 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { installTauriMock } from './helpers/tauri-mock';
+import { TEST_PROFILE_FILE } from './helpers/mock-engine';
+import { openApp, previewTestProfile } from './helpers/ui-mode';
 
 /**
  * Engine fault injection (unhappy paths) — launch-readiness lane L4.
@@ -12,8 +14,6 @@ import { installTauriMock } from './helpers/tauri-mock';
  * Apply button first (see getScenarioForCommand in mock-engine.ts).
  */
 
-const PROFILE_FILE = 'C:\\test\\profiles\\test-profile.jsonc';
-
 /** Boot the app into a given fault scenario against the built-in mock engine. */
 async function boot(
   page: Page,
@@ -21,7 +21,7 @@ async function boot(
   scenario: string,
   opts: { wireCancel?: boolean } = {},
 ): Promise<void> {
-  await installTauriMock(page, { initialProfileFiles: [PROFILE_FILE] });
+  await installTauriMock(page, { initialProfileFiles: [TEST_PROFILE_FILE] });
 
   // Select the fault scenario for the built-in mock (installed by main.tsx when
   // VITE_E2E=1). We do NOT override __ENDSTATE_MOCK_ENGINE__ — the whole point
@@ -58,16 +58,12 @@ async function boot(
     });
   }
 
-  await page.goto(baseURL || '/');
-  await page.waitForLoadState('networkidle');
+  await openApp(page, baseURL);
 }
 
 /** Drive the setup flow up to a completed preview so Apply is available. */
 async function previewProfile(page: Page): Promise<void> {
-  await page.locator('[data-testid="intent-setup"]').click();
-  await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
-  await page.locator('[data-testid="profile-card-test-profile"]').click();
-  await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+  await previewTestProfile(page);
   await expect(page.locator('[data-testid="setup-flow-apply"]')).toBeVisible();
 }
 

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { installTauriMock } from './helpers/tauri-mock';
+import { installMockEngine } from './helpers/mock-engine';
+import { openApp, previewTestProfile } from './helpers/ui-mode';
 
 /**
  * Preview to Apply Transition Tests
@@ -7,74 +8,16 @@ import { installTauriMock } from './helpers/tauri-mock';
  */
 test.describe('Preview to Apply Transition', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    await installTauriMock(page, {
-      initialProfileFiles: ['C:\\test\\profiles\\test-profile.jsonc'],
+    await installMockEngine(page, {
+      applyCallCounter: '__APPLY_CALL_COUNT__',
+      settleDelayMs: { apply: 50 },
+      apps: [{ id: 'Notepad++.Notepad++', name: 'Notepad++', installs: true }],
     });
-
-    await page.addInitScript(() => {
-      (window as any).__APPLY_CALL_COUNT__ = 0;
-
-      (window as any).__ENDSTATE_MOCK_ENGINE__ = {
-        runEndstateStreaming: async (settings: any, command: string, args: string[], onEvent: Function, options?: any) => {
-          if (command === 'capabilities') {
-            return { exitCode: 0, envelope: { success: true, data: { commands: ['capture', 'apply', 'verify', 'report'] } }, ndjsonEvents: [] };
-          }
-          if (command === 'report') {
-            return { exitCode: 0, envelope: { success: true, data: { hasState: false } }, ndjsonEvents: [] };
-          }
-          if (command === 'apply') {
-            (window as any).__APPLY_CALL_COUNT__++;
-            const isDryRun = args.includes('--dry-run');
-
-            const ndjsonItems = [
-              { event: 'item', id: 'Notepad++.Notepad++', driver: 'winget', status: isDryRun ? 'to_install' : 'installed', reason: isDryRun ? 'would_install' : 'installed', name: 'Notepad++' },
-            ];
-            for (const item of ndjsonItems) {
-              if (options?.onNdjsonEvent) options.onNdjsonEvent(item);
-              if (onEvent) onEvent({ type: 'stdout', data: JSON.stringify(item) + '\n' });
-            }
-
-            if (!isDryRun) {
-              await new Promise(r => setTimeout(r, 50));
-            }
-
-            return {
-              exitCode: 0,
-              envelope: {
-                success: true,
-                data: {
-                  dryRun: typeof isDryRun !== 'undefined' ? isDryRun : false,
-                  summary: {
-                    total: ndjsonItems.length,
-                    success: (typeof isDryRun !== 'undefined' && isDryRun) ? 0 : ndjsonItems.filter((i) => i.status === 'installed').length,
-                    skipped: ndjsonItems.filter((i) => i.status === 'present').length,
-                    failed: ndjsonItems.filter((i) => i.status === 'failed').length,
-                  },
-                  actions: ndjsonItems.map((i) => ({
-                    id: i.id, ref: i.id, driver: i.driver, name: i.name,
-                    status: i.status, reason: i.reason ?? '', message: '',
-                    version: '', manual: null,
-                  })),
-                }
-              },
-              ndjsonEvents: ndjsonItems,
-            };
-          }
-          return { exitCode: 0, envelope: { success: true, data: {} }, ndjsonEvents: [] };
-        }
-      };
-    });
-
-    await page.goto(baseURL || '/');
-    await page.waitForLoadState('networkidle');
+    await openApp(page, baseURL);
   });
 
   test('Selecting profile triggers exactly ONE preview call', async ({ page }) => {
-    await page.locator('[data-testid="intent-setup"]').click();
-    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
-
-    await page.locator('[data-testid="profile-card-test-profile"]').click();
-    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+    await previewTestProfile(page);
 
     const previewCount = await page.evaluate(() => (window as any).__APPLY_CALL_COUNT__);
     expect(previewCount).toBe(1);
@@ -82,11 +25,7 @@ test.describe('Preview to Apply Transition', () => {
   });
 
   test('Preview then Apply executes two separate calls', async ({ page }) => {
-    await page.locator('[data-testid="intent-setup"]').click();
-    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
-
-    await page.locator('[data-testid="profile-card-test-profile"]').click();
-    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+    await previewTestProfile(page);
     expect(await page.evaluate(() => (window as any).__APPLY_CALL_COUNT__)).toBe(1);
 
     await page.locator('[data-testid="setup-flow-apply"]').click();
@@ -95,20 +34,13 @@ test.describe('Preview to Apply Transition', () => {
   });
 
   test('Real-time progress shows during preview', async ({ page }) => {
-    await page.locator('[data-testid="intent-setup"]').click();
-    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
-
-    await page.locator('[data-testid="profile-card-test-profile"]').click();
-    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+    await previewTestProfile(page);
+    await expect(page.locator('text=Preview complete')).toBeVisible();
     await expect(page.locator('text=Notepad++')).toBeVisible();
   });
 
   test('Apply completes with correct final state', async ({ page }) => {
-    await page.locator('[data-testid="intent-setup"]').click();
-    await expect(page.locator('[data-testid="setup-flow"]')).toBeVisible({ timeout: 5000 });
-
-    await page.locator('[data-testid="profile-card-test-profile"]').click();
-    await expect(page.locator('text=Preview complete')).toBeVisible({ timeout: 10000 });
+    await previewTestProfile(page);
 
     await page.locator('[data-testid="setup-flow-apply"]').click();
     await expect(page.locator('text=Setup complete')).toBeVisible({ timeout: 10000 });
