@@ -1,10 +1,9 @@
 import type {
   ConfigResolution,
   ConfigResolutionKind,
-  ConfigResolutionStatus,
   RestoreTargetMapping,
 } from '@/types';
-import { settingsModulesPhrase } from '@/lib/settings-kind';
+import { disposition, foldedLine } from '@/lib/config-resolution-fold';
 import {
   Select,
   SelectContent,
@@ -39,45 +38,6 @@ interface IndividualResolution {
 }
 
 type RenderItem = ResolutionGroup | IndividualResolution;
-
-/** What a resolution asks of the person; this alone decides how it renders. */
-type Disposition = 'decision' | 'attention' | 'direct' | 'folded';
-
-// Terminal statuses that mean a config set did not end well.
-const FAILED_STATUSES: ReadonlySet<ConfigResolutionStatus> = new Set([
-  'failed',
-  'rolled_back',
-  'rollback_failed',
-]);
-
-// The engine's documented reasons (docs/contracts/cli-json-contract.md) that
-// need nothing from the person: no target app yet, nothing to change, or not
-// selected. The documented list is open ("include"), so every other reason,
-// including a new one, stays a card.
-const UNKNOWN_REASONS_NEEDING_NOTHING: ReadonlySet<string> = new Set([
-  'target_not_detected',
-  'already_up_to_date',
-  'restore_filtered',
-  'restore_not_enabled',
-]);
-
-function disposition(resolution: ConfigResolution): Disposition {
-  if (resolution.reason === 'ambiguous_target_instance') return 'decision';
-  if (FAILED_STATUSES.has(resolution.status)) return 'attention';
-  switch (resolution.resolution) {
-    case 'direct':
-      return 'direct';
-    case 'legacy_unverified':
-      return 'folded';
-    case 'unknown':
-      return resolution.reason !== null && UNKNOWN_REASONS_NEEDING_NOTHING.has(resolution.reason)
-        ? 'folded'
-        : 'attention';
-    default:
-      // migrate and incompatible always matter to the person.
-      return 'attention';
-  }
-}
 
 export function ConfigResolutionList(
   {
@@ -314,25 +274,6 @@ function FoldedCompatibility(
   );
 }
 
-/**
- * The GUI-authored line over the folded resolutions. Counts come from the
- * data, over distinct modules. The reason sentence only claims what holds:
- * the legacy kind is the only one that was saved before version checks.
- */
-function foldedLine(resolutions: ConfigResolution[]): string {
-  const moduleIds = (rows: ConfigResolution[]) => [...new Set(rows.map((r) => r.moduleId))];
-  const all = moduleIds(resolutions);
-  const legacy = moduleIds(resolutions.filter((r) => r.resolution === 'legacy_unverified'));
-  const lead = `Compatibility not checked for ${settingsModulesPhrase(all)}.`;
-
-  if (legacy.length === 0) return lead;
-  const reason = 'saved before Endstate checked versions';
-  if (legacy.length === all.length) {
-    return `${lead} ${all.length === 1 ? 'It was' : 'They were'} ${reason}.`;
-  }
-  return `${lead} ${legacy.length} of them ${legacy.length === 1 ? 'was' : 'were'} ${reason}.`;
-}
-
 /** Groups by the engine message, keeping first-occurrence order. */
 function groupByMessage(
   resolutions: ConfigResolution[],
@@ -394,17 +335,9 @@ function buildRenderItems(resolutions: ConfigResolution[]): RenderItem[] {
   return items;
 }
 
-/**
- * Collision-safe composite key over the engine-owned grouping fields. The
- * disposition keeps a failed `direct` result out of the quiet confirmations.
- */
+/** Collision-safe composite key over the engine-owned grouping fields. */
 function groupKey(resolution: ConfigResolution): string {
-  return JSON.stringify([
-    resolution.resolution,
-    resolution.label,
-    resolution.message,
-    disposition(resolution),
-  ]);
+  return JSON.stringify([resolution.resolution, resolution.label, resolution.message]);
 }
 
 function distinctRemediations(members: ConfigResolution[]): string[] {

@@ -29,11 +29,11 @@ Engine 2.32.0 adds a second kind of settings to a saved setup: Windows settings 
 ### Modified Capabilities
 
 - `command-warning-presentation`: warning details show every technical field, and the capture warning `config_secret_scope_conflict` names its module in plain words.
-- `config-generation-presentation`: configuration resolutions that need nothing from the person fold into one quiet line, and a card shows only for a row that needs the person.
+- `config-generation-presentation`: configuration resolutions that need nothing from the person fold into one quiet line, and a card shows only for a row that needs the person. The live list while Apply runs uses the same rule.
 - `restore-module-approval`: the compatibility notice before execution is that quiet line, with the engine message for each module in its details.
 
 ## Impact
 
-- GUI only: `src/lib/settings-kind.ts`, `src/components/app/intent/profile-contents-modal.tsx`, `src/components/app/intent/setup-flow.tsx`, `src/components/app/intent/save-flow.tsx`, `src/components/app/overview/components/config-module-selector.tsx`, `src/components/app/overview/components/restore-intent-toggle.tsx`, `src/lib/restore-activity.ts`, `src/lib/apply-utils.ts`, `src/components/app/intent/config-resolution-list.tsx`, `docs/ux-language.md`.
+- GUI only: `src/lib/settings-kind.ts`, `src/components/app/intent/profile-contents-modal.tsx`, `src/components/app/intent/setup-flow.tsx`, `src/components/app/intent/save-flow.tsx`, `src/components/app/overview/components/config-module-selector.tsx`, `src/components/app/overview/components/restore-intent-toggle.tsx`, `src/lib/restore-activity.ts`, `src/lib/apply-utils.ts`, `src/components/app/intent/config-resolution-list.tsx`, `src/components/app/intent/config-migration-progress.tsx`, `src/lib/config-resolution-fold.ts`, `docs/ux-language.md`.
 - No engine change, and no change to the status labels or the settings counts that `restore-results-honest-omissions` defines. The colour of PRESENT changes from green to muted, to match UP TO DATE.
 - A setup run carries no verify result for Windows settings. The engine checks them only in `verify` and `rebuild`, so the setup results show restore outcomes only.

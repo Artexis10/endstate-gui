@@ -2,7 +2,7 @@
 
 ### Requirement: GUI Renders Engine-Owned Config Resolution Results
 
-When an apply preview or completed apply envelope contains `configResolutions[]`, the GUI SHALL present every resolution's engine-authored `label`, `message`, nullable `remediation`, and terminal `status` without mapping or rewriting them, either on a card or in the details of the quiet line that folds the resolutions needing nothing from the person. The GUI SHALL NOT derive compatibility from application versions, generations, target candidates, migration paths, module definitions, or reason codes. It MAY read `resolution`, `reason` and `status` only to choose how a row is presented, and SHALL NOT read message text for that choice. For a completed apply, the GUI SHALL present `configResolutions[]` only when the restore intent is "apps-and-settings", matching the preview path; an install-only apply SHALL NOT present configuration cards even when the envelope carries resolution data. The GUI SHALL NOT drop a row by terminal status: a folded row stays reachable in the details. When the envelope omits configuration fields, the existing config-free presentation SHALL remain unchanged.
+When an apply preview or completed apply envelope contains `configResolutions[]`, the GUI SHALL present every resolution's engine-authored `label`, `message`, nullable `remediation`, and terminal `status` without mapping or rewriting them, on a card or, for a row that folds into the quiet line, in the details of that line when the show-details setting is on. The GUI SHALL NOT derive compatibility from application versions, generations, target candidates, migration paths, module definitions, or reason codes. It MAY read `resolution`, `reason` and `status` only to choose how a row is presented, and SHALL NOT read message text for that choice. For a completed apply, the GUI SHALL present `configResolutions[]` only when the restore intent is "apps-and-settings", matching the preview path; an install-only apply SHALL NOT present configuration cards even when the envelope carries resolution data. The GUI SHALL NOT drop a row by terminal status: a folded row stays reachable in the details when the show-details setting is on. When the envelope omits configuration fields, the existing config-free presentation SHALL remain unchanged.
 
 #### Scenario: Four distilled states are rendered from the engine
 
@@ -77,13 +77,35 @@ The GUI SHALL group the configuration resolutions that need the person by the co
 
 - **WHEN** a `legacy_unverified` row did not fail
 - **THEN** the quiet line that counts it is visible before execution without opening any disclosure
-- **AND** the engine-authored warning label, message, and remediation are in the details of that line
+- **AND** the engine-authored warning label, message, and remediation are in the details of that line when the show-details setting is on
+
+### Requirement: Migration Events Are Transient Engine-Authored Progress
+
+During apply, the GUI SHALL display the message of every `config-migration` event, and the message of every `config-resolution` event that needs the person, as transient progress in stream order. It SHALL fold the other `config-resolution` events into one quiet line counted from the events seen so far, with the same rule and the same copy as the final list, and SHALL NOT announce each change of that count to assistive technology. A `config-resolution` event carries no terminal status, because the engine emits it before it changes the set; the rule SHALL decide from `resolution` and `reason`, and a failure SHALL show through the `config-migration` events. It SHALL NOT interpret migration operations or translate staging, edge, validation, commit, or rollback into final outcomes.
+
+#### Scenario: Forward migration progress stays ordered
+
+- **WHEN** events report staging, multiple migration edges, validation, and commit
+- **THEN** the GUI shows the engine-authored messages in event order
+- **AND** uses no GUI-authored migration result in place of the final envelope
+
+#### Scenario: Failure and rollback remain visible
+
+- **WHEN** migration events report a failure followed by rollback progress
+- **THEN** the GUI shows both engine-authored messages while the run is active
+- **AND** waits for the command envelope to determine the terminal status
+
+#### Scenario: A long restore does not draw one box for each setting
+
+- **WHEN** 48 `config-resolution` events stream in, 47 `legacy_unverified` and 1 `unknown` with reason `target_not_detected`, together with 1 `incompatible` event
+- **THEN** the live list shows one row for the `incompatible` event and one quiet line for the other 48
+- **AND** the quiet line is outside the live region that assistive technology announces
 
 ## ADDED Requirements
 
 ### Requirement: GUI Folds Config Resolutions That Need Nothing From The Person
 
-The GUI SHALL show a card only for a resolution that needs the person, and SHALL fold every other resolution except a non-failed `direct` into one quiet line. A resolution needs the person when any of these holds: its `reason` is `ambiguous_target_instance`; its `resolution` is `migrate` or `incompatible`; its `status` is `failed`, `rolled_back` or `rollback_failed`; or its `resolution` is `unknown` and its `reason` is anything other than `target_not_detected`, `already_up_to_date`, `restore_filtered` or `restore_not_enabled`, including a missing or a new reason. A `legacy_unverified` resolution that did not fail, and an `unknown` resolution with one of those four reasons that did not fail, SHALL fold. The GUI SHALL decide from `resolution`, `reason` and `status` only, never from message text, and the preview and the results SHALL use the same rule.
+The GUI SHALL show a card only for a resolution that needs the person, and SHALL fold every other resolution except a non-failed `direct` into one quiet line. A resolution needs the person when any of these holds: its `reason` is `ambiguous_target_instance`; its `resolution` is `migrate` or `incompatible`; its `status` is `failed`, `rolled_back` or `rollback_failed`; or its `resolution` is `unknown` and its `reason` is anything other than `target_not_detected`, `already_up_to_date`, `restore_filtered` or `restore_not_enabled`, including a missing or a new reason. A `legacy_unverified` resolution that did not fail, and an `unknown` resolution with one of those four reasons that did not fail, SHALL fold. The GUI SHALL decide from `resolution`, `reason` and `status` only, never from message text, and the preview, the live list while Apply runs, and the results SHALL use the same rule.
 
 The quiet line SHALL be the compatibility notice shown before execution: it SHALL be visible without opening any disclosure, in the preview before Apply and in the results. It SHALL read "Compatibility not checked for" followed by a count of the distinct modules of the folded resolutions, named by settings group (for example "40 app settings and 7 Windows settings"), and then a sentence on why. That sentence SHALL claim only what holds: "They were saved before Endstate checked versions." when every folded resolution is `legacy_unverified` ("It was" for one), "N of them were saved before Endstate checked versions." when only some are, and no such sentence when none is. When no resolution needs the person, the section SHALL be that one line, with no heading. When every resolution needs the person, the section SHALL hold the cards only.
 

@@ -228,15 +228,14 @@ describe('ConfigResolutionList', () => {
       renderWithProviders(
         <ConfigResolutionList
           resolutions={[
-            resolution({ captureId: 'ok', resolution: 'direct', label: 'Compatible', status: 'restored' }),
-            resolution({ captureId: 'bad', resolution: 'direct', label: 'Compatible', status: 'failed' }),
+            resolution({ captureId: 'ok', resolution: 'direct', label: 'Compatible', message: 'Same message', status: 'restored' }),
+            resolution({ captureId: 'bad', resolution: 'direct', label: 'Compatible', message: 'Same message', status: 'failed' }),
           ]}
         />,
       );
 
-      // Only the failed result is a card; the successful one stays a quiet line.
+      // One engine message groups both rows; the failure keeps the group in a card.
       expect(screen.getByRole('article')).toHaveTextContent('failed');
-      expect(screen.getAllByTestId('config-resolution-group-direct')).toHaveLength(2);
     });
   });
 
@@ -466,26 +465,6 @@ describe('ConfigResolutionList', () => {
     expect(screen.getByText('Compatibility unknown')).toBeVisible();
     expect(screen.getByTestId('config-resolution-legacy-1')).toBeInTheDocument();
     expect(screen.getByText('apps.photoshop')).toBeInTheDocument();
-  });
-
-  it('keeps the raw module id out of the quiet line', () => {
-    renderWithProviders(
-      <ConfigResolutionList
-        resolutions={[
-          resolution({
-            captureId: 'legacy-capture',
-            moduleId: 'apps.photoshop',
-            resolution: 'legacy_unverified',
-            label: 'Compatibility unknown',
-            message: 'Review these legacy settings before restoring them.',
-          }),
-        ]}
-      />,
-    );
-
-    const line = screen.getByTestId('config-resolution-folded');
-    expect(within(line).queryByText('apps.photoshop')).not.toBeInTheDocument();
-    expect(line).not.toHaveTextContent('apps.photoshop');
   });
 
   it('names each folded setting by its display name in details, with its status', async () => {

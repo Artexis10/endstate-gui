@@ -43,8 +43,10 @@
 
 ## 6. Quiet settings compatibility
 
-- [x] 6.1 `config-resolution-list.tsx`: decide each row from `resolution`, `reason` and `status`; fold the rows that need nothing from the person into one quiet line, with the counts computed from the distinct modules; keep the cards and the target picker for the rest.
+- [x] 6.1 `src/lib/config-resolution-fold.ts`, used by `config-resolution-list.tsx`: decide each row from `resolution`, `reason` and `status`; fold the rows that need nothing from the person into one quiet line, with the counts computed from the distinct modules; keep the cards and the target picker for the rest.
 - [x] 6.2 Details: each engine label and message once, the settings under each message, each with status and provenance.
 - [x] 6.3 `docs/ux-language.md`, "Settings compatibility (setup preview and results)".
 - [x] 6.4 Unit: the fold rule per branch, the counts from the data, the copy; mutation-check the rule.
 - [x] 6.5 Chrome DevTools at 800x600, dark and light: preview and results of a mock run with the real distribution (24 / 23 / 1), and one run that keeps an `incompatible` and an `ambiguous_target_instance` card.
+- [x] 6.6 Live Apply list: `config-migration-progress.tsx` folds `config-resolution` events by the same rule, from the shared `src/lib/config-resolution-fold.ts`; the quiet line sits outside the live region; migration events stay rows.
+- [ ] 6.7 Archive order: `clarify-setup-import-and-settings` MODIFIES "GUI Renders Engine-Owned Config Resolution Results" and replaces "Per-module restore selection during Apply" (REMOVED, then ADDED under a new name). This change MODIFIES both too. Whichever change archives second MUST carry the changes of both: the quiet-line wording in the first, and in the second the quiet-line notice in place of the engine warning.

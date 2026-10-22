@@ -355,7 +355,8 @@ A long profile returns dozens of rows that carry the same engine label and say
 nothing the person can act on. The GUI shows a card only for a row that needs
 the person, and folds the other rows into one quiet line. It decides from
 `resolution`, `reason` and `status`, never from message text. The preview and
-the results use the same rule (`config-resolution-list.tsx`).
+the results use the same rule, and so does the live list while Apply runs
+(`src/lib/config-resolution-fold.ts`).
 
 | Row | Shown as |
 |-----|----------|
@@ -383,6 +384,13 @@ the results use the same rule (`config-resolution-list.tsx`).
   remediation, and under each message the settings it covers, each with its
   status and portable provenance. No label or message repeats.
 - **A failed `direct` row is a card.** A failure is never a quiet confirmation.
+- **The live list while Apply runs.** Each `config-resolution` stream event that
+  needs the person keeps its row. The other events fold into one quiet line, counted
+  from the events seen so far, with the same copy. A stream event carries no
+  status, because the engine emits it before it changes the set, so the rule
+  decides from `resolution` and `reason`; a failure shows through the
+  `config-migration` rows, which always stay. The quiet line sits outside the
+  polite live region, so a screen reader does not announce each count change.
 
 #### Produced-artifact completion line
 
