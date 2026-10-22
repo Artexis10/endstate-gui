@@ -201,7 +201,7 @@ describe('Capture Details Modal - Detected vs Skipped', () => {
     const chipElement = detectedLabel.closest('span');
     expect(chipElement).toHaveClass('bg-teal-500/10');
     // Verify it's NOT using success/green colors
-    expect(chipElement).not.toHaveClass('text-success');
+    expect(chipElement).not.toHaveClass('text-status-success');
     expect(chipElement).not.toHaveClass('bg-success/10');
   });
 });

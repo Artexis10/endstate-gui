@@ -350,3 +350,55 @@ describe('SetupFlow — per-app picker', () => {
     });
   });
 });
+
+/**
+ * The "N apps" chip clears the filters, so it counts every app row the cleared
+ * list shows: a manual app the engine skipped is an app row too.
+ */
+describe('SetupFlow — preview "N apps" chip', () => {
+  function makePreviewWithManualApp() {
+    return {
+      installed: 1,
+      alreadyPresent: 1,
+      appEvents: [
+        { app: 'Git.Git', action: 'To install', statusKey: 'to_install' as const, name: 'Git', timestamp: 1 },
+        { app: 'Mozilla.Firefox', action: 'OK', statusKey: 'present' as const, name: 'Firefox', timestamp: 2 },
+        { app: 'lightroom', action: 'Skipped', statusKey: 'skipped' as const, reason: 'manual_required', name: 'Lightroom Classic', timestamp: 3, driver: 'manual' },
+      ],
+      actions: [
+        { type: 'install', id: 'git-git', ref: 'Git.Git', status: 'to_install', message: '' },
+        { type: 'install', id: 'firefox', ref: 'Mozilla.Firefox', status: 'present', message: '' },
+        { type: 'install', id: 'lightroom', status: 'skipped', reason: 'manual_required', message: '' },
+      ],
+    };
+  }
+
+  const appRowLabels = () => screen.getAllByText(/^(TO INSTALL|PRESENT|SKIPPED)$/);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('counts a skipped manual app, the same rows its click shows', async () => {
+    const onPreview = vi.fn().mockResolvedValue(makePreviewWithManualApp());
+    await renderToPreviewDone({ onPreview });
+
+    await userEvent.click(screen.getByRole('button', { name: '1 to install' }));
+    expect(appRowLabels()).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole('button', { name: '3 apps' }));
+    expect(appRowLabels()).toHaveLength(3);
+    expect(screen.getByText('Lightroom Classic')).toBeInTheDocument();
+  });
+
+  it('counts a selected manual app with the per-app picker on', async () => {
+    const onPreview = vi.fn().mockResolvedValue(makePreviewWithManualApp());
+    await renderToPreviewDone({ onPreview, applyOnlySupported: true });
+
+    expect(screen.getByRole('button', { name: '3 apps' })).toBeInTheDocument();
+    expect(appRowLabels()).toHaveLength(3);
+
+    await userEvent.click(screen.getByTestId('app-picker-checkbox-lightroom'));
+    expect(screen.getByRole('button', { name: '2 apps' })).toBeInTheDocument();
+  });
+});

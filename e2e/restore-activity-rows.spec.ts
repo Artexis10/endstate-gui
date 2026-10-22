@@ -199,7 +199,7 @@ test.describe('Setup activity feed — restore & app row presentation', () => {
 
     // A missing optional file is neutral; a real failure stays an error.
     await expect(page.getByText('NOT IN SETUP', { exact: true })).toHaveClass(/text-muted-foreground/);
-    await expect(page.getByText('FAILED', { exact: true })).toHaveClass(/text-danger/);
+    await expect(page.getByText('FAILED', { exact: true })).toHaveClass(/text-status-danger/);
 
     // A run that restored a setting offers to undo it (the dry-run case below relies on this).
     await expect(page.getByRole('button', { name: 'Undo settings' })).toBeVisible();
