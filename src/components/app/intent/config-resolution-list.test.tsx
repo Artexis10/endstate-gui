@@ -201,6 +201,11 @@ describe('ConfigResolutionList', () => {
       { name: 'unknown with payload_integrity_failed', overrides: { resolution: 'unknown', reason: 'payload_integrity_failed' } },
       { name: 'unknown with a reason the GUI has never seen', overrides: { resolution: 'unknown', reason: 'a_future_reason' } },
       { name: 'unknown with no reason', overrides: { resolution: 'unknown', reason: null } },
+      // A failure the engine reports only as a reason, with a status that is not failed.
+      { name: 'legacy_unverified with target_collision', overrides: { resolution: 'legacy_unverified', reason: 'target_collision' } },
+      { name: 'direct with app_running', overrides: { resolution: 'direct', reason: 'app_running' } },
+      { name: 'direct with backup_failed', overrides: { resolution: 'direct', reason: 'backup_failed' } },
+      { name: 'direct with journal_intent_failed', overrides: { resolution: 'direct', reason: 'journal_intent_failed' } },
       { name: 'legacy_unverified that failed', overrides: { resolution: 'legacy_unverified', status: 'failed' } },
       { name: 'legacy_unverified that rolled back', overrides: { resolution: 'legacy_unverified', status: 'rolled_back' } },
       { name: 'unknown and allowlisted that failed', overrides: { resolution: 'unknown', reason: 'target_not_detected', status: 'rollback_failed' } },
@@ -222,6 +227,19 @@ describe('ConfigResolutionList', () => {
 
       expect(screen.getByTestId(`config-resolution-group-${overrides.resolution}`)).toBeInTheDocument();
       expect(screen.queryByTestId('config-resolution-folded')).not.toBeInTheDocument();
+    });
+
+    it('keeps a direct result with a harmless reason as a quiet line', () => {
+      renderWithProviders(
+        <ConfigResolutionList
+          resolutions={[
+            resolution({ captureId: 'one', resolution: 'direct', label: 'Compatible', reason: 'already_up_to_date' }),
+          ]}
+        />,
+      );
+
+      expect(screen.getByTestId('config-resolution-group-direct').tagName).toBe('P');
+      expect(screen.queryByRole('article')).not.toBeInTheDocument();
     });
 
     it('shows a failed direct result as a card, not a quiet confirmation', () => {

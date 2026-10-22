@@ -153,6 +153,79 @@ describe('ConfigMigrationProgress', () => {
     expect(screen.queryByText('Compatibility unknown', { selector: 'p.font-medium' })).not.toBeInTheDocument();
   });
 
+  it('shows a set that fails before the transaction as a row, not as a folded or compatible line', () => {
+    const event = (
+      captureId: string,
+      overrides: Partial<Extract<ConfigProgressEvent, { event: 'config-resolution' }>>,
+    ): ConfigProgressEvent => ({
+      version: 1,
+      runId: 'run-1',
+      timestamp: '2026-07-16T10:00:00Z',
+      event: 'config-resolution',
+      captureId,
+      moduleId: `apps.${captureId}`,
+      configSetId: 'legacy',
+      targetCandidates: [],
+      resolution: 'legacy_unverified',
+      reason: null,
+      migrationPath: [],
+      label: 'Engine label',
+      message: `Engine message for ${captureId}`,
+      remediation: null,
+      ...overrides,
+    });
+
+    renderWithProviders(
+      <ConfigMigrationProgress
+        events={[
+          event('clean-a', {}),
+          event('clean-b', { reason: 'already_up_to_date' }),
+          // The engine reports these only as a reason, and sends no migration event after them.
+          event('collision', { reason: 'target_collision' }),
+          event('no-backup', { resolution: 'direct', reason: 'backup_failed' }),
+          event('no-journal', { resolution: 'direct', reason: 'journal_intent_failed' }),
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByTestId('config-progress-message').map((node) => node.textContent)).toEqual([
+      'Engine message for collision',
+      'Engine message for no-backup',
+      'Engine message for no-journal',
+    ]);
+    expect(screen.getByTestId('config-progress-folded')).toHaveTextContent(
+      'Compatibility not checked for 2 settings. They were saved before Endstate checked versions.',
+    );
+    expect(screen.queryByTestId('config-progress-direct')).not.toBeInTheDocument();
+  });
+
+  it('keeps the live list mounted while no row needs the person', () => {
+    renderWithProviders(
+      <ConfigMigrationProgress
+        events={[{
+          version: 1,
+          runId: 'run-1',
+          timestamp: '2026-07-16T10:00:00Z',
+          event: 'config-resolution',
+          captureId: 'clean',
+          moduleId: 'apps.clean',
+          configSetId: 'legacy',
+          targetCandidates: [],
+          resolution: 'legacy_unverified',
+          reason: null,
+          migrationPath: [],
+          label: 'Engine label',
+          message: 'Engine message',
+          remediation: null,
+        }]}
+      />,
+    );
+
+    // The region must exist before the first row arrives, or that row is not announced.
+    expect(screen.getByRole('list')).toHaveAttribute('aria-live', 'polite');
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+  });
+
   it('renders nothing when the run has no config progress', () => {
     const { container } = renderWithProviders(<ConfigMigrationProgress events={[]} />);
     expect(container).toBeEmptyDOMElement();

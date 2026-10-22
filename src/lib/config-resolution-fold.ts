@@ -5,13 +5,13 @@ import { settingsModulesPhrase } from './settings-kind';
  * What a config resolution asks of the person. The final list and the live
  * apply list both decide from this one function, so they cannot disagree.
  */
-export type Disposition = 'decision' | 'attention' | 'direct' | 'folded';
+export type Disposition = 'attention' | 'direct' | 'folded';
 
 /**
  * The fields the rule reads. A `config-resolution` stream event carries no
- * `status`: the engine emits it before it changes the set, and a failure
- * arrives later as a `config-migration` event. Without a status, the rule
- * decides from `resolution` and `reason` alone.
+ * `status`: the engine emits it before it changes the set. Some failures reach
+ * the GUI only as a `reason` on that event, with no later event, so the rule
+ * reads the reason for every kind, with or without a status.
  */
 export interface FoldInput {
   resolution: ConfigResolutionKind;
@@ -29,8 +29,9 @@ const FAILED_STATUSES: ReadonlySet<ConfigResolutionStatus> = new Set([
 // The engine's documented reasons (Endstate engine repo,
 // docs/contracts/cli-json-contract.md) that need nothing from the person: no
 // target app yet, nothing to change, or not selected. The documented list is
-// open ("include"), so every other reason, including a new one, stays a card.
-const UNKNOWN_REASONS_NEEDING_NOTHING: ReadonlySet<string> = new Set([
+// open ("include"), so every other reason, including a new one, needs the
+// person.
+const REASONS_NEEDING_NOTHING: ReadonlySet<string> = new Set([
   'target_not_detected',
   'already_up_to_date',
   'restore_filtered',
@@ -38,17 +39,18 @@ const UNKNOWN_REASONS_NEEDING_NOTHING: ReadonlySet<string> = new Set([
 ]);
 
 export function disposition(resolution: FoldInput): Disposition {
-  if (resolution.reason === 'ambiguous_target_instance') return 'decision';
   if (resolution.status !== undefined && FAILED_STATUSES.has(resolution.status)) return 'attention';
+  if (resolution.reason !== null && !REASONS_NEEDING_NOTHING.has(resolution.reason)) {
+    return 'attention';
+  }
   switch (resolution.resolution) {
     case 'direct':
       return 'direct';
     case 'legacy_unverified':
       return 'folded';
     case 'unknown':
-      return resolution.reason !== null && UNKNOWN_REASONS_NEEDING_NOTHING.has(resolution.reason)
-        ? 'folded'
-        : 'attention';
+      // With no reason, nothing says why the engine could not decide.
+      return resolution.reason === null ? 'attention' : 'folded';
     default:
       // migrate and incompatible always matter to the person.
       return 'attention';

@@ -363,10 +363,17 @@ the results use the same rule, and so does the live list while Apply runs
 | `reason: ambiguous_target_instance` | Its own card with the target picker, whatever its `resolution` |
 | `migrate`, `incompatible` | A card |
 | Any row with status `failed`, `rolled_back` or `rollback_failed` | A card |
-| `unknown` whose `reason` is not `target_not_detected`, `already_up_to_date`, `restore_filtered` or `restore_not_enabled` (this includes a new reason and a missing reason) | A card |
-| `legacy_unverified` that did not fail | The quiet line |
-| `unknown` with one of the four reasons above, that did not fail | The quiet line |
-| `direct` that did not fail | A muted “Compatible” line, as before |
+| Any row, of any kind, whose `reason` is set and is not `target_not_detected`, `already_up_to_date`, `restore_filtered` or `restore_not_enabled` (this includes a new reason) | A card |
+| `unknown` with no `reason` | A card |
+| `legacy_unverified` with no `reason`, or one of the four reasons above | The quiet line |
+| `unknown` with one of the four reasons above | The quiet line |
+| `direct` with no `reason`, or one of the four reasons above | A muted “Compatible” line, as before |
+
+The engine reports some failures only as a `reason` on the row, for example
+`target_collision`, `app_running`, `backup_failed` or `journal_intent_failed`,
+with no terminal status that says “failed” and no later event. Reading the
+reason for every kind keeps those rows out of the quiet line and out of the
+“Compatible” line.
 
 - **The quiet line is the compatibility notice before Apply.** It shows without
   opening any disclosure. It reads “Compatibility not checked for 40 app
@@ -379,18 +386,22 @@ the results use the same rule, and so does the live list while Apply runs
   (`ux-guardrails.md`, “Treating Normal Outcomes as Errors”).
 - **The section has no heading.** When no row needs the person, the section is
   that one line. When every row needs the person, the section is the cards.
-- **Details.** With Show details on, the line has a “Configuration details”
-  disclosure. It shows each engine label once, each engine message once with its
-  remediation, and under each message the settings it covers, each with its
-  status and portable provenance. No label or message repeats.
+- **Details (preview and results).** With Show details on, the line has a
+  “Configuration details” disclosure. It shows each engine label once, each
+  engine message once with its remediation, and under each message the settings
+  it covers, each with its status and portable provenance. No label or message
+  repeats.
 - **A failed `direct` row is a card.** A failure is never a quiet confirmation.
 - **The live list while Apply runs.** Each `config-resolution` stream event that
-  needs the person keeps its row. The other events fold into one quiet line, counted
-  from the events seen so far, with the same copy. A stream event carries no
-  status, because the engine emits it before it changes the set, so the rule
-  decides from `resolution` and `reason`; a failure shows through the
-  `config-migration` rows, which always stay. The quiet line sits outside the
-  polite live region, so a screen reader does not announce each count change.
+  needs the person keeps its row, and every `config-migration` event stays a row.
+  The other events fold into one quiet line, counted from the events seen so far,
+  with the same copy. This list shows the line alone: it has no details
+  disclosure, and the preview and the results keep each folded row's engine copy.
+  A stream event carries no status, because the engine emits it before it
+  changes the set, so the rule decides from `resolution` and `reason`. The list
+  element stays mounted and polite, even when empty, so the first row that
+  needs the person is announced. The quiet line sits outside it, so a screen
+  reader does not announce each count change.
 
 #### Produced-artifact completion line
 
