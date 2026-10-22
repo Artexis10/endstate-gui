@@ -3,6 +3,7 @@ import type {
   ConfigResolutionKind,
   RestoreTargetMapping,
 } from '@/types';
+import { disposition, foldedLine } from '@/lib/config-resolution-fold';
 import {
   Select,
   SelectContent,
@@ -49,7 +50,8 @@ export function ConfigResolutionList(
 ) {
   if (resolutions.length === 0) return null;
 
-  const items = buildRenderItems(resolutions);
+  const items = buildRenderItems(resolutions.filter((r) => disposition(r) !== 'folded'));
+  const folded = resolutions.filter((r) => disposition(r) === 'folded');
 
   return (
     <section className="space-y-2" aria-label="Settings compatibility">
@@ -113,21 +115,15 @@ export function ConfigResolutionList(
                   </div>
                 )}
               <DetailsDisclosure title="Configuration details" className="mt-3">
-                <dl className="space-y-1 text-xs text-muted-foreground">
-                  {provenanceEntries(resolution).map(([label, value]) => (
-                    <div key={label} className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
-                      <dt>{label}</dt>
-                      <dd className="break-all font-mono">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
+                <ProvenanceList resolution={resolution} />
               </DetailsDisclosure>
             </article>
           );
         }
 
-        // A `direct` confirmation is a quiet muted line, never a card.
-        if (item.resolution === 'direct') {
+        // A `direct` confirmation is a quiet muted line, never a card. A
+        // failed one is not a confirmation, so it keeps its card.
+        if (item.resolution === 'direct' && item.members.every((m) => disposition(m) === 'direct')) {
           return (
             <p
               key={item.key}
@@ -205,14 +201,7 @@ export function ConfigResolutionList(
                         {moduleDisplayNames[member.moduleId]}
                       </p>
                     )}
-                    <dl className="space-y-1 text-xs text-muted-foreground">
-                      {provenanceEntries(member).map(([label, value]) => (
-                        <div key={label} className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
-                          <dt>{label}</dt>
-                          <dd className="break-all font-mono">{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
+                    <ProvenanceList resolution={member} />
                   </div>
                 ))}
               </div>
@@ -220,7 +209,94 @@ export function ConfigResolutionList(
           </article>
         );
       })}
+      {folded.length > 0 && (
+        <FoldedCompatibility resolutions={folded} moduleDisplayNames={moduleDisplayNames} />
+      )}
     </section>
+  );
+}
+
+/**
+ * Resolutions that need nothing from the person fold into one quiet line. The
+ * line is the compatibility notice shown before Apply; the engine's own
+ * message for each setting sits behind the details disclosure, once per
+ * distinct message.
+ */
+function FoldedCompatibility(
+  { resolutions, moduleDisplayNames }: {
+    resolutions: ConfigResolution[];
+    moduleDisplayNames: Readonly<Record<string, string>>;
+  },
+) {
+  const messageGroups = groupByMessage(resolutions);
+  const labels = [...new Set(resolutions.map((r) => r.label))];
+
+  return (
+    <div data-testid="config-resolution-folded">
+      <p className="text-xs text-muted-foreground">{foldedLine(resolutions)}</p>
+      <DetailsDisclosure title="Configuration details" className="mt-2">
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">{labels.join(' · ')}</p>
+          {messageGroups.map((group) => (
+            <div key={group.message} className="space-y-2">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-foreground">{group.message}</p>
+                {distinctRemediations(group.members).map((remediation) => (
+                  <p key={remediation} className="text-xs text-muted-foreground">
+                    {remediation}
+                  </p>
+                ))}
+              </div>
+              {group.members.map((member) => (
+                <div
+                  key={member.captureId}
+                  className="space-y-1"
+                  data-testid={`config-resolution-${member.captureId}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    {moduleDisplayNames[member.moduleId] && (
+                      <p className="min-w-0 text-xs font-medium text-foreground">
+                        {moduleDisplayNames[member.moduleId]}
+                      </p>
+                    )}
+                    <span className="ml-auto flex-shrink-0 font-mono text-[10px] text-muted-foreground">
+                      {member.status}
+                    </span>
+                  </div>
+                  <ProvenanceList resolution={member} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </DetailsDisclosure>
+    </div>
+  );
+}
+
+/** Groups by the engine message, keeping first-occurrence order. */
+function groupByMessage(
+  resolutions: ConfigResolution[],
+): Array<{ message: string; members: ConfigResolution[] }> {
+  const groups = new Map<string, ConfigResolution[]>();
+  for (const resolution of resolutions) {
+    const members = groups.get(resolution.message);
+    if (members) members.push(resolution);
+    else groups.set(resolution.message, [resolution]);
+  }
+  return [...groups].map(([message, members]) => ({ message, members }));
+}
+
+function ProvenanceList({ resolution }: { resolution: ConfigResolution }) {
+  return (
+    <dl className="space-y-1 text-xs text-muted-foreground">
+      {provenanceEntries(resolution).map(([label, value]) => (
+        <div key={label} className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
+          <dt>{label}</dt>
+          <dd className="break-all font-mono">{value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

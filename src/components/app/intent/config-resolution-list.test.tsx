@@ -108,7 +108,7 @@ describe('ConfigResolutionList', () => {
     expect(screen.getByText('rollback_failed')).toBeInTheDocument();
   });
 
-  it('collapses same-verdict legacy sets into a single group card', () => {
+  it('folds same-verdict legacy sets into one quiet line, never a card', () => {
     const resolutions = Array.from({ length: 10 }, (_, index) => resolution({
       captureId: `legacy-${index}`,
       moduleId: `apps.module${index}`,
@@ -120,14 +120,19 @@ describe('ConfigResolutionList', () => {
 
     renderWithProviders(<ConfigResolutionList resolutions={resolutions} />);
 
-    expect(screen.getAllByTestId('config-resolution-group-legacy_unverified')).toHaveLength(1);
-    expect(screen.getByText('10 settings')).toBeInTheDocument();
-    expect(screen.getAllByText('Compatibility unknown')).toHaveLength(1);
-    expect(screen.getAllByText('Review these legacy settings before restoring them.')).toHaveLength(1);
-    expect(screen.getAllByText('Engine legacy remediation')).toHaveLength(1);
+    const section = screen.getByRole('region', { name: 'Settings compatibility' });
+    expect(section.children).toHaveLength(1);
+    expect(screen.queryByTestId('config-resolution-group-legacy_unverified')).not.toBeInTheDocument();
+    expect(screen.getByTestId('config-resolution-folded')).toHaveTextContent(
+      'Compatibility not checked for 10 settings. They were saved before Endstate checked versions.',
+    );
+    // The engine copy lives behind the details disclosure, which is off here.
+    expect(screen.queryByText('Review these legacy settings before restoring them.')).not.toBeInTheDocument();
   });
 
-  it('keeps groups with distinct engine messages separate', () => {
+  it('lists each engine message once in details, grouped, with its label shown once', async () => {
+    vi.mocked(useShowDetails).mockReturnValue(true);
+    const user = userEvent.setup();
     renderWithProviders(
       <ConfigResolutionList
         resolutions={[
@@ -137,6 +142,7 @@ describe('ConfigResolutionList', () => {
             resolution: 'legacy_unverified',
             label: 'Compatibility unknown',
             message: 'First legacy reason',
+            remediation: 'Shared remediation',
           }),
           resolution({
             captureId: 'legacy-b',
@@ -145,13 +151,241 @@ describe('ConfigResolutionList', () => {
             label: 'Compatibility unknown',
             message: 'Second legacy reason',
           }),
+          resolution({
+            captureId: 'legacy-c',
+            moduleId: 'apps.c',
+            resolution: 'legacy_unverified',
+            label: 'Compatibility unknown',
+            message: 'First legacy reason',
+            remediation: 'Shared remediation',
+          }),
+        ]}
+        moduleDisplayNames={{ 'apps.a': 'App A', 'apps.b': 'App B', 'apps.c': 'App C' }}
+      />,
+    );
+
+    expect(screen.getAllByTestId('config-resolution-folded')).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Configuration details' }));
+
+    expect(screen.getAllByText('First legacy reason')).toHaveLength(1);
+    expect(screen.getAllByText('Second legacy reason')).toHaveLength(1);
+    expect(screen.getAllByText('Shared remediation')).toHaveLength(1);
+    expect(screen.getAllByText('Compatibility unknown')).toHaveLength(1);
+    for (const name of ['App A', 'App B', 'App C']) {
+      expect(screen.getAllByText(name)).toHaveLength(1);
+    }
+  });
+
+  describe('which resolutions fold into the quiet line', () => {
+    type Case = {
+      name: string;
+      overrides: Partial<ConfigResolution>;
+    };
+    const base = { captureId: 'one', label: 'Engine label' };
+
+    const folded: Case[] = [
+      { name: 'legacy_unverified with no reason', overrides: { resolution: 'legacy_unverified' } },
+      {
+        name: 'legacy_unverified that is already up to date',
+        overrides: { resolution: 'legacy_unverified', reason: 'already_up_to_date' },
+      },
+      { name: 'unknown with target_not_detected', overrides: { resolution: 'unknown', reason: 'target_not_detected' } },
+      { name: 'unknown with already_up_to_date', overrides: { resolution: 'unknown', reason: 'already_up_to_date' } },
+      { name: 'unknown with restore_filtered', overrides: { resolution: 'unknown', reason: 'restore_filtered' } },
+      { name: 'unknown with restore_not_enabled', overrides: { resolution: 'unknown', reason: 'restore_not_enabled' } },
+    ];
+    const cards: Case[] = [
+      { name: 'incompatible', overrides: { resolution: 'incompatible', reason: 'downgrade_unsupported' } },
+      { name: 'migrate', overrides: { resolution: 'migrate' } },
+      { name: 'unknown with target_collision', overrides: { resolution: 'unknown', reason: 'target_collision' } },
+      { name: 'unknown with payload_integrity_failed', overrides: { resolution: 'unknown', reason: 'payload_integrity_failed' } },
+      { name: 'unknown with a reason the GUI has never seen', overrides: { resolution: 'unknown', reason: 'a_future_reason' } },
+      { name: 'unknown with no reason', overrides: { resolution: 'unknown', reason: null } },
+      // A failure the engine reports only as a reason, with a status that is not failed.
+      { name: 'legacy_unverified with target_collision', overrides: { resolution: 'legacy_unverified', reason: 'target_collision' } },
+      { name: 'direct with app_running', overrides: { resolution: 'direct', reason: 'app_running' } },
+      { name: 'direct with backup_failed', overrides: { resolution: 'direct', reason: 'backup_failed' } },
+      { name: 'direct with journal_intent_failed', overrides: { resolution: 'direct', reason: 'journal_intent_failed' } },
+      { name: 'legacy_unverified that failed', overrides: { resolution: 'legacy_unverified', status: 'failed' } },
+      { name: 'legacy_unverified that rolled back', overrides: { resolution: 'legacy_unverified', status: 'rolled_back' } },
+      { name: 'unknown and allowlisted that failed', overrides: { resolution: 'unknown', reason: 'target_not_detected', status: 'rollback_failed' } },
+    ];
+
+    it.each(folded)('folds $name', ({ overrides }) => {
+      renderWithProviders(
+        <ConfigResolutionList resolutions={[resolution({ ...base, resolution: 'unknown', ...overrides })]} />,
+      );
+
+      expect(screen.getByTestId('config-resolution-folded')).toBeInTheDocument();
+      expect(screen.queryByTestId(/^config-resolution-group-/)).not.toBeInTheDocument();
+    });
+
+    it.each(cards)('shows $name as a card', ({ overrides }) => {
+      renderWithProviders(
+        <ConfigResolutionList resolutions={[resolution({ ...base, resolution: 'unknown', ...overrides })]} />,
+      );
+
+      expect(screen.getByTestId(`config-resolution-group-${overrides.resolution}`)).toBeInTheDocument();
+      expect(screen.queryByTestId('config-resolution-folded')).not.toBeInTheDocument();
+    });
+
+    it('keeps a direct result with a harmless reason as a quiet line', () => {
+      renderWithProviders(
+        <ConfigResolutionList
+          resolutions={[
+            resolution({ captureId: 'one', resolution: 'direct', label: 'Compatible', reason: 'already_up_to_date' }),
+          ]}
+        />,
+      );
+
+      expect(screen.getByTestId('config-resolution-group-direct').tagName).toBe('P');
+      expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    });
+
+    it('shows a failed direct result as a card, not a quiet confirmation', () => {
+      renderWithProviders(
+        <ConfigResolutionList
+          resolutions={[
+            resolution({ captureId: 'ok', resolution: 'direct', label: 'Compatible', message: 'Same message', status: 'restored' }),
+            resolution({ captureId: 'bad', resolution: 'direct', label: 'Compatible', message: 'Same message', status: 'failed' }),
+          ]}
+        />,
+      );
+
+      // One engine message groups both rows; the failure keeps the group in a card.
+      expect(screen.getByRole('article')).toHaveTextContent('failed');
+    });
+  });
+
+  it('never folds a row that asks the person to pick a target, whatever its kind', () => {
+    renderWithProviders(
+      <ConfigResolutionList
+        resolutions={[
+          resolution({
+            captureId: 'pick-me',
+            resolution: 'legacy_unverified',
+            label: 'Choose a target',
+            reason: 'ambiguous_target_instance',
+            targetCandidates: [candidate('t-1', '1.0')],
+          }),
+        ]}
+        restoreTargetSupported
+        onTargetMappingChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('config-resolution-pick-me')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    expect(screen.queryByTestId('config-resolution-folded')).not.toBeInTheDocument();
+  });
+
+  it('keeps cards for what needs the person and puts the quiet line after them', () => {
+    renderWithProviders(
+      <ConfigResolutionList
+        resolutions={[
+          resolution({ captureId: 'legacy', moduleId: 'apps.a', resolution: 'legacy_unverified', label: 'Compatibility unknown' }),
+          resolution({
+            captureId: 'bad',
+            moduleId: 'apps.b',
+            resolution: 'incompatible',
+            label: 'Not supported',
+            message: 'Cannot restore these settings',
+          }),
         ]}
       />,
     );
 
-    expect(screen.getAllByTestId('config-resolution-group-legacy_unverified')).toHaveLength(2);
-    expect(screen.getByText('First legacy reason')).toBeInTheDocument();
-    expect(screen.getByText('Second legacy reason')).toBeInTheDocument();
+    const section = screen.getByRole('region', { name: 'Settings compatibility' });
+    expect(section.children).toHaveLength(2);
+    expect(section.children[0]).toHaveAttribute('data-testid', 'config-resolution-group-incompatible');
+    expect(section.children[1]).toHaveAttribute('data-testid', 'config-resolution-folded');
+  });
+
+  describe('the quiet line copy, counted from the data', () => {
+    const legacy = (captureId: string, moduleId: string, overrides: Partial<ConfigResolution> = {}) =>
+      resolution({ captureId, moduleId, resolution: 'legacy_unverified', label: 'Compatibility unknown', ...overrides });
+
+    it('counts distinct modules, not config sets', () => {
+      renderWithProviders(
+        <ConfigResolutionList
+          resolutions={[
+            legacy('a-1', 'apps.a'),
+            legacy('a-2', 'apps.a', { configSetId: 'other' }),
+            legacy('b-1', 'apps.b'),
+          ]}
+        />,
+      );
+
+      expect(screen.getByTestId('config-resolution-folded')).toHaveTextContent(
+        'Compatibility not checked for 2 settings.',
+      );
+    });
+
+    it('names app settings and Windows settings apart', () => {
+      renderWithProviders(
+        <ConfigResolutionList
+          resolutions={[
+            legacy('a', 'apps.a'),
+            legacy('b', 'apps.b'),
+            legacy('k', 'windows-settings.keyboard'),
+          ]}
+        />,
+      );
+
+      expect(screen.getByTestId('config-resolution-folded')).toHaveTextContent(
+        'Compatibility not checked for 2 app settings and 1 Windows setting. They were saved before Endstate checked versions.',
+      );
+    });
+
+    it('says "It was" for one setting', () => {
+      renderWithProviders(<ConfigResolutionList resolutions={[legacy('a', 'apps.a')]} />);
+
+      expect(screen.getByTestId('config-resolution-folded')).toHaveTextContent(
+        'Compatibility not checked for 1 setting. It was saved before Endstate checked versions.',
+      );
+    });
+
+    it('claims the legacy reason only for the legacy settings when others are folded too', () => {
+      renderWithProviders(
+        <ConfigResolutionList
+          resolutions={[
+            legacy('a', 'apps.a'),
+            legacy('b', 'apps.b'),
+            resolution({
+              captureId: 'c',
+              moduleId: 'apps.c',
+              resolution: 'unknown',
+              reason: 'target_not_detected',
+              label: 'Compatibility unknown',
+            }),
+          ]}
+        />,
+      );
+
+      expect(screen.getByTestId('config-resolution-folded')).toHaveTextContent(
+        'Compatibility not checked for 3 settings. 2 of them were saved before Endstate checked versions.',
+      );
+    });
+
+    it('makes no claim about when the settings were saved when none is legacy', () => {
+      renderWithProviders(
+        <ConfigResolutionList
+          resolutions={[
+            resolution({
+              captureId: 'c',
+              moduleId: 'apps.c',
+              resolution: 'unknown',
+              reason: 'target_not_detected',
+              label: 'Compatibility unknown',
+            }),
+          ]}
+        />,
+      );
+
+      expect(screen.getByTestId('config-resolution-folded')).toHaveTextContent(
+        /^Compatibility not checked for 1 setting\.$/,
+      );
+    });
   });
 
   it('renders ambiguous-target rows as individual decision cards, never grouped', () => {
@@ -217,7 +451,7 @@ describe('ConfigResolutionList', () => {
     expect(screen.queryByRole('button', { name: 'Configuration details' })).not.toBeInTheDocument();
   });
 
-  it('keeps the legacy warning at the top level, visible without opening a disclosure', async () => {
+  it('keeps the folded notice visible and the engine copy and provenance behind the disclosure', async () => {
     vi.mocked(useShowDetails).mockReturnValue(true);
     const user = userEvent.setup();
     renderWithProviders(
@@ -235,39 +469,25 @@ describe('ConfigResolutionList', () => {
       />,
     );
 
-    expect(screen.getByText('Engine legacy consent warning')).toBeVisible();
-    expect(screen.getByText('Engine legacy remediation')).toBeVisible();
-    expect(screen.getByText('Compatibility unknown')).toBeVisible();
-    // Technical provenance (including the raw module id) stays behind the disclosure.
+    // The notice itself is visible before any interaction.
+    expect(screen.getByTestId('config-resolution-folded')).toHaveTextContent(
+      'Compatibility not checked for 1 setting.',
+    );
+    expect(screen.queryByText('Engine legacy consent warning')).not.toBeInTheDocument();
     expect(screen.queryByTestId('config-resolution-legacy-1')).not.toBeInTheDocument();
     expect(screen.queryByText('apps.photoshop')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Configuration details' }));
+    expect(screen.getByText('Engine legacy consent warning')).toBeVisible();
+    expect(screen.getByText('Engine legacy remediation')).toBeVisible();
+    expect(screen.getByText('Compatibility unknown')).toBeVisible();
     expect(screen.getByTestId('config-resolution-legacy-1')).toBeInTheDocument();
     expect(screen.getByText('apps.photoshop')).toBeInTheDocument();
   });
 
-  it('keeps the raw module id out of the distilled group card', () => {
-    renderWithProviders(
-      <ConfigResolutionList
-        resolutions={[
-          resolution({
-            captureId: 'legacy-capture',
-            moduleId: 'apps.photoshop',
-            resolution: 'legacy_unverified',
-            label: 'Compatibility unknown',
-            message: 'Review these legacy settings before restoring them.',
-          }),
-        ]}
-      />,
-    );
-
-    const card = screen.getByTestId('config-resolution-group-legacy_unverified');
-    expect(within(card).queryByText('apps.photoshop')).not.toBeInTheDocument();
-    expect(within(card).getByText('Review these legacy settings before restoring them.')).toBeVisible();
-  });
-
-  it('lists grouped member display names inside a single card', () => {
+  it('names each folded setting by its display name in details, with its status', async () => {
+    vi.mocked(useShowDetails).mockReturnValue(true);
+    const user = userEvent.setup();
     renderWithProviders(
       <ConfigResolutionList
         resolutions={[
@@ -277,6 +497,7 @@ describe('ConfigResolutionList', () => {
             resolution: 'legacy_unverified',
             label: 'Compatibility unknown',
             message: 'Review these legacy settings before restoring them.',
+            status: 'planned',
           }),
           resolution({
             captureId: 'vscode-legacy',
@@ -284,6 +505,7 @@ describe('ConfigResolutionList', () => {
             resolution: 'legacy_unverified',
             label: 'Compatibility unknown',
             message: 'Review these legacy settings before restoring them.',
+            status: 'skipped',
           }),
         ]}
         moduleDisplayNames={{
@@ -293,14 +515,14 @@ describe('ConfigResolutionList', () => {
       />,
     );
 
-    const cards = screen.getAllByTestId('config-resolution-group-legacy_unverified');
-    expect(cards).toHaveLength(1);
-    const card = cards[0];
-    expect(within(card).getByText('Adobe Photoshop')).toBeVisible();
-    expect(within(card).getByText('Visual Studio Code')).toBeVisible();
-    expect(within(card).getByText('2 settings')).toBeVisible();
-    expect(screen.queryByText('apps.photoshop')).not.toBeInTheDocument();
-    expect(screen.queryByText('apps.vscode')).not.toBeInTheDocument();
+    expect(screen.queryByText('Adobe Photoshop')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Configuration details' }));
+    const photoshop = screen.getByTestId('config-resolution-photoshop-legacy');
+    expect(within(photoshop).getByText('Adobe Photoshop')).toBeVisible();
+    expect(within(photoshop).getByText('planned')).toBeVisible();
+    const vscode = screen.getByTestId('config-resolution-vscode-legacy');
+    expect(within(vscode).getByText('Visual Studio Code')).toBeVisible();
+    expect(within(vscode).getByText('skipped')).toBeVisible();
   });
 
   it('offers engine candidates in input order with no default target', async () => {
