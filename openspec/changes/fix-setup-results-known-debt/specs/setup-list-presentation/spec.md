@@ -2,7 +2,7 @@
 
 ### Requirement: Setup list status text meets AA contrast
 
-The status labels on setup preview, setup results and restore rows, and the filter chips that take their colour, SHALL have a contrast ratio of at least 4.5:1 (WCAG AA) in the light theme, on the page background, the panel, the muted surface and the chip's own 10% tint. A change to the light theme SHALL NOT lower the contrast of these labels in the dark theme.
+The coloured status labels on setup preview, setup results and restore rows, and the filter chips that take their colour, SHALL have a contrast ratio of at least 4.5:1 (WCAG AA) in the light theme, on the page background, the panel, the muted surface and the chip's own 10% tint. The muted status labels (PRESENT, UP TO DATE, NOT IN SETUP) SHALL have at least 4.5:1 on the page background and the panel. A change to the light theme SHALL NOT lower the contrast of these labels in the dark theme.
 
 #### Scenario: Light theme failure label
 - **WHEN** a results row reads FAILED in the light theme

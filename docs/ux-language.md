@@ -178,8 +178,9 @@ Status text reads its colour from the `--status-*` tokens in
 semantic fills. In the light theme every coloured status reaches WCAG AA, at
 least 4.5:1, on white, the panel, the muted surface and a chip's 10% tint;
 muted status text uses the shared muted grey, which reaches AA on white and
-the panel. The dark theme keeps the colours these rows had before. Ratios on white (light) and
-on the dark background (dark):
+the panel. The dark theme keeps the colours these rows had before, except DETECTED, which
+moves from teal-600 to teal-400, the shade its class already asked for. Ratios on white
+(light) and on the dark background (dark):
 
 | Colour | Labels | Light | Dark |
 |--------|--------|------:|-----:|
