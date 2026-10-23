@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.13.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.12.0...gui-v3.13.0) (2026-10-23)
+
+
+### Features
+
+* **storage:** add local sync-folder setup storage ([#237](https://github.com/Artexis10/endstate-gui/issues/237)) ([714fe4e](https://github.com/Artexis10/endstate-gui/commit/714fe4e931c763dfc445af1274531bb44d9d6f7d))
+
+
+### Bug Fixes
+
+* **results:** AA status colours, preview app chip count, phase-aware fallback ([#239](https://github.com/Artexis10/endstate-gui/issues/239)) ([86e98e6](https://github.com/Artexis10/endstate-gui/commit/86e98e65d748e39f1d8cdf1020462e404f1be964))
+* **results:** fold settings compatibility rows that need nothing into one quiet line ([#243](https://github.com/Artexis10/endstate-gui/issues/243)) ([10216f0](https://github.com/Artexis10/endstate-gui/commit/10216f0cc4655f6fac3ade886e6184f84842746b))
+* **security:** authenticate the dev bridge and validate ZIP imports ([#244](https://github.com/Artexis10/endstate-gui/issues/244)) ([9db2e4b](https://github.com/Artexis10/endstate-gui/commit/9db2e4bb756d184b45b3617e66ef8736a78f260f))
+
 ## [3.12.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.11.0...gui-v3.12.0) (2026-10-19)
 
 
