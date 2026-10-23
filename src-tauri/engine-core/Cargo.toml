@@ -19,15 +19,16 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 base64 = "0.22"
 tempfile = "3.27"
 # Bridge-only deps: gated so the app crate (which links engine-core WITHOUT the
-# `bridge` feature) does not pull axum/tower-http/tokio-stream into release.
+# `bridge` feature) does not enable these server dependencies through engine-core.
 axum = { version = "0.8", optional = true }
 tower-http = { version = "0.6", features = ["cors"], optional = true }
 tokio-stream = { version = "0.1", features = ["sync"], optional = true }
+subtle = { version = "2.6", optional = true }
 
 [features]
 default = []
 # Compiles the axum HTTP bridge module. Enabled only by endstate-dev-bridge.
-bridge = ["axum", "tower-http", "tokio-stream"]
+bridge = ["axum", "tower-http", "tokio-stream", "subtle"]
 
 # Test-only: exercise the bridge router (body-limit regression). Only used when
 # tests run with `--features bridge`; harmless otherwise.

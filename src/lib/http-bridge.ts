@@ -1,77 +1,76 @@
-/**
- * HTTP bridge for browser-bridge mode.
- *
- * When running in a regular browser tab (not the Tauri webview) with
- * VITE_BROWSER_BRIDGE=1, this module routes invoke() calls through HTTP
- * and listen() through SSE to the dev-only HTTP server running in the
- * Tauri backend (port 9876). Used for browser-based dev / Playwright
- * automation against the real engine.
- */
+/** Authenticated standalone transport for browser development. Tauri uses IPC. */
+import { EventSource } from 'eventsource';
+import protocol from './bridge-protocol.json';
 
-const BRIDGE_URL = 'http://127.0.0.1:9876';
+const BOOTSTRAP_ERROR = 'Open the private browser bootstrap printed by npm run dev:bridge for this launch.';
 
-/**
- * Invoke a Tauri command via HTTP bridge.
- */
+function consumeBootstrap(): void {
+  if (typeof window === 'undefined' || import.meta.env.VITE_BROWSER_BRIDGE !== '1') return;
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  if (!fragment.has('endstate-bridge')) return;
+  const bearer = fragment.get('endstate-bridge');
+  // Clear authority before storage, validation, rendering, or any network request.
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  // The descriptor protocol fixes a 32-byte lowercase hexadecimal bearer.
+  if (bearer && /^[a-f0-9]{64}$/.test(bearer)) {
+    window.sessionStorage.setItem(protocol.storageKey, bearer);
+  } else {
+    window.sessionStorage.removeItem(protocol.storageKey);
+  }
+}
+consumeBootstrap();
+
+function authorization(): string {
+  const bearer = window.sessionStorage.getItem(protocol.storageKey);
+  if (!bearer) throw new Error(BOOTSTRAP_ERROR);
+  return `Bearer ${bearer}`;
+}
+
 export async function httpInvoke<T = any>(cmd: string, args?: Record<string, any>): Promise<T> {
-  const response = await fetch(`${BRIDGE_URL}/api/invoke`, {
+  const response = await fetch(`${protocol.bridgeUrl}/api/invoke`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: authorization() },
     body: JSON.stringify({ cmd, args: args || {} }),
   });
-
-  if (!response.ok) {
-    throw new Error(`HTTP bridge error: ${response.status} ${response.statusText}`);
-  }
-
+  if (response.status === 401 || response.status === 403) throw new Error(BOOTSTRAP_ERROR);
+  if (!response.ok) throw new Error(`HTTP bridge error: ${response.status} ${response.statusText}`);
   const result = await response.json();
-
-  if (!result.ok) {
-    throw new Error(result.error || `Command '${cmd}' failed`);
-  }
-
+  if (!result.ok) throw new Error(result.error || `Command '${cmd}' failed`);
   return result.data as T;
 }
 
-/**
- * Listen to events via SSE bridge.
- * Returns an unlisten function.
- */
 export function httpListen<T = any>(
   _event: string,
   handler: (event: { payload: T }) => void,
 ): () => void {
-  const eventSource = new EventSource(`${BRIDGE_URL}/events`);
-
-  eventSource.onmessage = (msg) => {
+  const credential = authorization();
+  const eventSource = new EventSource(`${protocol.bridgeUrl}/events`, {
+    fetch: (input, init) => fetch(input, {
+      ...init, headers: { ...init?.headers, Authorization: credential },
+    }),
+  });
+  eventSource.onmessage = (message) => {
     try {
-      const data = JSON.parse(msg.data) as T;
-      handler({ payload: data });
+      handler({ payload: JSON.parse(message.data) as T });
     } catch {
-      // Ignore unparseable events
+      // Ignore unparseable events.
     }
   };
-
-  eventSource.onerror = () => {
-    // EventSource auto-reconnects, just log
-    console.warn('[HTTP Bridge] SSE connection error, will retry...');
+  eventSource.onerror = (error) => {
+    if (error.code === 401 || error.code === 403) {
+      eventSource.close();
+      console.warn(`[HTTP Bridge] ${BOOTSTRAP_ERROR}`);
+    } else {
+      console.warn('[HTTP Bridge] SSE connection error, will retry...');
+    }
   };
-
-  // Return unlisten function
   return () => eventSource.close();
 }
 
-/**
- * Check if the HTTP bridge is reachable.
- */
 export async function isBridgeAvailable(): Promise<boolean> {
   try {
-    const response = await fetch(`${BRIDGE_URL}/api/invoke`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cmd: 'engine_is_running', args: {} }),
-    });
-    return response.ok;
+    await httpInvoke('engine_is_running');
+    return true;
   } catch {
     return false;
   }

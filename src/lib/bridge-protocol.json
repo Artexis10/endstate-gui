@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "frontendOrigin": "http://127.0.0.1:1420",
+  "bridgeUrl": "http://127.0.0.1:9876",
+  "storageKey": "endstate:bridge-session"
+}

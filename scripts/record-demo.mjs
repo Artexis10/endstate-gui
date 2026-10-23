@@ -22,6 +22,8 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import bridgeSession from './bridge-session.cjs';
+import protocol from '../src/lib/bridge-protocol.json' with { type: 'json' };
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const URL = process.env.DEMO_URL || 'http://127.0.0.1:1420';
@@ -33,11 +35,16 @@ const SIZE = { width: 1280, height: 800 };
 
 fs.mkdirSync(OUT, { recursive: true });
 
+const session = bridgeSession.readSession();
 const browser = await chromium.launch();
 const ctx = await browser.newContext({
   viewport: SIZE,
   recordVideo: { dir: OUT, size: SIZE },
 });
+
+await ctx.addInitScript(({ origin, key, bearer }) => {
+  if (location.origin === origin) sessionStorage.setItem(key, bearer);
+}, { origin: session.frontendOrigin, key: protocol.storageKey, bearer: session.bearer });
 
 // Seed settings before any app code runs, and suppress toasts for the camera.
 await ctx.addInitScript(({ profilesDir, engineScript }) => {

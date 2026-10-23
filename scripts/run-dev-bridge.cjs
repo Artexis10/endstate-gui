@@ -1,90 +1,105 @@
-// scripts/run-dev-bridge.cjs
-// Launch the livewire dev environment using the STANDALONE dev bridge instead
-// of the in-process Tauri bridge.
-//
-// Runs two long-lived children and ties their lifetimes together:
-//   1. Vite        — http://127.0.0.1:1420  (the frontend; VITE_BROWSER_BRIDGE=1)
-//   2. dev-bridge  — http://127.0.0.1:9876  (engine HTTP/SSE; non-Tauri binary)
-//
-// The standalone bridge links none of the native GUI stack (tao/wry/webview2-com),
-// which is where the intermittent 0xc0000374 heap corruption lived. The frontend
-// (src/lib/http-bridge.ts) still targets :9876, so nothing else changes.
-//
-// ENDSTATE_ROOT: defaults to the sibling ../endstate repo (same source the Tauri
-// resources copy from) so engine spawns find modules/payload. Override with the
-// ENDSTATE_ROOT env var. Override the engine binary with ENDSTATE_ENGINE_PATH.
-
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
+// One launcher owns both listeners and the private launch credential.
+const { spawn } = require('node:child_process');
+const { once } = require('node:events');
+const { createServer } = require('node:http');
+const { createInterface } = require('node:readline');
+const { randomBytes } = require('node:crypto');
+const path = require('node:path');
+const fs = require('node:fs');
+const { FRONTEND_ORIGIN, BRIDGE_URL, createSessionDirectory, writePrivate } = require('./bridge-session.cjs');
 
 const repoRoot = path.resolve(__dirname, '..');
-const siblingEngine = path.resolve(repoRoot, '../endstate');
-
-const env = { ...process.env };
-if (!env.ENDSTATE_ROOT && fs.existsSync(siblingEngine)) {
-  env.ENDSTATE_ROOT = siblingEngine;
-}
-// The bridge resolves its sidecar next to the compiled binary
-// (src-tauri/target/debug/endstate.exe, placed by rebuild-engine.cjs). An
-// explicit ENDSTATE_ENGINE_PATH override wins if set.
-
-const children = [];
+const frontendAddress = new URL(FRONTEND_ORIGIN);
+const children = new Set();
+let frontend;
+let vite;
+let runtimeDirectory;
 let shuttingDown = false;
 
-function shutdown(code) {
+async function shutdown(code) {
   if (shuttingDown) return;
   shuttingDown = true;
-  for (const c of children) {
-    if (c && !c.killed) {
-      try {
-        c.kill('SIGTERM');
-      } catch {
-        /* already gone */
-      }
-    }
+  for (const child of children) {
+    child.stdin?.end();
+    child.kill();
   }
+  await vite?.close();
+  frontend?.closeAllConnections();
+  await new Promise(resolve => frontend?.listening ? frontend.close(resolve) : resolve());
+  if (runtimeDirectory) fs.rmSync(runtimeDirectory, { recursive: true, force: true });
   process.exit(code);
 }
+process.on('SIGINT', () => void shutdown(0));
+process.on('SIGTERM', () => void shutdown(0));
+process.on('disconnect', () => void shutdown(0));
 
-function launch(name, command, args, extraEnv) {
-  const child = spawn(command, args, {
-    cwd: repoRoot,
-    env: { ...env, ...(extraEnv || {}) },
-    stdio: 'inherit',
-    shell: process.platform === 'win32', // npm/cargo on Windows need shell resolution
-  });
-  child.on('exit', (code, signal) => {
-    if (!shuttingDown) {
-      console.error(`[dev:bridge] ${name} exited (code=${code} signal=${signal}); shutting down.`);
-      shutdown(code === null ? 1 : code);
+async function main() {
+  process.env.VITE_BROWSER_BRIDGE = '1';
+  process.env.ENDSTATE_BROWSER_BRIDGE = '1';
+  frontend = createServer((request, response) => {
+    if (request.headers.host !== frontendAddress.host) {
+      response.writeHead(403).end();
+    } else if (vite) {
+      vite.middlewares(request, response, () => response.writeHead(404).end());
+    } else {
+      response.writeHead(503).end();
     }
   });
-  child.on('error', (err) => {
-    console.error(`[dev:bridge] failed to start ${name}: ${err.message}`);
-    shutdown(1);
+  // Acquire the public listener before creating authority; never reuse a server.
+  frontend.listen(Number(frontendAddress.port), frontendAddress.hostname);
+  await once(frontend, 'listening');
+  runtimeDirectory = createSessionDirectory();
+  const relative = path.relative(repoRoot, runtimeDirectory);
+  if (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+    throw new Error('Bridge session directory must be outside the served repository');
+  }
+  const session = { version: 1, frontendOrigin: FRONTEND_ORIGIN, bridgeUrl: BRIDGE_URL,
+    bearer: randomBytes(32).toString('hex') };
+  const descriptorPath = writePrivate(runtimeDirectory, 'session.json', JSON.stringify(session));
+
+  const cargo = spawn('cargo', ['build', '--locked', '--manifest-path', 'src-tauri/Cargo.toml', '-p', 'endstate-dev-bridge', '-j', '2'],
+    { cwd: repoRoot, stdio: 'inherit' });
+  children.add(cargo);
+  const [code] = await once(cargo, 'exit');
+  children.delete(cargo);
+  if (code !== 0) throw new Error('Bridge build failed');
+  const binary = path.resolve(process.env.CARGO_TARGET_DIR || path.join(repoRoot, 'src-tauri/target'), 'debug',
+    process.platform === 'win32' ? 'endstate-dev-bridge.exe' : 'endstate-dev-bridge');
+  const env = { ...process.env };
+  delete env.ENDSTATE_BRIDGE_SESSION;
+  const siblingEngine = path.resolve(repoRoot, '../endstate');
+  if (!env.ENDSTATE_ROOT && fs.existsSync(siblingEngine)) env.ENDSTATE_ROOT = siblingEngine;
+  const bridge = spawn(binary, [], { cwd: repoRoot, env, stdio: ['pipe', 'pipe', 'inherit'] });
+  children.add(bridge);
+  const bound = new Promise((resolve, reject) => {
+    const lines = createInterface({ input: bridge.stdout });
+    const timeout = setTimeout(() => reject(new Error('Bridge bind handshake timed out')), 30_000);
+    lines.once('line', line => {
+      clearTimeout(timeout);
+      if (line === 'ENDSTATE_BRIDGE_BOUND_V1') resolve();
+      else reject(new Error('Invalid bridge bind handshake'));
+    });
+    bridge.once('error', reject);
+    bridge.stdin.once('error', reject);
+    bridge.once('exit', () => { clearTimeout(timeout); reject(new Error('Bridge exited before readiness')); });
   });
-  children.push(child);
-  return child;
+  bridge.once('exit', () => { if (!shuttingDown) void shutdown(1); });
+  // Authority travels only through the owned stdin pipe, which stays open for lifetime control.
+  bridge.stdin.write(JSON.stringify(session) + '\n');
+  await bound;
+  // Readiness stays on the owned pipe; no HTTP readiness request carries authority.
+
+  const { createServer: createViteServer } = await import('vite');
+  vite = await createViteServer({ root: repoRoot, server: { middlewareMode: true,
+    hmr: { server: frontend }, fs: { strict: true, allow: [repoRoot] } } });
+  const destination = `${FRONTEND_ORIGIN}/#endstate-bridge=${encodeURIComponent(session.bearer)}`;
+  const bootstrapPath = writePrivate(runtimeDirectory, 'open-browser.html',
+    `<!doctype html><meta name="referrer" content="no-referrer"><title>Endstate bridge</title><script>location.replace(${JSON.stringify(destination)})</script>`);
+  console.log(`[dev:bridge] Ready. Private browser bootstrap: ${bootstrapPath}`);
+  console.log(`[dev:bridge] Session descriptor: ${descriptorPath}`);
+  process.send?.({ type: 'ready', descriptorPath, bootstrapPath });
 }
-
-process.on('SIGINT', () => shutdown(0));
-process.on('SIGTERM', () => shutdown(0));
-
-console.log('[dev:bridge] starting Vite (1420) + standalone dev bridge (9876)…');
-if (env.ENDSTATE_ROOT) {
-  console.log(`[dev:bridge] ENDSTATE_ROOT=${env.ENDSTATE_ROOT}`);
-}
-
-// Vite (frontend). VITE_* flags come from the npm script's cross-env.
-launch('vite', 'npm', ['run', 'dev']);
-
-// Standalone bridge. Build+run via cargo; first run compiles (~quick, already built).
-launch('dev-bridge', 'cargo', [
-  'run',
-  '--quiet',
-  '--manifest-path',
-  'src-tauri/Cargo.toml',
-  '-p',
-  'endstate-dev-bridge',
-]);
+main().catch(error => {
+  console.error(`[dev:bridge] ${error.message}`);
+  void shutdown(1);
+});

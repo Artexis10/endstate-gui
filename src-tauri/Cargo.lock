@@ -1018,6 +1018,7 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+ "subtle",
  "tempfile",
  "tokio",
  "tokio-stream",

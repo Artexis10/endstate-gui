@@ -308,3 +308,20 @@ This runs unit tests for the parsing logic, runId injection, and cancellation in
 ## Notes
 
 This repository exists to develop the official Endstate desktop experience.
+
+### Authenticated browser development
+
+Run `npm run dev:bridge` to start the standalone browser bridge.
+Open the printed private `open-browser.html` file in an isolated browser.
+The page clears its credential fragment immediately and retains authority in that tab.
+Reopen the new bootstrap after a launcher restart. Packaged Tauri applications continue to use native IPC.
+
+The launcher verifies owner-only runtime files outside the served repository and owns both loopback listeners.
+It gives Rust its session through a private stdin pipe; descriptor paths cannot authorize Rust startup.
+Occupied ports fail startup. Launcher loss closes the bridge, while Vite configuration reloads keep the frontend listener bound.
+Bridge mode disables Tidewave HTTP regardless of enable flags.
+
+Scripted clients set `ENDSTATE_BRIDGE_SESSION` to the printed descriptor path.
+Use `node scripts/bridge-invoke.cjs engine_is_running` for a safe authenticated probe.
+The real-engine Playwright configuration and demo recorder read the same private descriptor.
+Never publish the descriptor, bearer, authenticated headers, or browser storage. Real-engine traces stay disabled.

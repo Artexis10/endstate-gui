@@ -7,17 +7,21 @@
 //! heap corruption that plagued the in-process bridge cannot occur here.
 //!
 //! Routes + port (127.0.0.1:9876) + response shapes are byte-compatible with the
-//! old in-process bridge, so the frontend (`src/lib/http-bridge.ts`) is unchanged.
+//! old in-process bridge; callers now authenticate with the private launch session.
 
 use axum::{
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Request, State},
+    http::{header, HeaderMap, Method, StatusCode},
+    middleware::{self, Next},
     response::sse::{self, Sse},
+    response::Response,
     routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
-use std::io::{BufRead, BufReader};
+use std::future::IntoFuture;
+use std::io::{BufRead, BufReader, Write};
 use std::process::Stdio;
 use std::sync::atomic::Ordering;
 use tokio_stream::wrappers::BroadcastStream;
@@ -863,39 +867,141 @@ async fn handle_events(
 /// realistic bundles. (Dev/automation bridge only; loopback-bound.)
 const MAX_BODY_BYTES: usize = 64 * 1024 * 1024;
 
-/// Build the bridge router with routes, CORS, and the raised body limit.
-/// Extracted from [`start`] so the body-limit behaviour is unit-testable.
-fn build_router(state: AppState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(tower_http::cors::Any)
-        .allow_methods(tower_http::cors::Any)
-        .allow_headers(tower_http::cors::Any);
+/// Private launch frame. Endpoints and token format are a versioned protocol.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BridgeSession {
+    version: u8,
+    frontend_origin: String,
+    bridge_url: String,
+    bearer: String,
+}
 
+impl BridgeSession {
+    pub fn read_frame<R: BufRead>(input: &mut R) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut frame = Vec::new();
+        // Cap the private protocol at 4096 JSON bytes plus its required newline.
+        std::io::Read::take(input, 4097).read_until(b'\n', &mut frame)?;
+        if frame.last() != Some(&b'\n') {
+            return Err("Invalid private session frame".into());
+        }
+        let session: Self = serde_json::from_slice(&frame)?;
+        let protocol: serde_json::Value =
+            serde_json::from_str(include_str!("../../../src/lib/bridge-protocol.json"))?;
+        if Some(u64::from(session.version)) != protocol["version"].as_u64()
+            || Some(session.frontend_origin.as_str()) != protocol["frontendOrigin"].as_str()
+            || Some(session.bridge_url.as_str()) != protocol["bridgeUrl"].as_str()
+            || session.bearer.len() != 64
+            || !session
+                .bearer
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err("Invalid private session frame".into());
+        }
+        Ok(session)
+    }
+}
+
+fn single_header<'a>(headers: &'a HeaderMap, name: &str) -> Result<Option<&'a str>, StatusCode> {
+    let mut values = headers.get_all(name).iter();
+    let first = values.next();
+    if values.next().is_some() {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    first
+        .map(|v| v.to_str().map_err(|_| StatusCode::FORBIDDEN))
+        .transpose()
+}
+
+async fn validate_request_identity(
+    State(session): State<BridgeSession>,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let host = single_header(request.headers(), "host")?;
+    single_header(request.headers(), "authorization")?;
+    let expected_authority = session
+        .bridge_url
+        .strip_prefix("http://")
+        .expect("validated URL");
+    let authority = request.uri().authority().map(|a| a.as_str());
+    if host.is_none() && authority.is_none()
+        || host.is_some_and(|h| h != expected_authority)
+        || authority.is_some_and(|a| a != expected_authority)
+    {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if single_header(request.headers(), "origin")?.is_some_and(|o| o != session.frontend_origin) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    Ok(next.run(request).await)
+}
+
+async fn authenticate(
+    State(session): State<BridgeSession>,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let authorization =
+        single_header(request.headers(), "authorization")?.ok_or(StatusCode::UNAUTHORIZED)?;
+    let expected = format!("Bearer {}", session.bearer);
+    use subtle::ConstantTimeEq;
+    if !bool::from(authorization.as_bytes().ct_eq(expected.as_bytes())) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(next.run(request).await)
+}
+
+fn build_router(state: AppState, session: BridgeSession) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(
+            session
+                .frontend_origin
+                .parse::<axum::http::HeaderValue>()
+                .expect("validated origin"),
+        )
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]);
     Router::new()
         .route("/api/invoke", post(handle_invoke))
         .route("/events", get(handle_events))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .layer(middleware::from_fn_with_state(
+            session.clone(),
+            authenticate,
+        ))
         .layer(cors)
+        .layer(middleware::from_fn_with_state(
+            session,
+            validate_request_identity,
+        ))
         .with_state(state)
 }
 
-/// Start the bridge HTTP server on 127.0.0.1:9876, serving until the process
-/// exits. Tauri-free — the caller (standalone binary) owns the runtime.
-pub async fn start(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
-    let app = build_router(state);
-
-    let listener = match tokio::net::TcpListener::bind("127.0.0.1:9876").await {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!(
-                "Browser bridge failed to bind port 9876: {}. Continuing without bridge.",
-                e
-            );
-            return Ok(());
-        }
-    };
-    eprintln!("Browser bridge listening on http://127.0.0.1:9876");
-    axum::serve(listener, app).await?;
+/// Report binding on stdout; EOF on the session's private stdin revokes the listener.
+pub async fn start(
+    state: AppState,
+    session: BridgeSession,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let authority = session
+        .bridge_url
+        .strip_prefix("http://")
+        .ok_or("Invalid bridge URL")?;
+    let listener = tokio::net::TcpListener::bind(authority).await?;
+    println!("ENDSTATE_BRIDGE_BOUND_V1");
+    std::io::stdout().flush()?;
+    let (lost_parent, parent_lost) = tokio::sync::oneshot::channel();
+    std::thread::spawn(move || {
+        let mut byte = [0u8];
+        let _ = std::io::Read::read(&mut std::io::stdin(), &mut byte);
+        let _ = lost_parent.send(());
+    });
+    tokio::select! {
+        result = axum::serve(listener, build_router(state, session)).into_future() => { result?; }
+        _ = parent_lost => {}
+    }
+    // No graceful drain: existing SSE streams must also lose launch authority.
     Ok(())
 }
 
@@ -914,13 +1020,185 @@ mod tests {
         )
     }
 
+    fn test_session() -> BridgeSession {
+        BridgeSession {
+            version: 1,
+            frontend_origin: "http://127.0.0.1:1420".into(),
+            bridge_url: "http://127.0.0.1:9876".into(),
+            bearer: "ab".repeat(32),
+        }
+    }
+
+    #[test]
+    fn session_frame_accepts_the_protocol_only_after_a_complete_newline() {
+        let mut frame: serde_json::Value =
+            serde_json::from_str(include_str!("../../../src/lib/bridge-protocol.json")).unwrap();
+        frame.as_object_mut().unwrap().remove("storageKey");
+        frame["bearer"] = serde_json::json!("ab".repeat(32));
+        let mut bytes = serde_json::to_vec(&frame).unwrap();
+        assert!(BridgeSession::read_frame(&mut bytes.as_slice()).is_err());
+        bytes.push(b'\n');
+        assert!(BridgeSession::read_frame(&mut bytes.as_slice()).is_ok());
+
+        for (field, value) in [
+            ("version", serde_json::json!(2)),
+            ("frontendOrigin", serde_json::json!("http://other.local")),
+            ("bridgeUrl", serde_json::json!("http://other.local")),
+            ("bearer", serde_json::json!("short")),
+        ] {
+            let mut invalid = frame.clone();
+            invalid[field] = value;
+            let mut bytes = serde_json::to_vec(&invalid).unwrap();
+            bytes.push(b'\n');
+            assert!(BridgeSession::read_frame(&mut bytes.as_slice()).is_err());
+        }
+    }
+
+    #[test]
+    fn session_frame_refuses_missing_or_malformed_authority() {
+        for mut bytes in [b"".as_slice(), b"\n", b"{invalid}\n", b"{}\n"] {
+            assert!(BridgeSession::read_frame(&mut bytes).is_err());
+        }
+    }
+
+    #[test]
+    fn session_frame_caps_input_before_parsing() {
+        let frame = format!(
+            "{{\"version\":1,\"frontendOrigin\":\"http://127.0.0.1:1420\",\"bridgeUrl\":\"http://127.0.0.1:9876\",\"bearer\":\"{}\"}}",
+            "ab".repeat(32)
+        );
+        let mut bytes = frame.into_bytes();
+        bytes.resize(4096, b' ');
+        bytes.push(b'\n');
+        assert!(BridgeSession::read_frame(&mut bytes.as_slice()).is_ok());
+
+        bytes.insert(4096, b' ');
+        let mut input = std::io::Cursor::new(bytes);
+        assert!(BridgeSession::read_frame(&mut input).is_err());
+        assert_eq!(input.position(), 4097);
+    }
+
+    #[tokio::test]
+    async fn authentication_precedes_body_parsing_and_wraps_cors_errors() {
+        for credential in [None, Some("Bearer wrong")] {
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/api/invoke")
+                .header("host", "127.0.0.1:9876")
+                .header("origin", "http://127.0.0.1:1420")
+                .header("content-type", "application/json");
+            if let Some(value) = credential {
+                request = request.header("authorization", value);
+            }
+            let response = build_router(test_state(), test_session())
+                .oneshot(request.body(Body::from("invalid json")).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            assert_eq!(
+                response.headers()["access-control-allow-origin"],
+                "http://127.0.0.1:1420"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_untrusted_and_duplicate_request_identity() {
+        for (header, value) in [
+            ("host", "other.local:9876"),
+            ("host", "127.0.0.1:9876"),
+            ("origin", "null"),
+            ("origin", "http://other.local"),
+            ("origin", "http://127.0.0.1:1420"),
+            ("authorization", "Bearer wrong"),
+            ("authorization", "Bearer ab"),
+        ] {
+            let request = Request::builder()
+                .uri("/events")
+                .header("host", "127.0.0.1:9876")
+                .header("origin", "http://127.0.0.1:1420")
+                .header("authorization", format!("Bearer {}", test_session().bearer))
+                .header(header, value)
+                .body(Body::empty())
+                .unwrap();
+            let response = build_router(test_state(), test_session())
+                .oneshot(request)
+                .await
+                .unwrap();
+            assert!(
+                response.status().is_client_error(),
+                "{header} must be refused"
+            );
+        }
+        let request = Request::builder()
+            .uri("http://other.local:9876/events")
+            .header("forwarded", "host=127.0.0.1:9876")
+            .header("x-forwarded-host", "127.0.0.1:9876")
+            .header("host", "127.0.0.1:9876")
+            .header("authorization", format!("Bearer {}", test_session().bearer))
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            build_router(test_state(), test_session())
+                .oneshot(request)
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+
+    #[tokio::test]
+    async fn accepts_script_events_and_browser_preflight_without_granting_invoke() {
+        let request = Request::builder()
+            .uri("/events")
+            .header("host", "127.0.0.1:9876")
+            .header("authorization", format!("Bearer {}", test_session().bearer))
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            build_router(test_state(), test_session())
+                .oneshot(request)
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+        for origin in ["http://127.0.0.1:1420", "null"] {
+            let request = Request::builder()
+                .method("OPTIONS")
+                .uri("/api/invoke")
+                .header("host", "127.0.0.1:9876")
+                .header("origin", origin)
+                .header("access-control-request-method", "POST")
+                .header(
+                    "access-control-request-headers",
+                    "authorization,content-type",
+                )
+                .body(Body::empty())
+                .unwrap();
+            let response = build_router(test_state(), test_session())
+                .oneshot(request)
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                if origin == "null" {
+                    StatusCode::FORBIDDEN
+                } else {
+                    StatusCode::OK
+                }
+            );
+        }
+    }
+
     /// Regression: a JSON body larger than axum's 2 MB `DefaultBodyLimit` must
     /// be accepted (not rejected with 413). This is the mechanism behind the
     /// silent large-bundle import failure — a ~2.7 MB capture zip base64-encodes
     /// past 2 MB and was dropped before the handler ran.
     #[tokio::test]
     async fn accepts_body_larger_than_axum_default_limit() {
-        let app = build_router(test_state());
+        let app = build_router(test_state(), test_session());
 
         // 3 MB of padding — over the 2 MB default, well under our 64 MB cap.
         let padding = "a".repeat(3 * 1024 * 1024);
@@ -932,6 +1210,8 @@ mod tests {
         let req = Request::builder()
             .method("POST")
             .uri("/api/invoke")
+            .header("host", "127.0.0.1:9876")
+            .header("authorization", format!("Bearer {}", test_session().bearer))
             .header("content-type", "application/json")
             .body(Body::from(body))
             .unwrap();
