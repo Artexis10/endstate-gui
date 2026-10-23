@@ -23,6 +23,7 @@ classes:
     - "*.test.tsx"
     - "*.test.js"
     - "*.test.mjs"
+    - "*.test.cjs"
     - "e2e/*.ts"
     - "src/test/*" # test helpers; product code imports nothing from here
     - "vitest.config.ts"
@@ -57,6 +58,9 @@ classes:
     - "scripts/ci-bundle-policy.mjs"
     - "scripts/refresh-engine.mjs"
     - "scripts/run-dev-bridge.cjs"
+    - "scripts/bridge-session.cjs"
+    - "scripts/bridge-session-security.ps1"
+    - "scripts/bridge-invoke.cjs"
     - "scripts/capture-screenshots.mjs"
     - "scripts/capture-extras.mjs"
     - "scripts/record-demo.mjs"
@@ -108,6 +112,7 @@ javascript:
       - "scripts/capture-screenshots.mjs"
       - "scripts/capture-extras.mjs"
       - "scripts/record-demo.mjs"
+      - "scripts/bridge-invoke.cjs"
     ignore:
       # Not dead, though nothing imports it: scripts/check-version-sync.mjs (the
       # version-sync pre-push hook) reads it, scripts/bump-version.mjs rewrites it,

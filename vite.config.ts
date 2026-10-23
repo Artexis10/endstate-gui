@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 const isTidewaveEnabled =
+  process.env.VITE_BROWSER_BRIDGE !== '1' &&
+  process.env.ENDSTATE_BROWSER_BRIDGE !== '1' &&
   process.env.NODE_ENV === 'development' &&
   (process.env.TIDEWAVE_ENABLED === '1' || process.env.VITE_TIDEWAVE_ENABLED === '1');
 

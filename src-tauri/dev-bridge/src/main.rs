@@ -3,7 +3,7 @@
 //! This binary links ZERO of the native GUI stack (no tauri/tao/wry/
 //! webview2-com/windows). It exposes the same HTTP surface the in-process Tauri
 //! bridge did — `POST /api/invoke` + `GET /events` (SSE) on 127.0.0.1:9876 — so
-//! the frontend (`src/lib/http-bridge.ts`) and livewire need no changes.
+//! clients authenticate using a private launcher-owned session descriptor.
 //!
 //! Why it exists: the in-process bridge intermittently heap-corrupted
 //! `endstate-gui.exe` (0xc0000374) inside the native GUI dependency layer. Our
@@ -24,6 +24,20 @@ use endstate_engine_core::engine::{create_run_state, resolve_engine_path};
 
 #[tokio::main]
 async fn main() {
+    let descriptor = match std::env::var_os("ENDSTATE_BRIDGE_SESSION") {
+        Some(path) => std::path::PathBuf::from(path),
+        None => {
+            eprintln!("[dev-bridge] missing private session descriptor; use npm run dev:bridge");
+            std::process::exit(1);
+        }
+    };
+    let session = match bridge::BridgeSession::load(&descriptor) {
+        Ok(session) => session,
+        Err(_) => {
+            eprintln!("[dev-bridge] invalid private session descriptor");
+            std::process::exit(1);
+        }
+    };
     // Surface the resolved engine path early so a misconfigured dev environment
     // fails loudly here rather than per-invoke. Non-fatal: the bridge still
     // serves non-engine file ops, and an explicit `exe` arg can override.
@@ -43,7 +57,7 @@ async fn main() {
 
     let state = AppState::new(create_run_state(), EventBroadcaster::new());
 
-    if let Err(e) = bridge::start(state).await {
+    if let Err(e) = bridge::start(state, session).await {
         eprintln!("[dev-bridge] fatal: {}", e);
         std::process::exit(1);
     }

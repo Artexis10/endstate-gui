@@ -17,13 +17,8 @@ import { defineConfig } from '@playwright/test';
  * this lane's specs live under ./e2e/real-engine and are picked up only here.
  * (Guarded by real-engine-config-separation.test at the repo level too.)
  *
- * Two long-lived servers are managed by Playwright's multi-webServer support:
- *   1. endstate-dev-bridge — 127.0.0.1:9876 (engine HTTP/SSE; non-Tauri binary)
- *   2. vite                — 127.0.0.1:1420 (the frontend; VITE_BROWSER_BRIDGE=1)
- * The bridge resolves the engine from ENDSTATE_ENGINE_PATH / ENDSTATE_ROOT
- * (see src-tauri/engine-core/src/engine.rs::resolve_engine_path). If either is
- * missing the bridge cannot spawn the engine, the app's boot `capabilities`
- * call fails, and every spec fails loudly — there is no silent skip.
+ * The private launcher owns both listeners and reports readiness through IPC.
+ * Each worker reads its protected session descriptor; traces stay disabled.
  */
 export default defineConfig({
   testDir: './e2e/real-engine',
@@ -39,33 +34,7 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: 'http://127.0.0.1:1420',
-    trace: 'on-first-retry',
+    trace: 'off',
   },
-  webServer: [
-    {
-      // Rebuilds only if stale (pre-built in CI), then runs the standalone
-      // bridge. ENDSTATE_ENGINE_PATH / ENDSTATE_ROOT come from the environment
-      // (the CI job / local shell). Absent → engine unresolved → specs fail.
-      command: 'cargo run --quiet --manifest-path src-tauri/Cargo.toml -p endstate-dev-bridge',
-      // The bridge has no dedicated health route; GET /events (SSE) answers 200
-      // as soon as the listener is bound, which is all the readiness probe needs.
-      url: 'http://127.0.0.1:9876/events',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-    {
-      command: 'npx vite --port 1420 --strictPort',
-      url: 'http://127.0.0.1:1420',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      env: {
-        // Route invoke()/listen() through the HTTP bridge to the real engine.
-        VITE_BROWSER_BRIDGE: '1',
-        // Isolate localStorage from tauri/web dev storage, matching the e2e job.
-        VITE_STORAGE_NS: 'test',
-      },
-    },
-  ],
+  globalSetup: './e2e/real-engine/helpers/global-setup.ts',
 });

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
+import bridgeSession from '../../../scripts/bridge-session.cjs';
 
 /**
  * Helpers for the real-engine lane. These talk to the standalone dev bridge
@@ -13,7 +14,7 @@ import path from 'node:path';
  * point of the lane. If the bridge or engine is missing, these calls throw and
  * the spec fails loudly.
  */
-export const BRIDGE_URL = 'http://127.0.0.1:9876';
+export const BRIDGE_URL = bridgeSession.BRIDGE_URL;
 
 interface BridgeResponse<T = unknown> {
   ok: boolean;
@@ -27,7 +28,10 @@ export async function bridgeInvoke<T = unknown>(
   cmd: string,
   args: Record<string, unknown> = {},
 ): Promise<T> {
-  const res = await request.post(`${BRIDGE_URL}/api/invoke`, { data: { cmd, args } });
+  const res = await request.post(`${BRIDGE_URL}/api/invoke`, {
+    headers: { Authorization: `Bearer ${bridgeSession.readSession().bearer}` },
+    data: { cmd, args },
+  });
   if (!res.ok()) {
     throw new Error(`Bridge HTTP ${res.status()} for '${cmd}' — is the dev bridge up on 9876?`);
   }
