@@ -22,12 +22,15 @@ It creates a private runtime directory outside served trees, then writes the des
 POSIX directories use mode 0700 and files use mode 0600, verified through filesystem metadata.
 Windows creates the directory atomically with a protected DACL, or beneath a verified private parent, before any credential write.
 Verification reads the owner SID, protection status, and allowed trustees.
-Every Windows standalone entry point uses the checkout's Node/PowerShell helper to verify storage before reading credentials.
+The launcher and automation share one Node/PowerShell policy for private storage.
 ACL structure verification alone does not prove privacy. Use SID objects and native filesystem security APIs without elevation.
 
-The launcher passes the descriptor path to Rust. Rust reports successful binding through its inherited control pipe.
+The launcher sends one newline-terminated session JSON frame through its Rust child's private stdin pipe.
+Rust reads at most 4097 bytes, requires a complete newline and at most 4096 JSON bytes, and validates the protocol before startup.
+Rust never loads launch authority from a descriptor path or environment variable.
+It reports successful binding through its inherited stdout pipe.
 The private bind handshake establishes readiness; no HTTP readiness request carries a bearer.
-The bridge stops when that pipe closes. Port conflicts fail startup; no process reuses a public listener.
+The bridge stops when the same stdin pipe closes. Port conflicts fail startup; no process reuses a public listener.
 Vite runs in middleware mode behind one launcher-owned HTTP listener, which remains bound across configuration restarts.
 
 ### Private bootstrap supplies browser authority
@@ -54,7 +57,7 @@ Use native ACL APIs, Axum, tower-http, Vite's JavaScript API, and EventSource in
 Public tokens, unauthenticated proxies, and origin checks alone cannot authenticate a local non-browser caller.
 Host-wide cookies cross loopback ports, so the bridge uses request headers.
 Missing authority or unsafe storage prevents owner-operation exposure; a false refusal costs the developer a relaunch or supported storage.
-Direct Windows startup requires Node and the development checkout so it can reuse the same storage policy.
+Direct bridge startup requires the private session frame; the descriptor environment variable serves browser automation only.
 Exclusive listeners and private readiness prevent credential disclosure; occupied ports require the developer to resolve the conflict.
 Disabling traces reduces test diagnostics but prevents reusable credentials from entering artifacts.
 
@@ -67,6 +70,6 @@ Disabling traces reduces test diagnostics but prevents reusable credentials from
 
 ## Migration Plan
 
-1. Update launcher, server, clients, automation, and instructions together; all consumers use the descriptor.
+1. Update launcher and server to use the private pipe; browser automation continues to use the protected descriptor.
 2. Verify real HTTP, browser startup, private storage, and process lifetime; preserve existing command results.
 3. Deliver the reviewed source batch through normal CI; packaged Tauri behavior remains native.

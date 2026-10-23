@@ -85,6 +85,19 @@ Each launch SHALL create fresh credentials in private local files outside served
 
 The launcher SHALL refuse occupied listeners and unsafe bootstrap storage. Its loss SHALL stop the privileged listener. Restarting SHALL create fresh credentials without reusing another process's listener.
 
+#### Scenario: Rust receives launch authority
+
+- **WHEN** the launcher starts its Rust child
+- **THEN** it sends one newline-terminated session JSON frame through the child's private stdin pipe
+- **AND** Rust validates the complete frame before creating a runtime or binding a listener
+- **AND** the frame contains at most 4096 JSON bytes and one terminating newline
+
+#### Scenario: Missing or invalid launch frame
+
+- **WHEN** the private stdin frame is missing, malformed, incomplete, oversized, or violates the session protocol
+- **THEN** Rust fails startup without binding a listener
+- **AND** a descriptor path in the environment does not grant launch authority
+
 #### Scenario: Listener or storage cannot be owned safely
 
 - **WHEN** either required port is occupied or private bootstrap storage cannot be verified
@@ -93,7 +106,8 @@ The launcher SHALL refuse occupied listeners and unsafe bootstrap storage. Its l
 #### Scenario: Readiness cannot disclose authority to an existing listener
 
 - **WHEN** the launcher checks bridge readiness
-- **THEN** it confirms its child owns the listener through a private channel before sending credentials
+- **THEN** it confirms its child owns the listener through the private bind handshake
+- **AND** it sends no HTTP readiness request or credentials to an existing listener
 
 #### Scenario: Frontend configuration reload
 
@@ -103,7 +117,7 @@ The launcher SHALL refuse occupied listeners and unsafe bootstrap storage. Its l
 #### Scenario: Launcher terminates or restarts
 
 - **WHEN** the launcher exits, including abnormal termination
-- **THEN** its privileged listener stops accepting requests
+- **THEN** EOF on the same private stdin pipe stops its privileged listener and existing event streams
 - **AND** a later launch rejects the previous credentials
 
 ## REMOVED Requirements

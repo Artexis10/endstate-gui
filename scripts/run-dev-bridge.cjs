@@ -65,7 +65,8 @@ async function main() {
   if (code !== 0) throw new Error('Bridge build failed');
   const binary = path.resolve(process.env.CARGO_TARGET_DIR || path.join(repoRoot, 'src-tauri/target'), 'debug',
     process.platform === 'win32' ? 'endstate-dev-bridge.exe' : 'endstate-dev-bridge');
-  const env = { ...process.env, ENDSTATE_BRIDGE_SESSION: descriptorPath };
+  const env = { ...process.env };
+  delete env.ENDSTATE_BRIDGE_SESSION;
   const siblingEngine = path.resolve(repoRoot, '../endstate');
   if (!env.ENDSTATE_ROOT && fs.existsSync(siblingEngine)) env.ENDSTATE_ROOT = siblingEngine;
   const bridge = spawn(binary, [], { cwd: repoRoot, env, stdio: ['pipe', 'pipe', 'inherit'] });
@@ -79,9 +80,12 @@ async function main() {
       else reject(new Error('Invalid bridge bind handshake'));
     });
     bridge.once('error', reject);
+    bridge.stdin.once('error', reject);
     bridge.once('exit', () => { clearTimeout(timeout); reject(new Error('Bridge exited before readiness')); });
   });
   bridge.once('exit', () => { if (!shuttingDown) void shutdown(1); });
+  // Authority travels only through the owned stdin pipe, which stays open for lifetime control.
+  bridge.stdin.write(JSON.stringify(session) + '\n');
   await bound;
   // Readiness stays on the owned pipe; no HTTP readiness request carries authority.
 

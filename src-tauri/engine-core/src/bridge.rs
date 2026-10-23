@@ -867,7 +867,7 @@ async fn handle_events(
 /// realistic bundles. (Dev/automation bridge only; loopback-bound.)
 const MAX_BODY_BYTES: usize = 64 * 1024 * 1024;
 
-/// Private launch descriptor. Endpoints and token format are a versioned protocol.
+/// Private launch frame. Endpoints and token format are a versioned protocol.
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BridgeSession {
@@ -878,43 +878,14 @@ pub struct BridgeSession {
 }
 
 impl BridgeSession {
-    pub fn load(path: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let metadata = std::fs::symlink_metadata(path)?;
-        if !metadata.is_file() || metadata.len() > 4096 {
-            return Err("Invalid private session descriptor".into());
+    pub fn read_frame<R: BufRead>(input: &mut R) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut frame = Vec::new();
+        // Cap the private protocol at 4096 JSON bytes plus its required newline.
+        std::io::Read::take(input, 4097).read_until(b'\n', &mut frame)?;
+        if frame.last() != Some(&b'\n') {
+            return Err("Invalid private session frame".into());
         }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            let parent =
-                std::fs::symlink_metadata(path.parent().ok_or("Missing session directory")?)?;
-            if !parent.is_dir()
-                || parent.mode() & 0o777 != 0o700
-                || metadata.mode() & 0o777 != 0o600
-                || parent.uid() != metadata.uid()
-            {
-                return Err("Unsafe private session descriptor permissions".into());
-            }
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            // Reuse Node's storage policy and PowerShell environment handling for every Windows entry point.
-            let verifier = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../scripts/bridge-session.cjs");
-            let status = std::process::Command::new("node")
-                .arg(verifier)
-                .arg(path)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .creation_flags(0x0800_0000)
-                .status()?;
-            if !status.success() {
-                return Err("Unsafe private session descriptor permissions".into());
-            }
-        }
-        let session: Self = serde_json::from_slice(&std::fs::read(path)?)?;
+        let session: Self = serde_json::from_slice(&frame)?;
         let protocol: serde_json::Value =
             serde_json::from_str(include_str!("../../../src/lib/bridge-protocol.json"))?;
         if Some(u64::from(session.version)) != protocol["version"].as_u64()
@@ -926,7 +897,7 @@ impl BridgeSession {
                 .bytes()
                 .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         {
-            return Err("Invalid private session descriptor".into());
+            return Err("Invalid private session frame".into());
         }
         Ok(session)
     }
@@ -1008,7 +979,7 @@ fn build_router(state: AppState, session: BridgeSession) -> Router {
         .with_state(state)
 }
 
-/// Binding and readiness use a private pipe; EOF revokes the listener immediately.
+/// Report binding on stdout; EOF on the session's private stdin revokes the listener.
 pub async fn start(
     state: AppState,
     session: BridgeSession,
@@ -1056,6 +1027,55 @@ mod tests {
             bridge_url: "http://127.0.0.1:9876".into(),
             bearer: "ab".repeat(32),
         }
+    }
+
+    #[test]
+    fn session_frame_accepts_the_protocol_only_after_a_complete_newline() {
+        let mut frame: serde_json::Value =
+            serde_json::from_str(include_str!("../../../src/lib/bridge-protocol.json")).unwrap();
+        frame.as_object_mut().unwrap().remove("storageKey");
+        frame["bearer"] = serde_json::json!("ab".repeat(32));
+        let mut bytes = serde_json::to_vec(&frame).unwrap();
+        assert!(BridgeSession::read_frame(&mut bytes.as_slice()).is_err());
+        bytes.push(b'\n');
+        assert!(BridgeSession::read_frame(&mut bytes.as_slice()).is_ok());
+
+        for (field, value) in [
+            ("version", serde_json::json!(2)),
+            ("frontendOrigin", serde_json::json!("http://other.local")),
+            ("bridgeUrl", serde_json::json!("http://other.local")),
+            ("bearer", serde_json::json!("short")),
+        ] {
+            let mut invalid = frame.clone();
+            invalid[field] = value;
+            let mut bytes = serde_json::to_vec(&invalid).unwrap();
+            bytes.push(b'\n');
+            assert!(BridgeSession::read_frame(&mut bytes.as_slice()).is_err());
+        }
+    }
+
+    #[test]
+    fn session_frame_refuses_missing_or_malformed_authority() {
+        for mut bytes in [b"".as_slice(), b"\n", b"{invalid}\n", b"{}\n"] {
+            assert!(BridgeSession::read_frame(&mut bytes).is_err());
+        }
+    }
+
+    #[test]
+    fn session_frame_caps_input_before_parsing() {
+        let frame = format!(
+            "{{\"version\":1,\"frontendOrigin\":\"http://127.0.0.1:1420\",\"bridgeUrl\":\"http://127.0.0.1:9876\",\"bearer\":\"{}\"}}",
+            "ab".repeat(32)
+        );
+        let mut bytes = frame.into_bytes();
+        bytes.resize(4096, b' ');
+        bytes.push(b'\n');
+        assert!(BridgeSession::read_frame(&mut bytes.as_slice()).is_ok());
+
+        bytes.insert(4096, b' ');
+        let mut input = std::io::Cursor::new(bytes);
+        assert!(BridgeSession::read_frame(&mut input).is_err());
+        assert_eq!(input.position(), 4097);
     }
 
     #[tokio::test]

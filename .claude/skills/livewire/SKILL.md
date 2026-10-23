@@ -16,6 +16,7 @@ Packaged Tauri applications continue to use native IPC.
 5. Open the printed local `open-browser.html` file in isolated Chromium; expect the GUI with an empty URL fragment.
 
 The launcher owns both listeners. An occupied port fails startup; never reuse another process's listener.
+It gives Rust its session through a private stdin pipe; ENDSTATE_BRIDGE_SESSION only supplies authority to scripted clients.
 It disables Tidewave HTTP in bridge mode even when enable flags are present.
 Vite reloads retain the frontend listener. Launcher loss closes the privileged listener.
 Each launch creates a fresh credential. Reopen its private bootstrap after a relaunch.

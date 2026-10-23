@@ -3,7 +3,7 @@
 //! This binary links ZERO of the native GUI stack (no tauri/tao/wry/
 //! webview2-com/windows). It exposes the same HTTP surface the in-process Tauri
 //! bridge did — `POST /api/invoke` + `GET /events` (SSE) on 127.0.0.1:9876 — so
-//! clients authenticate using a private launcher-owned session descriptor.
+//! clients authenticate using a launcher-owned session received through private stdin.
 //!
 //! Why it exists: the in-process bridge intermittently heap-corrupted
 //! `endstate-gui.exe` (0xc0000374) inside the native GUI dependency layer. Our
@@ -22,22 +22,19 @@ use endstate_engine_core::bridge::{self, AppState};
 use endstate_engine_core::broadcast::EventBroadcaster;
 use endstate_engine_core::engine::{create_run_state, resolve_engine_path};
 
-#[tokio::main]
-async fn main() {
-    let descriptor = match std::env::var_os("ENDSTATE_BRIDGE_SESSION") {
-        Some(path) => std::path::PathBuf::from(path),
-        None => {
-            eprintln!("[dev-bridge] missing private session descriptor; use npm run dev:bridge");
-            std::process::exit(1);
+fn main() {
+    let session = {
+        let input = std::io::stdin();
+        let mut input = input.lock();
+        match bridge::BridgeSession::read_frame(&mut input) {
+            Ok(session) => session,
+            Err(_) => {
+                eprintln!("[dev-bridge] invalid private session frame; use npm run dev:bridge");
+                std::process::exit(1);
+            }
         }
     };
-    let session = match bridge::BridgeSession::load(&descriptor) {
-        Ok(session) => session,
-        Err(_) => {
-            eprintln!("[dev-bridge] invalid private session descriptor");
-            std::process::exit(1);
-        }
-    };
+    // Release stdin's lock before the lifetime reader uses the same pipe.
     // Surface the resolved engine path early so a misconfigured dev environment
     // fails loudly here rather than per-invoke. Non-fatal: the bridge still
     // serves non-engine file ops, and an explicit `exe` arg can override.
@@ -57,7 +54,14 @@ async fn main() {
 
     let state = AppState::new(create_run_state(), EventBroadcaster::new());
 
-    if let Err(e) = bridge::start(state, session).await {
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(e) => {
+            eprintln!("[dev-bridge] runtime failed: {}", e);
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = runtime.block_on(bridge::start(state, session)) {
         eprintln!("[dev-bridge] fatal: {}", e);
         std::process::exit(1);
     }

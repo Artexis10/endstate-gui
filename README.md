@@ -317,6 +317,7 @@ The page clears its credential fragment immediately and retains authority in tha
 Reopen the new bootstrap after a launcher restart. Packaged Tauri applications continue to use native IPC.
 
 The launcher verifies owner-only runtime files outside the served repository and owns both loopback listeners.
+It gives Rust its session through a private stdin pipe; descriptor paths cannot authorize Rust startup.
 Occupied ports fail startup. Launcher loss closes the bridge, while Vite configuration reloads keep the frontend listener bound.
 Bridge mode disables Tidewave HTTP regardless of enable flags.
 

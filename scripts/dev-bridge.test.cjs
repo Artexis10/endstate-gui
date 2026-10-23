@@ -1,7 +1,7 @@
 // Real listener ownership and request-boundary regression checks.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { execFileSync, fork, spawn } = require('node:child_process');
+const { fork, spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { createServer, request } = require('node:http');
 const { createConnection } = require('node:net');
@@ -56,34 +56,33 @@ async function waitForClosedPort(port) {
   throw new Error(`Owned port ${port} remained open`);
 }
 
-test('bridge refuses missing or invalid private descriptors before binding', async () => {
+test('bridge refuses missing, malformed, or incomplete session frames before binding', { timeout: 20_000 }, async () => {
   const env = { ...process.env };
   delete env.ENDSTATE_BRIDGE_SESSION;
   const target = process.env.CARGO_TARGET_DIR || path.resolve(__dirname, '../src-tauri/target');
   const binary = path.join(target, 'debug', process.platform === 'win32' ? 'endstate-dev-bridge.exe' : 'endstate-dev-bridge');
-  for (const descriptor of [undefined, path.join(os.tmpdir(), 'missing-bridge-session.json')]) {
-    const child = spawn(binary, [], { env: { ...env, ...(descriptor ? { ENDSTATE_BRIDGE_SESSION: descriptor } : {}) },
+  const incomplete = JSON.stringify({ version: 1, frontendOrigin: FRONTEND_ORIGIN,
+    bridgeUrl: BRIDGE_URL, bearer: 'ab'.repeat(32) });
+  for (const frame of ['', '{invalid}\n', incomplete]) {
+    const child = spawn(binary, [], { env,
       stdio: ['pipe', 'pipe', 'pipe'] });
+    let output = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', chunk => { output += chunk; });
+    child.stdin.end(frame);
     const [code] = await once(child, 'exit');
     assert.notEqual(code, 0);
+    assert.equal(output.includes('ENDSTATE_BRIDGE_BOUND_V1'), false);
   }
 });
 
-test('manual bridge startup refuses a public session descriptor before binding', { timeout: 20_000 }, async () => {
+test('a descriptor environment variable cannot authorize manual bridge startup', { timeout: 20_000 }, async () => {
   const directory = createSessionDirectory();
   let child;
   let timeout;
   try {
     const descriptor = writePrivate(directory, 'session.json', JSON.stringify({ version: 1,
       frontendOrigin: FRONTEND_ORIGIN, bridgeUrl: BRIDGE_URL, bearer: 'ab'.repeat(32) }));
-    if (process.platform === 'win32') {
-      // The well-known Everyone SID makes this synthetic handoff publicly readable.
-      execFileSync('icacls.exe', [directory, '/grant', '*S-1-1-0:(RX)'], { stdio: 'pipe', windowsHide: true });
-      execFileSync('icacls.exe', [descriptor, '/grant', '*S-1-1-0:(R)'], { stdio: 'pipe', windowsHide: true });
-    } else {
-      fs.chmodSync(directory, 0o755);
-      fs.chmodSync(descriptor, 0o644);
-    }
     const target = process.env.CARGO_TARGET_DIR || path.resolve(__dirname, '../src-tauri/target');
     const binary = path.join(target, 'debug', process.platform === 'win32' ? 'endstate-dev-bridge.exe' : 'endstate-dev-bridge');
     child = spawn(binary, [], { env: { ...process.env, ENDSTATE_BRIDGE_SESSION: descriptor },
@@ -91,9 +90,10 @@ test('manual bridge startup refuses a public session descriptor before binding',
     let output = '';
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', chunk => { output += chunk; });
+    child.stdin.end();
     const [code] = await Promise.race([
       once(child, 'exit'),
-      new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Public session storage was not refused')), 10_000); }),
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Descriptor-only startup was not refused')), 10_000); }),
     ]);
     assert.notEqual(code, 0);
     assert.equal(output.includes('ENDSTATE_BRIDGE_BOUND_V1'), false);
@@ -146,7 +146,16 @@ test('owned launcher authenticates HTTP and SSE, hides private files, survives V
       assert.equal(result.status, 200);
     }
     assert.equal((await invoke(session, { cmd: 'engine_is_running' })).status, 200);
+    const lifetimeSignal = AbortSignal.timeout(5000);
+    const liveEvents = await fetch(session.bridgeUrl + '/events', {
+      headers: { Authorization: 'Bearer ' + session.bearer }, signal: lifetimeSignal,
+    });
+    const streamClosed = liveEvents.body.getReader().read().then(
+      result => assert.equal(result.done, true),
+      () => assert.equal(lifetimeSignal.aborted, false, 'Parent loss must close SSE before the client timeout'),
+    );
     await stop(child, 'SIGKILL');
+    await streamClosed;
     await waitForClosedPort(9876);
     await waitForClosedPort(1420);
     const restart = launch();

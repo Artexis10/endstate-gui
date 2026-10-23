@@ -35,7 +35,8 @@ test('Windows storage verification ignores executables in the caller working dir
       frontendOrigin: FRONTEND_ORIGIN, bridgeUrl: BRIDGE_URL, bearer: randomBytes(32).toString('hex') }));
     // An empty sentinel makes current-directory executable lookup fail harmlessly.
     fs.writeFileSync(path.join(directory, 'powershell.exe'), '');
-    const result = spawnSync(process.execPath, [path.join(__dirname, 'bridge-session.cjs'), descriptor], {
+    const result = spawnSync(process.execPath, ['-e', 'require(process.argv[1]).readSession(process.argv[2])',
+      path.join(__dirname, 'bridge-session.cjs'), descriptor], {
       cwd: directory, encoding: 'utf8',
     });
     assert.equal(result.status, 0, result.stderr);

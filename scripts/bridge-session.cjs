@@ -73,14 +73,10 @@ function writePrivate(directory, name, content) {
   return target;
 }
 
-function verifySessionStorage(descriptorPath) {
+function readSession(descriptorPath = process.env.ENDSTATE_BRIDGE_SESSION) {
   if (!descriptorPath) throw new Error('Set ENDSTATE_BRIDGE_SESSION to the private session descriptor printed by dev:bridge');
   verifyPrivate(path.dirname(descriptorPath), true);
   verifyPrivate(descriptorPath, false);
-}
-
-function readSession(descriptorPath = process.env.ENDSTATE_BRIDGE_SESSION) {
-  verifySessionStorage(descriptorPath);
   const session = JSON.parse(fs.readFileSync(descriptorPath, 'utf8'));
   // The session format fixes these endpoints and a 32-byte hexadecimal bearer.
   if (session.version !== 1 || session.frontendOrigin !== FRONTEND_ORIGIN ||
@@ -92,13 +88,3 @@ function readSession(descriptorPath = process.env.ENDSTATE_BRIDGE_SESSION) {
 
 module.exports = { FRONTEND_ORIGIN, BRIDGE_URL,
   createSessionDirectory, writePrivate, readSession };
-
-// The standalone Rust entry point uses the same storage policy before reading authority.
-if (require.main === module) {
-  try {
-    verifySessionStorage(process.argv[2]);
-  } catch {
-    console.error('Unsafe or missing private bridge session storage');
-    process.exitCode = 1;
-  }
-}
