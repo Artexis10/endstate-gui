@@ -5,7 +5,7 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 
-const { frontendOrigin: FRONTEND_ORIGIN, bridgeUrl: BRIDGE_URL, storageKey: STORAGE_KEY } = require('../src/lib/bridge-protocol.json');
+const { frontendOrigin: FRONTEND_ORIGIN, bridgeUrl: BRIDGE_URL } = require('../src/lib/bridge-protocol.json');
 
 function windowsSecurity(action, target) {
   // Windows PowerShell must discover its own modules after a pwsh parent.
@@ -13,7 +13,14 @@ function windowsSecurity(action, target) {
   for (const key of Object.keys(childEnv)) {
     if (key.toUpperCase() === 'PSMODULEPATH') delete childEnv[key];
   }
-  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-File',
+  const systemRoot = process.env.SystemRoot;
+  // A drive-qualified OS path cannot resolve an executable from the caller's directory.
+  if (!systemRoot || !path.win32.isAbsolute(systemRoot) ||
+      !path.win32.parse(path.win32.normalize(systemRoot)).root.endsWith(':\\')) {
+    throw new Error('SystemRoot must be an absolute Windows OS drive path');
+  }
+  const powershell = path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-File',
     path.join(__dirname, 'bridge-session-security.ps1'), '-Action', action, '-Target', target],
   { stdio: 'pipe', windowsHide: true, env: childEnv });
 }
@@ -83,8 +90,8 @@ function readSession(descriptorPath = process.env.ENDSTATE_BRIDGE_SESSION) {
   return session;
 }
 
-module.exports = { FRONTEND_ORIGIN, BRIDGE_URL, STORAGE_KEY,
-  createSessionDirectory, writePrivate, verifyPrivate, readSession };
+module.exports = { FRONTEND_ORIGIN, BRIDGE_URL,
+  createSessionDirectory, writePrivate, readSession };
 
 // The standalone Rust entry point uses the same storage policy before reading authority.
 if (require.main === module) {

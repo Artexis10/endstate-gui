@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import bridgeSession from '../../scripts/bridge-session.cjs';
+import protocol from '../../src/lib/bridge-protocol.json' with { type: 'json' };
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -26,7 +27,7 @@ test('private bootstrap clears its fragment and retains authenticated invoke and
 test('authenticated browser receives real engine capability events and disposes its event stream', async ({ page }) => {
   const session = bridgeSession.readSession();
   await page.addInitScript(({ key, bearer }) => sessionStorage.setItem(key, bearer),
-    { key: bridgeSession.STORAGE_KEY, bearer: session.bearer });
+    { key: protocol.storageKey, bearer: session.bearer });
   await page.goto('/');
   const connected = page.waitForResponse(response => response.url().endsWith('/events') && response.status() === 200);
   await page.evaluate(async () => {
@@ -59,7 +60,7 @@ test('authenticated browser receives real engine capability events and disposes 
 test('event streams reconnect after network loss and stop after an authentication refusal', async ({ page }) => {
   const session = bridgeSession.readSession();
   await page.addInitScript(({ key, bearer }) => sessionStorage.setItem(key, bearer),
-    { key: bridgeSession.STORAGE_KEY, bearer: session.bearer });
+    { key: protocol.storageKey, bearer: session.bearer });
   await page.goto('/');
   let attempts = 0;
   await page.route('**/events', route => {
@@ -85,7 +86,7 @@ test('event streams reconnect after network loss and stop after an authenticatio
     sessionStorage.setItem(key, '00'.repeat(32));
     const bridge = await import('/src/lib/http-bridge.ts');
     (window as typeof window & { disposeBridgeAuthentication?: () => void }).disposeBridgeAuthentication = bridge.httpListen('event', () => {});
-  }, bridgeSession.STORAGE_KEY);
+  }, protocol.storageKey);
   await refused;
   // EventSource's ordinary reconnect delay is three seconds; refusal must stop it.
   await page.waitForTimeout(3200);

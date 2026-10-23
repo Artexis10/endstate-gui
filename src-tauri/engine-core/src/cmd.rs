@@ -541,8 +541,22 @@ fn import_zip_archive<R: Read + Seek>(
             }
             let mut output = fs::File::create(&output_path)
                 .map_err(|e| format!("Failed to create zip entry {}: {}", entry_name, e))?;
-            std::io::copy(&mut entry, &mut output)
+            // The ZIP reader checks CRC but does not enforce the declared expanded size.
+            let declared_size = entry.size();
+            let written = std::io::copy(&mut entry.by_ref().take(declared_size), &mut output)
                 .map_err(|e| format!("Failed to extract zip entry {}: {}", entry_name, e))?;
+            let mut extra = [0_u8; 1];
+            if written != declared_size
+                || entry
+                    .read(&mut extra)
+                    .map_err(|e| format!("Failed to finish zip entry {}: {}", entry_name, e))?
+                    != 0
+            {
+                return Err(format!(
+                    "Zip entry {} does not match its declared size",
+                    entry_name
+                ));
+            }
         }
     }
 
@@ -2227,6 +2241,36 @@ mod profile_validation_tests {
             .join("payload/settings.txt")
             .is_file());
         assert_eq!(directory_names(&profiles), vec!["capture"]);
+    }
+
+    #[test]
+    fn inconsistent_zip_expanded_sizes_reject_and_cleanup_without_changing_source() {
+        for declared_size in [8, VALID_V2.len() as u32 + 1] {
+            let temp = TestDir::new("inconsistent-zip-size");
+            let profiles = temp.path().join("profiles");
+            let zip_path = temp.path().join("capture.zip");
+            fs::create_dir(&profiles).expect("create profiles");
+            write_zip(&zip_path, &[("manifest.jsonc", VALID_V2)]);
+            let mut bytes = fs::read(&zip_path).expect("read generated zip");
+            // This single-entry fixture uses the ZIP central header's fixed size field.
+            let central_header = bytes
+                .windows(4)
+                .position(|window| window == b"PK\x01\x02")
+                .expect("central header");
+            bytes[central_header + 24..central_header + 28]
+                .copy_from_slice(&declared_size.to_le_bytes());
+            fs::write(&zip_path, &bytes).expect("write inconsistent size");
+
+            let error = extract_zip_profile(
+                zip_path.to_str().expect("zip path"),
+                profiles.to_str().expect("profiles path"),
+            )
+            .expect_err("inconsistent expanded size must fail");
+
+            assert!(error.contains("declared size"), "{error}");
+            assert!(directory_names(&profiles).is_empty());
+            assert_eq!(fs::read(&zip_path).expect("read source bundle"), bytes);
+        }
     }
 
     #[test]

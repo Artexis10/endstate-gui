@@ -14,7 +14,7 @@ import bridgeSession from '../../../scripts/bridge-session.cjs';
  * point of the lane. If the bridge or engine is missing, these calls throw and
  * the spec fails loudly.
  */
-export const BRIDGE_URL = bridgeSession.BRIDGE_URL;
+const BRIDGE_URL = bridgeSession.BRIDGE_URL;
 
 interface BridgeResponse<T = unknown> {
   ok: boolean;
