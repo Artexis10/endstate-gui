@@ -1,14 +1,14 @@
 // Real listener ownership and request-boundary regression checks.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { fork, spawn } = require('node:child_process');
+const { execFileSync, fork, spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { createServer, request } = require('node:http');
 const { createConnection } = require('node:net');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { readSession } = require('./bridge-session.cjs');
+const { createSessionDirectory, writePrivate, readSession, FRONTEND_ORIGIN, BRIDGE_URL } = require('./bridge-session.cjs');
 
 const launcherPath = path.join(__dirname, 'run-dev-bridge.cjs');
 function launch() {
@@ -66,6 +66,41 @@ test('bridge refuses missing or invalid private descriptors before binding', asy
       stdio: ['pipe', 'pipe', 'pipe'] });
     const [code] = await once(child, 'exit');
     assert.notEqual(code, 0);
+  }
+});
+
+test('manual bridge startup refuses a public session descriptor before binding', { timeout: 20_000 }, async () => {
+  const directory = createSessionDirectory();
+  let child;
+  let timeout;
+  try {
+    const descriptor = writePrivate(directory, 'session.json', JSON.stringify({ version: 1,
+      frontendOrigin: FRONTEND_ORIGIN, bridgeUrl: BRIDGE_URL, bearer: 'ab'.repeat(32) }));
+    if (process.platform === 'win32') {
+      // The well-known Everyone SID makes this synthetic handoff publicly readable.
+      execFileSync('icacls.exe', [directory, '/grant', '*S-1-1-0:(RX)'], { stdio: 'pipe', windowsHide: true });
+      execFileSync('icacls.exe', [descriptor, '/grant', '*S-1-1-0:(R)'], { stdio: 'pipe', windowsHide: true });
+    } else {
+      fs.chmodSync(directory, 0o755);
+      fs.chmodSync(descriptor, 0o644);
+    }
+    const target = process.env.CARGO_TARGET_DIR || path.resolve(__dirname, '../src-tauri/target');
+    const binary = path.join(target, 'debug', process.platform === 'win32' ? 'endstate-dev-bridge.exe' : 'endstate-dev-bridge');
+    child = spawn(binary, [], { env: { ...process.env, ENDSTATE_BRIDGE_SESSION: descriptor },
+      stdio: ['pipe', 'pipe', 'pipe'] });
+    let output = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', chunk => { output += chunk; });
+    const [code] = await Promise.race([
+      once(child, 'exit'),
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Public session storage was not refused')), 10_000); }),
+    ]);
+    assert.notEqual(code, 0);
+    assert.equal(output.includes('ENDSTATE_BRIDGE_BOUND_V1'), false);
+  } finally {
+    clearTimeout(timeout);
+    if (child) await stop(child);
+    fs.rmSync(directory, { recursive: true, force: true });
   }
 });
 

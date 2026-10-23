@@ -896,6 +896,24 @@ impl BridgeSession {
                 return Err("Unsafe private session descriptor permissions".into());
             }
         }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            // Reuse Node's storage policy and PowerShell environment handling for every Windows entry point.
+            let verifier = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../scripts/bridge-session.cjs");
+            let status = std::process::Command::new("node")
+                .arg(verifier)
+                .arg(path)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(0x0800_0000)
+                .status()?;
+            if !status.success() {
+                return Err("Unsafe private session descriptor permissions".into());
+            }
+        }
         let session: Self = serde_json::from_slice(&std::fs::read(path)?)?;
         let protocol: serde_json::Value =
             serde_json::from_str(include_str!("../../../src/lib/bridge-protocol.json"))?;

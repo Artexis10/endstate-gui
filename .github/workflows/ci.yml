@@ -480,7 +480,7 @@ jobs:
         run: cargo fmt --all --check --manifest-path src-tauri/Cargo.toml
 
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4

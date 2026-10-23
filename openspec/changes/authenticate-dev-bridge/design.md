@@ -22,9 +22,11 @@ It creates a private runtime directory outside served trees, then writes the des
 POSIX directories use mode 0700 and files use mode 0600, verified through filesystem metadata.
 Windows creates the directory atomically with a protected DACL, or beneath a verified private parent, before any credential write.
 Verification reads the owner SID, protection status, and allowed trustees.
+Every Windows standalone entry point uses the checkout's Node/PowerShell helper to verify storage before reading credentials.
 ACL structure verification alone does not prove privacy. Use SID objects and native filesystem security APIs without elevation.
 
-The launcher passes the descriptor path to Rust. Rust reports successful binding through its inherited control pipe before authenticated HTTP readiness runs.
+The launcher passes the descriptor path to Rust. Rust reports successful binding through its inherited control pipe.
+The private bind handshake establishes readiness; no HTTP readiness request carries a bearer.
 The bridge stops when that pipe closes. Port conflicts fail startup; no process reuses a public listener.
 Vite runs in middleware mode behind one launcher-owned HTTP listener, which remains bound across configuration restarts.
 
@@ -52,6 +54,7 @@ Use native ACL APIs, Axum, tower-http, Vite's JavaScript API, and EventSource in
 Public tokens, unauthenticated proxies, and origin checks alone cannot authenticate a local non-browser caller.
 Host-wide cookies cross loopback ports, so the bridge uses request headers.
 Missing authority or unsafe storage prevents owner-operation exposure; a false refusal costs the developer a relaunch or supported storage.
+Direct Windows startup requires Node and the development checkout so it can reuse the same storage policy.
 Exclusive listeners and private readiness prevent credential disclosure; occupied ports require the developer to resolve the conflict.
 Disabling traces reduces test diagnostics but prevents reusable credentials from entering artifacts.
 

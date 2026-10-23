@@ -8,9 +8,14 @@ const { execFileSync } = require('node:child_process');
 const { frontendOrigin: FRONTEND_ORIGIN, bridgeUrl: BRIDGE_URL, storageKey: STORAGE_KEY } = require('../src/lib/bridge-protocol.json');
 
 function windowsSecurity(action, target) {
+  // Windows PowerShell must discover its own modules after a pwsh parent.
+  const childEnv = { ...process.env };
+  for (const key of Object.keys(childEnv)) {
+    if (key.toUpperCase() === 'PSMODULEPATH') delete childEnv[key];
+  }
   execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-File',
     path.join(__dirname, 'bridge-session-security.ps1'), '-Action', action, '-Target', target],
-  { stdio: 'pipe', windowsHide: true });
+  { stdio: 'pipe', windowsHide: true, env: childEnv });
 }
 
 function verifyPrivate(target, directory) {
@@ -28,15 +33,23 @@ function verifyPrivate(target, directory) {
 function createSessionDirectory() {
   const parent = fs.realpathSync(os.tmpdir());
   let directory;
-  if (process.platform === 'win32') {
-    directory = path.join(parent, `endstate-bridge-${randomBytes(16).toString('hex')}`);
-    windowsSecurity('CreateDirectory', directory);
-  } else {
-    directory = fs.mkdtempSync(path.join(parent, 'endstate-bridge-'));
-    fs.chmodSync(directory, 0o700);
+  let created = false;
+  try {
+    if (process.platform === 'win32') {
+      directory = path.join(parent, `endstate-bridge-${randomBytes(16).toString('hex')}`);
+      windowsSecurity('CreateDirectory', directory);
+    } else {
+      directory = fs.mkdtempSync(path.join(parent, 'endstate-bridge-'));
+      created = true;
+      fs.chmodSync(directory, 0o700);
+    }
+    created = true;
+    verifyPrivate(directory, true);
+    return directory;
+  } catch (error) {
+    if (created) fs.rmdirSync(directory);
+    throw error;
   }
-  verifyPrivate(directory, true);
-  return directory;
 }
 
 function writePrivate(directory, name, content) {
@@ -53,10 +66,14 @@ function writePrivate(directory, name, content) {
   return target;
 }
 
-function readSession(descriptorPath = process.env.ENDSTATE_BRIDGE_SESSION) {
+function verifySessionStorage(descriptorPath) {
   if (!descriptorPath) throw new Error('Set ENDSTATE_BRIDGE_SESSION to the private session descriptor printed by dev:bridge');
   verifyPrivate(path.dirname(descriptorPath), true);
   verifyPrivate(descriptorPath, false);
+}
+
+function readSession(descriptorPath = process.env.ENDSTATE_BRIDGE_SESSION) {
+  verifySessionStorage(descriptorPath);
   const session = JSON.parse(fs.readFileSync(descriptorPath, 'utf8'));
   // The session format fixes these endpoints and a 32-byte hexadecimal bearer.
   if (session.version !== 1 || session.frontendOrigin !== FRONTEND_ORIGIN ||
@@ -68,3 +85,13 @@ function readSession(descriptorPath = process.env.ENDSTATE_BRIDGE_SESSION) {
 
 module.exports = { FRONTEND_ORIGIN, BRIDGE_URL, STORAGE_KEY,
   createSessionDirectory, writePrivate, verifyPrivate, readSession };
+
+// The standalone Rust entry point uses the same storage policy before reading authority.
+if (require.main === module) {
+  try {
+    verifySessionStorage(process.argv[2]);
+  } catch {
+    console.error('Unsafe or missing private bridge session storage');
+    process.exitCode = 1;
+  }
+}
