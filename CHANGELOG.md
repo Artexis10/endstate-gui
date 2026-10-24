@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [3.13.1](https://github.com/Artexis10/endstate-gui/compare/gui-v3.13.0...gui-v3.13.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** patch npm, Rust and Tauri security advisories ([#245](https://github.com/Artexis10/endstate-gui/issues/245)) ([2f3f091](https://github.com/Artexis10/endstate-gui/commit/2f3f091f1095794832ebc1ab5d11ff3d561c0870))
+
 ## [3.13.0](https://github.com/Artexis10/endstate-gui/compare/gui-v3.12.0...gui-v3.13.0) (2026-10-23)
 
 
