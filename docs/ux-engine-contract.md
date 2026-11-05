@@ -171,6 +171,9 @@ Changed content returns `status: "fail"` with `reason: "config_drift"`.
 A missing target with captured content returns `reason: "missing"`. An absent
 optional source makes no assertion that the target must be absent. An unchecked
 or ambiguous configuration remains skipped; it does not count as a pass.
+Unreadable or unstable targets fail with `config_read_failed`. Unsupported content
+uses `config_content_unchecked`. Missing or changed listed payload fails with
+`payload_integrity_failed`; consumers must not report it as target drift.
 
 `summary` reports `total`, `pass`, `fail`, and optional `skipped` counts.
 The envelope's `success` reports whether the command produced a valid result.
