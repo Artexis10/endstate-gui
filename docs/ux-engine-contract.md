@@ -155,6 +155,27 @@ Errors occur only when:
 
 Absence of configuration is not an error.
 
+### Structured verification results
+
+The current engine returns `data.manifest`, `data.summary`, and `data.results`
+for `verify`. The GUI retains these fields without converting them into the
+older package-only `items`, `okCount`, or `missingCount` fields.
+
+Each result has a `type` and `status`. Other fields are optional and depend on
+the result type. A captured configuration result uses `type: "config"` and
+identifies the capture with `id`. It can omit package fields such as `driver`
+and `version`. Consumers preserve its structured `reason` and `message`.
+
+Configuration verification compares captured content with the current target.
+Changed content returns `status: "fail"` with `reason: "config_drift"`.
+A missing target with captured content returns `reason: "missing"`. An absent
+optional source makes no assertion that the target must be absent. An unchecked
+or ambiguous configuration remains skipped; it does not count as a pass.
+
+`summary` reports `total`, `pass`, `fail`, and optional `skipped` counts.
+The envelope's `success` reports whether the command produced a valid result.
+Verification failures remain in `summary.fail` and the individual results.
+
 ---
 
 ## Capture Artifact Contract (INV-CAPTURE)

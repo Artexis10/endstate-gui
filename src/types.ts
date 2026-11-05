@@ -563,7 +563,25 @@ export interface VerifyItem {
   constraint?: string;
 }
 
+/** One result from the current engine verify command, including captured configuration. */
+export interface VerifyResultItem {
+  type: string;
+  status: string;
+  id?: string;
+  ref?: string;
+  driver?: string;
+  name?: string;
+  reason?: string;
+  message?: string;
+  version?: string;
+  expected?: string;
+}
+
 export interface EndstateVerifyData {
+  manifest?: { path: string; name: string };
+  summary?: { total: number; pass: number; fail: number; skipped?: number };
+  results?: VerifyResultItem[];
+  // Older engines return the package-only fields below instead of summary/results.
   manifestPath?: string;
   okCount?: number;
   missingCount?: number;
