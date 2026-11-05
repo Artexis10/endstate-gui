@@ -183,6 +183,20 @@ Verification failures remain in `summary.fail` and the individual results.
 
 ## Capture Artifact Contract (INV-CAPTURE)
 
+### Linux discovery accounting
+
+Linux capture keeps the complete `data.discovery` inventory under `--only`.
+Selected packages and private file plans determine the artifact contents.
+Consumers must use `discovery.counts` for candidate totals rather than summing
+overlapping source observations or counting only the included apps.
+
+`discovered = resolved + settingsOnly + unresolved`. The `settings` count can
+overlap `resolved`; `settingsOnly` counts supported settings without a resolved
+package. `selected` counts selected package or capturable settings candidates
+once each. Sanitized capture selects packages without collecting settings.
+Equal package and settings ID text does not establish an association;
+only a reviewed settings `packageId` joins them.
+
 ### Invariants
 
 1. **Success implies artifact exists and is valid.**
