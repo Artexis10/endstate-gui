@@ -187,6 +187,32 @@ Home Manager rollback may report `verification: "verified"` or `"unverified"`.
 Unavailable evidence adds `verificationReason: "file_expectations_unavailable"`.
 Consumers must not treat reactivation alone as content verification.
 
+Generated Home Manager activation requires known native ownership. The engine
+observes the generation and exact activation output before package mutation and
+again before activation. Only a missing native profile establishes absence.
+Unreadable, malformed, incomplete, or changing profiles and unreadable history
+leave ownership unknown.
+
+Unknown ownership returns `INPUT_PROVENANCE_UNRESOLVED` with
+`error.detail.subcode: "home-ownership"`. Native permission and availability
+failures retain their existing error codes. Consumers preserve the engine's
+message and do not infer an external owner from an observation failure.
+
+An established external owner receives `homeManager.ownershipAction` with
+`owner: "external"`, `action: "import_generated_module"`, `required: true`,
+`modulePath`, `message`, and optional `activeGeneration`. The generated
+configuration remains inactive; the engine leaves the owner's source graph
+unchanged. Consumers present the action without reporting completed activation.
+
+A late ownership error can follow committed package work. An activation whose
+resulting identity cannot be observed reports `stage: "commit"` and
+`committed: true`; consumers must not turn this uncertainty into success.
+A known process-start failure does not claim that activation ran.
+Capture reports unavailable ownership through provenance warnings and retains
+independent results. Verification reports unavailable native observation or
+history as `unreadable`, native absence as `missing`, and conflicting identity
+as `config_drift`.
+
 `summary` reports `total`, `pass`, `fail`, and optional `skipped` counts.
 The envelope's `success` reports whether the command produced a valid result.
 Verification failures remain in `summary.fail` and the individual results.
