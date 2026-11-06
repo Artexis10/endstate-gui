@@ -221,6 +221,21 @@ Keep typed `diagnostic` facts in technical details; show the engine's product
 message first. `retries` counts extra source-specific fallback queries, not
 process starts. The final envelope remains the authority for the saved artifact.
 
+Schema-v3 Linux generations can also capture one declared desktop value through
+the existing configuration workflow. A `desktop` detector supplies evidence with
+`type: "desktop"`, `backend: "gsettings"`, and `platform: "linux"`.
+`capture.desktopValues` contains trusted target/destination declarations;
+`desktop-value` restores use a trusted target and a desired-state payload.
+Boolean payloads distinguish inherited absence from explicit `false`.
+Effective defaults and private runtime scope stay outside portable evidence.
+
+The existing `config-resolution`, `restore-item`, and `config-migration` events
+carry this workflow. A restore item uses `restorer: "desktop-value"` and the
+case-sensitive `gsettings:<backing-directory><key>` target identity. Consumers
+render the engine's result and preserve the existing restore consent.
+Native desktop detection remains unavailable until its separate acceptance
+passes; injected workflow proof does not advertise GNOME support.
+
 Selected Linux capture scopes historical Home Manager declarations through the
 registry's program, package, and module associations. Retained update apps do
 not widen settings scope. Historical source paths do not authorize collection;
