@@ -204,6 +204,10 @@ An established external owner receives `homeManager.ownershipAction` with
 configuration remains inactive; the engine leaves the owner's source graph
 unchanged. Consumers present the action without reporting completed activation.
 
+The action's `modulePath` identifies the generated `default.nix` entry. That entry includes the copied configuration, staged file payloads, and optional secret references. Every generation uses a separate persistent directory; later generation preserves earlier imports. Clients keep the engine's exact path and do not reconstruct it from the user name.
+
+The owner chooses its source-graph change and activation. A pure owner flake can expose the generated directory as a non-flake input and import `default.nix` through that input. Generated directories remain on disk because external imports may still use them. The config-file wrapper does not relocate relative imports or other source-graph dependencies.
+
 A late ownership error can follow committed package work. An activation whose
 resulting identity cannot be observed reports `stage: "commit"` and
 `committed: true`; consumers must not turn this uncertainty into success.
