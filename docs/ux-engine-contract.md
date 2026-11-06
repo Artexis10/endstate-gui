@@ -209,6 +209,18 @@ once each. Sanitized capture selects packages without collecting settings.
 Equal package and settings ID text does not establish an association;
 only a reviewed settings `packageId` joins them.
 
+Schema-v1 `discovery-source` events contain the unchanged normalized row in
+`source`. `discovery-item` events contain `kind` and its matching `resolved`,
+`settings`, or `unresolved` row. They preserve the complete public inventory,
+including unselected rows, and do not establish capture success.
+
+Source `discovered` and `ignored` count accepted observations. Display source
+state instead of inventory counts for `failed` or `not_available` reads.
+All-failed and managed-profile fallback totals describe incomplete coverage.
+Keep typed `diagnostic` facts in technical details; show the engine's product
+message first. `retries` counts extra source-specific fallback queries, not
+process starts. The final envelope remains the authority for the saved artifact.
+
 Selected Linux capture scopes historical Home Manager declarations through the
 registry's program, package, and module associations. Retained update apps do
 not widen settings scope. Historical source paths do not authorize collection;
