@@ -175,6 +175,18 @@ Unreadable or unstable targets fail with `config_read_failed`. Unsupported conte
 uses `config_content_unchecked`. Missing or changed listed payload fails with
 `payload_integrity_failed`; consumers must not report it as target drift.
 
+A Home Manager result uses `type: "home-manager"`. It checks activation ownership
+and the declared files recorded with that activation. Missing file expectations
+return `status: "skip"` and `reason: "file_expectations_unavailable"`. Changed
+files fail with `config_drift`; missing files fail with `missing`; unreadable
+files or history fail with `unreadable`. Matching file hashes do not verify typed
+settings. The stream uses `skipped` for unavailable evidence and `failed` for
+failed checks. Consumers retain the engine's reason and message.
+
+Home Manager rollback may report `verification: "verified"` or `"unverified"`.
+Unavailable evidence adds `verificationReason: "file_expectations_unavailable"`.
+Consumers must not treat reactivation alone as content verification.
+
 `summary` reports `total`, `pass`, `fail`, and optional `skipped` counts.
 The envelope's `success` reports whether the command produced a valid result.
 Verification failures remain in `summary.fail` and the individual results.
@@ -196,6 +208,18 @@ package. `selected` counts selected package or capturable settings candidates
 once each. Sanitized capture selects packages without collecting settings.
 Equal package and settings ID text does not establish an association;
 only a reviewed settings `packageId` joins them.
+
+Selected Linux capture scopes historical Home Manager declarations through the
+registry's program, package, and module associations. Retained update apps do
+not widen settings scope. Historical source paths do not authorize collection;
+portable file references come from authorized staged payloads. Sanitization
+omits the entire Home Manager block. Sharing omits historical inline material
+that its payload redaction pipeline cannot process.
+
+Unrestricted private capture can retain opaque config or flake references and
+withhold competing live settings. Selected capture omits opaque references
+that it cannot scope. The engine reports these omissions in structured warnings;
+the GUI must not claim that omitted settings were captured.
 
 ### Invariants
 
