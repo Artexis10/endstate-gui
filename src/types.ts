@@ -184,8 +184,9 @@ export interface EndstateCapabilitiesData {
     /**
      * Scheduled setup-check capability. Additive in
      * schema 1.x; absent on engines that predate the `schedule` command family
-     * (≤ 2.21) → the entire feature stays dark. `supported` is true only on
-     * Windows where schtasks.exe is available; `autoPush` advertises that
+     * (≤ 2.21) → the entire feature stays dark. `supported` describes manual
+     * operations on Windows/Linux; `registration` describes the native backend.
+     * `autoPush` advertises that
      * `schedule run` can capture+push via the persisted keychain session.
      */
     schedule?: {
@@ -193,6 +194,8 @@ export interface EndstateCapabilitiesData {
       autoPush: boolean;
       /** Engine can read a manifest directly from .endstate and legacy .zip bundles. */
       bundleManifestSupported?: boolean;
+      /** Absent on older engines; native registration availability is then unknown. */
+      registration?: ScheduleRegistrationAvailability;
     };
   };
   platform?: {
@@ -277,6 +280,38 @@ export interface ProfileInspectionData {
 // verbatim — drift truth lives entirely in the engine (CLI is source of truth).
 // -----------------------------------------------------------------------------
 
+/** Native scheduling availability, independent of shared manual operations. */
+export interface ScheduleRegistrationAvailability {
+  supported: boolean;
+  backend?: string;
+  reason?: string;
+  detail?: string;
+}
+
+/** Observed unit facts. Missing booleans mean unknown, never false. */
+export interface ScheduleUnitObservation {
+  path: string;
+  present?: boolean;
+  owned?: boolean;
+  integrity?: boolean;
+  sha256?: string;
+  fragmentPath?: string;
+  dropInPaths?: string[];
+}
+
+/** Read-only native observations, separate from saved intent and run results. */
+export interface ScheduleRegistrationObservation extends ScheduleRegistrationAvailability {
+  stateReason?: string;
+  stateDetail?: string;
+  enabled?: boolean;
+  active?: boolean;
+  nextTriggerUtc?: string;
+  serviceResult?: string;
+  serviceActiveState?: string;
+  serviceExitStatus?: number;
+  units?: Record<string, ScheduleUnitObservation>;
+}
+
 /** Aggregated verify counts from a scheduled drift-check run. */
 export interface ScheduleVerifySummary {
   total: number;
@@ -345,7 +380,11 @@ export interface ScheduleStatusData {
   backupId?: string;
   /** Absent on older engines: upload state is then unknown, never healthy. */
   pendingUpload?: SchedulePendingUpload;
-  /** Null/absent when the schedule has never run. */
+  /** Absent on older engines; saved intent alone does not prove native health. */
+  registration?: ScheduleRegistrationObservation;
+  /** Distinguishes an unreadable saved result from a schedule that never ran. */
+  lastRunError?: ScheduleLastRunError;
+  /** Null/absent when no saved result is available; check lastRunError too. */
   lastRun?: ScheduleLastRun | null;
 }
 

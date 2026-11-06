@@ -284,6 +284,43 @@ Engine script path resolution order (for script mode):
 
 ---
 
+## Scheduled setup checks
+
+`features.schedule.supported` describes manual schedule operations on Windows
+and Linux. Native registration has separate availability in
+`features.schedule.registration`, with `supported`, optional `backend`, `reason`,
+and `detail`. An absent registration capability means unknown availability.
+
+`schedule status` retains saved intent, queue state, and last-run truth when
+native inspection fails. Its additive `registration` object reports observed
+availability and independent `stateReason`/`stateDetail`. Missing native
+`enabled`, `active`, or `nextTriggerUtc` fields mean unknown. Saved `enabled`
+alone does not prove that a task or timer is registered or healthy.
+
+The registration object can contain `units`, keyed by unit name. Each observed
+unit has a path and optional presence, ownership, integrity, SHA256, fragment
+path, and drop-in paths. Native service result, active state, and exit status
+remain separate from the persisted run result. `lastRunError` with code
+`LAST_RUN_READ_FAILED` identifies an unreadable result; absent `lastRun` alone
+does not establish that the schedule never ran.
+
+Windows uses Task Scheduler. Linux registration requires an existing systemd
+user manager and usable unit directory; it never starts a bus, changes system
+units, or enables lingering. Manual run, upload replay, and discard remain
+independent of native registration. Saved enabled intent still governs runs.
+The native arguments are `schedule run --root R --json`; nested operations use
+that root and read the current saved manifest. Linux catch-up waits for the
+registration commit. Status performs no recovery writes.
+
+The engine preserves benign inherited policy. Concrete execution or cadence
+overrides report `REGISTRATION_OVERRIDDEN`; ownership conflicts preserve foreign
+or modified units. Registration failures identify their phase and reason.
+Systemd rejects quotes, backslashes, and control characters in executable
+paths before any configuration change. Native lifecycle, rendered GUI,
+packaged application, and release acceptance remain separate obligations.
+
+---
+
 ## Contract Violations (Considered Bugs)
 
 The following are bugs:
