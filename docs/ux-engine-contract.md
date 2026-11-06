@@ -217,6 +217,13 @@ independent results. Verification reports unavailable native observation or
 history as `unreadable`, native absence as `missing`, and conflicting identity
 as `config_drift`.
 
+Output identity can establish ownership across native generations. Capture of an
+output-backed declaration needs completion evidence for the observed generation
+and output. A newer failure for that output prevents recovery of an older
+success. Consumers preserve unavailable-provenance warnings and independent
+capture results. An uncertain rollback can invalidate pre-attempt completion
+without proving its post-attempt identity.
+
 `summary` reports `total`, `pass`, `fail`, and optional `skipped` counts.
 The envelope's `success` reports whether the command produced a valid result.
 Verification failures remain in `summary.fail` and the individual results.
