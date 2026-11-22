@@ -1,12 +1,12 @@
 {
   "openspec_version": "2.1.1",
-  "comment": "Strict-validation warnings that existed when this repo moved to OpenSpec 2.1.1. CI fails on any warning not listed. Regenerate only to shrink it: node scripts/openspec_strict_gate.mjs --write-baseline -- <cmd>",
+  "comment": "Strict-validation warnings that existed when this repo moved to OpenSpec 2.1.1. CI fails on any warning not listed. Regenerate only to shrink it or to carry a renamed requirement: node scripts/openspec_strict_gate.mjs --write-baseline -- <cmd>",
   "keys": [
     "too-long auth-ui :: Claim submit invokes backupClaim and feeds recovery-key dialog",
     "too-long auth-ui :: Claim-code paste field validation",
     "too-long auth-ui :: Friendly error mapping for claim error codes",
     "too-long auth-ui :: Native Hosted Backup claim-link handling",
-    "too-long auth-ui :: Recovery-key dialog (load-bearing per contract §1)",
+    "too-long auth-ui :: Recovery-key dialog (load-bearing per contract \u00a71)",
     "too-long auth-ui :: Sign-up form claim-code branch",
     "too-long backup-pane :: Friendly engine-error rendering",
     "too-long backup-pane :: Last sync indicator",

@@ -57,20 +57,68 @@ try {
   fail2(`could not parse JSON from validate stdout (exit ${r.status}):\n${(r.stdout || '').slice(0, 2000)}\n${(r.stderr || '').slice(0, 2000)}`);
 }
 
-// Map spec-id -> ordered requirement names from openspec/specs/<id>/spec.md
+// Map spec-id -> ordered requirement names from openspec/specs/<id>/spec.md.
+// Mirrors MarkdownParser in the validator: BOM/CRLF normalized, fenced code
+// masked out, sections nested by header level, and requirements[i] is the i-th
+// direct child of the `## Requirements` section — any `###` header there, not
+// only `### Requirement:` ones.
+function stripClosingSequence(title) {
+  return title.replace(/[ \t]+#+[ \t]*$/, '').trim();
+}
+function buildCodeFenceMask(lines) {
+  const mask = new Array(lines.length).fill(false);
+  let active = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (!active) {
+      const m = lines[i].match(/^\s*(`{3,}|~{3,})(.*)/);
+      if (m && !(m[1][0] === '`' && m[2].includes('`'))) {
+        active = { marker: m[1][0], length: m[1].length };
+        mask[i] = true;
+      }
+      continue;
+    }
+    mask[i] = true;
+    const m = lines[i].match(/^\s*(`{3,}|~{3,})\s*$/);
+    if (m && m[1][0] === active.marker && m[1].length >= active.length) active = null;
+  }
+  return mask;
+}
+function specRequirementNames(specId) {
+  const p = join('openspec', 'specs', specId, 'spec.md');
+  if (!existsSync(p)) return [];
+  const content = readFileSync(p, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const lines = content.split('\n');
+  const mask = buildCodeFenceMask(lines);
+  // Section tree, as parseSections() builds it.
+  const sections = [];
+  const stack = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (mask[i]) continue;
+    const m = lines[i].match(/^(#{1,6})\s+(.+)$/);
+    if (!m) continue;
+    const section = { level: m[1].length, title: stripClosingSequence(m[2]), children: [] };
+    while (stack.length > 0 && stack[stack.length - 1].level >= section.level) stack.pop();
+    if (stack.length === 0) sections.push(section);
+    else stack[stack.length - 1].children.push(section);
+    stack.push(section);
+  }
+  const find = (list) => {
+    for (const sec of list) {
+      if (sec.title.toLowerCase() === 'requirements') return sec;
+      const hit = find(sec.children);
+      if (hit) return hit;
+    }
+    return undefined;
+  };
+  const reqSection = find(sections);
+  if (!reqSection) return [];
+  return reqSection.children.map((c) =>
+    stripClosingSequence(c.title.replace(/^Requirement:\s*/i, '')),
+  );
+}
 const reqNameCache = new Map();
 function requirementName(specId, index) {
-  if (!reqNameCache.has(specId)) {
-    const names = [];
-    const p = join('openspec', 'specs', specId, 'spec.md');
-    if (existsSync(p)) {
-      for (const line of readFileSync(p, 'utf8').split('\n')) {
-        const m = line.match(/^###\s+Requirement:\s*(.+?)\s*$/);
-        if (m) names.push(m[1]);
-      }
-    }
-    reqNameCache.set(specId, names);
-  }
+  if (!reqNameCache.has(specId)) reqNameCache.set(specId, specRequirementNames(specId));
   const names = reqNameCache.get(specId);
   return index < names.length ? names[index] : `#${index}`;
 }
@@ -116,14 +164,15 @@ const ls = spawnSync('git', ['ls-files', '-s', '--', ...TOOL_DIRS], {
   cwd: process.cwd(),
   encoding: 'utf8',
 });
-if (!ls.error && ls.status === 0) {
+if (ls.error) fail2(`failed to spawn git ls-files: ${ls.error.message}`);
+if (ls.status === 0) {
   for (const line of ls.stdout.split('\n')) {
     if (!line.trim()) continue;
     const m = line.match(/^(\d+) [0-9a-f]+ \d+\t(.+)$/);
     if (m && m[1] === '120000') symlinkFailures.push(m[2]);
   }
 }
-// non-zero status or spawn failure: outside a git repo -> skip silently.
+// non-zero status: outside a git repo -> skip silently.
 
 // ---- write-baseline mode ----
 if (writeBaseline) {
@@ -137,7 +186,7 @@ if (writeBaseline) {
     openspec_version: version,
     comment:
       'Strict-validation warnings that existed when this repo moved to OpenSpec 2.1.1. ' +
-      'CI fails on any warning not listed. Regenerate only to shrink it: ' +
+      'CI fails on any warning not listed. Regenerate only to shrink it or to carry a renamed requirement: ' +
       'node scripts/openspec_strict_gate.mjs --write-baseline -- <cmd>',
     keys,
   };
