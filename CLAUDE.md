@@ -33,7 +33,7 @@ npx playwright test e2e/apply-modal.spec.ts
 npx tsc --noEmit
 
 # OpenSpec validation (also runs as pre-push hook)
-npm run openspec:validate --all --strict --no-interactive
+npm run openspec:validate
 # Emergency bypass: OPENSPEC_BYPASS=1 git push
 
 # Git hooks
@@ -122,4 +122,4 @@ See `patches/README.md`.
 
 ## OpenSpec
 
-Significant changes must be represented as OpenSpec changes. Level 2 enforcement: pre-push hook blocks invalid specs. Specs live in `openspec/specs/`, changes in `openspec/changes/`. Emergency bypass: `OPENSPEC_BYPASS=1 git push`.
+Significant changes must be represented as OpenSpec changes. Level 2 enforcement: pre-push hook blocks invalid specs (the strict gate needs Node >= 22.20.0, the OpenSpec 2.1.1 engines floor). Specs live in `openspec/specs/`, changes in `openspec/changes/`. Emergency bypass: `OPENSPEC_BYPASS=1 git push`.
