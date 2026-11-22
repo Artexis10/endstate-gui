@@ -44,15 +44,18 @@ for (let i = 0; i < 3; i++) {
 }
 
 const argv = process.argv.slice(2);
-const writeBaseline = argv.includes('--write-baseline');
 const sep = argv.indexOf('--');
 if (sep === -1 || sep === argv.length - 1) {
   fail2('usage: openspec_strict_gate.mjs [--write-baseline] -- <openspec command and args...>');
 }
+const writeBaseline = argv.slice(0, sep).includes('--write-baseline');
 const cmd = argv.slice(sep + 1);
 
 function runOpenspec(args, label) {
-  const r = spawnSync(cmd[0], [...cmd.slice(1), ...args], {
+  // A `node <entry.js>` command runs on this same interpreter on every OS;
+  // `npx`/`npm` shims need a shell on native Windows, so callers use this form.
+  const bin = cmd[0] === 'node' ? process.execPath : cmd[0];
+  const r = spawnSync(bin, [...cmd.slice(1), ...args], {
     cwd: process.cwd(),
     env: { ...process.env, OPENSPEC_TELEMETRY: '0', CI: '1' },
     encoding: 'utf8',
@@ -71,6 +74,9 @@ try {
   report = JSON.parse(r.stdout);
 } catch {
   fail2(`could not parse JSON from validate stdout (exit ${r.status}):\n${(r.stdout || '').slice(0, 2000)}\n${(r.stderr || '').slice(0, 2000)}`);
+}
+if (!Array.isArray(report.items)) {
+  fail2(`validate output has no items array (exit ${r.status}) -- not a validation report:\n${r.stdout.slice(0, 2000)}`);
 }
 
 // Map spec-id -> ordered requirement names from openspec/specs/<id>/spec.md.
@@ -158,18 +164,23 @@ for (const item of report.items ?? []) {
       if (item.type === 'spec') {
         const m = String(issue.path).match(/^requirements\[(\d+)\]$/);
         const name = m ? requirementName(item.id, Number(m[1])) : `#${issue.path}`;
-        key = `too-long ${item.id} :: ${name}`;
+        key = `too-long spec/${item.id} :: ${name}`;
       } else {
         const m = msg.match(/^(?:ADDED|MODIFIED) "(.+)":/);
         const name = m ? m[1] : msg;
         const capability = String(issue.path).replace(/\/spec\.md$/, '');
-        key = `too-long ${capability} :: ${name}`;
+        key = `too-long change/${item.id}/${capability} :: ${name}`;
       }
     } else {
       key = `warning ${item.type}/${item.id} :: ${issue.path} :: ${msg}`;
     }
     warnings.push({ key, ...entry });
   }
+}
+
+// A failed validate that reported nothing is an operational failure, not green.
+if (r.status !== 0 && warnings.length === 0 && errors.length === 0) {
+  fail2(`openspec validate exited ${r.status} with no issues in its report`);
 }
 
 const presentKeys = new Set(warnings.map((w) => w.key));
@@ -220,8 +231,34 @@ try {
   fail2(`missing or unparsable baseline ${BASELINE_PATH}; run with --write-baseline`);
 }
 const baselineKeys = new Set(baseline.keys ?? []);
+if (report.items.length === 0 && baselineKeys.size > 0) {
+  fail2('validate reported no items but the baseline holds keys -- refuse to pass an empty report');
+}
+
+// Carry: a spec warning whose key is absent may be the archived form of a
+// baselined change delta -- `too-long spec/<cap> :: <name>` carries when the
+// baseline holds `too-long change/<cid>/<cap> :: <name>` and <cid> is not an
+// active change in this run. While it is still active, the spec warning fails.
+const activeChangeIds = new Set(
+  report.items.filter((i) => i.type === 'change').map((i) => i.id),
+);
+function carriedKey(key) {
+  if (!key.startsWith('too-long spec/')) return null;
+  const rest = key.slice('too-long spec/'.length);
+  const suffix = `/${rest}`;
+  for (const k of baselineKeys) {
+    if (!k.startsWith('too-long change/')) continue;
+    const cut = k.indexOf('/', 'too-long change/'.length);
+    if (cut === -1 || k.slice(cut) !== suffix) continue;
+    const cid = k.slice('too-long change/'.length, cut);
+    if (!activeChangeIds.has(cid)) return k;
+  }
+  return null;
+}
 
 const newWarnings = warnings.filter((w) => !baselineKeys.has(w.key));
+const carried = newWarnings.filter((w) => carriedKey(w.key) !== null);
+const uncarried = newWarnings.filter((w) => carriedKey(w.key) === null);
 const stale = [...baselineKeys].filter((k) => !presentKeys.has(k));
 
 let failed = false;
@@ -230,10 +267,16 @@ if (errors.length > 0) {
   console.error(`ERROR-level issues (never baselined): ${errors.length}`);
   for (const e of errors) console.error(`  ${e.key}`);
 }
-if (newWarnings.length > 0) {
+if (carried.length > 0) {
+  console.log(
+    `${carried.length} warning(s) carried from baselined keys of archived changes. ` +
+      `Fold them into the spec keys with: node scripts/openspec_strict_gate.mjs --write-baseline -- ${cmd.join(' ')}`,
+  );
+}
+if (uncarried.length > 0) {
   failed = true;
-  console.error(`New strict warnings not in baseline: ${newWarnings.length}`);
-  for (const w of newWarnings) {
+  console.error(`New strict warnings not in baseline: ${uncarried.length}`);
+  for (const w of uncarried) {
     console.error(`  ${w.key}`);
     console.error(`    from ${w.item.type} "${w.item.id}" (${w.issue.path})`);
   }

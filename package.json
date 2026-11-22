@@ -28,7 +28,7 @@
     "hooks:install": "lefthook install",
     "openspec:list": "openspec list",
     "openspec:list:specs": "openspec list --specs",
-    "openspec:validate": "node scripts/openspec_strict_gate.mjs -- npx --no-install openspec",
+    "openspec:validate": "node scripts/openspec_strict_gate.mjs -- node node_modules/@fission-ai/openspec/bin/openspec.js",
     "openspec:validate:ci": "pwsh -NoProfile -File scripts/openspec_validate.ps1",
     "postinstall": "patch-package",
     "version:bump": "node scripts/bump-version.mjs",
