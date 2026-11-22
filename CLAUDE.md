@@ -33,7 +33,7 @@ npx playwright test e2e/apply-modal.spec.ts
 npx tsc --noEmit
 
 # OpenSpec validation (also runs as pre-push hook)
-npm run openspec:validate --all --strict --no-interactive
+npm run openspec:validate
 # Emergency bypass: OPENSPEC_BYPASS=1 git push
 
 # Git hooks

@@ -1,9 +1,12 @@
 ---
-name: "OPSX: New"
-description: "Start a new change using the experimental artifact workflow (OPSX)"
+name: openspec-new-change
+description: Start a new OpenSpec change using the experimental artifact workflow. Use when the user wants to create a new feature, fix, or modification with a structured step-by-step approach. Also use when the user says "openspec new change" or "opsx new".
 allowed-tools: Bash(openspec:*)
-category: "Workflow"
-tags: ["workflow", "artifacts", "experimental"]
+license: MIT
+compatibility: Requires openspec CLI.
+metadata:
+  author: openspec
+  version: "1.0"
 ---
 
 Start a new change using the experimental artifact-driven approach.
@@ -16,16 +19,16 @@ One `"root": null` is not about setup: when a `status` error message starts with
 
 Otherwise, with no root, what happens next depends on how this workflow was reached:
 
-- **Auto-selected**: you chose this workflow yourself, without the user naming OpenSpec, naming this skill, or running its slash command. Stop using OpenSpec and answer the request normally, as you would with no OpenSpec installed. Do not ask them to set anything up and do not mention OpenSpec setup.
-- **Explicit OpenSpec request**: the user named OpenSpec, named this skill, or ran its slash command. Stop before writing and ask how to proceed: set this project up (`openspec init`), target a store they already have (`--store <id>`), or continue without OpenSpec for this request. Wait for their answer.
+- **Auto-selected**: you chose this workflow yourself, without the user naming OpenSpec, naming this skill, or invoking this skill by name. Stop using OpenSpec and answer the request normally, as you would with no OpenSpec installed. Do not ask them to set anything up and do not mention OpenSpec setup.
+- **Explicit OpenSpec request**: the user named OpenSpec, named this skill, or invoked this skill by name. Stop before writing and ask how to proceed: set this project up (`openspec init`), target a store they already have (`--store <id>`), or continue without OpenSpec for this request. Wait for their answer.
 
 In both branches, never create the root as a side effect: do not run `openspec init` until the user asks for it, do not hand-create `openspec/` files, and do not let a command create it.
 
-**Input**: The argument after `/opsx:new` is the change name (kebab-case), OR a description of what the user wants to build.
+**Input**: The user's request should include a change name (kebab-case) OR a description of what they want to build.
 
 **Steps**
 
-1. **If no input provided, ask what they want to build**
+1. **If no clear input provided, ask what they want to build**
 
    Ask the user (open-ended, no preset options):
    > "What change do you want to work on? Describe what you want to build or fix."
@@ -58,7 +61,8 @@ In both branches, never create the root as a side effect: do not run `openspec i
    Use the returned `planningHome`, `changeRoot`, `artifactPaths`, and `nextSteps` instead of assuming repo-local paths.
 
 5. **Get instructions for the first artifact**
-   The first artifact depends on the schema. Check the status output to find the first artifact with status "ready".
+   The first artifact depends on the schema (e.g., `proposal` for spec-driven).
+   Check the status output to find the first artifact with status "ready".
    ```bash
    openspec instructions <first-artifact-id> --change "<name>"
    ```
@@ -73,11 +77,11 @@ After completing the steps, summarize:
 - Schema/workflow being used and its artifact sequence
 - Current status (0/N artifacts complete)
 - The template for the first artifact
-- Prompt: "Ready to create the first artifact? Run `/opsx:continue` or just describe what this change is about and I'll draft it."
+- Prompt: "Ready to create the first artifact? Just describe what this change is about and I'll draft it, or ask me to continue."
 
 **Guardrails**
 - Do NOT create any artifacts yet - just show the instructions
 - Do NOT advance beyond showing the first artifact template
 - If the name is invalid (not kebab-case), ask for a valid name
-- If a change with that name already exists, suggest using `/opsx:continue` instead
+- If a change with that name already exists, suggest continuing that change instead
 - Pass --schema if using a non-default workflow

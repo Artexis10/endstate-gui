@@ -64,6 +64,7 @@ classes:
     - "scripts/capture-screenshots.mjs"
     - "scripts/capture-extras.mjs"
     - "scripts/record-demo.mjs"
+    - "scripts/openspec_strict_gate.mjs"
     - "scripts/openspec_validate.ps1"
   specs: ["openspec/*"]
   docs: ["*.md", "docs/*", "screenshots/*", "LICENSE"]

@@ -1,4 +1,4 @@
-/opsx:new capture-config-envelope — Surface structured config module metadata in capture JSON envelope
+`openspec-new-change` skill capture-config-envelope — Surface structured config module metadata in capture JSON envelope
 
 Goal: The capture `--json` envelope currently includes flat string arrays for config modules (configsIncluded, configsSkipped, configsCaptureErrors). The GUI needs structured per-module metadata to associate config modules with their parent apps without heuristic string matching. Surface the data that already exists internally in the engine into the JSON envelope.
 
@@ -10,7 +10,7 @@ Context:
 - Module IDs follow pattern "apps.<app-id>" (e.g., "apps.vscode") — appId is derivable by stripping the "apps." prefix
 - An OpenSpec already exists at openspec/specs/capture-config-metadata/spec.md covering the internal engine result; it needs extending to cover the JSON envelope
 
-/opsx:ff
+`openspec-ff-change` skill
 
 Files to read:
 - engine/bundle.ps1 — `New-CaptureBundle`, `Get-MatchedConfigModulesForApps`, `Invoke-CollectConfigFiles`
@@ -23,7 +23,7 @@ Files to read:
 - docs/contracts/cli-json-contract.md — JSON contract reference
 - modules/apps/vscode/module.jsonc — sample module structure
 
-/opsx:apply
+`openspec-apply-change` skill
 
 Task 1: Enrich New-CaptureBundle return value (engine/bundle.ps1)
 
@@ -135,12 +135,12 @@ Add Pester tests for the enriched `New-CaptureBundle` result in the appropriate 
 - filesCaptured counts are accurate per module
 - `ConfigModulesDetail` is empty array (not null) when no modules matched
 
-/opsx:verify
+`openspec-verify-change` skill
 
 1. Run unit tests: .\scripts\test-unit.ps1
 2. Verify the new fields exist in the bundle result by checking test output
 3. Confirm OpenSpec validation: npm run openspec:validate
 
-/opsx:archive
+`openspec-archive-change` skill
 
 Commit message: "feat: surface structured configModules metadata in capture JSON envelope"

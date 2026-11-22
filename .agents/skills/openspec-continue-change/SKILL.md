@@ -1,9 +1,12 @@
 ---
-name: "OPSX: Continue"
-description: "Continue working on a change - create the next artifact (Experimental)"
+name: openspec-continue-change
+description: Continue working on an OpenSpec change by creating the next artifact. Use when the user wants to progress their change, create the next artifact, or continue their workflow. Also use when the user says "openspec continue" or "opsx continue".
 allowed-tools: Bash(openspec:*)
-category: "Workflow"
-tags: ["workflow", "artifacts", "experimental"]
+license: MIT
+compatibility: Requires openspec CLI.
+metadata:
+  author: openspec
+  version: "1.0"
 ---
 
 Continue working on a change by creating the next artifact.
@@ -16,12 +19,12 @@ One `"root": null` is not about setup: when a `status` error message starts with
 
 Otherwise, with no root, what happens next depends on how this workflow was reached:
 
-- **Auto-selected**: you chose this workflow yourself, without the user naming OpenSpec, naming this skill, or running its slash command. Stop using OpenSpec and answer the request normally, as you would with no OpenSpec installed. Do not ask them to set anything up and do not mention OpenSpec setup.
-- **Explicit OpenSpec request**: the user named OpenSpec, named this skill, or ran its slash command. Stop before writing and ask how to proceed: set this project up (`openspec init`), target a store they already have (`--store <id>`), or continue without OpenSpec for this request. Wait for their answer.
+- **Auto-selected**: you chose this workflow yourself, without the user naming OpenSpec, naming this skill, or invoking this skill by name. Stop using OpenSpec and answer the request normally, as you would with no OpenSpec installed. Do not ask them to set anything up and do not mention OpenSpec setup.
+- **Explicit OpenSpec request**: the user named OpenSpec, named this skill, or invoked this skill by name. Stop before writing and ask how to proceed: set this project up (`openspec init`), target a store they already have (`--store <id>`), or continue without OpenSpec for this request. Wait for their answer.
 
 In both branches, never create the root as a side effect: do not run `openspec init` until the user asks for it, do not hand-create `openspec/` files, and do not let a command create it.
 
-**Input**: Optionally specify a change name after `/opsx:continue` (e.g., `/opsx:continue add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+**Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
 **Steps**
 
@@ -39,7 +42,7 @@ In both branches, never create the root as a side effect: do not run `openspec i
 
    Mark the most recently modified change as "(Recommended)" since it's likely what the user wants to continue.
 
-   Always announce: "Using change: <name>" and how to override (e.g., `/opsx:continue <other>`).
+   Always announce: "Using change: <name>" and how to override (e.g., `openspec-continue-change <other>`).
 
 2. **Check current status**
    ```bash
@@ -55,10 +58,17 @@ In both branches, never create the root as a side effect: do not run `openspec i
 
    ---
 
+   **Before anything else, finish a partly written artifact**:
+   - An artifact whose output is a glob pattern (e.g. `specs/**/*.md`) reads `done` as soon as one matching file exists, so a run interrupted while writing its files leaves it `done` with some still missing
+   - For each such `done` artifact, first get its instructions and read any completed dependencies needed to determine the expected files. Then compare those files with `artifactPaths.<id>.existingOutputPaths`. For spec-driven's `specs`, read the proposal and check for one `specs/<capability-path>/spec.md` per capability it lists; resolve each expected path against `changeRoot` before comparing path identity, and verify each one remains inside `changeRoot` after resolving symlinks, both in its parent directories and in the file itself if it already exists
+   - Never write an expected path that fails that check; stop and tell the user. If any are missing, write only the missing files, each at its checked path - when the `instruction` field delegates creation to a skill or command, invoke it only if it can write each file to its checked path; otherwise stop and tell the user - and STOP - that counts as this invocation's ONE artifact. If you cannot tell whether a file was left out on purpose, ask the user
+
+   ---
+
    **If all planning artifacts are complete (`isPlanningComplete: true`, or legacy `isComplete: true`)**:
    - Congratulate the user
    - Show final status including the schema used
-   - Suggest: "Planning is complete! You can now implement this change with `/opsx:apply`. Once implementation and any tracked work are complete, archive it with `/opsx:archive`."
+   - Suggest: "Planning is complete! The plan is ready for review. When you’re ready, ask me to apply it."
    - STOP
 
    ---
@@ -79,10 +89,13 @@ In both branches, never create the root as a side effect: do not run `openspec i
      - `skipped`/`warning`: present when the change declares skip_specs and this artifact must NOT be created - pick another artifact
    - **Create the artifact file**:
      - Read any completed dependency files for context - always re-read them from disk, even if you saw them earlier in the conversation (the user may have edited them)
-     - If the `instruction` field delegates creation to a specific skill or command, invoke it to produce the artifact instead of writing the file yourself, then verify the artifact file exists at `resolvedOutputPath`
-     - Otherwise use `template` as the structure - fill in its sections
-     - Apply `context` and `rules` as constraints when writing - but do NOT copy them into the file
-     - Write to the `resolvedOutputPath` specified in instructions. If it is a glob pattern, choose the concrete file path using the schema instruction and the change's context
+     - Choose the output path before creating anything. If the `resolvedOutputPath` specified in instructions is a glob pattern, choose a concrete path inside `changeRoot` using the schema instruction and the change's context, and verify it remains inside `changeRoot` after resolving symlinks, both in its parent directories and in the file itself if it already exists; if it does not, stop and tell the user. Otherwise the output path is `resolvedOutputPath`
+     - If the `instruction` field delegates creation to a specific skill or command, invoke it only if it can write the artifact to that output path; otherwise stop and tell the user
+     - Otherwise, write it yourself:
+       - Use `template` as the structure - fill in its sections
+       - Apply `context` and `rules` as constraints when writing - but do NOT copy them into the file
+       - Write the file to that output path
+     - Either way, verify the artifact file exists at that output path
    - Show what was created and what's now unlocked
    - STOP after creating ONE artifact
 
@@ -104,13 +117,13 @@ After each invocation, show:
 - Schema workflow being used
 - Current progress (N/M complete)
 - What artifacts are now unlocked
-- Prompt: "Run `/opsx:continue` to create the next artifact"
+- Prompt: "Want to continue? Just ask me to continue or tell me what to do next."
 
 **Artifact Creation Guidelines**
 
 The artifact types and their purpose depend on the schema. The `instruction` field from the instructions output is the authoritative guidance for each artifact - follow it even when the artifact has a familiar name (proposal.md, tasks.md, etc.), since custom schemas may define different content or a different process for the same file names.
 
-If the `instruction` field directs you to use a specific skill or command to create the artifact, invoke it instead of writing the artifact directly.
+If the `instruction` field directs you to use a specific skill or command to create the artifact, invoke it instead of writing the artifact directly - but only once you have chosen and checked the output path, and only if it can write there.
 
 **Guardrails**
 - Create ONE artifact per invocation

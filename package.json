@@ -28,7 +28,7 @@
     "hooks:install": "lefthook install",
     "openspec:list": "openspec list",
     "openspec:list:specs": "openspec list --specs",
-    "openspec:validate": "openspec validate --all --strict --no-interactive",
+    "openspec:validate": "node scripts/openspec_strict_gate.mjs -- npx --no-install openspec",
     "openspec:validate:ci": "pwsh -NoProfile -File scripts/openspec_validate.ps1",
     "postinstall": "patch-package",
     "version:bump": "node scripts/bump-version.mjs",
@@ -70,7 +70,7 @@
     "zod": "^4.3.4"
   },
   "devDependencies": {
-    "@fission-ai/openspec": "^1.14.0",
+    "@fission-ai/openspec": "2.1.1",
     "@playwright/test": "^1.57.0",
     "@tauri-apps/cli": "2.11.5",
     "@testing-library/jest-dom": "^6.9.1",
