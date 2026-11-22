@@ -27,6 +27,22 @@ function fail2(msg) {
   process.exit(2);
 }
 
+// OpenSpec 2.1.1's engines floor.
+const MIN_NODE = '22.20.0';
+const nodeParts = process.versions.node.split('.').map(Number);
+const minParts = MIN_NODE.split('.').map(Number);
+for (let i = 0; i < 3; i++) {
+  if (nodeParts[i] !== minParts[i]) {
+    if (nodeParts[i] < minParts[i]) {
+      fail2(
+        `OpenSpec 2.1.1 needs Node >= ${MIN_NODE}; this is v${process.versions.node}. ` +
+          `Upgrade Node, or bypass the pre-push hook once with OPENSPEC_BYPASS=1.`,
+      );
+    }
+    break;
+  }
+}
+
 const argv = process.argv.slice(2);
 const writeBaseline = argv.includes('--write-baseline');
 const sep = argv.indexOf('--');
