@@ -7,7 +7,7 @@ The capture bundle is the artifact Endstate exists to produce, and in the GUI it
 costs the double-click (Windows cannot route `.zip` to Endstate — the shell owns it), and it makes
 the product's own output look like a shipping detail rather than a format.
 
-The engine change (Artexis10/endstate) gives bundles a first-class `.endstate` extension. This is
+The engine change (substrate-systems/endstate) gives bundles a first-class `.endstate` extension. This is
 the GUI half: accept it everywhere, offer it in every picker, and register it with Windows so
 double-clicking one opens Endstate.
 

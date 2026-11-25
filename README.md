@@ -6,15 +6,15 @@ Website: <https://substratesystems.io/endstate> · Download: <https://substrates
 
 The GUI is designed to consume Endstate strictly through its public CLI interface, ensuring a clear separation between the engine and the user interface.
 
-Endstate is governed by a set of public principles documented in the engine repository: [Endstate Principles](https://github.com/Artexis10/endstate/blob/main/PRINCIPLES.md). These apply to both the engine and the GUI and constrain product, pricing, and architecture decisions.
+Endstate is governed by a set of public principles documented in the engine repository: [Endstate Principles](https://github.com/substrate-systems/endstate/blob/main/PRINCIPLES.md). These apply to both the engine and the GUI and constrain product, pricing, and architecture decisions.
 
 ## Status
 
-[![CI](https://github.com/Artexis10/endstate-gui/actions/workflows/ci.yml/badge.svg)](https://github.com/Artexis10/endstate-gui/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/Artexis10/endstate-gui?display_name=tag&label=release)](https://github.com/Artexis10/endstate-gui/releases/latest)
+[![CI](https://github.com/substrate-systems/endstate-gui/actions/workflows/ci.yml/badge.svg)](https://github.com/substrate-systems/endstate-gui/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/substrate-systems/endstate-gui?display_name=tag&label=release)](https://github.com/substrate-systems/endstate-gui/releases/latest)
 ![engine pin](https://img.shields.io/badge/engine-v2.32.0-blue)
 
-Endstate GUI is released and actively maintained. Download the latest signed installer from [Releases](https://github.com/Artexis10/endstate-gui/releases/latest). The installer is the only download: it bundles the Endstate engine, so you do not install the CLI separately.
+Endstate GUI is released and actively maintained. Download the latest signed installer from [Releases](https://github.com/substrate-systems/endstate-gui/releases/latest). The installer is the only download: it bundles the Endstate engine, so you do not install the CLI separately.
 
 ## Development Prerequisites
 
@@ -174,7 +174,7 @@ Endstate Cloud is the public name of the managed backup service. Endstate GUI
 surfaces the hosted-backup capability of the bundled engine (`endstate backup *`,
 available from engine v2.0.0). All cryptography, HTTP, JWT validation, and
 keychain access live in the engine — the GUI is a thin presentation layer per
-the [Hosted Backup contract](https://github.com/Artexis10/endstate/blob/main/docs/contracts/hosted-backup-contract.md).
+the [Hosted Backup contract](https://github.com/substrate-systems/endstate/blob/main/docs/contracts/hosted-backup-contract.md).
 
 The `hostedBackup` capability key, the `EndstateHostedBackupCapability` type,
 and the contract document's filename are unchanged: the rename is public

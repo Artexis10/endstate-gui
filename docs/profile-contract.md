@@ -4,7 +4,7 @@ This document links to the canonical profile contract maintained in the Endstate
 
 ## Canonical Source
 
-**See:** [Endstate Engine - Profile Contract](https://github.com/Artexis10/endstate/blob/main/docs/contracts/profile-contract.md)
+**See:** [Endstate Engine - Profile Contract](https://github.com/substrate-systems/endstate/blob/main/docs/contracts/profile-contract.md)
 
 For local development, the contract is located at:
 ```

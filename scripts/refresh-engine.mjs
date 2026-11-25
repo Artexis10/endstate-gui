@@ -1,7 +1,7 @@
 // scripts/refresh-engine.mjs
 //
 // Refreshes the bundled engine binary to the version pinned in ENGINE_VERSION,
-// downloading the official signed release asset from Artexis10/endstate and
+// downloading the official signed release asset from substrate-systems/endstate and
 // verifying its SHA-256 before placing it at the sidecar location.
 //
 //   Usage: npm run engine:refresh
@@ -30,14 +30,14 @@ const dest = resolve(
 
 const work = mkdtempSync(join(tmpdir(), 'engine-refresh-'));
 try {
-  console.log(`Downloading engine ${tag} from Artexis10/endstate…`);
+  console.log(`Downloading engine ${tag} from substrate-systems/endstate…`);
   // execFileSync (no shell) — args are passed directly, so nothing is
   // interpreted even though `tag`/`work` are interpolated values.
   execFileSync(
     'gh',
     [
       'release', 'download', tag,
-      '--repo', 'Artexis10/endstate',
+      '--repo', 'substrate-systems/endstate',
       '--pattern', 'endstate.exe',
       '--pattern', 'endstate.exe.sha256',
       '--dir', work,

@@ -36,6 +36,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Check WINGET_TOKEN can publish through the winget-pkgs fork
+        id: token
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: bash scripts/check-winget-token.sh 0
@@ -49,3 +50,5 @@ jobs:
           # Submit the MSI installer (matches the existing manifest)
           installers-regex: '\.msi$'
           token: ${{ secrets.WINGET_TOKEN }}
+          # The fork lives on the token owner's account, not on the repository owner.
+          fork-user: ${{ steps.token.outputs.fork_owner }}

@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Automatically detect when the pinned engine version in `ENGINE_VERSION` is behind the latest published release of `Artexis10/endstate`, and open a bump PR to keep the GUI in sync with the engine.
+Automatically detect when the pinned engine version in `ENGINE_VERSION` is behind the latest published release of `substrate-systems/endstate`, and open a bump PR to keep the GUI in sync with the engine.
 
 ## Requirements
 
 ### Requirement: Scheduled engine drift detection
-The system SHALL provide a GitHub Actions workflow (`.github/workflows/engine-drift-check.yml`) that runs on a daily schedule and on `workflow_dispatch`, reads `ENGINE_VERSION` from the repository root, queries the latest published release from `Artexis10/endstate`, and determines whether the pin is behind using proper semver comparison.
+The system SHALL provide a GitHub Actions workflow (`.github/workflows/engine-drift-check.yml`) that runs on a daily schedule and on `workflow_dispatch`, reads `ENGINE_VERSION` from the repository root, queries the latest published release from `substrate-systems/endstate`, and determines whether the pin is behind using proper semver comparison.
 
 #### Scenario: No drift detected
 - **WHEN** the workflow runs

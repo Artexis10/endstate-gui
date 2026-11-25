@@ -1,6 +1,6 @@
 name: Engine Drift Check
 
-# Detects when ENGINE_VERSION is behind the latest Artexis10/endstate release
+# Detects when ENGINE_VERSION is behind the latest substrate-systems/endstate release
 # and opens a "feat:" PR to bump it. Runs daily and on demand.
 # feat: title is required — release-please uses it to bump the GUI minor version on merge.
 
@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           CURRENT=$(cat ENGINE_VERSION | tr -d '[:space:]')
-          LATEST=$(gh release view --repo Artexis10/endstate \
+          LATEST=$(gh release view --repo substrate-systems/endstate \
             --json tagName --jq '.tagName' | tr -d '[:space:]' | sed 's/^v//')
 
           echo "Current pin:    v${CURRENT}"
@@ -82,7 +82,7 @@ jobs:
           # Guard: require both release assets before opening the bump PR.
           # A release without endstate.exe or .sha256 is incomplete; bumping
           # now would cause the GUI build to fail.
-          ASSET_NAMES=$(gh release view "v${LATEST}" --repo Artexis10/endstate \
+          ASSET_NAMES=$(gh release view "v${LATEST}" --repo substrate-systems/endstate \
             --json assets --jq '[.assets[].name] | join(" ")')
           for REQUIRED in "endstate.exe" "endstate.exe.sha256"; do
             if ! echo "${ASSET_NAMES}" | grep -qF "${REQUIRED}"; then
@@ -112,7 +112,7 @@ jobs:
           MAJOR_CURRENT=$(echo "$CURRENT" | cut -d. -f1)
           MAJOR_LATEST=$(echo "$LATEST"  | cut -d. -f1)
 
-          COMMITS=$(gh api "repos/Artexis10/endstate/compare/v${CURRENT}...v${LATEST}" \
+          COMMITS=$(gh api "repos/substrate-systems/endstate/compare/v${CURRENT}...v${LATEST}" \
             --jq '[.commits[].commit.message | split("\n")[0]] | "- " + join("\n- ")' \
             2>/dev/null || echo "_Unable to retrieve commit list._")
 
@@ -121,7 +121,7 @@ jobs:
             if [ "$MAJOR_LATEST" -gt "$MAJOR_CURRENT" ]; then
               printf '## ⚠ Major version bump — review breaking changes before merging.\n\n'
             fi
-            printf 'Bumps the bundled engine from `v%s` to [`v%s`](https://github.com/Artexis10/endstate/releases/tag/v%s).\n\n' \
+            printf 'Bumps the bundled engine from `v%s` to [`v%s`](https://github.com/substrate-systems/endstate/releases/tag/v%s).\n\n' \
               "$CURRENT" "$LATEST" "$LATEST"
             printf '### Engine commits since v%s\n\n' "$CURRENT"
             echo "$COMMITS"

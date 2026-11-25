@@ -10,7 +10,7 @@ The `plugins.updater.endpoints` array in `src-tauri/tauri.conf.json` SHALL conta
 
 #### Scenario: Endpoint is the GitHub releases latest URL
 - **WHEN** `src-tauri/tauri.conf.json` is inspected
-- **THEN** `plugins.updater.endpoints` contains `https://github.com/Artexis10/endstate-gui/releases/latest/download/latest.json`
+- **THEN** `plugins.updater.endpoints` contains `https://github.com/substrate-systems/endstate-gui/releases/latest/download/latest.json`
 
 #### Scenario: Installed app detects a newer version
 - **WHEN** a new GUI release is published and `latest.json` is uploaded to that release
