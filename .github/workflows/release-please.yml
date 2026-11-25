@@ -1,6 +1,6 @@
 # Engine version is pinned via ENGINE_VERSION file at repo root.
 # To ship a new engine version with the next GUI release:
-#   1. Verify the engine tag exists: gh release list --repo Artexis10/endstate
+#   1. Verify the engine tag exists: gh release list --repo substrate-systems/endstate
 #   2. Update ENGINE_VERSION to the desired semver (e.g. 1.8.0)
 #   3. Commit, PR, merge. Next release-please PR will build against that engine.
 # Do not leave ENGINE_VERSION blank or set to 'main' — builds must be reproducible.
@@ -148,7 +148,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
-        run: gh release edit "$TAG" --repo Artexis10/endstate-gui --draft=true --prerelease=false --latest=false
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=true --prerelease=false --latest=false
 
       - uses: actions/checkout@v4
         with:
@@ -168,10 +168,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.read_engine_ver.outputs.version }}"
-          echo "Checking release v${VERSION} on Artexis10/endstate..."
-          if ! gh release view "v${VERSION}" --repo Artexis10/endstate > /dev/null 2>&1; then
-            echo "::error::GitHub Release v${VERSION} does not exist on Artexis10/endstate."
-            echo "Check available releases with: gh release list --repo Artexis10/endstate"
+          echo "Checking release v${VERSION} on substrate-systems/endstate..."
+          if ! gh release view "v${VERSION}" --repo substrate-systems/endstate > /dev/null 2>&1; then
+            echo "::error::GitHub Release v${VERSION} does not exist on substrate-systems/endstate."
+            echo "Check available releases with: gh release list --repo substrate-systems/endstate"
             exit 1
           fi
           echo "Release v${VERSION} confirmed." | tee -a $GITHUB_STEP_SUMMARY
@@ -183,7 +183,7 @@ jobs:
         run: |
           VERSION="${{ steps.read_engine_ver.outputs.version }}"
           gh release download "v${VERSION}" \
-            --repo Artexis10/endstate \
+            --repo substrate-systems/endstate \
             --pattern "endstate.exe" \
             --pattern "endstate.exe.sha256"
           echo "Downloaded endstate.exe and endstate.exe.sha256 from v${VERSION}"
@@ -217,7 +217,7 @@ jobs:
       # TODO: remove once the engine release publishes a modules asset directly.
       - uses: actions/checkout@v4
         with:
-          repository: Artexis10/endstate
+          repository: substrate-systems/endstate
           ref: v${{ steps.read_engine_ver.outputs.version }}
           path: endstate
           fetch-depth: 1
@@ -283,7 +283,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
         run: |
-          ASSETS=$(gh release view "$TAG" --repo Artexis10/endstate-gui --json assets --jq '[.assets[].name] | join(" ")')
+          ASSETS=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | join(" ")')
           echo "Assets on $TAG: $ASSETS"
           missing=()
           echo "$ASSETS" | grep -qE '\.exe( |$)' || missing+=("a .exe installer")
@@ -309,10 +309,10 @@ jobs:
         run: |
           EXPECTED_TAG="gui-v$(node -p "require('./package.json').version")"
           if [ "$TAG" = "$EXPECTED_TAG" ]; then
-            gh release edit "$TAG" --repo Artexis10/endstate-gui --draft=false --prerelease=false --latest
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
             echo "Published $TAG as Latest." | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            gh release edit "$TAG" --repo Artexis10/endstate-gui --draft=false --prerelease=false --latest=false
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest=false
             echo "Published historical $TAG without changing Latest ($EXPECTED_TAG)." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -326,6 +326,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag_name }}
         run: |
-          gh release edit "$TAG" --repo Artexis10/endstate-gui --draft=true --prerelease=false --latest=false || true
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=true --prerelease=false --latest=false || true
           echo "::error::Release $TAG did not produce verified installers and remains draft (NOT Latest). /download and the updater keep serving the previous good release. Investigate and re-run." \
             | tee -a "$GITHUB_STEP_SUMMARY"

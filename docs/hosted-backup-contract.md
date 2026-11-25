@@ -4,7 +4,7 @@ This document links to the canonical hosted-backup contract maintained in the En
 
 ## Canonical Source
 
-**See:** [Endstate Engine — Hosted Backup Contract](https://github.com/Artexis10/endstate/blob/main/docs/contracts/hosted-backup-contract.md)
+**See:** [Endstate Engine — Hosted Backup Contract](https://github.com/substrate-systems/endstate/blob/main/docs/contracts/hosted-backup-contract.md)
 
 For local development, the contract is located at:
 ```

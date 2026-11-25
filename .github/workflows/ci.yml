@@ -78,7 +78,7 @@ jobs:
         run: |
           version="$(tr -d '[:space:]' < ENGINE_VERSION)"
           gh release download "v${version}" \
-            --repo Artexis10/endstate \
+            --repo substrate-systems/endstate \
             --pattern endstate-linux-amd64 \
             --pattern endstate-linux-amd64.sha256
 
@@ -124,7 +124,7 @@ jobs:
         run: |
           version="$(tr -d '[:space:]' < ENGINE_VERSION)"
           gh release download "v${version}" \
-            --repo Artexis10/endstate \
+            --repo substrate-systems/endstate \
             --pattern endstate.exe \
             --pattern endstate.exe.sha256
 
@@ -268,7 +268,7 @@ jobs:
       - name: Check out the pinned engine's module catalog
         uses: actions/checkout@v4
         with:
-          repository: Artexis10/endstate
+          repository: substrate-systems/endstate
           ref: ${{ env.ENGINE_REF }}
           path: engine-src
 
@@ -340,7 +340,7 @@ jobs:
         run: |
           version="$(tr -d '[:space:]' < ENGINE_VERSION)"
           gh release download "v${version}" \
-            --repo Artexis10/endstate \
+            --repo substrate-systems/endstate \
             --pattern endstate.exe \
             --pattern endstate.exe.sha256
 
@@ -361,7 +361,7 @@ jobs:
       - name: Check out the pinned engine's module catalog
         uses: actions/checkout@v4
         with:
-          repository: Artexis10/endstate
+          repository: substrate-systems/endstate
           ref: ${{ env.ENGINE_REF }}
           path: engine-src
 

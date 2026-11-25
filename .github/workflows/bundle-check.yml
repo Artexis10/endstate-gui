@@ -93,7 +93,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.read_engine_ver.outputs.version }}"
-          gh release download "v${VERSION}" --repo Artexis10/endstate --pattern "endstate.exe"
+          gh release download "v${VERSION}" --repo substrate-systems/endstate --pattern "endstate.exe"
 
       - name: Place engine binary at sidecar location
         shell: bash
@@ -106,7 +106,7 @@ jobs:
       # resource files (modules/ and SCHEMA_VERSION) bundled into the installer.
       - uses: actions/checkout@v4
         with:
-          repository: Artexis10/endstate
+          repository: substrate-systems/endstate
           ref: v${{ steps.read_engine_ver.outputs.version }}
           path: endstate
           fetch-depth: 1
