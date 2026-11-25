@@ -40,6 +40,12 @@ if [ "$login" != "$fork_owner" ]; then
     exit 1
 fi
 
+# The publish step reads the fork owner from here, so this file stays its one source.
+# winget-releaser otherwise defaults to the repository owner, which has no fork.
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "fork_owner=$fork_owner" >> "$GITHUB_OUTPUT"
+fi
+
 # GitHub sends X-OAuth-Scopes only for classic tokens. `public_repo` and `repo`
 # are GitHub's documented scopes that can write a public repository.
 scopes=$(header x-oauth-scopes)
